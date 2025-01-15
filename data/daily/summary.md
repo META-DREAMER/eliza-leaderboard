@@ -1,7 +1,7 @@
-# elizaos Eliza (2025-01-12)
+# elizaos Eliza (2025-01-15)
     
 ## 📊 Overview
-Development focused on package improvements (change prompt to ensure it returns json), new features (nft plugin), 6 bug fixes. with 38 contributors merging 22 PRs. Major work included odilitime is actively working on merging pull requests, fixing json format issues, bumping versions, and making code changes in various areas such as agent, client, characters, and documentation within the project repository.
+Development focused on package improvements (change prompt to ensure it returns json), new features (nft plugin), 6 bug fixes. with 38 contributors merging 22 PRs. Major work included unable to generate summary for odilitime due to an error.
 
 ## 📈 Key Metrics
 | Metric | Count |
@@ -29,9 +29,9 @@ Development focused on package improvements (change prompt to ensure it returns 
 - chore: Prep 0.1.8.build.1
 
 ## 👥 Top Contributors
-- **odilitime**: odilitime is actively working on merging pull requests, fixing JSON format issues, bumping versions, and making code changes in various areas such as agent, client, characters, and documentation within the project repository
-- **tcm390**: tcm390 is currently working on adding support for deepseek, updating README in Greek language, adding a new nft plugin, and making corrections to parameters and return values in the codebase
-- **ai16z-demirix**: ai16z-demirix is currently working on adding tests for various plugins, such as the Coinbase and WhatsApp plugins, to enhance the packages in the codebase
+- **odilitime**: Unable to generate summary for odilitime due to an error
+- **tcm390**: Unable to generate summary for tcm390 due to an error
+- **ai16z-demirix**: Unable to generate summary for ai16z-demirix due to an error
 
 ## ⚠️ Issues
 - **New Issues**: 19
