@@ -149,10 +149,11 @@ program
   .command("process")
   .description("Process and analyze data")
   .option("-r, --repository <owner/name>", "Process specific repository")
+  .option("-f, --force", "Force regeneration of summaries")
   .action(async (options) => {
     try {
       // Calculate date range based on config
-      const lookbackDays = pipelineConfig.lookbackDays || 30;
+      const lookbackDays = pipelineConfig.lookbackDays || 7;
       const endDate = new Date();
       const startDate = subDays(endDate, lookbackDays);
 
@@ -165,6 +166,7 @@ program
 
       // Get the repositories from database
       const repoRows = await db.select().from(repositories).all();
+      console.log("Found repositories:", repoRows);
 
       if (repoRows.length === 0) {
         console.error(chalk.red("No repositories found to process."));
@@ -206,12 +208,14 @@ program
         console.log(
           chalk.blue(`\nProcessing data for repository: ${repository}`)
         );
+        console.log("Repository config:", repo);
 
         // Process data for the repository
         const result = await contributorPipeline.processTimeframe(
           {
             startDate: startDateStr,
             endDate: endDateStr,
+            force: options.force
           },
           repository
         );

@@ -15,6 +15,7 @@ import {
 import { eq, and, gte, lte, sql } from "drizzle-orm";
 import path from "path";
 import { ScoringRules, TagConfig, PipelineConfig } from "./types";
+import { ExportService } from "./export";
 
 /**
  * Contributor Pipeline - A modern, maintainable data processing system
@@ -26,6 +27,7 @@ import { ScoringRules, TagConfig, PipelineConfig } from "./types";
 interface DateRange {
   startDate: string;
   endDate: string;
+  force?: boolean;
 }
 
 interface ContributorMetrics {
@@ -37,11 +39,28 @@ interface ContributorMetrics {
     merged: number;
     open: number;
     closed: number;
+    items: Array<{
+      id: string;
+      title: string;
+      number?: string;
+      merged?: boolean;
+      commits?: Array<{
+        sha: string;
+        message: string;
+        additions?: number;
+        deletions?: number;
+        changed_files?: number;
+      }>;
+    }>;
   };
   issues: {
     total: number;
     open: number;
     closed: number;
+    items: Array<{
+      id: string;
+      title: string;
+    }>;
   };
   reviews: {
     total: number;
@@ -95,9 +114,11 @@ interface ProcessingResult {
  */
 export class ContributorPipeline {
   private config: PipelineConfig;
+  private exportService: ExportService;
 
   constructor(config: PipelineConfig) {
     this.config = config;
+    this.exportService = new ExportService();
   }
 
   /**
@@ -140,8 +161,8 @@ export class ContributorPipeline {
     // Sort contributors by score
     metrics.sort((a, b) => b.score - a.score);
 
-    // Save daily summaries
-    await this.saveDailySummaries(metrics, dateRange.endDate);
+    // Save daily summaries with force flag
+    await this.saveDailySummaries(metrics, dateRange.endDate, dateRange.force);
 
     // Return processed data
     return {
@@ -165,7 +186,15 @@ export class ContributorPipeline {
     repository: string
   ): Promise<string[]> {
     const { startDate, endDate } = dateRange;
-    const activeUsers = new Set<string>();
+    console.log(`Looking for contributors between ${startDate} and ${endDate} in ${repository}`);
+
+    const activeUsers = new Map<string, {
+      prs: number,
+      issues: number,
+      reviews: number,
+      prComments: number,
+      issueComments: number
+    }>();
 
     // Common conditions for time range
     const timeRangeCondition = and(
@@ -179,18 +208,37 @@ export class ContributorPipeline {
       eq(rawPullRequests.repository, repository)
     );
 
-    // Get PR authors
+    // Get PR authors with counts
+    console.log("Querying PR authors...");
     const prAuthors = await db
-      .select({ username: rawPullRequests.author })
+      .select({
+        username: rawPullRequests.author,
+        count: sql<number>`count(*)`
+      })
       .from(rawPullRequests)
       .where(repoCondition)
+      .groupBy(rawPullRequests.author)
       .all();
+    
+    console.log(`Found ${prAuthors.length} PR authors:`, prAuthors);
 
-    prAuthors.forEach((row) => activeUsers.add(row.username));
+    prAuthors.forEach(({username, count}) => {
+      activeUsers.set(username, {
+        prs: count,
+        issues: 0,
+        reviews: 0,
+        prComments: 0,
+        issueComments: 0
+      });
+    });
 
-    // Get issue authors
+    // Get issue authors with counts
+    console.log("Querying issue authors...");
     const issueAuthors = await db
-      .select({ username: rawIssues.author })
+      .select({
+        username: rawIssues.author,
+        count: sql<number>`count(*)`
+      })
       .from(rawIssues)
       .where(
         and(
@@ -199,13 +247,29 @@ export class ContributorPipeline {
           eq(rawIssues.repository, repository)
         )
       )
+      .groupBy(rawIssues.author)
       .all();
 
-    issueAuthors.forEach((row) => activeUsers.add(row.username));
+    console.log(`Found ${issueAuthors.length} issue authors:`, issueAuthors);
 
-    // Get reviewers
+    issueAuthors.forEach(({username, count}) => {
+      const existing = activeUsers.get(username) || {
+        prs: 0,
+        issues: 0,
+        reviews: 0,
+        prComments: 0,
+        issueComments: 0
+      };
+      existing.issues = count;
+      activeUsers.set(username, existing);
+    });
+
+    // Get reviewers with counts
     const reviewers = await db
-      .select({ username: prReviews.author })
+      .select({
+        username: prReviews.author,
+        count: sql<number>`count(*)`
+      })
       .from(prReviews)
       .innerJoin(rawPullRequests, eq(prReviews.prId, rawPullRequests.id))
       .where(
@@ -215,15 +279,28 @@ export class ContributorPipeline {
           eq(rawPullRequests.repository, repository)
         )
       )
+      .groupBy(prReviews.author)
       .all();
 
-    reviewers.forEach((row) => {
-      if (row.username) activeUsers.add(row.username);
+    reviewers.forEach(({username, count}) => {
+      if (!username) return;
+      const existing = activeUsers.get(username) || {
+        prs: 0,
+        issues: 0,
+        reviews: 0,
+        prComments: 0,
+        issueComments: 0
+      };
+      existing.reviews = count;
+      activeUsers.set(username, existing);
     });
 
-    // Get commenters
+    // Get PR commenters with counts
     const prCommenters = await db
-      .select({ username: prComments.author })
+      .select({
+        username: prComments.author,
+        count: sql<number>`count(*)`
+      })
       .from(prComments)
       .innerJoin(rawPullRequests, eq(prComments.prId, rawPullRequests.id))
       .where(
@@ -233,14 +310,28 @@ export class ContributorPipeline {
           eq(rawPullRequests.repository, repository)
         )
       )
+      .groupBy(prComments.author)
       .all();
 
-    prCommenters.forEach((row) => {
-      if (row.username) activeUsers.add(row.username);
+    prCommenters.forEach(({username, count}) => {
+      if (!username) return;
+      const existing = activeUsers.get(username) || {
+        prs: 0,
+        issues: 0,
+        reviews: 0,
+        prComments: 0,
+        issueComments: 0
+      };
+      existing.prComments = count;
+      activeUsers.set(username, existing);
     });
 
+    // Get issue commenters with counts
     const issueCommenters = await db
-      .select({ username: issueComments.author })
+      .select({
+        username: issueComments.author,
+        count: sql<number>`count(*)`
+      })
       .from(issueComments)
       .innerJoin(rawIssues, eq(issueComments.issueId, rawIssues.id))
       .where(
@@ -250,25 +341,47 @@ export class ContributorPipeline {
           eq(rawIssues.repository, repository)
         )
       )
+      .groupBy(issueComments.author)
       .all();
 
-    issueCommenters.forEach((row) => {
-      if (row.username) {
-        activeUsers.add(row.username);
-      }
+    issueCommenters.forEach(({username, count}) => {
+      if (!username) return;
+      const existing = activeUsers.get(username) || {
+        prs: 0,
+        issues: 0,
+        reviews: 0,
+        prComments: 0,
+        issueComments: 0
+      };
+      existing.issueComments = count;
+      activeUsers.set(username, existing);
     });
 
-    // Filter out invalid usernames
-    activeUsers.delete("unknown");
-    activeUsers.delete("[deleted]");
-    activeUsers.delete("");
+    // Filter out invalid usernames and users with no meaningful activity
+    const validUsers = Array.from(activeUsers.entries())
+      .filter(([username, counts]) => {
+        // Filter out invalid usernames
+        if (!username || username === "unknown" || username === "[deleted]") {
+          return false;
+        }
+        
+        // Filter out bot users
+        if (this.config.botUsers?.includes(username)) {
+          return false;
+        }
 
-    // Filter out bot users from the config
-    const filteredUsers = Array.from(activeUsers)
-      .filter(Boolean)
-      .filter((username) => !this.config.botUsers?.includes(username));
+        // Only include users with meaningful contributions:
+        // - Created PRs or issues
+        // - Provided reviews
+        // - Made substantive comments (more than just reactions)
+        return counts.prs > 0 || 
+               counts.issues > 0 || 
+               counts.reviews > 0 ||
+               (counts.prComments + counts.issueComments) > 0;
+      })
+      .map(([username]) => username);
 
-    return filteredUsers;
+    return validUsers;
   }
 
   /**
@@ -291,11 +404,13 @@ export class ContributorPipeline {
         merged: 0,
         open: 0,
         closed: 0,
+        items: [],
       },
       issues: {
         total: 0,
         open: 0,
         closed: 0,
+        items: [],
       },
       reviews: {
         total: 0,
@@ -880,8 +995,9 @@ export class ContributorPipeline {
     for (const filePath of filePaths) {
       const parts = filePath.split("/");
       if (parts.length > 1) {
-        const topDir = parts[0];
-        dirCounts[topDir] = (dirCounts[topDir] || 0) + 1;
+        // Get the directory path (everything except the file name)
+        const dirPath = parts.slice(0, -1).join("/");
+        dirCounts[dirPath] = (dirCounts[dirPath] || 0) + 1;
         totalFiles++;
       }
     }
@@ -1056,30 +1172,355 @@ export class ContributorPipeline {
   }
 
   /**
+   * Generate an AI summary of a contributor's activity
+   */
+  private async generateContributorSummary(metrics: ContributorMetrics): Promise<string> {
+    if (!this.config.aiSummary?.enabled) {
+      return "";
+    }
+    
+    const apiKey = process.env.OPENROUTER_API_KEY || this.config.aiSummary.apiKey;
+    if (!apiKey) {
+      console.warn(`No API key for AI summary generation`);
+      return "";
+    }
+
+    // Skip summary generation if no meaningful activity
+    const hasActivity = 
+      metrics.pullRequests.merged > 0 || 
+      metrics.pullRequests.open > 0 ||
+      metrics.issues.total > 0 || 
+      metrics.reviews.total > 0 ||
+      metrics.codeChanges.files > 0; // Also check for code changes
+
+    if (!hasActivity) {
+      return `${metrics.username}: No activity today.`;
+    }
+
+    try {
+      // Extract meaningful context from PRs and issues with more detail
+      interface PRContext {
+        title: string;
+        number: string;
+        merged: boolean;
+        message: string;
+        additions: number;
+        deletions: number;
+        files: number;
+        area: string;
+      }
+
+      // Get the most significant directories from focus areas
+      const topDirs = metrics.focusAreas
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 2)
+        .map(area => {
+          const parts = area.area.split("/");
+          // If it's a package, use the package name
+          if (parts.includes("packages")) {
+            const pkgIndex = parts.indexOf("packages");
+            return parts[pkgIndex + 1] || area.area;
+          }
+          // For docs, distinguish between package and markdown files
+          if (parts[0] === "docs" || parts.includes("docs")) {
+            return "docs-package";
+          }
+          if (area.area.endsWith(".md") || area.area.endsWith(".mdx") || area.area.includes("/docs/") || area.area.includes("documentation")) {
+            return "documentation";
+          }
+          // Otherwise use the first meaningful directory
+          return parts[0] || area.area;
+        });
+
+      // Helper to truncate long titles
+      const truncateTitle = (title: string, maxLength = 50) => {
+        if (title.length <= maxLength) return title;
+        return title.substring(0, maxLength - 3) + "...";
+      };
+
+      // Process PRs by area
+      const prsByArea = new Map<string, PRContext[]>();
+      metrics.pullRequests.items.forEach(pr => {
+        // Determine the primary area for this PR
+        let area = "other";
+        if (pr.commits?.length) {
+          const files = pr.commits.reduce((sum, c) => sum + (c.changed_files || 0), 0);
+          const additions = pr.commits.reduce((sum, c) => sum + (c.additions || 0), 0);
+          const deletions = pr.commits.reduce((sum, c) => sum + (c.deletions || 0), 0);
+          
+          // Find the most relevant area from our top directories
+          for (const dir of topDirs) {
+            if (pr.title.toLowerCase().includes(dir.toLowerCase())) {
+              area = dir;
+              break;
+            }
+          }
+
+          // Extract PR number from the database ID
+          let prNumber = "";
+          const idMatch = pr.id.match(/\/pull\/(\d+)$/);
+          if (idMatch) {
+            prNumber = idMatch[1];
+          } else if (pr.number && typeof pr.number === 'string') {
+            prNumber = pr.number;
+          } else if (pr.number && typeof pr.number === 'number') {
+            prNumber = String(pr.number);
+          } else {
+            // Fallback to title match if available
+            const titleMatch = pr.title.match(/#(\d+)/);
+            prNumber = titleMatch ? titleMatch[1] : "";
+          }
+
+          const prContext: PRContext = {
+            title: pr.title || "",
+            number: prNumber,
+            merged: pr.merged === true,
+            message: pr.commits[0]?.message || "",
+            additions,
+            deletions,
+            files,
+            area
+          };
+
+          if (!prsByArea.has(area)) {
+            prsByArea.set(area, []);
+          }
+          prsByArea.get(area)?.push(prContext);
+        }
+      });
+
+      // Process issues with proper number extraction
+      const issues = metrics.issues.items.map(issue => {
+        // Extract issue number from the database ID
+        let issueNumber = "";
+        const idMatch = issue.id.match(/\/issues\/(\d+)$/);
+        if (idMatch) {
+          issueNumber = idMatch[1];
+        } else {
+          // Fallback to title match if available
+          const titleMatch = issue.title.match(/#(\d+)/);
+          issueNumber = titleMatch ? titleMatch[1] : issue.id;
+        }
+        
+        return {
+          title: issue.title || "",
+          number: issueNumber,
+          state: issue.id.includes('closed') ? 'closed' : 'open'
+        };
+      });
+
+      // Build the summary sections with actual data
+      const mergedPRs = Array.from(prsByArea.entries())
+        .map(([area, prs]) => {
+          const mergedInArea = prs.filter(pr => pr.merged);
+          if (mergedInArea.length === 0) return null;
+          
+          const prDetails = mergedInArea.map(pr => ({
+            number: pr.number,
+            title: truncateTitle(pr.title),
+            additions: pr.additions,
+            deletions: pr.deletions,
+            area
+          }));
+          
+          return { area, prs: prDetails };
+        })
+        .filter((group): group is NonNullable<typeof group> => group !== null);
+
+      const openPRs = Array.from(prsByArea.entries())
+        .map(([area, prs]) => {
+          const openInArea = prs.filter(pr => !pr.merged);
+          if (openInArea.length === 0) return null;
+          
+          const prDetails = openInArea.map(pr => ({
+            number: pr.number,
+            title: truncateTitle(pr.title),
+            area
+          }));
+          
+          return { area, prs: prDetails };
+        })
+        .filter((group): group is NonNullable<typeof group> => group !== null);
+
+      const prompt = `Summarize ${metrics.username}'s actual contributions today:
+
+Pull Requests:
+- Merged: ${mergedPRs.length > 0 ? 
+  mergedPRs.map(group => 
+    group.prs.map(pr => 
+      `#${pr.number} "${pr.title}" in ${pr.area} (+${pr.additions}/-${pr.deletions} lines)`
+    ).join(", ")
+  ).join("; ") 
+  : "None"}
+- Opened: ${openPRs.length > 0 ? 
+  openPRs.map(group => 
+    group.prs.map(pr => 
+      `#${pr.number} "${pr.title}" in ${pr.area}`
+    ).join(", ")
+  ).join("; ") 
+  : "None"}
+
+Issues:
+${issues.length > 0 ? 
+  issues.map(issue => `#${issue.number} "${issue.title}" (${issue.state})`).join(", ") 
+  : "None"}
+
+Reviews: ${
+  metrics.reviews.total > 0 ? 
+  `${metrics.reviews.total} total (${metrics.reviews.approved} approvals, ${metrics.reviews.changesRequested} change requests, ${metrics.reviews.commented} comments)` 
+  : "None"}
+
+Code Changes:
+${metrics.codeChanges.files > 0 ? 
+  `Modified ${metrics.codeChanges.files} files (+${metrics.codeChanges.additions}/-${metrics.codeChanges.deletions} lines)` 
+  : "No code changes"}
+
+Primary Areas: ${topDirs.join(", ") || "N/A"}
+
+Write a natural, factual summary that:
+1. Starts with "${metrics.username}: "
+2. ONLY includes their actual contributions from the data above
+3. Uses exact PR/issue numbers ONLY if they are provided in the data (never make up numbers)
+4. Groups similar activities by area (e.g., "merged 3 PRs in backend")
+5. Includes line changes (+X/-Y) for significant code changes
+6. Omits any activity type that shows "None" above
+7. Uses at most 2 sentences
+8. Varies sentence structure based on the actual work done
+
+Example good summaries:
+"username: No activity today."
+"username: Merged PR #123 in auth (+500/-200 lines) and provided 5 code reviews."
+"username: Opened 2 PRs in UI and reviewed 3 PRs with 2 approvals."
+"username: Addressed issue #456 in core and provided 4 code reviews with 3 approvals."`;
+
+      try {
+        const response = await fetch(this.config.aiSummary.endpoint || "https://openrouter.ai/api/v1/chat/completions", {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`,
+            'HTTP-Referer': process.env.SITE_URL || 'https://elizaos.github.io',
+            'X-Title': process.env.SITE_NAME || 'GitHub Contributor Analytics'
+          },
+          body: JSON.stringify({
+            model: this.config.aiSummary.model || "anthropic/claude-3-sonnet-20240229",
+            messages: [
+              { 
+                role: "system", 
+                content: "You are writing daily GitHub activity summaries. Use only the actual contribution data provided. Never add, modify or make up information. Focus on real PR/issue numbers and metrics." 
+              },
+              { role: "user", content: prompt }
+            ],
+            temperature: 0.1,
+            max_tokens: 200
+          })
+        });
+
+        if (!response.ok) {
+          const error = await response.text();
+          throw new Error(`API request failed: ${error}`);
+        }
+
+        const data = await response.json();
+        const summary = data.choices[0].message.content.trim();
+
+        // Validate the generated summary
+        const hasSuspiciousPatterns = (summary: string): boolean => {
+          // Check for placeholder-like PR numbers (#101, #102, etc.)
+          const placeholderPattern = /#(?:10[1-9]|20[1-9])/;
+          if (placeholderPattern.test(summary)) return true;
+
+          // Check for repetitive PR number sequences
+          const prNumbers = summary.match(/#\d+/g) || [];
+          const uniquePRs = new Set(prNumbers);
+          if (prNumbers.length > uniquePRs.size) return true;
+
+          return false;
+        };
+
+        // If the summary looks suspicious, try one more time with stricter instructions
+        if (hasSuspiciousPatterns(summary)) {
+          console.warn(`Generated summary for ${metrics.username} contains suspicious patterns, regenerating...`);
+          const retryPrompt = prompt + "\n\nIMPORTANT: Do not use any PR or issue numbers unless they are explicitly provided in the data above. Never use placeholder numbers like #101, #102, etc.";
+          
+          const retryResponse = await fetch(this.config.aiSummary.endpoint || "https://openrouter.ai/api/v1/chat/completions", {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${apiKey}`,
+              'HTTP-Referer': process.env.SITE_URL || 'https://elizaos.github.io',
+              'X-Title': process.env.SITE_NAME || 'GitHub Contributor Analytics'
+            },
+            body: JSON.stringify({
+              model: this.config.aiSummary.model || "anthropic/claude-3-sonnet-20240229",
+              messages: [
+                { 
+                  role: "system", 
+                  content: "You are writing daily GitHub activity summaries. Use only the actual contribution data provided. Never add, modify or make up information. Focus on real PR/issue numbers and metrics." 
+                },
+                { role: "user", content: retryPrompt }
+              ],
+              temperature: 0.1,
+              max_tokens: 200
+            })
+          });
+
+          if (retryResponse.ok) {
+            const retryData = await retryResponse.json();
+            return retryData.choices[0].message.content.trim();
+          }
+        }
+
+        return summary;
+
+      } catch (error) {
+        console.error(`Error generating summary for ${metrics.username}:`, error);
+        return ""; // Return empty on error
+      }
+    } catch (error) {
+      console.error(`Error generating summary for ${metrics.username}:`, error);
+      return ""; // Return empty on error
+    }
+  }
+
+  /**
    * Save daily summaries for contributors
    */
   private async saveDailySummaries(
     metrics: ContributorMetrics[],
-    date: string
+    date: string,
+    force?: boolean
   ): Promise<void> {
     const dateStr = new Date(date).toISOString().split("T")[0];
 
+    // Process each contributor's metrics
     for (const metric of metrics) {
+      // Generate AI summary if enabled or if force flag is true
+      let summary = "";
+      if (force || !await db.select().from(userDailySummaries)
+          .where(eq(userDailySummaries.id, `${metric.username}_${dateStr}`))
+          .get()) {
+        summary = await this.generateContributorSummary(metric);
+      }
+
       // Create a structured daily summary
       const dailyData = {
         id: `${metric.username}_${dateStr}`,
         username: metric.username,
         date: dateStr,
         score: metric.score,
-        summary: "", // Will be filled by AI summarization if enabled
-        totalCommits: 0, // Will need to calculate from PR data
+        summary,
+        totalCommits: metric.pullRequests.items.reduce(
+          (acc: number, pr) => acc + (pr.commits?.length || 0),
+          0
+        ),
         totalPRs: metric.pullRequests.total,
         additions: metric.codeChanges.additions,
         deletions: metric.codeChanges.deletions,
         changedFiles: metric.codeChanges.files,
-        commits: "[]", // JSON string
-        pullRequests: "[]", // JSON string
-        issues: "[]", // JSON string
+        commits: JSON.stringify(metric.pullRequests.items.flatMap(pr => pr.commits || [])),
+        pullRequests: JSON.stringify(metric.pullRequests.items),
+        issues: JSON.stringify(metric.issues.items),
       };
 
       // Store the daily summary
@@ -1090,10 +1531,15 @@ export class ContributorPipeline {
           target: userDailySummaries.id,
           set: {
             score: metric.score,
+            ...(summary ? { summary } : {}), // Only update summary if we generated a new one
+            totalCommits: dailyData.totalCommits,
             totalPRs: metric.pullRequests.total,
             additions: metric.codeChanges.additions,
             deletions: metric.codeChanges.deletions,
             changedFiles: metric.codeChanges.files,
+            commits: dailyData.commits,
+            pullRequests: dailyData.pullRequests,
+            issues: dailyData.issues,
           },
         });
 
@@ -1121,24 +1567,25 @@ export class ContributorPipeline {
           totalAdditions: metric.codeChanges.additions,
           totalDeletions: metric.codeChanges.deletions,
           filesByType: JSON.stringify(filesByTypeObj),
-          prsByMonth: "{}", // Would need to group PRs by month
+          prsByMonth: JSON.stringify({}), // TODO: Calculate monthly stats
           focusAreas: JSON.stringify(focusAreasArray),
-          lastUpdated: new Date().toISOString(),
         })
         .onConflictDoUpdate({
           target: userStats.username,
           set: {
-            totalPRs: metric.pullRequests.total,
-            mergedPRs: metric.pullRequests.merged,
-            closedPRs: metric.pullRequests.closed,
-            totalFiles: metric.codeChanges.files,
-            totalAdditions: metric.codeChanges.additions,
-            totalDeletions: metric.codeChanges.deletions,
+            totalPRs: sql`total_prs + ${metric.pullRequests.total}`,
+            mergedPRs: sql`merged_prs + ${metric.pullRequests.merged}`,
+            closedPRs: sql`closed_prs + ${metric.pullRequests.closed}`,
+            totalFiles: sql`total_files + ${metric.codeChanges.files}`,
+            totalAdditions: sql`total_additions + ${metric.codeChanges.additions}`,
+            totalDeletions: sql`total_deletions + ${metric.codeChanges.deletions}`,
             filesByType: JSON.stringify(filesByTypeObj),
             focusAreas: JSON.stringify(focusAreasArray),
-            lastUpdated: new Date().toISOString(),
           },
         });
     }
+
+    // Export daily summary to JSON files
+    await this.exportService.exportDailySummary(dateStr);
   }
 }

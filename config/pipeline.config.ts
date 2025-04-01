@@ -14,12 +14,12 @@ export const pipelineConfig: PipelineConfig = {
     {
       owner: "elizaos",
       name: "eliza",
-      defaultBranch: "main",
+      defaultBranch: "v2-develop",
     },
   ],
 
   // Default lookback period in days
-  lookbackDays: 14,
+  lookbackDays: 5,
 
   // List of bot usernames to ignore during processing
   botUsers: [
@@ -206,7 +206,7 @@ export const pipelineConfig: PipelineConfig = {
       {
         name: "docs",
         category: "AREA",
-        patterns: ["docs/", "README", ".md"],
+        patterns: [".mdx", "README", ".md"],
         weight: 1.5,
         description: "Documentation and guides",
       },
@@ -343,8 +343,10 @@ export const pipelineConfig: PipelineConfig = {
 
   // AI Summary generation (optional)
   aiSummary: {
-    enabled: false,
-    model: "openai",
-    // apiKey is optional, better to use environment variables
+    enabled: true,
+    model: "openai/gpt-4o-mini" as const,
+    temperature: 0.1,
+    max_tokens: 140,
+    endpoint: "https://openrouter.ai/api/v1/chat/completions",
   },
 };
