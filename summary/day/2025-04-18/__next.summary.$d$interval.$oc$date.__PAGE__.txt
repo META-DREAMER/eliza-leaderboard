@@ -1,0 +1,886 @@
+1:"$Sreact.fragment"
+2:I[4817319,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"IntervalSelector"]
+3:I[6998365,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"LlmCopyButton"]
+13:I[3642796,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],""]
+14:I[3238488,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"StatCardsDisplay"]
+23:I[4261541,["/eliza-leaderboard/_next/static/chunks/b33bcbdcb3f88354.js","/eliza-leaderboard/_next/static/chunks/8ba59154b6704904.js"],"OutletBoundary"]
+24:"$Sreact.suspense"
+4:T5f1,**Describe the bug**
+Using `gpt-4-vision-preview` model to analyze images in the openai plugin (around line 404 in `plugin-openai/src/index.ts`) is leading to the below error. The `gpt-4-vision` model appears to be deprecated. Changing the model definition to `gpt-4o` or `gpt-4o-mini` resolves the error.
+
+```
+[2025-04-07 16:04:09] ERROR: Error analyzing image:
+    message: "(Error) OpenAI API error: 404"
+    stack: [
+      "Error: OpenAI API error: 404",
+      "at IMAGE_DESCRIPTION (.../node_modules/@elizaos/plugin-openai/dist/index.js:782:17)",
+      "at process.processTicksAndRejections (node:internal/process/task_queues:105:5)",
+      "at async AgentRuntime.useModel (.../node_modules/@elizaos/cli/dist/chunk-2I224C7C.js:46786:22)",
+      "at async TwitterInteractionClient.handleTweet .../node_modules/@elizaos/plugin-twitter/dist/index.js:8169:29)",
+      "at async TwitterInteractionClient.processMentionTweets (.../node_modules/@elizaos/plugin-twitter/dist/index.js:8016:9)",
+      "at async TwitterInteractionClient.handleTwitterInteractions (.../node_modules/@elizaos/plugin-twitter/dist/index.js:7909:7)"
+    ]
+```
+
+<!-- A clear and concise description of what the bug is. -->
+
+**To Reproduce**
+
+<!-- Steps to reproduce the behavior. -->
+
+**Expected behavior**
+
+<!-- A clear and concise description of what you expected to happen. -->
+
+**Screenshots**
+
+<!-- If applicable, add screenshots to help explain your problem. -->
+
+**Additional context**
+
+<!-- Add any other context about the problem here. -->
+5:T77f,# ElizaOS Twitter Plugin: Redundant Tweet Interaction Checks
+
+## Description
+The Twitter plugin is repeatedly checking the same tweets and mentions in a loop, even after they've been processed. This creates unnecessary API calls and log spam.
+
+## Current Behavior
+The system continuously checks the same tweets over and over, as shown in the logs:
+
+```log
+[2025-03-31 16:21:29] LOG: Checking Twitter interactions
+[2025-03-31 16:21:30] LOG: Completed checking mentioned tweets:
+[2025-03-31 16:21:30] LOG: Already responded to tweet 1906195114227020237, skipping
+[2025-03-31 16:21:30] LOG: Already responded to tweet 1906195395497091521, skipping
+[2025-03-31 16:21:30] LOG: Already responded to tweet 1906209067460137240, skipping
+...
+[2025-03-31 16:21:59] LOG: Checking Twitter interactions
+[2025-03-31 16:22:00] LOG: Already responded to tweet 1906195114227020237, skipping
+[2025-03-31 16:22:00] LOG: Already responded to tweet 1906195395497091521, skipping
+[2025-03-31 16:22:00] LOG: Already responded to tweet 1906209067460137240, skipping
+```
+
+## Expected Behavior
+- The system should only check new interactions since the last check
+- Previously processed tweets should be filtered out before logging
+- The interaction check should maintain a cursor or timestamp of the last checked tweet
+
+## Impact
+1. Unnecessary Twitter API calls that could lead to rate limiting
+2. Excessive log entries making it difficult to debug actual issues
+3. Increased system load from repeated processing of the same data
+
+## Possible Solutions
+1. Implement a cursor-based pagination system to only fetch new tweets
+2. Store the last checked tweet ID and only process tweets newer than that
+3. Add a proper caching mechanism for processed tweets with TTL
+
+## Environment
+- ElizaOS Version: 1.0.0-beta.7
+- Bun install && bun run build && bun start
+
+## Related Issues
+- Previous issue about duplicate key errors in Twitter mentions #4115 6:T954,# ElizaOS Twitter Plugin Bugs
+
+## Issue 1: Duplicate Key Error When Receiving Twitter Mentions
+
+**Describe the bug**
+When someone mentions the bot on Twitter, the system tries to create a memory record twice with the same ID, resulting in database errors:
+
+```
+error: duplicate key value violates unique constraint "memories_pkey"
+detail: "Key (id)=(d79a6e52-7b78-0c8b-941d-fd9c0e353f7a) already exists."
+```
+
+Logs show the same memory ID being processed twice:
+```
+[2025-03-30 05:29:29] DEBUG: DrizzleAdapter createMemory:
+    memoryId: "d79a6e52-7b78-0c8b-941d-fd9c0e353f7a"
+    contentLength: 26
+[2025-03-30 05:29:29] LOG: Processing Tweet: 1906217138978697554
+[2025-03-30 05:29:29] DEBUG: DrizzleAdapter createMemory:
+    memoryId: "d79a6e52-7b78-0c8b-941d-fd9c0e353f7a"
+    contentLength: 26
+```
+
+**To Reproduce**
+1. Configure Twitter plugin with valid credentials
+2. Have someone mention your Twitter bot
+3. Check logs for duplicate key errors
+
+**Expected behavior**
+The bot should create only one memory record per tweet mention and handle all interactions without database errors.
+
+**Root cause**
+The issue occurs because `handleTwitterInteractions()` creates a memory record and then calls `handleTweet()` which tries to create the same memory again:
+1. First creation in `handleTwitterInteractions()` around line 227
+2. Second creation in `handleTweet()` around line 642
+
+## Issue 2: Null Post Interval Configuration
+
+**Describe the bug**
+The Twitter post interval configuration is not being properly read, resulting in null values in the logs:
+
+```
+[2025-03-30 05:31:09] LOG: - Post Interval: null-null minutes
+```
+
+**To Reproduce**
+1. Configure Twitter plugin with a valid post interval setting
+2. Check logs to see that the interval is showing as null-null minutes
+
+**Expected behavior**
+The logs should correctly show the configured post interval, such as "Post Interval: 30-60 minutes" if configured with those values.
+
+**Additional context**
+The post interval configuration appears to be properly set in the config files, but the system is not reading or applying these values correctly. This may affect the bot's posting schedule.
+
+These two bugs should be fixed separately as they affect different aspects of the Twitter plugin functionality:
+1. The duplicate key error prevents proper handling of mentions
+2. The null post interval may cause irregular posting behavior 7:T458,# Relates to
+
+https://linear.app/eliza-labs/issue/ELI2-236/uiux-implement-agent-templates-via-dropdown-in-creation-form
+
+# Risks
+Low. This PR only adds new agent templates based on the existing client documentation. No functional changes to the application logic.
+
+# Background
+
+## What does this PR do?
+Adds new agent templates for all client types found in the packages/docs/packages/clients directory. These templates provide easy-to-use configurations for creating agents that work with specific platforms like Discord, Telegram, Slack, Twitter, GitHub, Instagram, and others.
+
+## What kind of change is this?
+Features (non-breaking change which adds functionality)
+
+# Documentation changes needed?
+My changes do not require a change to the project documentation as the templates are self-documenting within the UI.
+
+# Testing
+
+## Where should a reviewer start?
+1. Open the Character Settings UI
+2. Check the template dropdown
+3. Verify all client types are represented with appropriate templates
+
+
+https://github.com/user-attachments/assets/657de3a3-9606-46f9-9611-9d283bdc122c
+
+8:Tc3d,<!-- Use this template by filling in information and copying and pasting relevant items out of the HTML comments. -->
+
+# Relates to
+
+<!-- LINK TO ISSUE OR TICKET -->
+
+<!-- This risks section must be filled out before the final review and merge. -->
+
+# Risks
+
+<!--
+Low, medium, large. List what kind of risks and what could be affected.
+-->
+Low: adding test coverage 
+# Background
+
+## What does this PR do?
+Test coverage for plugin-video-understanding package
+* Added vitest configuration file
+* Created three test suites covering all main components:
+    * types.test.ts: Tests for Zod schema validation with 6 test cases
+    * plugin.test.ts: Tests for plugin export and configuration with 6 test cases
+    * video.test.ts: Tests for VideoService with 15 test cases
+Specific coverage:
+* Types: Tested FileLocationResultSchema validation for valid/invalid inputs and isFileLocationResult type guard
+* Plugin: Tested name, description, service registration, and exports
+* VideoService: Tested lifecycle methods (start/stop), URL detection, caching, and media processing
+
+## What kind of change is this?
+
+<!--
+Bug fixes (non-breaking change which fixes an issue)
+Improvements (misc. changes to existing features)
+Features (non-breaking change which adds functionality)
+Updates (new versions of included code)
+-->
+feautre/chore: adding tests
+<!-- This "Why" section is most relevant if there are no linked issues explaining why. If there is a related issue, it might make sense to skip this why section. -->
+<!--
+## Why are we doing this? Any context or related work?
+-->
+
+# Documentation changes needed?
+npne
+<!--
+My changes do not require a change to the project documentation.
+My changes require a change to the project documentation.
+If documentation change is needed: I have updated the documentation accordingly.
+-->
+
+<!-- Please show how you tested the PR. This will really help if the PR needs to be retested and probably help the PR get merged quicker. -->
+
+# Testing
+
+## Where should a reviewer start?
+packages/plugin-video-understanding
+## Detailed testing steps
+
+<!--
+None: Automated tests are acceptable.
+-->
+
+<!--
+- As [anon/admin], go to [link]
+  - [do action]
+  - verify [result]
+-->
+cd packages/plugin-video-understanding && pnpm install && pnpm test 
+<!-- If there is a UI change, please include before and after screenshots or videos. This will speed up PRs being merged. It is extra nice to annotate screenshots with arrows or boxes pointing out the differences. -->
+<!--
+## Screenshots
+### Before
+### After
+-->
+
+<!-- If there is anything about the deployment, please make a note. -->
+<!--
+# Deploy Notes
+-->
+
+<!--  Copy and paste command line output. -->
+<!--
+## Database changes
+-->
+
+<!--  Please specify deploy instructions if there is something more than the automated steps. -->
+<!--
+## Deployment instructions
+-->
+
+<!-- If you are on Discord, please join https://discord.gg/elizaOS and state your Discord username here for the contributor role and join us in #development-feed -->
+<!--
+## Discord username
+
+-->
+9:T9d8,# Relates to
+
+<!-- LINK TO ISSUE OR TICKET -->
+[ELI2-227 – UI/UX: Implement confirmation modals for destructive actions](https://linear.app/eliza-labs/issue/ELI2-227/uiux-implement-confirmation-modals-for-destructive-actions)
+
+
+# Risks
+
+Medium – Affects multiple user-facing components that perform destructive actions.  
+Risks include:
+- Potential UI regressions if modals block valid workflows.
+- Inconsistent behavior if modal logic is incorrectly implemented across components.
+
+# Background
+
+## What does this PR do?
+
+This PR introduces a reusable confirmation modal component for destructive actions (such as deletions and data clears) throughout the application. The modal includes:
+- Clear action context (e.g., "Confirm Deletion")
+- Specific item detail (e.g., character name, log type, group name)
+- Warning about irreversibility
+- Action buttons ("Confirm" / "Cancel") with "Cancel" as default
+
+It has been integrated into:
+- Agent Settings (Delete Character)
+- System Logs view (Clear Logs)
+- Chat view Log panel (Clear Logs)
+
+## What kind of change is this?
+
+- Features (non-breaking change which adds functionality)
+- Improvements (misc. changes to existing features)
+
+# Documentation changes needed?
+
+- My changes do not require a change to the project documentation.
+
+# Testing
+
+## Where should a reviewer start?
+
+Start by reviewing the new `ConfirmationModal` component inside `packages/client/components/common/ConfirmationModal.tsx` (or relevant location).  
+Then check usage examples in `AgentSettings`, `SystemLogs`, and `ChatLogs`.
+
+## Detailed testing steps
+
+- As admin:
+  - Navigate to Agent Settings
+    - Click "Delete Character"
+    - Confirm modal appears, and only on confirm is the character deleted
+  - Navigate to System Logs
+    - Click "Clear Logs"
+    - Confirm modal appears before logs are deleted
+  - Navigate to Chat Log panel
+    - Click "Clear Logs"
+    - Modal should confirm action before proceeding
+
+- Try canceling in each modal to ensure no destructive action occurs.
+
+- Confirm the default action is "Cancel" by checking focus and keyboard behavior.
+
+## Screenshots
+### Before
+Destructive actions occurred instantly on button click.
+
+### After
+Confirmation modal intercepts the action and clearly warns the user.
+
+![Output](https://github.com/user-attachments/assets/b9d94b64-da13-47f5-b285-5c5d6c015e17)
+![output1](https://github.com/user-attachments/assets/5d39b1d0-630d-43c8-8ed9-bd172e0a8023)
+
+a:T994,<!-- Use this template by filling in information and copying and pasting relevant items out of the HTML comments. -->
+
+# Relates to
+When adding rag knowledge, the editor reports an error
+
+<!-- LINK TO ISSUE OR TICKET -->
+
+<!-- This risks section must be filled out before the final review and merge. -->
+
+# Risks
+
+<!--
+Low, medium, large. List what kind of risks and what could be affected.
+-->
+low
+
+# Background
+
+## What does this PR do?
+Fix type errors
+
+## What kind of change is this?
+
+<!--
+Bug fixes (non-breaking change which fixes an issue)
+Improvements (misc. changes to existing features)
+Features (non-breaking change which adds functionality)
+Updates (new versions of included code)
+-->
+Bug fixes 
+<!-- This "Why" section is most relevant if there are no linked issues explaining why. If there is a related issue, it might make sense to skip this why section. -->
+<!--
+## Why are we doing this? Any context or related work?
+-->
+
+# Documentation changes needed?
+
+<!--
+My changes do not require a change to the project documentation.
+My changes require a change to the project documentation.
+If documentation change is needed: I have updated the documentation accordingly.
+-->
+My changes do not require a change to the project documentation.
+<!-- Please show how you tested the PR. This will really help if the PR needs to be retested and probably help the PR get merged quicker. -->
+
+# Testing
+
+## Where should a reviewer start?
+
+## Detailed testing steps
+
+<!--
+None: Automated tests are acceptable.
+-->
+
+<!--
+- As [anon/admin], go to [link]
+  - [do action]
+  - verify [result]
+-->
+
+<!-- If there is a UI change, please include before and after screenshots or videos. This will speed up PRs being merged. It is extra nice to annotate screenshots with arrows or boxes pointing out the differences. -->
+<!--
+## Screenshots
+### Before
+### After
+-->
+
+<!-- If there is anything about the deployment, please make a note. -->
+<!--
+# Deploy Notes
+-->
+
+<!--  Copy and paste command line output. -->
+<!--
+## Database changes
+-->
+
+<!--  Please specify deploy instructions if there is something more than the automated steps. -->
+<!--
+## Deployment instructions
+-->
+
+<!-- If you are on Discord, please join https://discord.gg/elizaOS and state your Discord username here for the contributor role and join us in #development-feed -->
+<!--
+## Discord username
+
+-->
+b:Tf3e,On April 18, 2025, ElizaOS focused on enhancing user experience and system stability, with key feature additions like OpenAI model usage tracking and improved group deletion confirmations. Significant progress was made on bug fixes, including resolving issues with knowledge types and UUID generation, while new challenges emerged concerning image analysis in the Discord plugin and persistent UI elements.
+
+## 🚨 Needs Attention
+- **Urgent Discussions**:
+    - [elizaos/eliza#4319](https://github.com/elizaos/eliza/issues/4319): A 404 error is occurring when analyzing images using the OpenAI API in the Discord plugin.
+    - [elizaos/eliza#4316](https://github.com/elizaos/eliza/issues/4316): A persistent blue dot remains after skipping onboarding via the close button, indicating a UI issue that needs resolution.
+    - [elizaos/eliza#4315](https://github.com/elizaos/eliza/issues/4315): Group chat functionality is failing due to a JavaScript error related to `crypto.randomUUID()` not being a function, requiring immediate attention.
+
+## ✅ Completed Work
+### User Experience & Feature Enhancements
+- Added OpenAI model usage tracking via plugin-scoped events to provide better insights into model consumption ([elizaos/eliza#4230](https://github.com/elizaos/eliza/pull/4230)).
+- Implemented a confirmation dialog for deleting groups to prevent accidental data loss ([elizaos/eliza#4310](https://github.com/elizaos/eliza/pull/4310)).
+- Exported all providers, actions, and evaluators from the bootstrap plugin, improving the consumer experience and modularity ([elizaos/eliza#4311](https://github.com/elizaos/eliza/pull/4311)).
+
+### Bug Fixes & System Stability
+- Resolved issues with knowledge types when adding RAG knowledge, which previously caused errors ([elizaos/eliza#4243](https://github.com/elizaos/eliza/pull/4243)).
+- Fixed a typographical error in `Character.md` for improved documentation clarity ([elizaos/eliza#4313](https://github.com/elizaos/eliza/pull/4313)).
+- Addressed the persistent blue beacon issue by marking onboarding as complete when the tour is closed manually ([elizaos/eliza#4317](https://github.com/elizaos/eliza/pull/4317)).
+- Implemented a fallback for UUID generation to ensure broader browser support and prevent functionality failures ([elizaos/eliza#4318](https://github.com/elizaos/eliza/pull/4318)).
+
+### Testing & Documentation Improvements
+- Added tests for the video understanding plugin to ensure its functionality and reliability ([elizaos/eliza#4233](https://github.com/elizaos/eliza/pull/4233)).
+- Removed consecutive duplicate words in documentation for improved readability and conciseness ([elizaos/eliza#4312](https://github.com/elizaos/eliza/pull/4312)).
+
+## 🐞 Issue Triage
+### elizaos/eliza
+- **New Issues**:
+    - [elizaos/eliza#4319](https://github.com/elizaos/eliza/issues/4319): 404 error when analyzing images using OpenAI API in Discord plugin.
+    - [elizaos/eliza#4316](https://github.com/elizaos/eliza/issues/4316): Persistent blue dot after skipping onboarding via close button.
+    - [elizaos/eliza#4315](https://github.com/elizaos/eliza/issues/4315): Group chat functionality failing due to `crypto.randomUUID()` error.
+- **Closed Issues**:
+    - [elizaos/eliza#4238](https://github.com/elizaos/eliza/issues/4238): Fixed `getTasks` error when launching a new agent in the GUI.
+    - [elizaos/eliza#4210](https://github.com/elizaos/eliza/issues/4210): Addressed 404 error related to OpenAI Plugin using deprecated `gpt-4-vision-preview` model.
+    - [elizaos/eliza#4146](https://github.com/elizaos/eliza/issues/4146): Resolved Twitter plugin issues, including duplicate memory creation.
+    - [elizaos/eliza#4127](https://github.com/elizaos/eliza/issues/4127): Resolved Twitter plugin issues, including redundant checks.
+    - [elizaos/eliza#4115](https://github.com/elizaos/eliza/issues/4115): Resolved Twitter plugin issues.0:{"buildId":"US8XLB_zHXYj_PVAECGcd","rsc":["$","$1","c",{"children":[["$","div",null,{"className":"container mx-auto px-6 py-8 md:px-8","children":["$","div",null,{"className":"mx-auto max-w-4xl","children":[["$","div",null,{"className":"mb-4 flex flex-col justify-between sm:flex-row","children":[["$","$L2",null,{"currentInterval":"day","currentDate":"2025-04-18"}],["$","$L3",null,{"metrics":{"date":"2025-04-18","interval":{"intervalStart":"$D2025-04-18T00:00:00.000Z","intervalEnd":"$D2025-04-19T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":7,"merged":10,"total":14},"issues":{"new":3,"closed":8,"total":9},"activeContributors":16,"codeChanges":{"additions":703,"deletions":89,"files":23,"commitCount":33},"topContributors":[{"username":"tcm390","avatarUrl":"https://avatars.githubusercontent.com/u/60634884?u=c6c41679b8322eaa0c81f72e0b4ed95e80f0ac16&v=4","totalScore":97.53391014905532,"prScore":42.83391014905531,"issueScore":4,"reviewScore":50.5,"commentScore":0.2,"summary":"tcm390: Merged 2 PRs (#4318 with +4/-2 lines, #4317 with +3/-3 lines) and created 2 issues, both of which were closed. Made significant code changes, modifying 1794 files with a total of +77667/-31406 lines, while maintaining a consistent activity pattern with 17 commits."},{"username":"HarshModi2005","avatarUrl":"https://avatars.githubusercontent.com/u/142230924?u=64e337bbdb6b3aded5943b7e297759e7a3cfc0f0&v=4","totalScore":52.8797738965761,"prScore":52.8797738965761,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"HarshModi2005: Merged 1 significant pull request (#4323) adding default agents based on the organization, with a total of +58775/-6880 lines. Modified 5 files with a focus on other work, contributing +735/-59 lines of code today."},{"username":"paoloanzn","avatarUrl":"https://avatars.githubusercontent.com/u/201222836?u=d628ac4982cd80572da1abbe16f90e6415972e29&v=4","totalScore":28.782225198264968,"prScore":28.782225198264968,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"paoloanzn: Merged 1 PR (#4320) with a significant feature addition, implementing deleteTweet() and contributing +83 lines of code across 3 modified files. Maintained a consistent activity pattern, focusing entirely on feature work today."},{"username":"monilpat","avatarUrl":"https://avatars.githubusercontent.com/u/15067321?v=4","totalScore":27,"prScore":0,"issueScore":0,"reviewScore":27,"commentScore":0,"summary":"monilpat: Made significant code changes by modifying 83 files (+2851/-587 lines) with a focus on other work, while also conducting 5 reviews that included 3 change requests and 2 comments. Maintained a consistent activity pattern, being active every day."},{"username":"leopardracer","avatarUrl":"https://avatars.githubusercontent.com/u/136604165?u=7ca681dd63a1e9991929157a38f094609d7a42f0&v=4","totalScore":22.788947636399186,"prScore":22.788947636399186,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"leopardracer: Merged 1 PR (#4322) focused on fixing typos and improving documentation in the changelog (+6/-6 lines), demonstrating consistent activity with a primary focus on documentation work."},{"username":"zeroprooff","avatarUrl":"https://avatars.githubusercontent.com/u/155266802?u=de0189445af06c044a1dc79b6766d6f4e64e4bcf&v=4","totalScore":20.576306144334055,"prScore":20.576306144334055,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"zeroprooff: Merged 1 PR (#4321) that deleted a duplicate README_NL.md, resulting in significant changes of +52124/-24085 lines. Maintained a consistent activity pattern with a focus on documentation modifications, making 1 commit today."},{"username":"0xbbjoker","avatarUrl":"https://avatars.githubusercontent.com/u/54844437?u=90fe1762420de6ad493a1c1582f1f70c0d87d8e2&v=4","totalScore":19.914027890391893,"prScore":19.714027890391893,"issueScore":0,"reviewScore":0,"commentScore":0.2,"summary":"0xbbjoker: Opened 1 PR (#4314) focused on adding operation name tracking and modified 3 files with a total of +200/-215 lines, demonstrating consistent feature work. Active today with 1 PR comment, maintaining a steady contribution pattern."},{"username":"michavie","avatarUrl":"https://avatars.githubusercontent.com/u/39144548?u=3496eb82a60d2a8e88bf5e22c3ffe5eb2b37d816&v=4","totalScore":4.5,"prScore":0,"issueScore":0,"reviewScore":4.5,"commentScore":0,"summary":"michavie: Made code modifications in 2 files, contributing a total of +46 lines and -13 lines, with a primary focus on other work. Engaged in the review process with 1 comment, maintaining a consistent activity pattern by being active every day."},{"username":"standujar","avatarUrl":"https://avatars.githubusercontent.com/u/16385918?u=718bdcd1585be8447bdfffb8c11ce249baa7532d&v=4","totalScore":4.3,"prScore":0,"issueScore":4.1,"reviewScore":0,"commentScore":0.2,"summary":"standujar: Created 1 issue (#4319 \"Image analysis fails with OpenAI API 404 error in @elizaos/pl...\") which has been closed, and commented on another issue, demonstrating sporadic activity today."},{"username":"Titan-Node","avatarUrl":"https://avatars.githubusercontent.com/u/86620041?u=1fe2cab4cc826fd48f3468a55aa4784870bd7196&v=4","totalScore":4,"prScore":0,"issueScore":4,"reviewScore":0,"commentScore":0,"summary":"Titan-Node: Created 2 issues today, including #4238 \"V2 - `getTasks` error\" (CLOSED) and #4315 \"V2 - Group chat not working\" (OPEN), indicating a focus on addressing bugs. Activity remains sporadic, with no merged pull requests or code changes."}],"focusAreas":[{"area":"plugin-bootstrap","count":6},{"area":"plugin-video-understanding","count":4},{"area":"client","count":4},{"area":"plugin-twitter","count":3},{"area":"core","count":2},{"area":"plugin-openai","count":1},{"area":"docs/community","count":1},{"area":"docs/api","count":1}],"topIssues":[{"id":"I_kwDOMT5cIs6zHnkA","title":"Image analysis fails with OpenAI API 404 error in @elizaos/plugin-openai using discord","author":"standujar","number":4319,"repository":"elizaos/eliza","body":"Describe the bug\n\nWhen trying to analyze an image using the @elizaos/plugin-openai, the process fails with a 404 error from the OpenAI API. This appears during image attachment processing in a Discord plugin.\n\n⸻\n\nTo Reproduce\n\t1.\tStart the ElizaOS agent with the Discord plugin enabled.\n\t2.\tSend an image to the Discord channel monitored by the agent.\n\t3.\tObserve the error logs in the console.\n\n⸻\n\nExpected behavior\n\nThe image should be successfully processed by the plugin using the OpenAI API, and the result should be handled or displayed accordingly.\n\nAdditional context\n\t•\tPlugin versions:\n\t•\t@elizaos/plugin-openai@1.0.0-beta.32\n\t•\t@elizaos/plugin-discord@1.0.0-beta.32\n\t•\tRuntime: ElizaOS Agent via @elizaos/cli@1.0.0-beta.32\n\t•\tPossibly related to a deprecated or incorrect endpoint in the image analysis feature (IMAGE_DESCRIPTION)\n\t•\tThe error may indicate a missing route on OpenAI’s side, or a wrong model/feature is being called.\n\n\nI'm using the 4o model","createdAt":"2025-04-18T14:52:47Z","closedAt":"2025-04-18T15:14:05Z","state":"CLOSED","commentCount":2},{"id":"I_kwDOMT5cIs6zEVIk","title":"V2 - Group chat not working","author":"Titan-Node","number":4315,"repository":"elizaos/eliza","body":"**Describe the bug**\nCannot use group chat, getting this js error.\n\n```\nUncaught TypeError: crypto.randomUUID is not a function\n    at handleSendMessage (room.tsx:369:18)\n```\n\nIf you delete this line and rebuild it works.\nhttps://github.com/elizaOS/eliza/blob/e8e4bd0585999e68daf09e0c65e4520041a0b077/packages/client/src/components/room.tsx#L369\n\n","createdAt":"2025-04-18T07:26:14Z","closedAt":"2025-05-23T02:29:31Z","state":"CLOSED","commentCount":1},{"id":"I_kwDOMT5cIs6xui3y","title":"V2 - `getTasks` error","author":"Titan-Node","number":4238,"repository":"elizaos/eliza","body":"**Describe the bug**\n\nGetting this error after launching a new agent in the GUI\n\n```\n[2025-04-09 06:57:26] ERROR: Error checking tasks:\n    message: \"(TypeError) Cannot read properties of undefined (reading 'getTasks')\"\n    stack: [\n      \"TypeError: Cannot read properties of undefined (reading 'getTasks')\",\n      \"at AgentRuntime.getTasks (file:///root/eliza-v2/test-vtuber/node_modules/@elizaos/cli/dist/chunk-E227RYGB.js:47081:31)\",\n      \"at _TaskService.checkTasks (file:///root/eliza-v2/test-vtuber/node_modules/@elizaos/plugin-bootstrap/dist/index.js:5235:43)\",\n      \"at Timeout._onTimeout (file:///root/eliza-v2/test-vtuber/node_modules/@elizaos/plugin-bootstrap/dist/index.js:5189:20)\",\n      \"at listOnTimeout (node:internal/timers:614:17)\",\n      \"at process.processTimers (node:internal/timers:549:7)\"\n    ]\n```\nNot affecting the GUI, it's just spamming the logs on the machine.","createdAt":"2025-04-09T06:59:42Z","closedAt":"2025-04-18T07:14:51Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs6xds6u","title":"OpenAI Plugin using `gpt-4-vision-preview` model leading to 404 error","author":"LongJeongS","number":4210,"repository":"elizaos/eliza","body":"$4","createdAt":"2025-04-07T16:09:26Z","closedAt":"2025-04-18T09:05:12Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs6wvWc1","title":"Failed to create Twitter client","author":"tcm390","number":4146,"repository":"elizaos/eliza","body":"<img width=\"812\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/3aa6e12e-ec2a-41f4-b537-395cbba5699b\" />\n\nSteps to Reproduce:\n\n1. Purge the database\n\n2. Run the Twitter plugin","createdAt":"2025-04-02T05:12:54Z","closedAt":"2025-04-18T09:06:33Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs6wkFlk","title":"Repeat checking on interaction, mentioned tweets","author":"AbdelrahmanZ08","number":4127,"repository":"elizaos/eliza","body":"$5","createdAt":"2025-04-01T05:06:27Z","closedAt":"2025-04-18T09:06:47Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs6wWdk_","title":"Twitter Plugin: Duplicate Memory Creation on Mentions & Null Post Interval Configuration","author":"AbdelrahmanZ08","number":4115,"repository":"elizaos/eliza","body":"$6","createdAt":"2025-03-30T05:39:58Z","closedAt":"2025-04-18T09:05:30Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs6uI5im","title":"feat: upload .env file to webui configurator","author":"madjin","number":3936,"repository":"elizaos/eliza","body":"ability to upload / drag and drop a .env file to automatically populate secrets with","createdAt":"2025-03-15T01:11:24Z","closedAt":"2025-04-18T09:05:42Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs6zEmua","title":"Blue dot remains after skipping onboarding via close button","author":"tcm390","number":4316,"repository":"elizaos/eliza","body":"When I close the onboarding instructions from the GUI without completing them step by step, a persistent blue dot appears on top of the interface. \n\n<img width=\"834\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/d0daa604-2e4d-4492-ac71-eba0bcc63632\" />","createdAt":"2025-04-18T08:01:18Z","closedAt":"2025-04-18T08:35:36Z","state":"CLOSED","commentCount":0}],"topPullRequests":[{"id":"PR_kwDOMT5cIs6TKcaP","title":"Added Default Agents based on the org","author":"HarshModi2005","number":4323,"body":"$7","repository":"elizaos/eliza","createdAt":"2025-04-18T20:50:33Z","mergedAt":"2025-04-20T16:21:50Z","additions":1537,"deletions":494},{"id":"PR_kwDOMT5cIs6R2cZx","title":"chore: video understanding plugin tests ","author":"ai16z-demirix","number":4233,"body":"$8","repository":"elizaos/eliza","createdAt":"2025-04-08T21:21:10Z","mergedAt":"2025-04-18T02:31:13Z","additions":462,"deletions":3},{"id":"PR_kwDOMT5cIs6TDWKS","title":"fix: add operation name tracking","author":"0xbbjoker","number":4314,"body":"\n\n<!-- This is an auto-generated comment: release notes by coderabbit.ai -->\n\n## Summary by CodeRabbit\n\n- **Refactor**\n  - Improved logging and traceability for database operations by standardizing method signatures and including descriptive operation names.\n  - Simplified internal control flow for task-related actions, removing redundant retry wrappers.\n  - Enhanced reliability and clarity in database adapter behavior, including better warning messages during shutdown scenarios.\n\n<!-- end of auto-generated comment: release notes by coderabbit.ai -->","repository":"elizaos/eliza","createdAt":"2025-04-18T00:15:26Z","mergedAt":null,"additions":200,"deletions":215},{"id":"PR_kwDOMT5cIs6TIiQQ","title":"feat: Add deleteTweet()","author":"paoloanzn","number":4320,"body":"<!-- Use this template by filling in information and copying and pasting relevant items out of the HTML comments. -->\r\n\r\n# Relates to\r\n\r\n- Request to add same changes as in https://github.com/elizaOS/agent-twitter-client from @tcm390 \r\n\r\n# Risks\r\n\r\n- Low: No error if you try to accidentally delete a tweet which is not yours, simply nothing happens\r\n\r\n# Background\r\n\r\n## What does this PR do?\r\n\r\n- Add deleteTweet() function to tweets.ts\r\n- Add deleteTweet() wrapping method for Client class\r\n- Add test for deleteTweet() to tweet.tests.ts\r\n\r\n## What kind of change is this?\r\n\r\nFeature\r\n\r\n## Discord username\r\n@paoloanzn \r\nbtw i'm in the development server but I can't join the other server as if I'm banned :( ","repository":"elizaos/eliza","createdAt":"2025-04-18T15:14:51Z","mergedAt":"2025-04-18T15:27:40Z","additions":83,"deletions":0},{"id":"PR_kwDOMT5cIs6TAQcC","title":"Export bootstrap plugin capabilities","author":"michavie","number":4311,"body":"Exporting all providers, actions, and evaluators from the bootstrap plugin for a more controlled consumer experience.\r\n\r\n# Risks\r\n\r\nNo breaking changes for regular package consumers. For consistency, `updateRoleAction ` and `updateSettingsAction ` have been changed to named exports as the other actions.\r\n\r\n# Background\r\n\r\n## What kind of change is this?\r\n\r\nImprovements (misc. changes to existing features)\r\n\r\n# Documentation changes needed?\r\n\r\nMy changes do not require a change to the project documentation.\r\n\r\n## Discord username\r\n\r\n@michavie\r\n","repository":"elizaos/eliza","createdAt":"2025-04-17T14:57:08Z","mergedAt":"2025-04-18T01:07:23Z","additions":71,"deletions":66},{"id":"PR_kwDOMT5cIs6R07-A","title":"Add OpenAi model usage events","author":"michavie","number":4230,"body":"Add open ai model usage tracking via plugin-scoped events.","repository":"elizaos/eliza","createdAt":"2025-04-08T17:45:47Z","mergedAt":"2025-04-18T09:30:39Z","additions":62,"deletions":7},{"id":"PR_kwDOMT5cIs6S_cPa","title":"feat: add confirmation dialog for delete group","author":"Samarthsinghal28","number":4310,"body":"$9","repository":"elizaos/eliza","createdAt":"2025-04-17T13:29:15Z","mergedAt":"2025-04-18T00:57:45Z","additions":15,"deletions":1},{"id":"PR_kwDOMT5cIs6TKX0S","title":"Fix Typos and Improve Documentation in Changelog","author":"leopardracer","number":4322,"body":"\r\n\r\n**Description:**\r\n\r\nThis pull request addresses several minor issues in the changelog documentation:\r\n\r\n- Corrected typos such as \"toghether\" to \"together\" and \"misstype\" to \"mistype\".\r\n- Improved consistency by using strict types to avoid errors, as referenced in issue #2164.\r\n- Updated links and references to ensure they point to the correct pull requests and issues.\r\n- Enhanced readability and clarity of the changelog entries.\r\n\r\nThese changes aim to improve the overall quality and accuracy of the documentation.\r\n\r\n\r\n","repository":"elizaos/eliza","createdAt":"2025-04-18T20:36:08Z","mergedAt":"2025-04-19T02:51:27Z","additions":5,"deletions":5},{"id":"PR_kwDOMT5cIs6TF53i","title":"fix: Use utils-based UUID for broader browser support","author":"tcm390","number":4318,"body":"related: https://github.com/elizaOS/eliza/issues/4315\r\n\r\nFallback to a custom UUID generator for browsers that don't support crypto.randomUUID().","repository":"elizaos/eliza","createdAt":"2025-04-18T08:31:14Z","mergedAt":"2025-04-18T08:32:51Z","additions":4,"deletions":2},{"id":"PR_kwDOMT5cIs6TFwbo","title":"fix: persistent beacon by handling tour close action","author":"tcm390","number":4317,"body":"related: https://github.com/elizaOS/eliza/issues/4316\r\n\r\nMark onboarding as complete when the tour is closed manually to prevent lingering blue beacon.","repository":"elizaos/eliza","createdAt":"2025-04-18T08:17:20Z","mergedAt":"2025-04-18T08:17:54Z","additions":3,"deletions":3},{"id":"PR_kwDOMT5cIs6R98mt","title":"fix knowledge types","author":"piperTang","number":4243,"body":"$a","repository":"elizaos/eliza","createdAt":"2025-04-09T15:31:08Z","mergedAt":"2025-04-18T02:22:19Z","additions":1,"deletions":1},{"id":"PR_kwDOMT5cIs6TCf4F","title":"Fix Typographical Error in Character.md","author":"leopardracer","number":4313,"body":"\r\n\r\nDescription: \r\nThis pull request corrects a typographical error in the `Character.md` file. The word \"Optional\" was previously misspelled as \"Optinal\" and has been corrected. This change ensures consistency and clarity in the documentation.\r\n","repository":"elizaos/eliza","createdAt":"2025-04-17T20:42:32Z","mergedAt":"2025-04-18T00:53:06Z","additions":1,"deletions":1},{"id":"PR_kwDOMT5cIs6TBayk","title":"docs: remove consecutive duplicate words","author":"zeroprooff","number":4312,"body":"","repository":"elizaos/eliza","createdAt":"2025-04-17T17:37:32Z","mergedAt":"2025-04-18T00:54:43Z","additions":1,"deletions":1},{"id":"PR_kwDOMT5cIs6TJO-W","title":"deleted duplicate README_NL.md","author":"zeroprooff","number":4321,"body":"thanks ! ","repository":"elizaos/eliza","createdAt":"2025-04-18T16:53:02Z","mergedAt":"2025-04-19T02:35:45Z","additions":1,"deletions":1}],"detailedContributorSummaries":{"0xbbjoker":"0xbbjoker: Opened 1 PR (#4314) focused on adding operation name tracking and modified 3 files with a total of +200/-215 lines, demonstrating consistent feature work. Active today with 1 PR comment, maintaining a steady contribution pattern.","HarshModi2005":"HarshModi2005: Merged 1 significant pull request (#4323) adding default agents based on the organization, with a total of +58775/-6880 lines. Modified 5 files with a focus on other work, contributing +735/-59 lines of code today.","Titan-Node":"Titan-Node: Created 2 issues today, including #4238 \"V2 - `getTasks` error\" (CLOSED) and #4315 \"V2 - Group chat not working\" (OPEN), indicating a focus on addressing bugs. Activity remains sporadic, with no merged pull requests or code changes.","leopardracer":"leopardracer: Merged 1 PR (#4322) focused on fixing typos and improving documentation in the changelog (+6/-6 lines), demonstrating consistent activity with a primary focus on documentation work.","michavie":"michavie: Made code modifications in 2 files, contributing a total of +46 lines and -13 lines, with a primary focus on other work. Engaged in the review process with 1 comment, maintaining a consistent activity pattern by being active every day.","monilpat":"monilpat: Made significant code changes by modifying 83 files (+2851/-587 lines) with a focus on other work, while also conducting 5 reviews that included 3 change requests and 2 comments. Maintained a consistent activity pattern, being active every day.","paoloanzn":"paoloanzn: Merged 1 PR (#4320) with a significant feature addition, implementing deleteTweet() and contributing +83 lines of code across 3 modified files. Maintained a consistent activity pattern, focusing entirely on feature work today.","standujar":"standujar: Created 1 issue (#4319 \"Image analysis fails with OpenAI API 404 error in @elizaos/pl...\") which has been closed, and commented on another issue, demonstrating sporadic activity today.","tcm390":"tcm390: Merged 2 PRs (#4318 with +4/-2 lines, #4317 with +3/-3 lines) and created 2 issues, both of which were closed. Made significant code changes, modifying 1794 files with a total of +77667/-31406 lines, while maintaining a consistent activity pattern with 17 commits.","zeroprooff":"zeroprooff: Merged 1 PR (#4321) that deleted a duplicate README_NL.md, resulting in significant changes of +52124/-24085 lines. Maintained a consistent activity pattern with a focus on documentation modifications, making 1 commit today."}},"summaryContent":"$b","className":"self-end sm:self-start"}]]}],"$Lc","$Ld","$Le"]}]}],["$Lf","$L10","$L11"],"$L12"]}],"loading":null,"isPartial":false}
+c:["$","div",null,{"className":"mb-6","children":["$","div",null,{"className":"flex items-center justify-between","children":[[["$","$L13",null,{"href":"/summary/day/2025-04-17","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left mr-2 h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"children":"Previous"}],false],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$L13",null,{"href":"/summary/day/2025-04-17","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Previous"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]],["$","div",null,{"className":"flex flex-col items-center","children":[["$","div",null,{"className":"text-sm font-medium text-gray-500","children":["Daily"," Summary"]}],["$","time",null,{"dateTime":"2025-04-18","className":"text-md font-bold","children":"Apr 18, 2025"}]]}],[["$","$L13",null,{"href":"/summary/day/2025-04-19","children":[false,["$","span",null,{"children":"Next"}],["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right ml-2 h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}]],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$L13",null,{"href":"/summary/day/2025-04-19","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Next"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]]]}]}]
+15:T5f1,**Describe the bug**
+Using `gpt-4-vision-preview` model to analyze images in the openai plugin (around line 404 in `plugin-openai/src/index.ts`) is leading to the below error. The `gpt-4-vision` model appears to be deprecated. Changing the model definition to `gpt-4o` or `gpt-4o-mini` resolves the error.
+
+```
+[2025-04-07 16:04:09] ERROR: Error analyzing image:
+    message: "(Error) OpenAI API error: 404"
+    stack: [
+      "Error: OpenAI API error: 404",
+      "at IMAGE_DESCRIPTION (.../node_modules/@elizaos/plugin-openai/dist/index.js:782:17)",
+      "at process.processTicksAndRejections (node:internal/process/task_queues:105:5)",
+      "at async AgentRuntime.useModel (.../node_modules/@elizaos/cli/dist/chunk-2I224C7C.js:46786:22)",
+      "at async TwitterInteractionClient.handleTweet .../node_modules/@elizaos/plugin-twitter/dist/index.js:8169:29)",
+      "at async TwitterInteractionClient.processMentionTweets (.../node_modules/@elizaos/plugin-twitter/dist/index.js:8016:9)",
+      "at async TwitterInteractionClient.handleTwitterInteractions (.../node_modules/@elizaos/plugin-twitter/dist/index.js:7909:7)"
+    ]
+```
+
+<!-- A clear and concise description of what the bug is. -->
+
+**To Reproduce**
+
+<!-- Steps to reproduce the behavior. -->
+
+**Expected behavior**
+
+<!-- A clear and concise description of what you expected to happen. -->
+
+**Screenshots**
+
+<!-- If applicable, add screenshots to help explain your problem. -->
+
+**Additional context**
+
+<!-- Add any other context about the problem here. -->
+16:T77f,# ElizaOS Twitter Plugin: Redundant Tweet Interaction Checks
+
+## Description
+The Twitter plugin is repeatedly checking the same tweets and mentions in a loop, even after they've been processed. This creates unnecessary API calls and log spam.
+
+## Current Behavior
+The system continuously checks the same tweets over and over, as shown in the logs:
+
+```log
+[2025-03-31 16:21:29] LOG: Checking Twitter interactions
+[2025-03-31 16:21:30] LOG: Completed checking mentioned tweets:
+[2025-03-31 16:21:30] LOG: Already responded to tweet 1906195114227020237, skipping
+[2025-03-31 16:21:30] LOG: Already responded to tweet 1906195395497091521, skipping
+[2025-03-31 16:21:30] LOG: Already responded to tweet 1906209067460137240, skipping
+...
+[2025-03-31 16:21:59] LOG: Checking Twitter interactions
+[2025-03-31 16:22:00] LOG: Already responded to tweet 1906195114227020237, skipping
+[2025-03-31 16:22:00] LOG: Already responded to tweet 1906195395497091521, skipping
+[2025-03-31 16:22:00] LOG: Already responded to tweet 1906209067460137240, skipping
+```
+
+## Expected Behavior
+- The system should only check new interactions since the last check
+- Previously processed tweets should be filtered out before logging
+- The interaction check should maintain a cursor or timestamp of the last checked tweet
+
+## Impact
+1. Unnecessary Twitter API calls that could lead to rate limiting
+2. Excessive log entries making it difficult to debug actual issues
+3. Increased system load from repeated processing of the same data
+
+## Possible Solutions
+1. Implement a cursor-based pagination system to only fetch new tweets
+2. Store the last checked tweet ID and only process tweets newer than that
+3. Add a proper caching mechanism for processed tweets with TTL
+
+## Environment
+- ElizaOS Version: 1.0.0-beta.7
+- Bun install && bun run build && bun start
+
+## Related Issues
+- Previous issue about duplicate key errors in Twitter mentions #4115 17:T954,# ElizaOS Twitter Plugin Bugs
+
+## Issue 1: Duplicate Key Error When Receiving Twitter Mentions
+
+**Describe the bug**
+When someone mentions the bot on Twitter, the system tries to create a memory record twice with the same ID, resulting in database errors:
+
+```
+error: duplicate key value violates unique constraint "memories_pkey"
+detail: "Key (id)=(d79a6e52-7b78-0c8b-941d-fd9c0e353f7a) already exists."
+```
+
+Logs show the same memory ID being processed twice:
+```
+[2025-03-30 05:29:29] DEBUG: DrizzleAdapter createMemory:
+    memoryId: "d79a6e52-7b78-0c8b-941d-fd9c0e353f7a"
+    contentLength: 26
+[2025-03-30 05:29:29] LOG: Processing Tweet: 1906217138978697554
+[2025-03-30 05:29:29] DEBUG: DrizzleAdapter createMemory:
+    memoryId: "d79a6e52-7b78-0c8b-941d-fd9c0e353f7a"
+    contentLength: 26
+```
+
+**To Reproduce**
+1. Configure Twitter plugin with valid credentials
+2. Have someone mention your Twitter bot
+3. Check logs for duplicate key errors
+
+**Expected behavior**
+The bot should create only one memory record per tweet mention and handle all interactions without database errors.
+
+**Root cause**
+The issue occurs because `handleTwitterInteractions()` creates a memory record and then calls `handleTweet()` which tries to create the same memory again:
+1. First creation in `handleTwitterInteractions()` around line 227
+2. Second creation in `handleTweet()` around line 642
+
+## Issue 2: Null Post Interval Configuration
+
+**Describe the bug**
+The Twitter post interval configuration is not being properly read, resulting in null values in the logs:
+
+```
+[2025-03-30 05:31:09] LOG: - Post Interval: null-null minutes
+```
+
+**To Reproduce**
+1. Configure Twitter plugin with a valid post interval setting
+2. Check logs to see that the interval is showing as null-null minutes
+
+**Expected behavior**
+The logs should correctly show the configured post interval, such as "Post Interval: 30-60 minutes" if configured with those values.
+
+**Additional context**
+The post interval configuration appears to be properly set in the config files, but the system is not reading or applying these values correctly. This may affect the bot's posting schedule.
+
+These two bugs should be fixed separately as they affect different aspects of the Twitter plugin functionality:
+1. The duplicate key error prevents proper handling of mentions
+2. The null post interval may cause irregular posting behavior 18:T458,# Relates to
+
+https://linear.app/eliza-labs/issue/ELI2-236/uiux-implement-agent-templates-via-dropdown-in-creation-form
+
+# Risks
+Low. This PR only adds new agent templates based on the existing client documentation. No functional changes to the application logic.
+
+# Background
+
+## What does this PR do?
+Adds new agent templates for all client types found in the packages/docs/packages/clients directory. These templates provide easy-to-use configurations for creating agents that work with specific platforms like Discord, Telegram, Slack, Twitter, GitHub, Instagram, and others.
+
+## What kind of change is this?
+Features (non-breaking change which adds functionality)
+
+# Documentation changes needed?
+My changes do not require a change to the project documentation as the templates are self-documenting within the UI.
+
+# Testing
+
+## Where should a reviewer start?
+1. Open the Character Settings UI
+2. Check the template dropdown
+3. Verify all client types are represented with appropriate templates
+
+
+https://github.com/user-attachments/assets/657de3a3-9606-46f9-9611-9d283bdc122c
+
+19:Tc3d,<!-- Use this template by filling in information and copying and pasting relevant items out of the HTML comments. -->
+
+# Relates to
+
+<!-- LINK TO ISSUE OR TICKET -->
+
+<!-- This risks section must be filled out before the final review and merge. -->
+
+# Risks
+
+<!--
+Low, medium, large. List what kind of risks and what could be affected.
+-->
+Low: adding test coverage 
+# Background
+
+## What does this PR do?
+Test coverage for plugin-video-understanding package
+* Added vitest configuration file
+* Created three test suites covering all main components:
+    * types.test.ts: Tests for Zod schema validation with 6 test cases
+    * plugin.test.ts: Tests for plugin export and configuration with 6 test cases
+    * video.test.ts: Tests for VideoService with 15 test cases
+Specific coverage:
+* Types: Tested FileLocationResultSchema validation for valid/invalid inputs and isFileLocationResult type guard
+* Plugin: Tested name, description, service registration, and exports
+* VideoService: Tested lifecycle methods (start/stop), URL detection, caching, and media processing
+
+## What kind of change is this?
+
+<!--
+Bug fixes (non-breaking change which fixes an issue)
+Improvements (misc. changes to existing features)
+Features (non-breaking change which adds functionality)
+Updates (new versions of included code)
+-->
+feautre/chore: adding tests
+<!-- This "Why" section is most relevant if there are no linked issues explaining why. If there is a related issue, it might make sense to skip this why section. -->
+<!--
+## Why are we doing this? Any context or related work?
+-->
+
+# Documentation changes needed?
+npne
+<!--
+My changes do not require a change to the project documentation.
+My changes require a change to the project documentation.
+If documentation change is needed: I have updated the documentation accordingly.
+-->
+
+<!-- Please show how you tested the PR. This will really help if the PR needs to be retested and probably help the PR get merged quicker. -->
+
+# Testing
+
+## Where should a reviewer start?
+packages/plugin-video-understanding
+## Detailed testing steps
+
+<!--
+None: Automated tests are acceptable.
+-->
+
+<!--
+- As [anon/admin], go to [link]
+  - [do action]
+  - verify [result]
+-->
+cd packages/plugin-video-understanding && pnpm install && pnpm test 
+<!-- If there is a UI change, please include before and after screenshots or videos. This will speed up PRs being merged. It is extra nice to annotate screenshots with arrows or boxes pointing out the differences. -->
+<!--
+## Screenshots
+### Before
+### After
+-->
+
+<!-- If there is anything about the deployment, please make a note. -->
+<!--
+# Deploy Notes
+-->
+
+<!--  Copy and paste command line output. -->
+<!--
+## Database changes
+-->
+
+<!--  Please specify deploy instructions if there is something more than the automated steps. -->
+<!--
+## Deployment instructions
+-->
+
+<!-- If you are on Discord, please join https://discord.gg/elizaOS and state your Discord username here for the contributor role and join us in #development-feed -->
+<!--
+## Discord username
+
+-->
+1a:T9d8,# Relates to
+
+<!-- LINK TO ISSUE OR TICKET -->
+[ELI2-227 – UI/UX: Implement confirmation modals for destructive actions](https://linear.app/eliza-labs/issue/ELI2-227/uiux-implement-confirmation-modals-for-destructive-actions)
+
+
+# Risks
+
+Medium – Affects multiple user-facing components that perform destructive actions.  
+Risks include:
+- Potential UI regressions if modals block valid workflows.
+- Inconsistent behavior if modal logic is incorrectly implemented across components.
+
+# Background
+
+## What does this PR do?
+
+This PR introduces a reusable confirmation modal component for destructive actions (such as deletions and data clears) throughout the application. The modal includes:
+- Clear action context (e.g., "Confirm Deletion")
+- Specific item detail (e.g., character name, log type, group name)
+- Warning about irreversibility
+- Action buttons ("Confirm" / "Cancel") with "Cancel" as default
+
+It has been integrated into:
+- Agent Settings (Delete Character)
+- System Logs view (Clear Logs)
+- Chat view Log panel (Clear Logs)
+
+## What kind of change is this?
+
+- Features (non-breaking change which adds functionality)
+- Improvements (misc. changes to existing features)
+
+# Documentation changes needed?
+
+- My changes do not require a change to the project documentation.
+
+# Testing
+
+## Where should a reviewer start?
+
+Start by reviewing the new `ConfirmationModal` component inside `packages/client/components/common/ConfirmationModal.tsx` (or relevant location).  
+Then check usage examples in `AgentSettings`, `SystemLogs`, and `ChatLogs`.
+
+## Detailed testing steps
+
+- As admin:
+  - Navigate to Agent Settings
+    - Click "Delete Character"
+    - Confirm modal appears, and only on confirm is the character deleted
+  - Navigate to System Logs
+    - Click "Clear Logs"
+    - Confirm modal appears before logs are deleted
+  - Navigate to Chat Log panel
+    - Click "Clear Logs"
+    - Modal should confirm action before proceeding
+
+- Try canceling in each modal to ensure no destructive action occurs.
+
+- Confirm the default action is "Cancel" by checking focus and keyboard behavior.
+
+## Screenshots
+### Before
+Destructive actions occurred instantly on button click.
+
+### After
+Confirmation modal intercepts the action and clearly warns the user.
+
+![Output](https://github.com/user-attachments/assets/b9d94b64-da13-47f5-b285-5c5d6c015e17)
+![output1](https://github.com/user-attachments/assets/5d39b1d0-630d-43c8-8ed9-bd172e0a8023)
+
+1b:T994,<!-- Use this template by filling in information and copying and pasting relevant items out of the HTML comments. -->
+
+# Relates to
+When adding rag knowledge, the editor reports an error
+
+<!-- LINK TO ISSUE OR TICKET -->
+
+<!-- This risks section must be filled out before the final review and merge. -->
+
+# Risks
+
+<!--
+Low, medium, large. List what kind of risks and what could be affected.
+-->
+low
+
+# Background
+
+## What does this PR do?
+Fix type errors
+
+## What kind of change is this?
+
+<!--
+Bug fixes (non-breaking change which fixes an issue)
+Improvements (misc. changes to existing features)
+Features (non-breaking change which adds functionality)
+Updates (new versions of included code)
+-->
+Bug fixes 
+<!-- This "Why" section is most relevant if there are no linked issues explaining why. If there is a related issue, it might make sense to skip this why section. -->
+<!--
+## Why are we doing this? Any context or related work?
+-->
+
+# Documentation changes needed?
+
+<!--
+My changes do not require a change to the project documentation.
+My changes require a change to the project documentation.
+If documentation change is needed: I have updated the documentation accordingly.
+-->
+My changes do not require a change to the project documentation.
+<!-- Please show how you tested the PR. This will really help if the PR needs to be retested and probably help the PR get merged quicker. -->
+
+# Testing
+
+## Where should a reviewer start?
+
+## Detailed testing steps
+
+<!--
+None: Automated tests are acceptable.
+-->
+
+<!--
+- As [anon/admin], go to [link]
+  - [do action]
+  - verify [result]
+-->
+
+<!-- If there is a UI change, please include before and after screenshots or videos. This will speed up PRs being merged. It is extra nice to annotate screenshots with arrows or boxes pointing out the differences. -->
+<!--
+## Screenshots
+### Before
+### After
+-->
+
+<!-- If there is anything about the deployment, please make a note. -->
+<!--
+# Deploy Notes
+-->
+
+<!--  Copy and paste command line output. -->
+<!--
+## Database changes
+-->
+
+<!--  Please specify deploy instructions if there is something more than the automated steps. -->
+<!--
+## Deployment instructions
+-->
+
+<!-- If you are on Discord, please join https://discord.gg/elizaOS and state your Discord username here for the contributor role and join us in #development-feed -->
+<!--
+## Discord username
+
+-->
+d:["$","div",null,{"className":"mb-8 space-y-6","children":[["$","$L14",null,{"metrics":{"date":"2025-04-18","interval":{"intervalStart":"$D2025-04-18T00:00:00.000Z","intervalEnd":"$D2025-04-19T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":7,"merged":10,"total":14},"issues":{"new":3,"closed":8,"total":9},"activeContributors":16,"codeChanges":{"additions":703,"deletions":89,"files":23,"commitCount":33},"topContributors":[{"username":"tcm390","avatarUrl":"https://avatars.githubusercontent.com/u/60634884?u=c6c41679b8322eaa0c81f72e0b4ed95e80f0ac16&v=4","totalScore":97.53391014905532,"prScore":42.83391014905531,"issueScore":4,"reviewScore":50.5,"commentScore":0.2,"summary":"tcm390: Merged 2 PRs (#4318 with +4/-2 lines, #4317 with +3/-3 lines) and created 2 issues, both of which were closed. Made significant code changes, modifying 1794 files with a total of +77667/-31406 lines, while maintaining a consistent activity pattern with 17 commits."},{"username":"HarshModi2005","avatarUrl":"https://avatars.githubusercontent.com/u/142230924?u=64e337bbdb6b3aded5943b7e297759e7a3cfc0f0&v=4","totalScore":52.8797738965761,"prScore":52.8797738965761,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"HarshModi2005: Merged 1 significant pull request (#4323) adding default agents based on the organization, with a total of +58775/-6880 lines. Modified 5 files with a focus on other work, contributing +735/-59 lines of code today."},{"username":"paoloanzn","avatarUrl":"https://avatars.githubusercontent.com/u/201222836?u=d628ac4982cd80572da1abbe16f90e6415972e29&v=4","totalScore":28.782225198264968,"prScore":28.782225198264968,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"paoloanzn: Merged 1 PR (#4320) with a significant feature addition, implementing deleteTweet() and contributing +83 lines of code across 3 modified files. Maintained a consistent activity pattern, focusing entirely on feature work today."},{"username":"monilpat","avatarUrl":"https://avatars.githubusercontent.com/u/15067321?v=4","totalScore":27,"prScore":0,"issueScore":0,"reviewScore":27,"commentScore":0,"summary":"monilpat: Made significant code changes by modifying 83 files (+2851/-587 lines) with a focus on other work, while also conducting 5 reviews that included 3 change requests and 2 comments. Maintained a consistent activity pattern, being active every day."},{"username":"leopardracer","avatarUrl":"https://avatars.githubusercontent.com/u/136604165?u=7ca681dd63a1e9991929157a38f094609d7a42f0&v=4","totalScore":22.788947636399186,"prScore":22.788947636399186,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"leopardracer: Merged 1 PR (#4322) focused on fixing typos and improving documentation in the changelog (+6/-6 lines), demonstrating consistent activity with a primary focus on documentation work."},{"username":"zeroprooff","avatarUrl":"https://avatars.githubusercontent.com/u/155266802?u=de0189445af06c044a1dc79b6766d6f4e64e4bcf&v=4","totalScore":20.576306144334055,"prScore":20.576306144334055,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"zeroprooff: Merged 1 PR (#4321) that deleted a duplicate README_NL.md, resulting in significant changes of +52124/-24085 lines. Maintained a consistent activity pattern with a focus on documentation modifications, making 1 commit today."},{"username":"0xbbjoker","avatarUrl":"https://avatars.githubusercontent.com/u/54844437?u=90fe1762420de6ad493a1c1582f1f70c0d87d8e2&v=4","totalScore":19.914027890391893,"prScore":19.714027890391893,"issueScore":0,"reviewScore":0,"commentScore":0.2,"summary":"0xbbjoker: Opened 1 PR (#4314) focused on adding operation name tracking and modified 3 files with a total of +200/-215 lines, demonstrating consistent feature work. Active today with 1 PR comment, maintaining a steady contribution pattern."},{"username":"michavie","avatarUrl":"https://avatars.githubusercontent.com/u/39144548?u=3496eb82a60d2a8e88bf5e22c3ffe5eb2b37d816&v=4","totalScore":4.5,"prScore":0,"issueScore":0,"reviewScore":4.5,"commentScore":0,"summary":"michavie: Made code modifications in 2 files, contributing a total of +46 lines and -13 lines, with a primary focus on other work. Engaged in the review process with 1 comment, maintaining a consistent activity pattern by being active every day."},{"username":"standujar","avatarUrl":"https://avatars.githubusercontent.com/u/16385918?u=718bdcd1585be8447bdfffb8c11ce249baa7532d&v=4","totalScore":4.3,"prScore":0,"issueScore":4.1,"reviewScore":0,"commentScore":0.2,"summary":"standujar: Created 1 issue (#4319 \"Image analysis fails with OpenAI API 404 error in @elizaos/pl...\") which has been closed, and commented on another issue, demonstrating sporadic activity today."},{"username":"Titan-Node","avatarUrl":"https://avatars.githubusercontent.com/u/86620041?u=1fe2cab4cc826fd48f3468a55aa4784870bd7196&v=4","totalScore":4,"prScore":0,"issueScore":4,"reviewScore":0,"commentScore":0,"summary":"Titan-Node: Created 2 issues today, including #4238 \"V2 - `getTasks` error\" (CLOSED) and #4315 \"V2 - Group chat not working\" (OPEN), indicating a focus on addressing bugs. Activity remains sporadic, with no merged pull requests or code changes."}],"focusAreas":[{"area":"plugin-bootstrap","count":6},{"area":"plugin-video-understanding","count":4},{"area":"client","count":4},{"area":"plugin-twitter","count":3},{"area":"core","count":2},{"area":"plugin-openai","count":1},{"area":"docs/community","count":1},{"area":"docs/api","count":1}],"topIssues":[{"id":"I_kwDOMT5cIs6zHnkA","title":"Image analysis fails with OpenAI API 404 error in @elizaos/plugin-openai using discord","author":"standujar","number":4319,"repository":"elizaos/eliza","body":"Describe the bug\n\nWhen trying to analyze an image using the @elizaos/plugin-openai, the process fails with a 404 error from the OpenAI API. This appears during image attachment processing in a Discord plugin.\n\n⸻\n\nTo Reproduce\n\t1.\tStart the ElizaOS agent with the Discord plugin enabled.\n\t2.\tSend an image to the Discord channel monitored by the agent.\n\t3.\tObserve the error logs in the console.\n\n⸻\n\nExpected behavior\n\nThe image should be successfully processed by the plugin using the OpenAI API, and the result should be handled or displayed accordingly.\n\nAdditional context\n\t•\tPlugin versions:\n\t•\t@elizaos/plugin-openai@1.0.0-beta.32\n\t•\t@elizaos/plugin-discord@1.0.0-beta.32\n\t•\tRuntime: ElizaOS Agent via @elizaos/cli@1.0.0-beta.32\n\t•\tPossibly related to a deprecated or incorrect endpoint in the image analysis feature (IMAGE_DESCRIPTION)\n\t•\tThe error may indicate a missing route on OpenAI’s side, or a wrong model/feature is being called.\n\n\nI'm using the 4o model","createdAt":"2025-04-18T14:52:47Z","closedAt":"2025-04-18T15:14:05Z","state":"CLOSED","commentCount":2},{"id":"I_kwDOMT5cIs6zEVIk","title":"V2 - Group chat not working","author":"Titan-Node","number":4315,"repository":"elizaos/eliza","body":"**Describe the bug**\nCannot use group chat, getting this js error.\n\n```\nUncaught TypeError: crypto.randomUUID is not a function\n    at handleSendMessage (room.tsx:369:18)\n```\n\nIf you delete this line and rebuild it works.\nhttps://github.com/elizaOS/eliza/blob/e8e4bd0585999e68daf09e0c65e4520041a0b077/packages/client/src/components/room.tsx#L369\n\n","createdAt":"2025-04-18T07:26:14Z","closedAt":"2025-05-23T02:29:31Z","state":"CLOSED","commentCount":1},{"id":"I_kwDOMT5cIs6xui3y","title":"V2 - `getTasks` error","author":"Titan-Node","number":4238,"repository":"elizaos/eliza","body":"**Describe the bug**\n\nGetting this error after launching a new agent in the GUI\n\n```\n[2025-04-09 06:57:26] ERROR: Error checking tasks:\n    message: \"(TypeError) Cannot read properties of undefined (reading 'getTasks')\"\n    stack: [\n      \"TypeError: Cannot read properties of undefined (reading 'getTasks')\",\n      \"at AgentRuntime.getTasks (file:///root/eliza-v2/test-vtuber/node_modules/@elizaos/cli/dist/chunk-E227RYGB.js:47081:31)\",\n      \"at _TaskService.checkTasks (file:///root/eliza-v2/test-vtuber/node_modules/@elizaos/plugin-bootstrap/dist/index.js:5235:43)\",\n      \"at Timeout._onTimeout (file:///root/eliza-v2/test-vtuber/node_modules/@elizaos/plugin-bootstrap/dist/index.js:5189:20)\",\n      \"at listOnTimeout (node:internal/timers:614:17)\",\n      \"at process.processTimers (node:internal/timers:549:7)\"\n    ]\n```\nNot affecting the GUI, it's just spamming the logs on the machine.","createdAt":"2025-04-09T06:59:42Z","closedAt":"2025-04-18T07:14:51Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs6xds6u","title":"OpenAI Plugin using `gpt-4-vision-preview` model leading to 404 error","author":"LongJeongS","number":4210,"repository":"elizaos/eliza","body":"$15","createdAt":"2025-04-07T16:09:26Z","closedAt":"2025-04-18T09:05:12Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs6wvWc1","title":"Failed to create Twitter client","author":"tcm390","number":4146,"repository":"elizaos/eliza","body":"<img width=\"812\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/3aa6e12e-ec2a-41f4-b537-395cbba5699b\" />\n\nSteps to Reproduce:\n\n1. Purge the database\n\n2. Run the Twitter plugin","createdAt":"2025-04-02T05:12:54Z","closedAt":"2025-04-18T09:06:33Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs6wkFlk","title":"Repeat checking on interaction, mentioned tweets","author":"AbdelrahmanZ08","number":4127,"repository":"elizaos/eliza","body":"$16","createdAt":"2025-04-01T05:06:27Z","closedAt":"2025-04-18T09:06:47Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs6wWdk_","title":"Twitter Plugin: Duplicate Memory Creation on Mentions & Null Post Interval Configuration","author":"AbdelrahmanZ08","number":4115,"repository":"elizaos/eliza","body":"$17","createdAt":"2025-03-30T05:39:58Z","closedAt":"2025-04-18T09:05:30Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs6uI5im","title":"feat: upload .env file to webui configurator","author":"madjin","number":3936,"repository":"elizaos/eliza","body":"ability to upload / drag and drop a .env file to automatically populate secrets with","createdAt":"2025-03-15T01:11:24Z","closedAt":"2025-04-18T09:05:42Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs6zEmua","title":"Blue dot remains after skipping onboarding via close button","author":"tcm390","number":4316,"repository":"elizaos/eliza","body":"When I close the onboarding instructions from the GUI without completing them step by step, a persistent blue dot appears on top of the interface. \n\n<img width=\"834\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/d0daa604-2e4d-4492-ac71-eba0bcc63632\" />","createdAt":"2025-04-18T08:01:18Z","closedAt":"2025-04-18T08:35:36Z","state":"CLOSED","commentCount":0}],"topPullRequests":[{"id":"PR_kwDOMT5cIs6TKcaP","title":"Added Default Agents based on the org","author":"HarshModi2005","number":4323,"body":"$18","repository":"elizaos/eliza","createdAt":"2025-04-18T20:50:33Z","mergedAt":"2025-04-20T16:21:50Z","additions":1537,"deletions":494},{"id":"PR_kwDOMT5cIs6R2cZx","title":"chore: video understanding plugin tests ","author":"ai16z-demirix","number":4233,"body":"$19","repository":"elizaos/eliza","createdAt":"2025-04-08T21:21:10Z","mergedAt":"2025-04-18T02:31:13Z","additions":462,"deletions":3},{"id":"PR_kwDOMT5cIs6TDWKS","title":"fix: add operation name tracking","author":"0xbbjoker","number":4314,"body":"\n\n<!-- This is an auto-generated comment: release notes by coderabbit.ai -->\n\n## Summary by CodeRabbit\n\n- **Refactor**\n  - Improved logging and traceability for database operations by standardizing method signatures and including descriptive operation names.\n  - Simplified internal control flow for task-related actions, removing redundant retry wrappers.\n  - Enhanced reliability and clarity in database adapter behavior, including better warning messages during shutdown scenarios.\n\n<!-- end of auto-generated comment: release notes by coderabbit.ai -->","repository":"elizaos/eliza","createdAt":"2025-04-18T00:15:26Z","mergedAt":null,"additions":200,"deletions":215},{"id":"PR_kwDOMT5cIs6TIiQQ","title":"feat: Add deleteTweet()","author":"paoloanzn","number":4320,"body":"<!-- Use this template by filling in information and copying and pasting relevant items out of the HTML comments. -->\r\n\r\n# Relates to\r\n\r\n- Request to add same changes as in https://github.com/elizaOS/agent-twitter-client from @tcm390 \r\n\r\n# Risks\r\n\r\n- Low: No error if you try to accidentally delete a tweet which is not yours, simply nothing happens\r\n\r\n# Background\r\n\r\n## What does this PR do?\r\n\r\n- Add deleteTweet() function to tweets.ts\r\n- Add deleteTweet() wrapping method for Client class\r\n- Add test for deleteTweet() to tweet.tests.ts\r\n\r\n## What kind of change is this?\r\n\r\nFeature\r\n\r\n## Discord username\r\n@paoloanzn \r\nbtw i'm in the development server but I can't join the other server as if I'm banned :( ","repository":"elizaos/eliza","createdAt":"2025-04-18T15:14:51Z","mergedAt":"2025-04-18T15:27:40Z","additions":83,"deletions":0},{"id":"PR_kwDOMT5cIs6TAQcC","title":"Export bootstrap plugin capabilities","author":"michavie","number":4311,"body":"Exporting all providers, actions, and evaluators from the bootstrap plugin for a more controlled consumer experience.\r\n\r\n# Risks\r\n\r\nNo breaking changes for regular package consumers. For consistency, `updateRoleAction ` and `updateSettingsAction ` have been changed to named exports as the other actions.\r\n\r\n# Background\r\n\r\n## What kind of change is this?\r\n\r\nImprovements (misc. changes to existing features)\r\n\r\n# Documentation changes needed?\r\n\r\nMy changes do not require a change to the project documentation.\r\n\r\n## Discord username\r\n\r\n@michavie\r\n","repository":"elizaos/eliza","createdAt":"2025-04-17T14:57:08Z","mergedAt":"2025-04-18T01:07:23Z","additions":71,"deletions":66},{"id":"PR_kwDOMT5cIs6R07-A","title":"Add OpenAi model usage events","author":"michavie","number":4230,"body":"Add open ai model usage tracking via plugin-scoped events.","repository":"elizaos/eliza","createdAt":"2025-04-08T17:45:47Z","mergedAt":"2025-04-18T09:30:39Z","additions":62,"deletions":7},{"id":"PR_kwDOMT5cIs6S_cPa","title":"feat: add confirmation dialog for delete group","author":"Samarthsinghal28","number":4310,"body":"$1a","repository":"elizaos/eliza","createdAt":"2025-04-17T13:29:15Z","mergedAt":"2025-04-18T00:57:45Z","additions":15,"deletions":1},{"id":"PR_kwDOMT5cIs6TKX0S","title":"Fix Typos and Improve Documentation in Changelog","author":"leopardracer","number":4322,"body":"\r\n\r\n**Description:**\r\n\r\nThis pull request addresses several minor issues in the changelog documentation:\r\n\r\n- Corrected typos such as \"toghether\" to \"together\" and \"misstype\" to \"mistype\".\r\n- Improved consistency by using strict types to avoid errors, as referenced in issue #2164.\r\n- Updated links and references to ensure they point to the correct pull requests and issues.\r\n- Enhanced readability and clarity of the changelog entries.\r\n\r\nThese changes aim to improve the overall quality and accuracy of the documentation.\r\n\r\n\r\n","repository":"elizaos/eliza","createdAt":"2025-04-18T20:36:08Z","mergedAt":"2025-04-19T02:51:27Z","additions":5,"deletions":5},{"id":"PR_kwDOMT5cIs6TF53i","title":"fix: Use utils-based UUID for broader browser support","author":"tcm390","number":4318,"body":"related: https://github.com/elizaOS/eliza/issues/4315\r\n\r\nFallback to a custom UUID generator for browsers that don't support crypto.randomUUID().","repository":"elizaos/eliza","createdAt":"2025-04-18T08:31:14Z","mergedAt":"2025-04-18T08:32:51Z","additions":4,"deletions":2},{"id":"PR_kwDOMT5cIs6TFwbo","title":"fix: persistent beacon by handling tour close action","author":"tcm390","number":4317,"body":"related: https://github.com/elizaOS/eliza/issues/4316\r\n\r\nMark onboarding as complete when the tour is closed manually to prevent lingering blue beacon.","repository":"elizaos/eliza","createdAt":"2025-04-18T08:17:20Z","mergedAt":"2025-04-18T08:17:54Z","additions":3,"deletions":3},{"id":"PR_kwDOMT5cIs6R98mt","title":"fix knowledge types","author":"piperTang","number":4243,"body":"$1b","repository":"elizaos/eliza","createdAt":"2025-04-09T15:31:08Z","mergedAt":"2025-04-18T02:22:19Z","additions":1,"deletions":1},{"id":"PR_kwDOMT5cIs6TCf4F","title":"Fix Typographical Error in Character.md","author":"leopardracer","number":4313,"body":"\r\n\r\nDescription: \r\nThis pull request corrects a typographical error in the `Character.md` file. The word \"Optional\" was previously misspelled as \"Optinal\" and has been corrected. This change ensures consistency and clarity in the documentation.\r\n","repository":"elizaos/eliza","createdAt":"2025-04-17T20:42:32Z","mergedAt":"2025-04-18T00:53:06Z","additions":1,"deletions":1},{"id":"PR_kwDOMT5cIs6TBayk","title":"docs: remove consecutive duplicate words","author":"zeroprooff","number":4312,"body":"","repository":"elizaos/eliza","createdAt":"2025-04-17T17:37:32Z","mergedAt":"2025-04-18T00:54:43Z","additions":1,"deletions":1},{"id":"PR_kwDOMT5cIs6TJO-W","title":"deleted duplicate README_NL.md","author":"zeroprooff","number":4321,"body":"thanks ! ","repository":"elizaos/eliza","createdAt":"2025-04-18T16:53:02Z","mergedAt":"2025-04-19T02:35:45Z","additions":1,"deletions":1}],"detailedContributorSummaries":{"0xbbjoker":"0xbbjoker: Opened 1 PR (#4314) focused on adding operation name tracking and modified 3 files with a total of +200/-215 lines, demonstrating consistent feature work. Active today with 1 PR comment, maintaining a steady contribution pattern.","HarshModi2005":"HarshModi2005: Merged 1 significant pull request (#4323) adding default agents based on the organization, with a total of +58775/-6880 lines. Modified 5 files with a focus on other work, contributing +735/-59 lines of code today.","Titan-Node":"Titan-Node: Created 2 issues today, including #4238 \"V2 - `getTasks` error\" (CLOSED) and #4315 \"V2 - Group chat not working\" (OPEN), indicating a focus on addressing bugs. Activity remains sporadic, with no merged pull requests or code changes.","leopardracer":"leopardracer: Merged 1 PR (#4322) focused on fixing typos and improving documentation in the changelog (+6/-6 lines), demonstrating consistent activity with a primary focus on documentation work.","michavie":"michavie: Made code modifications in 2 files, contributing a total of +46 lines and -13 lines, with a primary focus on other work. Engaged in the review process with 1 comment, maintaining a consistent activity pattern by being active every day.","monilpat":"monilpat: Made significant code changes by modifying 83 files (+2851/-587 lines) with a focus on other work, while also conducting 5 reviews that included 3 change requests and 2 comments. Maintained a consistent activity pattern, being active every day.","paoloanzn":"paoloanzn: Merged 1 PR (#4320) with a significant feature addition, implementing deleteTweet() and contributing +83 lines of code across 3 modified files. Maintained a consistent activity pattern, focusing entirely on feature work today.","standujar":"standujar: Created 1 issue (#4319 \"Image analysis fails with OpenAI API 404 error in @elizaos/pl...\") which has been closed, and commented on another issue, demonstrating sporadic activity today.","tcm390":"tcm390: Merged 2 PRs (#4318 with +4/-2 lines, #4317 with +3/-3 lines) and created 2 issues, both of which were closed. Made significant code changes, modifying 1794 files with a total of +77667/-31406 lines, while maintaining a consistent activity pattern with 17 commits.","zeroprooff":"zeroprooff: Merged 1 PR (#4321) that deleted a duplicate README_NL.md, resulting in significant changes of +52124/-24085 lines. Maintained a consistent activity pattern with a focus on documentation modifications, making 1 commit today."}}}],"$L1c"]}]
+e:["$","div",null,{"className":"prose prose-sm mx-auto mt-8 dark:prose-invert sm:prose lg:prose-lg xl:prose-xl","children":[["$","p","p-0",{"children":"On April 18, 2025, ElizaOS focused on enhancing user experience and system stability, with key feature additions like OpenAI model usage tracking and improved group deletion confirmations. Significant progress was made on bug fixes, including resolving issues with knowledge types and UUID generation, while new challenges emerged concerning image analysis in the Discord plugin and persistent UI elements."}],"\n",["$","h2","h2-0",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"🚨 Needs Attention","position":{"start":{"line":3,"column":4,"offset":411},"end":{"line":3,"column":22,"offset":429}}}],"position":{"start":{"line":3,"column":1,"offset":408},"end":{"line":3,"column":22,"offset":429}}},"children":"🚨 Needs Attention"}],"\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"Urgent Discussions"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/4319","children":"elizaos/eliza#4319"}],": A 404 error is occurring when analyzing images using the OpenAI API in the Discord plugin."]}],"\n",["$","li","li-1",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/4316","children":"elizaos/eliza#4316"}],": A persistent blue dot remains after skipping onboarding via the close button, indicating a UI issue that needs resolution."]}],"\n",["$","li","li-2",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/4315","children":"elizaos/eliza#4315"}],": Group chat functionality is failing due to a JavaScript error related to ",["$","code","code-0",{"children":"crypto.randomUUID()"}]," not being a function, requiring immediate attention."]}],"\n"]}],"\n"]}],"\n"]}],"\n",["$","h2","h2-1",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"✅ Completed Work","position":{"start":{"line":9,"column":4,"offset":1044},"end":{"line":9,"column":20,"offset":1060}}}],"position":{"start":{"line":9,"column":1,"offset":1041},"end":{"line":9,"column":20,"offset":1060}}},"children":"✅ Completed Work"}],"\n",["$","h3","h3-0",{"children":"User Experience & Feature Enhancements"}],"\n",["$","ul","ul-1",{"children":["\n",["$","li","li-0",{"children":["Added OpenAI model usage tracking via plugin-scoped events to provide better insights into model consumption (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/4230","children":"elizaos/eliza#4230"}],")."]}],"\n",["$","li","li-1",{"children":["Implemented a confirmation dialog for deleting groups to prevent accidental data loss (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/4310","children":"elizaos/eliza#4310"}],")."]}],"\n",["$","li","li-2",{"children":["Exported all providers, actions, and evaluators from the bootstrap plugin, improving the consumer experience and modularity (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/4311","children":"elizaos/eliza#4311"}],")."]}],"\n"]}],"\n",["$","h3","h3-1",{"children":"Bug Fixes & System Stability"}],"\n",["$","ul","ul-2",{"children":["\n",["$","li","li-0",{"children":["Resolved issues with knowledge types when adding RAG knowledge, which previously caused errors (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/4243","children":"elizaos/eliza#4243"}],")."]}],"\n",["$","li","li-1",{"children":["Fixed a typographical error in ",["$","code","code-0",{"children":"Character.md"}]," for improved documentation clarity (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/4313","children":"elizaos/eliza#4313"}],")."]}],"\n",["$","li","li-2",{"children":["Addressed the persistent blue beacon issue by marking onboarding as complete when the tour is closed manually (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/4317","children":"elizaos/eliza#4317"}],")."]}],"\n","$L1d","\n"]}],"\n","$L1e","\n","$L1f","\n","$L20","\n","$L21","\n","$L22"]}]
+f:["$","script","script-0",{"src":"/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","async":true}]
+10:["$","script","script-1",{"src":"/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","async":true}]
+11:["$","script","script-2",{"src":"/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js","async":true}]
+12:["$","$L23",null,{"children":["$","$24",null,{"name":"Next.MetadataOutlet","children":"$@25"}]}]
+1c:["$","div",null,{"className":"rounded-lg border bg-card text-card-foreground shadow-sm","children":[["$","div",null,{"className":"flex flex-col space-y-1.5 p-6 py-4","children":["$","div",null,{"className":"tracking-tight text-sm font-medium","children":["$undefined","Code Changes"]}]}],["$","div",null,{"className":"p-6 pt-0","children":["$","div",null,{"className":"grid grid-cols-2 gap-4 md:grid-cols-4","children":[["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-git-commit-vertical h-5 w-5","aria-hidden":"true","children":[["$","path","1holv5",{"d":"M12 3v6"}],["$","circle","1v7zrd",{"cx":"12","cy":"12","r":"3"}],["$","path","a9ows0",{"d":"M12 15v6"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":33}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Commits"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-file-code h-5 w-5","aria-hidden":"true","children":[["$","path","1oefj6",{"d":"M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"}],["$","path","wfsgrz",{"d":"M14 2v5a1 1 0 0 0 1 1h5"}],["$","path","1tg20x",{"d":"M10 12.5 8 15l2 2.5"}],["$","path","yinavb",{"d":"m14 12.5 2 2.5-2 2.5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":23}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Files Changed"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-green-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-up h-5 w-5 text-green-500","aria-hidden":"true","children":[["$","path","hav0vg",{"d":"m5 12 7-7 7 7"}],["$","path","x0mq9r",{"d":"M12 19V5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-green-500","children":"+703"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Added"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-red-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-down h-5 w-5 text-red-500","aria-hidden":"true","children":[["$","path","s699le",{"d":"M12 5v14"}],["$","path","1idqje",{"d":"m19 12-7 7-7-7"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-red-500","children":"-89"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Deleted"}]]}]]}]]}]}]]}]
+1d:["$","li","li-3",{"children":["Implemented a fallback for UUID generation to ensure broader browser support and prevent functionality failures (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/4318","children":"elizaos/eliza#4318"}],")."]}]
+1e:["$","h3","h3-2",{"children":"Testing & Documentation Improvements"}]
+1f:["$","ul","ul-3",{"children":["\n",["$","li","li-0",{"children":["Added tests for the video understanding plugin to ensure its functionality and reliability (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/4233","children":"elizaos/eliza#4233"}],")."]}],"\n",["$","li","li-1",{"children":["Removed consecutive duplicate words in documentation for improved readability and conciseness (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/4312","children":"elizaos/eliza#4312"}],")."]}],"\n"]}]
+20:["$","h2","h2-2",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"🐞 Issue Triage","position":{"start":{"line":25,"column":4,"offset":2716},"end":{"line":25,"column":19,"offset":2731}}}],"position":{"start":{"line":25,"column":1,"offset":2713},"end":{"line":25,"column":19,"offset":2731}}},"children":"🐞 Issue Triage"}]
+21:["$","h3","h3-3",{"children":"elizaos/eliza"}]
+22:["$","ul","ul-4",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"New Issues"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/4319","children":"elizaos/eliza#4319"}],": 404 error when analyzing images using OpenAI API in Discord plugin."]}],"\n",["$","li","li-1",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/4316","children":"elizaos/eliza#4316"}],": Persistent blue dot after skipping onboarding via close button."]}],"\n",["$","li","li-2",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/4315","children":"elizaos/eliza#4315"}],": Group chat functionality failing due to ",["$","code","code-0",{"children":"crypto.randomUUID()"}]," error."]}],"\n"]}],"\n"]}],"\n",["$","li","li-1",{"children":[["$","strong","strong-0",{"children":"Closed Issues"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/4238","children":"elizaos/eliza#4238"}],": Fixed ",["$","code","code-0",{"children":"getTasks"}]," error when launching a new agent in the GUI."]}],"\n",["$","li","li-1",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/4210","children":"elizaos/eliza#4210"}],": Addressed 404 error related to OpenAI Plugin using deprecated ",["$","code","code-0",{"children":"gpt-4-vision-preview"}]," model."]}],"\n",["$","li","li-2",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/4146","children":"elizaos/eliza#4146"}],": Resolved Twitter plugin issues, including duplicate memory creation."]}],"\n",["$","li","li-3",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/4127","children":"elizaos/eliza#4127"}],": Resolved Twitter plugin issues, including redundant checks."]}],"\n",["$","li","li-4",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/4115","children":"elizaos/eliza#4115"}],": Resolved Twitter plugin issues."]}],"\n"]}],"\n"]}],"\n"]}]
+25:null

@@ -1,0 +1,373 @@
+1:"$Sreact.fragment"
+2:I[4817319,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"IntervalSelector"]
+3:I[6998365,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"LlmCopyButton"]
+10:I[3642796,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],""]
+11:I[3238488,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"StatCardsDisplay"]
+17:I[4261541,["/eliza-leaderboard/_next/static/chunks/b33bcbdcb3f88354.js","/eliza-leaderboard/_next/static/chunks/8ba59154b6704904.js"],"OutletBoundary"]
+18:"$Sreact.suspense"
+4:Tc4a,## Summary
+
+Enhances multi-step workflows with retry logic and parameter extraction capabilities.
+
+### Changes
+
+- **Retry logic for XML parsing**: Multi-step workflows now retry parsing up to 5 times (configurable via `MULTISTEP_PARSE_RETRIES`) with exponential backoff (1s, 2s, 4s... capped at 8s)
+- **Summary generation retry with fallback**: Summary parsing retries with a graceful fallback message if all attempts fail (configurable via `MULTISTEP_SUMMARY_PARSE_RETRIES`)
+- **Parameter extraction**: The multi-step decision template now supports a `<parameters>` key allowing actions to receive structured parameters from the LLM
+- **Actions provider with parameter schemas**: Added `formatActionsWithParams()` function and `actionsWithParams` provider value for better LLM tool calling
+- **Bounds checking**: Retry counts validated to be within 1-10 range
+
+### Configuration
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `MULTISTEP_PARSE_RETRIES` | 5 | Number of retries for XML parsing failures |
+| `MULTISTEP_SUMMARY_PARSE_RETRIES` | 5 | Number of retries for summary generation failures |
+
+### Files Changed
+
+- `packages/core/src/services/default-message-service.ts` - Retry logic and parameter extraction
+- `packages/core/src/prompts.ts` - Updated multi-step template with parameters key
+- `packages/plugin-bootstrap/src/providers/actions.ts` - Added formatActionsWithParams
+- `packages/plugin-bootstrap/src/__tests__/multi-step.test.ts` - Added tests
+
+### Test Plan
+
+- [x] Added tests for retry logic (success after retries, failure after max retries)
+- [x] Added tests for summary fallback response
+- [x] Added tests for parameter extraction (object, JSON string, invalid JSON handling)
+- [x] All 19 multi-step tests pass
+- [x] Core package builds successfully
+- [x] Plugin-bootstrap package builds successfully
+
+<!-- CURSOR_SUMMARY -->
+---
+
+> [!NOTE]
+> Improves robustness and tool-calling for multi-step workflows.
+> 
+> - Updates `multiStepDecisionTemplate` to include explicit `parameters` and clarifies output keys
+> - In `default-message-service.ts`:
+>   - Adds bounded (1–10) retry with exponential backoff for decision-step XML parsing (`MULTISTEP_PARSE_RETRIES`) and summary generation (`MULTISTEP_SUMMARY_PARSE_RETRIES`)
+>   - Parses `parameters` (object or JSON string), stores in `state.data.actionParams` and action-specific namespace; logs validation issues
+>   - Provides fallback user response when summary parsing fails; improves structured logging
+>   - Minor cleanup to always-respond channel/source overrides and response message construction
+> - In `providers/actions.ts`, adds `formatActionsWithParams()` and exposes `actionsWithParams` so prompts include action parameter schemas
+> - Extends tests to cover retry success/failure paths, summary fallback, and parameter extraction (object, JSON string, invalid JSON)
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit cd4e6f34ab9c8c2e619806cf5ff0e585b30ecee5. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->5:T9f7,## Summary
+This PR adds support for processing embeds and media in Farcaster casts, enabling agents to better understand and respond to image and link content.
+
+## Changes
+- Add `EmbedManager` for handling embeds/media in casts
+- Add image description generation using vision models (defaults to gpt-4o-mini)
+- Add URL content extraction and summarization
+- Update `interactions.ts` to process embeds and include media context
+- Add attachment hint to message text for proper ATTACHMENTS provider selection
+- Add test scripts for embed processing
+- Bump version to 1.7.2
+
+## New Features
+- Automatic image analysis using OpenAI Vision
+- Link content extraction and summarization
+- Configurable embed processing via `IMAGE_DESCRIPTION` model setting
+
+<!-- CURSOR_SUMMARY -->
+---
+
+> [!NOTE]
+> Adds first-class embed/media handling for Farcaster casts and surfaces media to the agent runtime.
+> 
+> - New `EmbedManager` processes Neynar `embeds` (images, videos, audio, webpages, frames, quoted casts) and converts them to `Media` with optional vision-based image descriptions
+> - `interactions.ts` now processes embeds for mentions/replies, adds `(Attachments: ...)` hint, and includes `attachments` in memory content
+> - Types updated: `Cast` now carries raw `embeds` (Neynar) and processed `media`; utilities include embeds in `neynarCastToCast` and add attachments in `createCastMemory`
+> - Public exports for embed utilities from `src/index.ts`; adds `scripts/test-embed-processing.ts` for manual verification
+> - Bumps package version to `1.7.2`, adds `@elizaos/cli` dev dep, and updates `.gitignore` entries
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit 5649b1d1f254f40c6a689253b9b779ea518d2195. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+* **New Features**
+  * Added support for processing embedded media from Farcaster casts, including images, videos, audio, webpages, and frames.
+  * Integrated AI vision model capabilities to automatically generate descriptions for image embeds.
+  * Enhanced memory attachments to include processed media metadata.
+
+* **Chores**
+  * Version bump: 1.7.0 → 1.7.2.
+  * Added new dev dependency for CLI tools.
+
+<sub>✏️ Tip: You can customize this high-level summary in your review settings.</sub>
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->6:T4b6,## fix(server): standardize message server route naming
+
+### Problem
+
+The `api-client` package was calling `/message-servers/*` routes that didn't exist on the server. The server had inconsistent naming with `/servers/*` routes instead.
+
+```
+Client calls:  POST /message-servers
+Server had:    POST /servers          → 404!
+```
+
+### Solution
+
+- Renamed `/servers/*` → `/message-servers/*`
+- Renamed `:serverId` → `:messageServerId`
+- Added deprecated routes with forwarding for backward compatibility
+
+### Routes Changed
+
+| Old Route | New Route |
+|-----------|-----------|
+| `POST /servers` | `POST /message-servers` |
+| `GET /servers/:serverId/agents` | `GET /message-servers/:messageServerId/agents` |
+| `POST /servers/:serverId/agents` | `POST /message-servers/:messageServerId/agents` |
+| `DELETE /servers/:serverId/agents/:agentId` | `DELETE /message-servers/:messageServerId/agents/:agentId` |
+
+### Backward Compatibility
+
+Old routes still work but log deprecation warnings:
+```
+[DEPRECATED] POST /servers is deprecated. Use POST /message-servers instead.
+```
+
+### Tests
+
+- Added 17 unit tests for route naming conventions
+- All 420 server unit tests pass
+7:T6b4,add batch embeddings
+
+<!-- CURSOR_SUMMARY -->
+---
+
+> [!NOTE]
+> **Batch embeddings pipeline**
+> 
+> - Adds batch embedding flow in `document-processor.ts` with `EMBEDDING_BATCH_SIZE=100`, `shouldUseBatchEmbeddings`, `generateEmbeddingsBatch`, and `generateBatchEmbeddingsViaRuntime` (uses `runtime.useModel(ModelType.TEXT_EMBEDDING, { texts })`), with automatic fallback to per-chunk embedding.
+> - Embedding result handling standardized (zero-vector checks) and improved logging; failed chunks are pre-populated in results.
+> 
+> **Rate limiting and config tweaks**
+> 
+> - Updates defaults in `config.ts` for batch mode: `MAX_CONCURRENT_REQUESTS=100`, `REQUESTS_PER_MINUTE=500`, `TOKENS_PER_MINUTE=1000000`, and clarifies comments; retains `BATCH_DELAY_MS`.
+> - Simplifies client-side rate limiter (actual limits handled by API headers) and adds clearer wait logging.
+> 
+> **Misc**
+> 
+> - Version bump to `1.6.1` in `package.json`.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit cbf3e1aa0f692546077c3fb267a31cf336d70a4d. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+* **Chores**
+  * Released version 1.6.1.
+
+* **Performance**
+  * Updated rate-limiting configuration thresholds to optimize batch processing workflows.
+  * Implemented batch-based embedding generation to reduce API call overhead and improve throughput.
+
+<sub>✏️ Tip: You can customize this high-level summary in your review settings.</sub>
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->8:T70b,On December 26, 2025, the ElizaOS project saw significant foundational improvements, including enhancements to multi-step workflows in the core `eliza` repository and critical updates to plugin capabilities, such as Farcaster cast processing with embeds and media, and batch embedding for knowledge management. Additionally, the OpenAI plugin received a dependency update to enable streaming support, ensuring better compatibility across the ecosystem.
+
+## ✅ Completed Work
+### Core Framework Enhancements
+- **elizaos-plugins/plugin-openai**: Updated the `@elizaos/core` dependency to version `1.7.0` to enable streaming support, improving interaction and data handling within the plugin. ([elizaos-plugins/plugin-openai#22](https://github.com/elizaos-plugins/plugin-openai/pull/22))
+
+### Plugin Feature Development
+- **elizaos-plugins/plugin-farcaster**: Implemented support for processing embeds and media within Farcaster casts, allowing agents to interpret image and link content more effectively through the introduction of an `EmbedManager`. ([elizaos-plugins/plugin-farcaster#16](https://github.com/elizaos-plugins/plugin-farcaster/pull/16))
+- **elizaos-plugins/plugin-knowledge**: Added a batch embedding pipeline, including `EMBEDDING_BATCH_SIZE=100` and `generateEmbeddingsBatch`, to optimize performance when generating document embeddings. ([elizaos-plugins/plugin-knowledge#50](https://github.com/elizaos-plugins/plugin-knowledge/pull/50))
+
+## 🏗️ Work in Progress
+### New Pull Requests
+- **elizaos/eliza**:
+    - Enhance multi-step workflows by adding retry logic and parameter extraction capabilities. ([elizaos/eliza#6286](https://github.com/elizaos/eliza/pull/6286))
+    - Standardize message server route naming. ([elizaos/eliza#6285](https://github.com/elizaos/eliza/pull/6285))0:{"buildId":"US8XLB_zHXYj_PVAECGcd","rsc":["$","$1","c",{"children":[["$","div",null,{"className":"container mx-auto px-6 py-8 md:px-8","children":["$","div",null,{"className":"mx-auto max-w-4xl","children":[["$","div",null,{"className":"mb-4 flex flex-col justify-between sm:flex-row","children":[["$","$L2",null,{"currentInterval":"day","currentDate":"2025-12-26"}],["$","$L3",null,{"metrics":{"date":"2025-12-26","interval":{"intervalStart":"$D2025-12-26T00:00:00.000Z","intervalEnd":"$D2025-12-27T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":5,"merged":3,"total":5},"issues":{"new":0,"closed":0,"total":0},"activeContributors":4,"codeChanges":{"additions":975,"deletions":110,"files":11,"commitCount":85},"topContributors":[{"username":"wtfsayo","avatarUrl":"https://avatars.githubusercontent.com/u/82053242?u=98209a1f10456f42d4d2fa71db4d5bf4a672cbc3&v=4","totalScore":113.06431077009434,"prScore":113.06431077009434,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"wtfsayo: Focused on expanding media processing capabilities, delivering a significant feature in elizaos-plugins/plugin-farcaster#16 to add embed/media processing support for Farcaster casts, involving a substantial +746/-12 lines of code. Their work today primarily centered on feature development and bug fixes, with a focus on code and tests."},{"username":"standujar","avatarUrl":"https://avatars.githubusercontent.com/u/16385918?u=718bdcd1585be8447bdfffb8c11ce249baa7532d&v=4","totalScore":53.62098807096852,"prScore":53.62098807096852,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"standujar: Focused on bugfix work, merging a PR in elizaos-plugins/plugin-openai#22 to update core for streaming support, and opened a PR to standardize message server route naming in elizaos/eliza#6285. Their code changes primarily involved bugfixes, with additional work on other tasks and tests, touching code, tests, and config files."},{"username":"0xbbjoker","avatarUrl":"https://avatars.githubusercontent.com/u/54844437?u=90fe1762420de6ad493a1c1582f1f70c0d87d8e2&v=4","totalScore":38.84821373497066,"prScore":38.84821373497066,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"0xbbjoker: Focused on feature development, successfully merging a significant PR in elizaos-plugins/plugin-knowledge (#50) that added batch embeddings, contributing to new functionality with 231 additions and 101 deletions across 6 files. Their work primarily involved feature development and other tasks, touching both code and configuration files."}],"focusAreas":[{"area":"src","count":3},{"area":"src/common","count":2},{"area":"src/managers","count":2},{"area":"scripts","count":1}],"topIssues":[],"topPullRequests":[{"id":"PR_kwDOMT5cIs66pZDH","title":"feat(core): enhance multi-step workflow with retry logic and parameter extraction","author":"wtfsayo","number":6286,"body":"$4","repository":"elizaos/eliza","createdAt":"2025-12-26T16:31:52Z","mergedAt":"2026-01-13T15:54:04Z","additions":2509,"deletions":1208},{"id":"PR_kwDOOtnBDc66oVKh","title":"feat: add embed/media processing support for Farcaster casts","author":"wtfsayo","number":16,"body":"$5","repository":"elizaos-plugins/plugin-farcaster","createdAt":"2025-12-26T12:15:46Z","mergedAt":"2025-12-26T12:16:12Z","additions":739,"deletions":5},{"id":"PR_kwDOMT5cIs66o0Al","title":"fix(server): standardize message server route naming","author":"standujar","number":6285,"body":"$6","repository":"elizaos/eliza","createdAt":"2025-12-26T14:04:10Z","mergedAt":"2025-12-29T12:41:22Z","additions":638,"deletions":109},{"id":"PR_kwDOOu4gVs66pzbI","title":"feat: add batch embeddings","author":"0xbbjoker","number":50,"body":"$7","repository":"elizaos-plugins/plugin-knowledge","createdAt":"2025-12-26T18:23:30Z","mergedAt":"2025-12-26T18:23:59Z","additions":231,"deletions":101},{"id":"PR_kwDON0mV_866pTlK","title":"fix: update @elizaos/core to ^1.7.0 for streaming support","author":"standujar","number":22,"body":"\n\n<!-- This is an auto-generated comment: release notes by coderabbit.ai -->\n## Summary by CodeRabbit\n\n* **Chores**\n  * Bumped package version to 1.6.0.\n  * Updated dependency \"@elizaos/core\" to version 1.7.0.\n\n<sub>✏️ Tip: You can customize this high-level summary in your review settings.</sub>\n<!-- end of auto-generated comment: release notes by coderabbit.ai -->","repository":"elizaos-plugins/plugin-openai","createdAt":"2025-12-26T16:08:21Z","mergedAt":"2025-12-26T16:19:12Z","additions":5,"deletions":4}],"detailedContributorSummaries":{"0xbbjoker":"0xbbjoker: Focused on feature development, successfully merging a significant PR in elizaos-plugins/plugin-knowledge (#50) that added batch embeddings, contributing to new functionality with 231 additions and 101 deletions across 6 files. Their work primarily involved feature development and other tasks, touching both code and configuration files.","standujar":"standujar: Focused on bugfix work, merging a PR in elizaos-plugins/plugin-openai#22 to update core for streaming support, and opened a PR to standardize message server route naming in elizaos/eliza#6285. Their code changes primarily involved bugfixes, with additional work on other tasks and tests, touching code, tests, and config files.","wtfsayo":"wtfsayo: Focused on expanding media processing capabilities, delivering a significant feature in elizaos-plugins/plugin-farcaster#16 to add embed/media processing support for Farcaster casts, involving a substantial +746/-12 lines of code. Their work today primarily centered on feature development and bug fixes, with a focus on code and tests."}},"summaryContent":"$8","className":"self-end sm:self-start"}]]}],"$L9","$La","$Lb"]}]}],["$Lc","$Ld","$Le"],"$Lf"]}],"loading":null,"isPartial":false}
+9:["$","div",null,{"className":"mb-6","children":["$","div",null,{"className":"flex items-center justify-between","children":[[["$","$L10",null,{"href":"/summary/day/2025-12-25","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left mr-2 h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"children":"Previous"}],false],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$L10",null,{"href":"/summary/day/2025-12-25","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Previous"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]],["$","div",null,{"className":"flex flex-col items-center","children":[["$","div",null,{"className":"text-sm font-medium text-gray-500","children":["Daily"," Summary"]}],["$","time",null,{"dateTime":"2025-12-26","className":"text-md font-bold","children":"Dec 26, 2025"}]]}],[["$","$L10",null,{"href":"/summary/day/2025-12-27","children":[false,["$","span",null,{"children":"Next"}],["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right ml-2 h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}]],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$L10",null,{"href":"/summary/day/2025-12-27","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Next"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]]]}]}]
+12:Tc4a,## Summary
+
+Enhances multi-step workflows with retry logic and parameter extraction capabilities.
+
+### Changes
+
+- **Retry logic for XML parsing**: Multi-step workflows now retry parsing up to 5 times (configurable via `MULTISTEP_PARSE_RETRIES`) with exponential backoff (1s, 2s, 4s... capped at 8s)
+- **Summary generation retry with fallback**: Summary parsing retries with a graceful fallback message if all attempts fail (configurable via `MULTISTEP_SUMMARY_PARSE_RETRIES`)
+- **Parameter extraction**: The multi-step decision template now supports a `<parameters>` key allowing actions to receive structured parameters from the LLM
+- **Actions provider with parameter schemas**: Added `formatActionsWithParams()` function and `actionsWithParams` provider value for better LLM tool calling
+- **Bounds checking**: Retry counts validated to be within 1-10 range
+
+### Configuration
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `MULTISTEP_PARSE_RETRIES` | 5 | Number of retries for XML parsing failures |
+| `MULTISTEP_SUMMARY_PARSE_RETRIES` | 5 | Number of retries for summary generation failures |
+
+### Files Changed
+
+- `packages/core/src/services/default-message-service.ts` - Retry logic and parameter extraction
+- `packages/core/src/prompts.ts` - Updated multi-step template with parameters key
+- `packages/plugin-bootstrap/src/providers/actions.ts` - Added formatActionsWithParams
+- `packages/plugin-bootstrap/src/__tests__/multi-step.test.ts` - Added tests
+
+### Test Plan
+
+- [x] Added tests for retry logic (success after retries, failure after max retries)
+- [x] Added tests for summary fallback response
+- [x] Added tests for parameter extraction (object, JSON string, invalid JSON handling)
+- [x] All 19 multi-step tests pass
+- [x] Core package builds successfully
+- [x] Plugin-bootstrap package builds successfully
+
+<!-- CURSOR_SUMMARY -->
+---
+
+> [!NOTE]
+> Improves robustness and tool-calling for multi-step workflows.
+> 
+> - Updates `multiStepDecisionTemplate` to include explicit `parameters` and clarifies output keys
+> - In `default-message-service.ts`:
+>   - Adds bounded (1–10) retry with exponential backoff for decision-step XML parsing (`MULTISTEP_PARSE_RETRIES`) and summary generation (`MULTISTEP_SUMMARY_PARSE_RETRIES`)
+>   - Parses `parameters` (object or JSON string), stores in `state.data.actionParams` and action-specific namespace; logs validation issues
+>   - Provides fallback user response when summary parsing fails; improves structured logging
+>   - Minor cleanup to always-respond channel/source overrides and response message construction
+> - In `providers/actions.ts`, adds `formatActionsWithParams()` and exposes `actionsWithParams` so prompts include action parameter schemas
+> - Extends tests to cover retry success/failure paths, summary fallback, and parameter extraction (object, JSON string, invalid JSON)
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit cd4e6f34ab9c8c2e619806cf5ff0e585b30ecee5. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->13:T9f7,## Summary
+This PR adds support for processing embeds and media in Farcaster casts, enabling agents to better understand and respond to image and link content.
+
+## Changes
+- Add `EmbedManager` for handling embeds/media in casts
+- Add image description generation using vision models (defaults to gpt-4o-mini)
+- Add URL content extraction and summarization
+- Update `interactions.ts` to process embeds and include media context
+- Add attachment hint to message text for proper ATTACHMENTS provider selection
+- Add test scripts for embed processing
+- Bump version to 1.7.2
+
+## New Features
+- Automatic image analysis using OpenAI Vision
+- Link content extraction and summarization
+- Configurable embed processing via `IMAGE_DESCRIPTION` model setting
+
+<!-- CURSOR_SUMMARY -->
+---
+
+> [!NOTE]
+> Adds first-class embed/media handling for Farcaster casts and surfaces media to the agent runtime.
+> 
+> - New `EmbedManager` processes Neynar `embeds` (images, videos, audio, webpages, frames, quoted casts) and converts them to `Media` with optional vision-based image descriptions
+> - `interactions.ts` now processes embeds for mentions/replies, adds `(Attachments: ...)` hint, and includes `attachments` in memory content
+> - Types updated: `Cast` now carries raw `embeds` (Neynar) and processed `media`; utilities include embeds in `neynarCastToCast` and add attachments in `createCastMemory`
+> - Public exports for embed utilities from `src/index.ts`; adds `scripts/test-embed-processing.ts` for manual verification
+> - Bumps package version to `1.7.2`, adds `@elizaos/cli` dev dep, and updates `.gitignore` entries
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit 5649b1d1f254f40c6a689253b9b779ea518d2195. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+* **New Features**
+  * Added support for processing embedded media from Farcaster casts, including images, videos, audio, webpages, and frames.
+  * Integrated AI vision model capabilities to automatically generate descriptions for image embeds.
+  * Enhanced memory attachments to include processed media metadata.
+
+* **Chores**
+  * Version bump: 1.7.0 → 1.7.2.
+  * Added new dev dependency for CLI tools.
+
+<sub>✏️ Tip: You can customize this high-level summary in your review settings.</sub>
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->14:T4b6,## fix(server): standardize message server route naming
+
+### Problem
+
+The `api-client` package was calling `/message-servers/*` routes that didn't exist on the server. The server had inconsistent naming with `/servers/*` routes instead.
+
+```
+Client calls:  POST /message-servers
+Server had:    POST /servers          → 404!
+```
+
+### Solution
+
+- Renamed `/servers/*` → `/message-servers/*`
+- Renamed `:serverId` → `:messageServerId`
+- Added deprecated routes with forwarding for backward compatibility
+
+### Routes Changed
+
+| Old Route | New Route |
+|-----------|-----------|
+| `POST /servers` | `POST /message-servers` |
+| `GET /servers/:serverId/agents` | `GET /message-servers/:messageServerId/agents` |
+| `POST /servers/:serverId/agents` | `POST /message-servers/:messageServerId/agents` |
+| `DELETE /servers/:serverId/agents/:agentId` | `DELETE /message-servers/:messageServerId/agents/:agentId` |
+
+### Backward Compatibility
+
+Old routes still work but log deprecation warnings:
+```
+[DEPRECATED] POST /servers is deprecated. Use POST /message-servers instead.
+```
+
+### Tests
+
+- Added 17 unit tests for route naming conventions
+- All 420 server unit tests pass
+15:T6b4,add batch embeddings
+
+<!-- CURSOR_SUMMARY -->
+---
+
+> [!NOTE]
+> **Batch embeddings pipeline**
+> 
+> - Adds batch embedding flow in `document-processor.ts` with `EMBEDDING_BATCH_SIZE=100`, `shouldUseBatchEmbeddings`, `generateEmbeddingsBatch`, and `generateBatchEmbeddingsViaRuntime` (uses `runtime.useModel(ModelType.TEXT_EMBEDDING, { texts })`), with automatic fallback to per-chunk embedding.
+> - Embedding result handling standardized (zero-vector checks) and improved logging; failed chunks are pre-populated in results.
+> 
+> **Rate limiting and config tweaks**
+> 
+> - Updates defaults in `config.ts` for batch mode: `MAX_CONCURRENT_REQUESTS=100`, `REQUESTS_PER_MINUTE=500`, `TOKENS_PER_MINUTE=1000000`, and clarifies comments; retains `BATCH_DELAY_MS`.
+> - Simplifies client-side rate limiter (actual limits handled by API headers) and adds clearer wait logging.
+> 
+> **Misc**
+> 
+> - Version bump to `1.6.1` in `package.json`.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit cbf3e1aa0f692546077c3fb267a31cf336d70a4d. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+* **Chores**
+  * Released version 1.6.1.
+
+* **Performance**
+  * Updated rate-limiting configuration thresholds to optimize batch processing workflows.
+  * Implemented batch-based embedding generation to reduce API call overhead and improve throughput.
+
+<sub>✏️ Tip: You can customize this high-level summary in your review settings.</sub>
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->a:["$","div",null,{"className":"mb-8 space-y-6","children":[["$","$L11",null,{"metrics":{"date":"2025-12-26","interval":{"intervalStart":"$D2025-12-26T00:00:00.000Z","intervalEnd":"$D2025-12-27T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":5,"merged":3,"total":5},"issues":{"new":0,"closed":0,"total":0},"activeContributors":4,"codeChanges":{"additions":975,"deletions":110,"files":11,"commitCount":85},"topContributors":[{"username":"wtfsayo","avatarUrl":"https://avatars.githubusercontent.com/u/82053242?u=98209a1f10456f42d4d2fa71db4d5bf4a672cbc3&v=4","totalScore":113.06431077009434,"prScore":113.06431077009434,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"wtfsayo: Focused on expanding media processing capabilities, delivering a significant feature in elizaos-plugins/plugin-farcaster#16 to add embed/media processing support for Farcaster casts, involving a substantial +746/-12 lines of code. Their work today primarily centered on feature development and bug fixes, with a focus on code and tests."},{"username":"standujar","avatarUrl":"https://avatars.githubusercontent.com/u/16385918?u=718bdcd1585be8447bdfffb8c11ce249baa7532d&v=4","totalScore":53.62098807096852,"prScore":53.62098807096852,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"standujar: Focused on bugfix work, merging a PR in elizaos-plugins/plugin-openai#22 to update core for streaming support, and opened a PR to standardize message server route naming in elizaos/eliza#6285. Their code changes primarily involved bugfixes, with additional work on other tasks and tests, touching code, tests, and config files."},{"username":"0xbbjoker","avatarUrl":"https://avatars.githubusercontent.com/u/54844437?u=90fe1762420de6ad493a1c1582f1f70c0d87d8e2&v=4","totalScore":38.84821373497066,"prScore":38.84821373497066,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"0xbbjoker: Focused on feature development, successfully merging a significant PR in elizaos-plugins/plugin-knowledge (#50) that added batch embeddings, contributing to new functionality with 231 additions and 101 deletions across 6 files. Their work primarily involved feature development and other tasks, touching both code and configuration files."}],"focusAreas":[{"area":"src","count":3},{"area":"src/common","count":2},{"area":"src/managers","count":2},{"area":"scripts","count":1}],"topIssues":[],"topPullRequests":[{"id":"PR_kwDOMT5cIs66pZDH","title":"feat(core): enhance multi-step workflow with retry logic and parameter extraction","author":"wtfsayo","number":6286,"body":"$12","repository":"elizaos/eliza","createdAt":"2025-12-26T16:31:52Z","mergedAt":"2026-01-13T15:54:04Z","additions":2509,"deletions":1208},{"id":"PR_kwDOOtnBDc66oVKh","title":"feat: add embed/media processing support for Farcaster casts","author":"wtfsayo","number":16,"body":"$13","repository":"elizaos-plugins/plugin-farcaster","createdAt":"2025-12-26T12:15:46Z","mergedAt":"2025-12-26T12:16:12Z","additions":739,"deletions":5},{"id":"PR_kwDOMT5cIs66o0Al","title":"fix(server): standardize message server route naming","author":"standujar","number":6285,"body":"$14","repository":"elizaos/eliza","createdAt":"2025-12-26T14:04:10Z","mergedAt":"2025-12-29T12:41:22Z","additions":638,"deletions":109},{"id":"PR_kwDOOu4gVs66pzbI","title":"feat: add batch embeddings","author":"0xbbjoker","number":50,"body":"$15","repository":"elizaos-plugins/plugin-knowledge","createdAt":"2025-12-26T18:23:30Z","mergedAt":"2025-12-26T18:23:59Z","additions":231,"deletions":101},{"id":"PR_kwDON0mV_866pTlK","title":"fix: update @elizaos/core to ^1.7.0 for streaming support","author":"standujar","number":22,"body":"\n\n<!-- This is an auto-generated comment: release notes by coderabbit.ai -->\n## Summary by CodeRabbit\n\n* **Chores**\n  * Bumped package version to 1.6.0.\n  * Updated dependency \"@elizaos/core\" to version 1.7.0.\n\n<sub>✏️ Tip: You can customize this high-level summary in your review settings.</sub>\n<!-- end of auto-generated comment: release notes by coderabbit.ai -->","repository":"elizaos-plugins/plugin-openai","createdAt":"2025-12-26T16:08:21Z","mergedAt":"2025-12-26T16:19:12Z","additions":5,"deletions":4}],"detailedContributorSummaries":{"0xbbjoker":"0xbbjoker: Focused on feature development, successfully merging a significant PR in elizaos-plugins/plugin-knowledge (#50) that added batch embeddings, contributing to new functionality with 231 additions and 101 deletions across 6 files. Their work primarily involved feature development and other tasks, touching both code and configuration files.","standujar":"standujar: Focused on bugfix work, merging a PR in elizaos-plugins/plugin-openai#22 to update core for streaming support, and opened a PR to standardize message server route naming in elizaos/eliza#6285. Their code changes primarily involved bugfixes, with additional work on other tasks and tests, touching code, tests, and config files.","wtfsayo":"wtfsayo: Focused on expanding media processing capabilities, delivering a significant feature in elizaos-plugins/plugin-farcaster#16 to add embed/media processing support for Farcaster casts, involving a substantial +746/-12 lines of code. Their work today primarily centered on feature development and bug fixes, with a focus on code and tests."}}}],"$L16"]}]
+b:["$","div",null,{"className":"prose prose-sm mx-auto mt-8 dark:prose-invert sm:prose lg:prose-lg xl:prose-xl","children":[["$","p","p-0",{"children":["On December 26, 2025, the ElizaOS project saw significant foundational improvements, including enhancements to multi-step workflows in the core ",["$","code","code-0",{"children":"eliza"}]," repository and critical updates to plugin capabilities, such as Farcaster cast processing with embeds and media, and batch embedding for knowledge management. Additionally, the OpenAI plugin received a dependency update to enable streaming support, ensuring better compatibility across the ecosystem."]}],"\n",["$","h2","h2-0",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"✅ Completed Work","position":{"start":{"line":3,"column":4,"offset":457},"end":{"line":3,"column":20,"offset":473}}}],"position":{"start":{"line":3,"column":1,"offset":454},"end":{"line":3,"column":20,"offset":473}}},"children":"✅ Completed Work"}],"\n",["$","h3","h3-0",{"children":"Core Framework Enhancements"}],"\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"elizaos-plugins/plugin-openai"}],": Updated the ",["$","code","code-0",{"children":"@elizaos/core"}]," dependency to version ",["$","code","code-1",{"children":"1.7.0"}]," to enable streaming support, improving interaction and data handling within the plugin. (",["$","a","a-0",{"href":"https://github.com/elizaos-plugins/plugin-openai/pull/22","children":"elizaos-plugins/plugin-openai#22"}],")"]}],"\n"]}],"\n",["$","h3","h3-1",{"children":"Plugin Feature Development"}],"\n",["$","ul","ul-1",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"elizaos-plugins/plugin-farcaster"}],": Implemented support for processing embeds and media within Farcaster casts, allowing agents to interpret image and link content more effectively through the introduction of an ",["$","code","code-0",{"children":"EmbedManager"}],". (",["$","a","a-0",{"href":"https://github.com/elizaos-plugins/plugin-farcaster/pull/16","children":"elizaos-plugins/plugin-farcaster#16"}],")"]}],"\n",["$","li","li-1",{"children":[["$","strong","strong-0",{"children":"elizaos-plugins/plugin-knowledge"}],": Added a batch embedding pipeline, including ",["$","code","code-0",{"children":"EMBEDDING_BATCH_SIZE=100"}]," and ",["$","code","code-1",{"children":"generateEmbeddingsBatch"}],", to optimize performance when generating document embeddings. (",["$","a","a-0",{"href":"https://github.com/elizaos-plugins/plugin-knowledge/pull/50","children":"elizaos-plugins/plugin-knowledge#50"}],")"]}],"\n"]}],"\n",["$","h2","h2-1",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"🏗️ Work in Progress","position":{"start":{"line":11,"column":4,"offset":1457},"end":{"line":11,"column":24,"offset":1477}}}],"position":{"start":{"line":11,"column":1,"offset":1454},"end":{"line":11,"column":24,"offset":1477}}},"children":"🏗️ Work in Progress"}],"\n",["$","h3","h3-2",{"children":"New Pull Requests"}],"\n",["$","ul","ul-2",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"elizaos/eliza"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["Enhance multi-step workflows by adding retry logic and parameter extraction capabilities. (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/6286","children":"elizaos/eliza#6286"}],")"]}],"\n",["$","li","li-1",{"children":["Standardize message server route naming. (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/6285","children":"elizaos/eliza#6285"}],")"]}],"\n"]}],"\n"]}],"\n"]}]]}]
+c:["$","script","script-0",{"src":"/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","async":true}]
+d:["$","script","script-1",{"src":"/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","async":true}]
+e:["$","script","script-2",{"src":"/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js","async":true}]
+f:["$","$L17",null,{"children":["$","$18",null,{"name":"Next.MetadataOutlet","children":"$@19"}]}]
+16:["$","div",null,{"className":"rounded-lg border bg-card text-card-foreground shadow-sm","children":[["$","div",null,{"className":"flex flex-col space-y-1.5 p-6 py-4","children":["$","div",null,{"className":"tracking-tight text-sm font-medium","children":["$undefined","Code Changes"]}]}],["$","div",null,{"className":"p-6 pt-0","children":["$","div",null,{"className":"grid grid-cols-2 gap-4 md:grid-cols-4","children":[["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-git-commit-vertical h-5 w-5","aria-hidden":"true","children":[["$","path","1holv5",{"d":"M12 3v6"}],["$","circle","1v7zrd",{"cx":"12","cy":"12","r":"3"}],["$","path","a9ows0",{"d":"M12 15v6"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":85}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Commits"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-file-code h-5 w-5","aria-hidden":"true","children":[["$","path","1oefj6",{"d":"M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"}],["$","path","wfsgrz",{"d":"M14 2v5a1 1 0 0 0 1 1h5"}],["$","path","1tg20x",{"d":"M10 12.5 8 15l2 2.5"}],["$","path","yinavb",{"d":"m14 12.5 2 2.5-2 2.5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":11}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Files Changed"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-green-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-up h-5 w-5 text-green-500","aria-hidden":"true","children":[["$","path","hav0vg",{"d":"m5 12 7-7 7 7"}],["$","path","x0mq9r",{"d":"M12 19V5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-green-500","children":"+975"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Added"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-red-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-down h-5 w-5 text-red-500","aria-hidden":"true","children":[["$","path","s699le",{"d":"M12 5v14"}],["$","path","1idqje",{"d":"m19 12-7 7-7-7"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-red-500","children":"-110"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Deleted"}]]}]]}]]}]}]]}]
+19:null

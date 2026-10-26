@@ -1,0 +1,271 @@
+{
+  "interval": {
+    "intervalStart": "2026-02-15T00:00:00.000Z",
+    "intervalEnd": "2026-02-22T00:00:00.000Z",
+    "intervalType": "week"
+  },
+  "repository": "elizaos-plugins/plugin-n8n-workflow",
+  "overview": "From 2026-02-15 to 2026-02-22, elizaos-plugins/plugin-n8n-workflow had 2 new PRs (2 merged), 0 new issues, and 2 active contributors.",
+  "topIssues": [],
+  "topPRs": [
+    {
+      "id": "PR_kwDORDL9tM7DREr_",
+      "title": "Add REST API routes for workflow management",
+      "author": "standujar",
+      "number": 16,
+      "body": "## Summary\nExpose REST API routes from `plugin-n8n-workflow` to enable direct frontend access for workflow CRUD, node catalog browsing, validation, and execution monitoring — without going through the agent NLP pipeline.\n\nThis creates a dual-access architecture:\n- **Agent access**: NLP → actions (existing)\n- **Frontend access**: REST → routes (new)\n\n## Routes Added\n### Workflows\n- `GET /workflows` - List workflows for a user\n- `POST /workflows` - Create workflow with auto credential resolution\n- `GET /workflows/:id` - Get workflow details\n- `PUT /workflows/:id` - Update existing workflow\n- `DELETE /workflows/:id` - Delete workflow\n- `POST /workflows/:id/activate` - Activate workflow\n- `POST /workflows/:id/deactivate` - Deactivate workflow\n\n### Validation\n- `POST /workflows/validate` - Real-time workflow validation (nodes, parameters, inputs)\n\n### Nodes\n- `GET /nodes?q=...` - Search node catalog with relevance scoring\n- `GET /nodes/available` - Browse categorized catalog (supported/unsupported/utility)\n- `GET /nodes/:type` - Get node definition\n\n### Executions\n- `GET /executions` - List executions with filters (workflowId, status, limit, cursor)\n- `GET /executions/:id` - Get execution details\n\n## Implementation Details\n- **Route handlers** delegate to service layer (no business logic in handlers)\n- **Credential resolution** via existing `N8nCredentialBridge` (OAuth/API key mapping)\n- **Auto-positioning** nodes for workflow creation/updates\n- **ElizaOS integration**: Runtime auto-collects `plugin.routes` and prefixes with plugin name\n\n## Changes\n- Add route handlers in `src/routes/` (workflows, nodes, validation, executions)\n- Export `routes: n8nRoutes` from plugin (auto-collected by ElizaOS runtime)\n- Add `listByUser()` to `N8nCredentialStoreApi` for credential mapping\n- Add `getWorkflow()` and `listExecutions()` to `N8nWorkflowService`\n- Add `getAllNodes()` to catalog utils\n- Update mock service helper with new methods\n\n## Tests\n✅ **37 unit tests** across 4 files, 78 assertions, all passing:\n- `validation.test.ts` - 5 tests (valid/invalid workflows, missing fields)\n- `nodes.test.ts` - 8 tests (search, catalog, filtering, 404/400 errors)\n- `workflows.test.ts` - 16 tests (full CRUD, activation, validation, missing credentials)\n- `executions.test.ts` - 8 tests (list, filters, detail, errors)\n\n## Next Steps\n- [ ] Add e2e tests for Next.js catch-all route integration\n- [ ] Add retry execution endpoint (`POST /executions/:id/retry`)\n\n<!-- This is an auto-generated comment: release notes by coderabbit.ai -->\n\n## Summary by CodeRabbit\n\n* **New Features**\n  * Exposed REST API endpoints for workflow management (create, read, update, delete, activate, and deactivate operations)\n  * Added execution listing and detail retrieval endpoints with filtering support\n  * Integrated node catalog API with search and availability filtering\n  * Added workflow validation endpoint with detailed error reporting\n\n* **Tests**\n  * Comprehensive test coverage for all new API routes\n\n<!-- end of auto-generated comment: release notes by coderabbit.ai -->",
+      "repository": "elizaos-plugins/plugin-n8n-workflow",
+      "createdAt": "2026-02-12T12:28:58Z",
+      "mergedAt": "2026-02-16T17:40:38Z",
+      "additions": 2566,
+      "deletions": 33
+    },
+    {
+      "id": "PR_kwDORDL9tM7FOlc4",
+      "title": "fix: prevent multi-step confabulation + ensure AI nodes in results",
+      "author": "standujar",
+      "number": 19,
+      "body": "## Summary\n\n- **Bug 1 — Multi-step loop confabulation**: Callbacks now carry `data: { awaitingUserInput: true }` so the cloud multi-step loop breaks correctly after preview/clarification/auth-required states. Removes the dead `originMessageId` guard.\n- **Bug 2 — AI nodes missing from search**: `supplementAINodes()` ensures OpenAI and AI Transform nodes appear in search results when AI-intent keywords are detected, even when service keywords (gmail, trigger) dominate the top 15 scores.\n- **Bug 1 variant in modifyExistingWorkflow**: Same missing `awaitingUserInput` signal patched in the modify-existing action callback.\n- **Tests updated**: 8 new `awaitingUserInput` tests, 2 new AI node scoring tests, removed obsolete `originMessageId` tests.\n- **Version**: 1.2.2 → 1.2.3\n\n## Changed files\n\n| File | What changed |\n|------|-------------|\n| `src/actions/createWorkflow.ts` | 7 callbacks patched with `awaitingUserInput`, `originMessageId` guard removed |\n| `src/actions/modifyExistingWorkflow.ts` | Callback patched with `awaitingUserInput` |\n| `src/services/n8n-workflow-service.ts` | `supplementAINodes()` + 17 AI-intent keywords |\n| `src/types/index.ts` | `originMessageId` removed from `WorkflowDraft` |\n| `__tests__/integration/actions/createWorkflow.test.ts` | 8 new tests, 1 removed, 1 updated |\n| `__tests__/unit/catalog.test.ts` | 2 new tests documenting AI node scoring gap |\n| `package.json` | Version bump 1.2.2 → 1.2.3 |\n\n## Test plan\n\n- [x] All 313 tests pass (`bun test`)\n- [x] Build clean (`bun run build`)\n- [ ] Deploy to staging and verify multi-step agent conversation (10+ LLM calls) completes without confabulation\n- [ ] Verify AI-intent prompts (\"summarize my emails\") include OpenAI node in generated workflows\n\n<!-- This is an auto-generated comment: release notes by coderabbit.ai -->\n## Summary by CodeRabbit\n\n* **New Features**\n  * AI-related nodes now auto-supplement search results when AI keywords are detected.\n  * Delete workflow now requires a two-step confirmation (prompt then confirm).\n\n* **Improvements**\n  * Callbacks and previews consistently signal \"awaiting user input\" across generation, modification, auth, deploy, and error flows.\n  * Deployment responses include credential-related warnings when integrations are missing.\n  * Workflow listings omit last-run details and simplify output.\n\n* **Tests**\n  * Expanded integration and unit tests for awaiting-user-input flows and AI node search.\n\n* **Chores**\n  * Package version bumped to 1.2.3.\n<!-- end of auto-generated comment: release notes by coderabbit.ai -->",
+      "repository": "elizaos-plugins/plugin-n8n-workflow",
+      "createdAt": "2026-02-20T18:06:35Z",
+      "mergedAt": null,
+      "additions": 431,
+      "deletions": 130
+    },
+    {
+      "id": "PR_kwDORDL9tM7Ee4gW",
+      "title": "fix: apply property defaults before visibility checks",
+      "author": "standujar",
+      "number": 18,
+      "body": "## Summary\n\n- `isPropertyVisible` checked `node.parameters` directly without considering property defaults. When the LLM omits structural fields like `resource`/`operation`/`language` (which have defaults), all dependent fields (`jsCode`, `sendTo`, `subject`, `message`) were treated as invisible → flagged as unknown → dropped by param correction.\n- Introduces `buildEffectiveParams` which resolves defaults in two passes (always-visible → then conditionally-visible) so chained `displayOptions` (`resource` → `operation` → field) evaluate correctly.\n- Applied consistently in `detectUnknownParameters`, `correctOptionParameters`, and `validateNodeParameters`.\n- 3 new tests covering Code node without `language`/`mode`, Gmail without `resource`/`operation`, and Gmail with wrong param names.\n\n## Test plan\n\n- [x] 55/55 unit tests passing (52 existing + 3 new)\n- [x] Verified with manual test script: `jsCode` no longer dropped on Code node\n- [x] Verified: `sendTo`/`subject`/`message` no longer dropped on Gmail node\n- [x] Verified: truly unknown params (e.g. `toEmail`) still detected and correctable by LLM\n\n<!-- This is an auto-generated comment: release notes by coderabbit.ai -->\n\n## Summary by CodeRabbit\n\n## Release Notes\n\n* **New Features**\n  * Workflow parameter detection now accurately handles nested display options and default value resolution.\n  * Unknown parameter detection improved with enhanced visibility logic.\n\n* **Chores**\n  * Version updated to 1.2.2.\n\n<!-- end of auto-generated comment: release notes by coderabbit.ai -->",
+      "repository": "elizaos-plugins/plugin-n8n-workflow",
+      "createdAt": "2026-02-17T23:48:35Z",
+      "mergedAt": "2026-02-18T17:20:14Z",
+      "additions": 145,
+      "deletions": 5
+    }
+  ],
+  "codeChanges": {
+    "additions": 2711,
+    "deletions": 38,
+    "files": 30,
+    "commitCount": 12
+  },
+  "completedItems": [
+    {
+      "title": "Add REST API routes for workflow management",
+      "prNumber": 16,
+      "type": "other",
+      "body": "## Summary\nExpose REST API routes from `plugin-n8n-workflow` to enable direct frontend access for workflow CRUD, node catalog browsing, validation, and execution monitoring — without going through the agent NLP pipeline.\n\nThis creates a dua",
+      "files": [
+        "PLAN-routes.md",
+        "__tests__/helpers/mockService.ts",
+        "__tests__/unit/routes/executions.test.ts",
+        "__tests__/unit/routes/nodes.test.ts",
+        "__tests__/unit/routes/validation.test.ts",
+        "__tests__/unit/routes/workflows.test.ts",
+        "src/index.ts",
+        "src/routes/_helpers.ts",
+        "src/routes/executions.ts",
+        "src/routes/index.ts",
+        "src/routes/nodes.ts",
+        "src/routes/validation.ts",
+        "src/routes/workflows.ts",
+        "src/services/n8n-credential-store.ts",
+        "src/services/n8n-workflow-service.ts",
+        "src/types/index.ts",
+        "src/utils/catalog.ts",
+        ".env.example",
+        ".gitignore",
+        "__tests__/e2e/routes-workflows.e2e.test.ts",
+        "__tests__/fixtures/workflows.ts",
+        "__tests__/helpers/e2eRuntime.ts",
+        ".github/workflows/ci.yml",
+        "__tests__/unit/outputSchema.test.ts",
+        "__tests__/unit/workflow.test.ts",
+        "docs/trigger-schema-capture-guide.md",
+        "package.json",
+        "scripts/crawl-triggers-live.ts",
+        "scripts/create-credentials.ts"
+      ]
+    },
+    {
+      "title": "fix: apply property defaults before visibility checks",
+      "prNumber": 18,
+      "type": "bugfix",
+      "body": "## Summary\n\n- `isPropertyVisible` checked `node.parameters` directly without considering property defaults. When the LLM omits structural fields like `resource`/`operation`/`language` (which have defaults), all dependent fields (`jsCode`, `",
+      "files": [
+        "__tests__/unit/workflow.test.ts",
+        "package.json",
+        "src/utils/workflow.ts"
+      ]
+    }
+  ],
+  "topContributors": [
+    {
+      "username": "odilitime",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/16395496?u=c9bac48e632aae594a0d85aaf9e9c9c69b674d8b&v=4",
+      "totalScore": 81.47654779315219,
+      "prScore": 81.47654779315219,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": null
+    },
+    {
+      "username": "standujar",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/16385918?u=718bdcd1585be8447bdfffb8c11ce249baa7532d&v=4",
+      "totalScore": 80.71342900469084,
+      "prScore": 80.51342900469083,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0.2,
+      "summary": null
+    },
+    {
+      "username": "greptile-apps",
+      "avatarUrl": "https://avatars.githubusercontent.com/in/867647?v=4",
+      "totalScore": 68.3,
+      "prScore": 0,
+      "issueScore": 0,
+      "reviewScore": 67.5,
+      "commentScore": 0.8,
+      "summary": null
+    },
+    {
+      "username": "kaiclawd",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/257877415?u=2c8763bb75f5fd07b37a1939903a8b557dd7a46f&v=4",
+      "totalScore": 59.475878208526346,
+      "prScore": 59.475878208526346,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": null
+    },
+    {
+      "username": "buzzbysolcex",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/259807261?v=4",
+      "totalScore": 51.22425149251019,
+      "prScore": 50.78625149251019,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0.43799999999999994,
+      "summary": null
+    },
+    {
+      "username": "yaooooooooooooooo",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/62118705?v=4",
+      "totalScore": 43.5437738965761,
+      "prScore": 43.5437738965761,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": null
+    },
+    {
+      "username": "decentralize-dfw",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/115695363?u=858e729376e39f7d94ec1907637812ec3b9ca575&v=4",
+      "totalScore": 43.5437738965761,
+      "prScore": 43.5437738965761,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": null
+    },
+    {
+      "username": "Fankouzu",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/8297296?u=bfe40f2d2a88d01f2092e44db726b11c0608b657&v=4",
+      "totalScore": 34.0207738965761,
+      "prScore": 34.0207738965761,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": null
+    },
+    {
+      "username": "kamiyo-ai",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/197570892?u=0d1ee66bdde083d3cfa339f7b2dfc1c2e8fee2fd&v=4",
+      "totalScore": 21.18304826901074,
+      "prScore": 20.64304826901074,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0.54,
+      "summary": null
+    },
+    {
+      "username": "dontonon",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/22495678?v=4",
+      "totalScore": 13.234147180559946,
+      "prScore": 13.234147180559946,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": null
+    },
+    {
+      "username": "borisudovicic",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/31806472?u=8935f4d43fd7e4eb9bf5ff92d54d4d2f8ac8a786&v=4",
+      "totalScore": 10,
+      "prScore": 0,
+      "issueScore": 10,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": null
+    },
+    {
+      "username": "jasonxkensei",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/260305565?u=b17387a9077530191e297ff256d49d9a14c47194&v=4",
+      "totalScore": 6.557573590279973,
+      "prScore": 6.557573590279973,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": null
+    },
+    {
+      "username": "samarth30",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/48334430?u=1fc119a6c2deb8cf60448b4c8961cb21dc69baeb&v=4",
+      "totalScore": 4,
+      "prScore": 0,
+      "issueScore": 4,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": null
+    },
+    {
+      "username": "rookdaemon",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/258400181?u=f806b5798e056f9384e53da900fdcd3d7bc24c14&v=4",
+      "totalScore": 2,
+      "prScore": 0,
+      "issueScore": 2,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": null
+    },
+    {
+      "username": "mbatini",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/34915878?v=4",
+      "totalScore": 2,
+      "prScore": 0,
+      "issueScore": 2,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": null
+    },
+    {
+      "username": "JKHeadley",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/12631935?u=e1a3e2005973fbf5526f5dccd04b6310e2476946&v=4",
+      "totalScore": 2,
+      "prScore": 0,
+      "issueScore": 2,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": null
+    }
+  ],
+  "newPRs": 2,
+  "mergedPRs": 2,
+  "newIssues": 0,
+  "closedIssues": 0,
+  "activeContributors": 2
+}

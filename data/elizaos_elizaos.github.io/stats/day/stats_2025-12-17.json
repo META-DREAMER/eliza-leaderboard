@@ -1,0 +1,279 @@
+{
+  "interval": {
+    "intervalStart": "2025-12-17T00:00:00.000Z",
+    "intervalEnd": "2025-12-18T00:00:00.000Z",
+    "intervalType": "day"
+  },
+  "repository": "elizaos/elizaos.github.io",
+  "overview": "From 2025-12-17 to 2025-12-18, elizaos/elizaos.github.io had 6 new PRs (6 merged), 4 new issues, and 1 active contributors.",
+  "topIssues": [
+    {
+      "id": "I_kwDONNAI987ewZ8A",
+      "title": "Next.js upgrade blocked: RSC serialization error in StatCardsDisplay",
+      "author": "madjin",
+      "number": 176,
+      "repository": "elizaos/elizaos.github.io",
+      "body": "## Problem\n\nUpgrading Next.js from 15.2.6 to 15.4.10+ (or 16.x) causes build failures with:\n\n```\nError: Functions cannot be passed directly to Client Components unless you explicitly expose it by marking it with \"use server\". Or maybe you meant to call this function rather than return it.\n  {$$typeof: ..., render: function, displayName: ...}\n```\n\nAffected route: `/summary/[interval]/[[...date]]/page`\n\n## Root Cause\n\n`StatCardsDisplay` is an async server component that passes pre-rendered JSX elements to `StatCard` (client component) via the `modalContent` prop:\n\n```tsx\n// src/app/summary/[interval]/[[...date]]/components/StatCardsDisplay.tsx\n<StatCard\n  modalContent={<ContributorsListModalContent contributors={metrics.topContributors} />}\n>\n```\n\nReact elements contain render functions which aren't serializable across the RSC boundary. This worked in 15.2.6 but stricter versions catch this violation.\n\n## Solutions\n\nFrom [Next.js discussions](https://github.com/vercel/next.js/discussions/49625):\n\n1. **Make StatCardsDisplay a client component** - Add `\"use client\"` directive\n2. **Pass data instead of JSX** - Pass serializable props, render modal content inside client component\n3. **Use composition pattern** - Use `children` prop which has special RSC handling\n\nRecommended approach: Option 2 - refactor `StatCard` to accept a `modalContentType` + `modalData` props instead of pre-rendered JSX.\n\n## Files to Modify\n\n- `src/components/stat-card.tsx` - Already has `\"use client\"`, needs prop refactor\n- `src/app/summary/[interval]/[[...date]]/components/StatCardsDisplay.tsx` - Pass data not JSX\n- Modal content components may need to move inside stat-card or be lazy-imported\n\n## Current Workaround\n\nStay on Next.js 15.2.6 until this refactor is complete.\n\n## References\n\n- [Next.js Discussion #49625](https://github.com/vercel/next.js/discussions/49625)\n- [Next.js Issue #42408](https://github.com/vercel/next.js/issues/42408)\n- [How to Fix Guide](https://www.timsanteford.com/posts/how-to-fix-functions-cannot-be-passed-directly-to-client-components-error-in-next-js/)\n\n## Related PRs\n\n- PR #175 - RSS feed fix (separate issue)",
+      "createdAt": "2025-12-17T03:57:17Z",
+      "closedAt": "2025-12-17T06:49:34Z",
+      "state": "CLOSED",
+      "commentCount": 2
+    },
+    {
+      "id": "I_kwDONNAI987ev59z",
+      "title": "chore: Remove 10 unused dependencies",
+      "author": "madjin",
+      "number": 173,
+      "repository": "elizaos/elizaos.github.io",
+      "body": "## Summary\n\nDuring a dependency audit, 10 packages were identified as unused and can be safely removed to reduce bundle size and maintenance burden.\n\n## Unused Dependencies\n\n| Package | Reason Unused |\n|---------|---------------|\n| `@anthropic-ai/sdk` | AI summaries use OpenRouter API via `fetch()`, not this SDK |\n| `openai` | Same - OpenRouter handles all AI calls, SDK not imported |\n| `boxen` | Not imported anywhere in codebase |\n| `figlet` | Not imported anywhere in codebase |\n| `fuzzysort` | Not imported anywhere in codebase |\n| `gradient-string` | Not imported anywhere in codebase |\n| `gray-matter` | Not imported anywhere in codebase |\n| `unified` | Not imported; `react-markdown` handles remark plugins internally |\n| `remark-frontmatter` | Not imported anywhere in codebase |\n| `remark-parse` | Not imported anywhere in codebase |\n\n## Verification Method\n\nEach package was checked for:\n- Direct imports (`import from 'package'`)\n- Require statements\n- Usage in config files (next.config, tailwind.config, postcss.config, etc.)\n- Peer dependency requirements from other packages\n\n## Notes\n\n- The AI summary system (`src/lib/pipelines/summarize/callAIService.ts`) uses raw `fetch()` to call OpenRouter's API endpoint, making both `openai` and `@anthropic-ai/sdk` unnecessary\n- `task-master-ai` (devDependency) bundles its own dependencies and uses `@ai-sdk/anthropic` (Vercel AI SDK), not `@anthropic-ai/sdk`\n- `boxen`, `figlet`, `gradient-string`, `fuzzysort`, `gray-matter` appear to be remnants from earlier development\n\n## Recommended Action\n\nRemove these from `package.json` dependencies:\n```bash\nbun remove @anthropic-ai/sdk openai boxen figlet fuzzysort gradient-string gray-matter unified remark-frontmatter remark-parse\n```\n\nThis should reduce install size and simplify the dependency tree.",
+      "createdAt": "2025-12-17T02:39:59Z",
+      "closedAt": "2025-12-17T03:17:33Z",
+      "state": "CLOSED",
+      "commentCount": 2
+    },
+    {
+      "id": "I_kwDONNAI987SX1I5",
+      "title": "Enhancement: Adaptive Rate Limiting for 60% Faster Multi-Repo Ingestion",
+      "author": "madjin",
+      "number": 159,
+      "repository": "elizaos/elizaos.github.io",
+      "body": "## Problem: Sequential Processing is Too Slow for Multi-Repo Pipelines\n\n### Current Bottleneck\n\nThe current pipeline uses **static concurrency** which creates a performance vs reliability tradeoff:\n\n- **Low concurrency (current: 5)**: Safe but SLOW\n  - 23 repos × 52 weeks of data = **~10-15 hours** for full ingestion\n  - Single slow repo blocks entire pipeline\n  - Underutilizes available API quota (5,000 requests/hour)\n\n- **High concurrency**: Fast but RISKY\n  - Hits secondary rate limits frequently\n  - Forces pipeline to wait 15+ minutes\n  - Wastes time with retry backoff cycles\n\n### Real-World Impact\n\n**Example from M3-org fork** (14 Optimism repositories):\n- **Static concurrency=5**: 6-8 hours for full historical ingestion\n- **With adaptive concurrency**: 2-3 hours (60% faster)\n- **Rate limit hits**: Reduced from 10-15 to 2-3 per run\n\n**Projected for 23 elizaOS repositories:**\n- **Current static approach**: 10-15 hours\n- **With adaptive concurrency**: ~4-6 hours (60-70% faster)\n\n### Why Static Concurrency Fails\n\n1. **API health varies** - Morning vs evening, weekday vs weekend\n2. **Repository sizes differ** - Small repos finish fast, large repos take hours\n3. **Rate limit recovery** - After hitting limit, pipeline should slow down temporarily\n4. **Unnecessary conservatism** - Static concurrency=5 is safe but wastes quota\n\n---\n\n## Solution: Adaptive Concurrency Management\n\n### Core Concept\n\n**Dynamically adjust concurrent operations (3-8) based on rate limit health:**\n\n- **Start conservative**: 3 concurrent operations\n- **Increase on success**: +1 concurrency every 2 minutes without rate limits\n- **Decrease on rate limit**: Halve concurrency immediately\n- **Track health**: Remember last rate limit for 5 minutes\n\n### Performance Benchmarks\n\n**Test Setup**: M3-org/op-hiscores fork with 14 ethereum-optimism repos\n\n| Metric | Static (5) | Adaptive (3-8) | Improvement |\n|--------|-----------|----------------|-------------|\n| **Total duration** | 6h 45min | 2h 50min | **58% faster** |\n| **Rate limit hits** | 12 | 2 | **83% fewer** |\n| **Avg concurrency** | 5 | 5.8 | +16% |\n| **Recovery time** | 3h 20min | 45min | **77% faster** |\n\n---\n\n## Implementation Components\n\n### 1. Adaptive Concurrency Manager (~110 lines)\n```typescript\nclass AdaptiveConcurrencyManager {\n  currentLevel: 3-8 (starts at 3)\n  reduceOnSecondaryLimit() → currentLevel / 2\n  increaseOnSuccess() → currentLevel + 1 (if no rate limit in 2min)\n  shouldReduceLoad() → true if rate limited in last 5min\n}\n```\n\n### 2. Rate Limit Type Detection (~50 lines)\n- Distinguishes **primary** vs **secondary** rate limits\n- Different strategies for each type\n- Primary: Wait until reset (1hr)\n- Secondary: Reduce load + backoff (15min)\n\n### 3. Adaptive Pipeline Integration (~60 lines)\n```typescript\nmapStep(operation, {\n  adaptiveConcurrency: true,  // Enable dynamic adjustment\n  defaultConcurrency: 5       // Fallback\n})\n```\n\n### 4. API Cost Estimation (~75 lines)\n- Shows estimated duration BEFORE execution\n- `--estimate-only` flag for dry-run\n- Risk assessment (LOW/MEDIUM/HIGH)\n\n### 5. Graceful Shutdown (~30 lines)\n- First Ctrl+C: Complete current operation, preserve adaptive state\n- Second Ctrl+C: Force exit\n- Better for long-running multi-hour ingestions\n\n**Total**: ~348 lines across 4 files\n\n---\n\n## Production Testing\n\n- **Fork**: https://github.com/M3-org/op-hiscores\n- **Deployment**: https://m3-org.github.io/op-hiscores/\n- **Dataset**: 14 repos, 18,000+ PRs, 4,800+ issues\n- **Duration**: 6+ months in production\n- **Commit**: `309c37c` - feat: Enhance pipeline with adaptive rate limiting\n\n---\n\n## Trade-offs\n\n### Pros\n✅ **60-70% faster** for multi-repo ingestion\n✅ **75% fewer rate limit hits**\n✅ **Self-tuning** - No manual configuration needed\n✅ **Production-tested** - 14 repos, 18K+ PRs successfully processed\n✅ **Backward compatible** - Opt-in via `adaptiveConcurrency: true`\n\n### Cons\n⚠️ **Complexity** - 348 lines vs current static approach\n⚠️ **Tuning** - Thresholds (3-8, 2min, 5min) may not be optimal for all workloads\n⚠️ **Debugging** - Dynamic behavior is harder to reason about\n\n---\n\n## Value Proposition\n\nFor projects tracking **10+ repositories** (like this project with 23 repos), the difference between **15 hours and 4-6 hours** for full ingestion is substantial.\n\nThe self-tuning nature means:\n- No manual configuration needed\n- Automatically finds optimal concurrency\n- Scales better as more repos are added\n- Reduces developer waiting time by 6-10 hours per full ingestion\n\n---\n\n## Next Steps\n\nIf this enhancement aligns with the project's goals, I'm happy to:\n1. Submit a PR with the full implementation\n2. Provide additional benchmarks or testing\n3. Adjust parameters based on your specific workload\n4. Start with a subset (e.g., just rate limit type detection) if preferred\n\nThe implementation is production-ready and has been thoroughly tested with larger datasets than currently tracked by this project.\n\n---\n\n**Question for maintainers**: Is the ~60% performance improvement worth the additional complexity? Would you prefer the full enhancement or a smaller subset (e.g., just rate limit parsing)?\n",
+      "createdAt": "2025-10-19T03:21:00Z",
+      "closedAt": "2025-12-17T06:49:51Z",
+      "state": "CLOSED",
+      "commentCount": 1
+    },
+    {
+      "id": "I_kwDONNAI987ev_A0",
+      "title": "feat: Upgrade leaderboard search to fuzzy matching",
+      "author": "madjin",
+      "number": 174,
+      "repository": "elizaos/elizaos.github.io",
+      "body": "## Summary\n\nThe current leaderboard search uses simple string matching (`.toLowerCase().includes()`), which requires exact substring matches. Upgrading to fuzzy search would improve user experience.\n\n## Current Implementation\n\n```typescript\n// src/components/leaderboard.tsx:141\nuser.username.toLowerCase().includes(searchTerm.toLowerCase())\n```\n\nThis requires exact matches - searching \"shwa\" won't find \"shaw\".\n\n## Proposed Enhancement\n\nUse `fuzzysort` (already in package.json but unused) for typo-tolerant matching:\n\n```typescript\nimport fuzzysort from 'fuzzysort';\n\n// Instead of exact matching:\nconst filteredUsers = fuzzysort.go(searchTerm, users, { key: 'username' })\n  .map(result => result.obj);\n```\n\n## Benefits\n\n- **Typo tolerance**: \"shwa\" → finds \"shaw\"\n- **Partial matching**: \"wtfis\" → finds \"wtfisagi0\"  \n- **Ranked results**: Best matches appear first\n- **Fast**: Optimized for real-time filtering\n\n## Context\n\n- `fuzzysort` was added in commit `4fe3c624` (2025-01-21) during SQLite implementation\n- Search UI was added in PR #92 but used simple matching\n- Package is already installed, just needs to be imported and used\n\n## Related\n\n- See #173 for dependency audit (lists `fuzzysort` as currently unused)",
+      "createdAt": "2025-12-17T02:52:29Z",
+      "closedAt": null,
+      "state": "OPEN",
+      "commentCount": 1
+    },
+    {
+      "id": "I_kwDONNAI987eu8JU",
+      "title": "RFC: Making the project more fork-friendly for org-specific deployments",
+      "author": "madjin",
+      "number": 171,
+      "repository": "elizaos/elizaos.github.io",
+      "body": "## Context\n\nSeveral organizations are running forks of this project to track their own GitHub organizations:\n- **M3-org/op-hiscores** - Tracking Optimism ecosystem repos\n- **Sendo-labs fork** - Custom deployment\n\nThese forks want to stay current with upstream features (badges, rate limiting, API improvements) but face challenges keeping in sync.\n\n## Current Pain Points\n\n### 1. Config conflicts on every sync\n`config/pipeline.config.ts` contains:\n- Repository list (org-specific)\n- AI context/prompts (org-specific branding)\n- Scoring rules (potentially org-specific)\n\nEvery upstream merge requires manual conflict resolution.\n\n### 2. Scattered org-specific values\nHardcoded values appear in multiple places:\n- `src/lib/pipelines/summarize/callAIService.ts` - `SITE_URL` default\n- `src/app/about/page.tsx` - Hardcoded links\n- CSS files - Brand colors\n- Various components - Org-specific text\n\n### 3. No clear separation of concerns\nNo distinction between:\n- **Core code** - Should always sync from upstream\n- **Deployment config** - Should stay fork-specific\n- **Branding/theming** - Should be configurable\n\n### 4. Cherry-picking is error-prone\nUseful features often come bundled with org-specific changes in the same commits, making clean cherry-picks difficult.\n\n## Proposed Improvements\n\n### Externalized Configuration\n\n1. **Single config file for all org-specific values**\n   ```typescript\n   // config/deployment.config.ts (gitignored)\n   export default {\n     siteName: \"ElizaOS Contributors\",\n     siteUrl: \"https://elizaos.github.io\",\n     repositories: [...],\n     branding: {\n       primaryColor: \"#...\",\n       logo: \"/logo.svg\",\n     },\n     aiContext: \"We are ElizaOS...\",\n   }\n   ```\n\n2. **Provide a `.example` template**\n   ```\n   config/deployment.config.example.ts  ← Committed\n   config/deployment.config.ts          ← Gitignored, fork-specific\n   ```\n\n3. **Environment variable fallbacks**\n   ```typescript\n   const siteUrl = config.siteUrl || process.env.SITE_URL;\n   ```\n\n### README Deployment Section\n\nAdd a \"Deploying Your Own Instance\" section to README covering:\n- How to fork and configure for your org\n- Which files to customize vs. keep in sync\n- Recommended workflow for pulling upstream updates\n- Example deployment configs for reference\n\n## Benefits\n\n1. **Cleaner git history** - Forks can `git pull upstream main` without conflicts\n2. **Easier feature adoption** - New features \"just work\" after pull\n3. **Reduced maintenance burden** - Fork maintainers focus on config, not merge conflicts\n4. **Better contributor experience** - Clear separation of what to modify\n\n## Questions for Discussion\n\n1. Would upstream accept PRs to externalize configuration?\n2. Is there interest in officially supporting \"white-label\" deployments?\n3. Are there other forks we should coordinate with?\n\n---\n\nHappy to help implement whichever approach the maintainers prefer!",
+      "createdAt": "2025-12-17T00:41:49Z",
+      "closedAt": "2025-12-17T19:51:01Z",
+      "state": "CLOSED",
+      "commentCount": 1
+    }
+  ],
+  "topPRs": [
+    {
+      "id": "PR_kwDONNAI9865d1At",
+      "title": "feat: make all fork-specific values configurable via env vars",
+      "author": "madjin",
+      "number": 179,
+      "body": "## Summary\n- Replaces all hardcoded fork-specific values with environment variables\n- Auto-detects BASE_PATH and SITE_URL in GitHub Actions workflow based on repository name\n- Enables smooth fork syncing with upstream without conflicts\n\n## Changes\n- `next.config.js`: Use `BASE_PATH` env var instead of hardcoded `/op-hiscores`\n- `AuthContext.tsx`: Use `NEXT_PUBLIC_BASE_PATH` for OAuth redirects\n- `profile/page.tsx`: Use `NEXT_PUBLIC_SITE_NAME` for profile metadata\n- `callAIService.ts`: Use `SITE_URL` and `SITE_NAME` with generic fallbacks\n- `date-utils.ts`: Generic comment (no fork-specific text)\n- `.github/workflows/deploy.yml`: Auto-detect site URL and base path from repo name\n\n## How it works\nThe deploy workflow automatically detects whether this is:\n- An org/user site (`*.github.io` repo) → no base path needed\n- A project site (any other repo) → base path is `/${repo-name}`\n\nNo secrets need to be configured - values are computed at build time.\n\n## Test plan\n- [ ] Verify GitHub Actions build passes\n- [ ] Verify site deploys correctly to GitHub Pages\n- [ ] Verify OAuth flow works with dynamic base path\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)",
+      "repository": "elizaos/elizaos.github.io",
+      "createdAt": "2025-12-17T22:20:05Z",
+      "mergedAt": null,
+      "additions": 6401,
+      "deletions": 812
+    },
+    {
+      "id": "PR_kwDONNAI9865SBES",
+      "title": "fix: add SITE_URL for RSS feed + RSS nav button",
+      "author": "madjin",
+      "number": 175,
+      "body": "## Summary\n- Add `SITE_URL` environment variable to deploy workflow for RSS feed generation\n- Uses fork-friendly pattern: `secrets.SITE_URL` with fallback to `https://{owner}.github.io`\n- Add RSS icon button to navigation bar (desktop)\n- Update default AI model to gemini-2.5-flash\n\n## Context\nThe RSS feed at `/rss.xml` was returning 404 because `SITE_URL` wasn't set during the build. Since this is a static export (`output: \"export\"`), the route handler needs `SITE_URL` at build time to generate proper feed URLs.\n\nThe fallback pattern ensures forks can also deploy without configuring a secret - it will auto-detect the owner's github.io URL.\n\n## Test plan\n- [ ] Deploy workflow runs successfully\n- [ ] RSS feed accessible at `/rss.xml`\n- [ ] RSS button visible in navbar\n- [ ] Feed URLs point to correct domain\n\nFixes the RSS feed 404 issue from PR #172\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)",
+      "repository": "elizaos/elizaos.github.io",
+      "createdAt": "2025-12-17T03:41:31Z",
+      "mergedAt": "2025-12-17T04:50:28Z",
+      "additions": 914,
+      "deletions": 573
+    },
+    {
+      "id": "PR_kwDONNAI9865Q1Ls",
+      "title": "feat: add RSS feed endpoint",
+      "author": "madjin",
+      "number": 172,
+      "body": "## Summary\nAdds `/rss.xml` endpoint that serves an RSS 2.0 feed of contributor summaries.\n\n## Features\n- 30 daily summaries\n- 4 weekly summaries  \n- 1 monthly summary\n- Strips markdown for clean descriptions\n- Proper XML escaping\n- Static generation with hourly revalidation\n- Uses `SITE_URL` env var for links (no hardcoded defaults)\n\n## Usage\nSubscribe to `https://your-site.com/rss.xml` in any RSS reader to get notified of new contributor summaries.\n\n## Files Added\n- `src/app/rss.xml/route.ts` - RSS feed route handler\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)",
+      "repository": "elizaos/elizaos.github.io",
+      "createdAt": "2025-12-17T00:46:27Z",
+      "mergedAt": "2025-12-17T01:56:07Z",
+      "additions": 698,
+      "deletions": 855
+    },
+    {
+      "id": "PR_kwDONNAI9865aMxg",
+      "title": "feat: RSS feed, workflow fixes, and fork-friendliness improvements",
+      "author": "madjin",
+      "number": 178,
+      "body": "## Summary\n\nThis PR combines several improvements:\n\n### RSS Feed\n- Add RSS feed endpoint at `/rss.xml` with daily, weekly, and monthly summaries\n- RSS button in navigation header\n- Items sorted chronologically by date (newest first)\n\n### Pipeline Workflow Fix\n- Reorder summary generation: Repository → Contributor → Overall\n- Fixes issue where overall summaries were empty (they depend on repo summaries)\n\n### Fork-Friendliness (#171)\n- **Site name configurable**: Uses `NEXT_PUBLIC_SITE_NAME` env var (falls back to \"Contributor Analytics\")\n- **Auto-detect site URL**: Workflow automatically determines correct URL based on repo type:\n  - Org/user sites (`*.github.io`): `https://{owner}.github.io`\n  - Project sites: `https://{owner}.github.io/{repo}`\n- Removes hardcoded \"ElizaOS\" from navigation, page title, and RSS feed\n\n### RSC Fix\n- Add \"use client\" directive to StatCardsDisplay.tsx\n- Fixes serialization error after Next.js 15.4.10 upgrade\n\n## Test plan\n- [x] Build passes with custom `NEXT_PUBLIC_SITE_NAME`\n- [x] RSS feed accessible at /rss.xml\n- [x] RSS items sorted by date\n- [x] Pipeline generates overall summaries correctly\n- [ ] Verify fork deployment works without secrets\n\n## Related Issues\n- Fixes #176 (RSC serialization error)\n- Partially addresses #171 (fork-friendliness)\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)",
+      "repository": "elizaos/elizaos.github.io",
+      "createdAt": "2025-12-17T16:36:57Z",
+      "mergedAt": "2025-12-17T19:51:00Z",
+      "additions": 558,
+      "deletions": 569
+    },
+    {
+      "id": "PR_kwDONNAI9865eBgf",
+      "title": "feat: make all fork-specific values configurable via env vars",
+      "author": "madjin",
+      "number": 180,
+      "body": "## Summary\n- Replaces all hardcoded fork-specific values with environment variables\n- Auto-detects BASE_PATH and SITE_URL in GitHub Actions workflow based on repository name\n- Enables smooth fork syncing without conflicts\n\n## Changes\n- `next.config.js`: Use `BASE_PATH` env var instead of hardcoded path\n- `AuthContext.tsx`: Use `NEXT_PUBLIC_BASE_PATH` for OAuth redirects\n- `profile/page.tsx`: Use `NEXT_PUBLIC_SITE_NAME` for profile metadata\n- `callAIService.ts`: Use `SITE_URL` and `SITE_NAME` with generic fallbacks\n- `date-utils.ts`: Generic comment\n- `.github/workflows/deploy.yml`: Auto-detect site URL and base path from repo name\n- `README.md`: Made generic, documented auto-detection\n\n## How it works\nThe deploy workflow automatically detects whether this is:\n- An org/user site (`*.github.io` repo) → no base path needed\n- A project site (any other repo) → base path is `/${repo-name}`\n\nNo secrets need to be configured - values are computed at build time.\n\n## Test plan\n- [ ] Verify GitHub Actions build passes\n- [ ] Verify site deploys correctly to GitHub Pages\n- [ ] Verify OAuth flow works with dynamic base path\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)",
+      "repository": "elizaos/elizaos.github.io",
+      "createdAt": "2025-12-17T22:52:17Z",
+      "mergedAt": "2025-12-17T23:04:15Z",
+      "additions": 106,
+      "deletions": 99
+    }
+  ],
+  "codeChanges": {
+    "additions": 3824,
+    "deletions": 2551,
+    "files": 31,
+    "commitCount": 27
+  },
+  "completedItems": [
+    {
+      "title": "🔧 Chore: Update AI SDKs (openai, anthropic)",
+      "prNumber": 170,
+      "type": "other",
+      "body": "## Summary\nUpdates AI SDK dependencies to latest versions.\n\n## Changes\n| Package | Old | New |\n|---------|-----|-----|\n| openai | 4.86.1 | 6.10.0 |\n| @anthropic-ai/sdk | 0.39.0 | 0.71.2 |\n\n## OpenAI SDK v6 Changes\n- Response types updated\n-",
+      "files": [
+        ".github/workflows/deploy.yml",
+        "CLAUDE.md",
+        "README.md",
+        "auth-worker/wrangler.toml",
+        "bun.lock",
+        "cli/analyze-pipeline.ts",
+        "config/pipeline.config.ts",
+        "next.config.js",
+        "package.json",
+        "scripts/2025-weekly-reingest.sh",
+        "scripts/README.md",
+        "scripts/daily-automation.sh",
+        "scripts/fetch_github.py",
+        "scripts/verify-data.sh",
+        "src/app/globals.css",
+        "src/app/layout.tsx",
+        "src/app/profile/[username]/page.tsx",
+        "src/components/icons/op-red.svg",
+        "src/components/navigation.tsx",
+        "src/contexts/AuthContext.tsx",
+        "src/lib/data/github.ts",
+        "src/lib/date-utils.ts",
+        "src/lib/pipelines/ingest/index.ts",
+        "src/lib/pipelines/summarize/callAIService.ts",
+        "src/lib/pipelines/types.ts"
+      ]
+    },
+    {
+      "title": "fix: add SITE_URL for RSS feed + RSS nav button",
+      "prNumber": 175,
+      "type": "bugfix",
+      "body": "## Summary\n- Add `SITE_URL` environment variable to deploy workflow for RSS feed generation\n- Uses fork-friendly pattern: `secrets.SITE_URL` with fallback to `https://{owner}.github.io`\n- Add RSS icon button to navigation bar (desktop)\n- Up",
+      "files": [
+        ".github/workflows/deploy.yml",
+        "bun.lock",
+        "config/pipeline.config.ts",
+        "package.json",
+        "src/app/summary/[interval]/[[...date]]/components/StatCardsDisplay.tsx",
+        "src/components/navigation.tsx",
+        "src/components/stat-card.tsx"
+      ]
+    },
+    {
+      "title": "feat: add RSS feed endpoint",
+      "prNumber": 172,
+      "type": "feature",
+      "body": "## Summary\nAdds `/rss.xml` endpoint that serves an RSS 2.0 feed of contributor summaries.\n\n## Features\n- 30 daily summaries\n- 4 weekly summaries  \n- 1 monthly summary\n- Strips markdown for clean descriptions\n- Proper XML escaping\n- Static g",
+      "files": [
+        "bun.lock",
+        "src/app/rss.xml/route.ts"
+      ]
+    },
+    {
+      "title": "fix: RSS feed sorting and pipeline ordering",
+      "prNumber": 177,
+      "type": "bugfix",
+      "body": "## Summary\n- Fix RSS feed item sorting to be chronological instead of grouped by type\n- Fix pipeline workflow step ordering so overall summaries run after repository summaries\n\n## Changes\n\n### RSS Feed Sorting\nItems were grouped by type (mo",
+      "files": [
+        ".github/workflows/run-pipelines.yml",
+        "src/app/rss.xml/route.ts"
+      ]
+    },
+    {
+      "title": "feat: make all fork-specific values configurable via env vars",
+      "prNumber": 180,
+      "type": "feature",
+      "body": "## Summary\n- Replaces all hardcoded fork-specific values with environment variables\n- Auto-detects BASE_PATH and SITE_URL in GitHub Actions workflow based on repository name\n- Enables smooth fork syncing without conflicts\n\n## Changes\n- `nex",
+      "files": [
+        ".github/workflows/deploy.yml",
+        "README.md",
+        "cli/analyze-pipeline.ts",
+        "next.config.js",
+        "src/app/profile/[username]/page.tsx",
+        "src/contexts/AuthContext.tsx",
+        "src/lib/date-utils.ts",
+        "src/lib/pipelines/summarize/callAIService.ts"
+      ]
+    },
+    {
+      "title": "feat: RSS feed, workflow fixes, and fork-friendliness improvements",
+      "prNumber": 178,
+      "type": "feature",
+      "body": "## Summary\n\nThis PR combines several improvements:\n\n### RSS Feed\n- Add RSS feed endpoint at `/rss.xml` with daily, weekly, and monthly summaries\n- RSS button in navigation header\n- Items sorted chronologically by date (newest first)\n\n### Pi",
+      "files": [
+        ".github/workflows/deploy.yml",
+        ".github/workflows/pr-checks.yml",
+        ".github/workflows/run-pipelines.yml",
+        "README.md",
+        "config/example.json",
+        "config/pipeline.config.ts",
+        "src/app/layout.tsx",
+        "src/app/rss.xml/route.ts",
+        "src/components/navigation.tsx"
+      ]
+    }
+  ],
+  "topContributors": [
+    {
+      "username": "madjin",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/32600939?u=cdcf89f44c7a50906c7a80d889efa85023af2049&v=4",
+      "totalScore": 76.16339650691849,
+      "prScore": 65.62539650691849,
+      "issueScore": 10.1,
+      "reviewScore": 0,
+      "commentScore": 0.43799999999999994,
+      "summary": "madjin: Focused on enhancing the `elizaos.github.io` project's functionality and maintainability, notably implementing an RSS feed across multiple PRs (e.g., #175, #172, #178) and improving fork-friendliness by making values configurable via environment variables (#180). Their work primarily involved bug fixes, refactoring, and feature development, touching a significant amount of code across 90 files."
+    },
+    {
+      "username": "borisudovicic",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/31806472?u=8935f4d43fd7e4eb9bf5ff92d54d4d2f8ac8a786&v=4",
+      "totalScore": 28,
+      "prScore": 0,
+      "issueScore": 28,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "borisudovicic: Demonstrated a strong focus on product refinement and user experience by creating 31 issues, with 17 already closed, addressing a wide range of improvements from UI/UX enhancements like \"Rename \"Knowledge\" section to \"Files\"\" (elizaos/eliza#6237) and \"Add three-dot menu to agent cards\" (elizaos/eliza#6234) to critical bug fixes and performance investigations."
+    },
+    {
+      "username": "standujar",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/16385918?u=718bdcd1585be8447bdfffb8c11ce249baa7532d&v=4",
+      "totalScore": 0.2,
+      "prScore": 0,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0.2,
+      "summary": "standujar: Focused on feature work, modifying 21 files with 2 commits (+1271/-319 lines) and providing 1 PR comment."
+    }
+  ],
+  "newPRs": 6,
+  "mergedPRs": 6,
+  "newIssues": 4,
+  "closedIssues": 4,
+  "activeContributors": 1
+}

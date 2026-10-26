@@ -1,0 +1,747 @@
+{
+  "interval": {
+    "intervalStart": "2025-08-24T00:00:00.000Z",
+    "intervalEnd": "2025-08-31T00:00:00.000Z",
+    "intervalType": "week"
+  },
+  "repository": "elizaos/eliza",
+  "overview": "From 2025-08-24 to 2025-08-31, elizaos/eliza had 28 new PRs (23 merged), 7 new issues, and 17 active contributors.",
+  "topIssues": [
+    {
+      "id": "I_kwDOMT5cIs7H3Obz",
+      "title": "Implement Dynamic Prompting (Multi-Turn Conversations) in ElizaOS Scenarios",
+      "author": "linear",
+      "number": 5819,
+      "repository": "elizaos/eliza",
+      "body": "# Dynamic Prompting Implementation for ElizaOS Scenarios\n\n## Overview\n\nImplement **Dynamic Prompting** (multi-turn conversations) in ElizaOS scenarios to enable sophisticated testing of agent behavior through extended conversations where an LLM simulates realistic user responses.\n\n## Problem Statement\n\nCurrent ElizaOS scenarios are limited to single-turn interactions, making it impossible to test:\n\n* Multi-step problem solving\n* Context retention across conversation turns\n* Clarification and follow-up question handling\n* Natural conversation flow assessment\n* Error recovery and correction flows\n\n## Solution\n\nExtend the existing scenario framework to support multi-turn conversations where:\n\n1. **Agent** receives initial user input\n2. **Agent** responds with thoughts, actions, and replies\n3. **LLM Simulator** generates realistic user follow-up based on agent response\n4. **Agent** continues the conversation based on simulated user input\n5. Process repeats for specified number of turns or until conditions are met\n\n## Key Requirements\n\n### 1\\. Backward Compatibility\n\n* **100% backward compatible** - all existing scenarios must work unchanged\n* Gradual adoption path for teams to enhance existing scenarios\n* No breaking changes to existing APIs or CLI commands\n\n### 2\\. Core Components\n\n#### Schema Extensions\n\n* Extend `RunStepSchema` with optional `conversation` field\n* Add new evaluation types: `conversation_length`, `conversation_flow`, `user_satisfaction`, `context_retention`\n* Support conversation configuration with user simulator settings\n\n#### User Simulator\n\n* LLM-based response generation with persona-driven prompts\n* Configurable personality, objectives, constraints, and knowledge level\n* Realistic conversation progression based on agent responses\n\n#### Conversation Manager\n\n* Multi-turn execution orchestration\n* Termination condition checking (satisfaction, solution provided, escalation needed)\n* Turn-level and final evaluation support\n* Conversation transcript generation\n\n#### New Evaluators\n\n* **Conversation Length**: Validate optimal conversation duration\n* **Conversation Flow**: Detect required conversation patterns\n* **User Satisfaction**: Measure user satisfaction through sentiment analysis\n* **Context Retention**: Verify agent memory across conversation turns\n\n### 3\\. Configuration Examples\n\n#### Basic Multi-Turn Conversation\n\n```yaml\nrun:\n  - input: \"I need help with something\"\n    conversation:\n      max_turns: 4\n      user_simulator:\n        persona: \"polite customer with a billing question\"\n        objective: \"find out why charged twice this month\"\n        temperature: 0.6\n      final_evaluations:\n        - type: \"llm_judge\"\n          prompt: \"Did the agent successfully help resolve the billing issue?\"\n          expected: \"yes\"\n```\n\n#### Advanced Persona-Driven Conversation\n\n```yaml\nrun:\n  - input: \"This is ridiculous! Your product doesn't work!\"\n    conversation:\n      max_turns: 6\n      user_simulator:\n        persona: \"angry customer who had bad experience\"\n        objective: \"vent frustration but eventually want help\"\n        style: \"initially hostile, gradually becomes cooperative if handled well\"\n        constraints:\n          - \"Start with complaints and criticism\"\n          - \"Don't accept first solution immediately\"\n          - \"Become more cooperative if agent shows empathy\"\n      termination_conditions:\n        - type: \"user_expresses_satisfaction\"\n        - type: \"agent_escalates_to_human\"\n```\n\n## Implementation Plan\n\n### Phase 1: Core Infrastructure (Weeks 1-2)\n\n- [ ] Schema extensions and type definitions\n- [ ] User Simulator implementation\n- [ ] Basic conversation flow testing\n\n### Phase 2: Conversation Management (Weeks 3-4)\n\n- [ ] ConversationManager class implementation\n- [ ] Provider integration (LocalEnvironmentProvider, E2BEnvironmentProvider)\n- [ ] Termination condition logic\n\n### Phase 3: Evaluation System (Weeks 5-6)\n\n- [ ] New conversation evaluators implementation\n- [ ] EvaluationEngine integration\n- [ ] End-to-end testing\n\n### Phase 4: Polish and Documentation (Week 7)\n\n- [ ] Example scenarios creation\n- [ ] Documentation updates\n- [ ] Performance optimizations\n\n## Technical Specifications\n\n### File Structure\n\n```\npackages/cli/src/commands/scenario/src/\n├── schema.ts (extend)\n├── conversation-types.ts (new)\n├── UserSimulator.ts (new)\n├── ConversationManager.ts (new)\n├── ConversationEvaluators.ts (new)\n├── LocalEnvironmentProvider.ts (modify)\n├── E2BEnvironmentProvider.ts (modify)\n└── __tests__/\n    ├── UserSimulator.test.ts (new)\n    ├── ConversationManager.test.ts (new)\n    ├── ConversationEvaluators.test.ts (new)\n    └── integration/ (new tests)\n```\n\n### Key Interfaces\n\n```typescript\ninterface ConversationConfig {\n  max_turns: number;\n  user_simulator: UserSimulatorConfig;\n  termination_conditions: TerminationCondition[];\n  turn_evaluations: EvaluationSchema[];\n  final_evaluations: EvaluationSchema[];\n}\n\ninterface UserSimulatorConfig {\n  persona: string;\n  objective: string;\n  style?: string;\n  constraints: string[];\n  knowledge_level: 'beginner' | 'intermediate' | 'expert';\n}\n```\n\n## Success Criteria\n\n### Functional Requirements\n\n- [ ] Single-turn scenarios continue to work unchanged\n- [ ] Multi-turn conversations execute successfully\n- [ ] User simulator generates realistic, persona-consistent responses\n- [ ] Termination conditions work correctly\n- [ ] All new evaluation types function properly\n- [ ] Matrix testing supports conversation parameters\n\n### Performance Requirements\n\n- [ ] Conversation scenarios complete within reasonable time limits\n- [ ] Memory usage remains within acceptable bounds\n- [ ] LLM API usage is optimized and rate-limited appropriately\n\n### Quality Requirements\n\n- [ ] Comprehensive test coverage (unit, integration, e2e)\n- [ ] Clear error handling and debugging capabilities\n- [ ] Well-documented examples and migration guide\n\n## Risk Mitigation\n\n### Technical Risks\n\n* **LLM API failures**: Implement retry logic and graceful degradation\n* **Infinite loops**: Hard max_turns limit and timeout mechanisms\n* **Memory leaks**: Turn-based cleanup and conversation archiving\n\n### Integration Risks\n\n* **Breaking existing scenarios**: Comprehensive backward compatibility testing\n* **Performance impact**: Resource monitoring and optimization\n\n## Dependencies\n\n* Existing `askAgentViaApi` infrastructure\n* Current evaluation engine and trajectory reconstruction\n* LLM provider integration for user simulation\n* Database schema (no changes required)\n\n## Acceptance Criteria\n\n1. **Backward Compatibility**: All existing scenarios pass without modification\n2. **New Functionality**: Multi-turn conversation scenarios execute successfully\n3. **Evaluation Quality**: New evaluators provide meaningful insights\n4. **Performance**: No significant impact on existing scenario execution time\n5. **Documentation**: Clear examples and migration path provided",
+      "createdAt": "2025-08-25T20:36:17Z",
+      "closedAt": null,
+      "state": "OPEN",
+      "commentCount": 1
+    },
+    {
+      "id": "I_kwDOMT5cIs7BH4Ls",
+      "title": "Fix Windows path handling in CLI agent start command tests",
+      "author": "linear",
+      "number": 5619,
+      "repository": "elizaos/eliza",
+      "body": "\\## Description\n\n\\### Summary\n\nWindows CI tests are failing due to incorrect path handling when running \\`elizaos agent start\\` with the \\`--path\\` flag. The file path is being malformed, resulting in doubled/concatenated paths with embedded quotes.\n\n\\### Error Details\n\nThe test command:\n\n\\`\\`\\`bash\n\nelizaos agent start --remote-url http://localhost:3000 --path \"D:\\\\a\\\\eliza\\\\eliza\\\\packages\\\\cli\\\\tests\\\\test-characters\\\\max.json\"\n\n\\`\\`\\`\n\nResults in this malformed path:\n\n\\`\\`\\`\n\nD:\\\\a\\\\eliza\\\\eliza\\\\packages\\\\cli\\\\\"D:\\\\a\\\\eliza\\\\eliza\\\\packages\\\\cli\\\\tests\\\\test-characters\\\\max.json\"\n\n\\`\\`\\`\n\nError message:\n\n\\`\\`\\`\n\nerror: File not found at path: D:\\\\a\\\\eliza\\\\eliza\\\\packages\\\\cli\\\\\"D:\\\\a\\\\eliza\\\\eliza\\\\packages\\\\cli\\\\tests\\\\test-characters\\\\max.json\"\n\n\\`\\`\\`\n\n\\### Root Cause\n\nThe path resolution in \\`packages/cli/src/commands/agent.ts\\` (around the \\`startAgent\\` function) is not properly handling quoted paths on Windows. When \\`path.resolve(process.cwd(), options.path)\\` is called, it's incorrectly concatenating the current working directory with an already-absolute path.\n\n\\### Affected Code\n\n\\- File: \\`packages/cli/dist/chunk-KKAK7OQA.js\\` (compiled from source)\n\n\\- Line: Around line 3326 where \\`path12.resolve(process.cwd(), options.path)\\` is called\n\n\\- Source likely in: \\`packages/cli/src/commands/agent.ts\\` or related agent command files\n\n\\### Reproduction\n\nOnly occurs on Windows systems when running:\n\n\\`\\`\\`bash\n\nbun test packages/cli/tests/create-commands.test.ts\n\n\\`\\`\\`\n\n\\### Proposed Fix\n\n1\\. Check if the provided path is already absolute before calling \\`path.resolve()\\`\n\n2\\. Handle Windows path separators and quoted paths correctly\n\n3\\. Add unit tests specifically for Windows path scenarios\n\n\\### Example Fix\n\n\\`\\`\\`typescript\n\n*// Instead of:*\n\nconst filePath = path.resolve(process.cwd(), options.path);\n\n*// Use:*\n\nconst inputPath = options.path.replace(/^\"|\"$/g, ''); *// Remove surrounding quotes*\n\nconst filePath = path.isAbsolute(inputPath)\n\n? inputPath\n\n: path.resolve(process.cwd(), inputPath);\n\n\\`\\`\\`\n\n\\### Priority\n\nHigh - Blocking CI/CD pipeline\n\n\\### Labels\n\n\\- bug\n\n\\- windows\n\n\\- cli\n\n\\- ci-failure",
+      "createdAt": "2025-07-17T15:48:27Z",
+      "closedAt": "2025-08-27T06:56:37Z",
+      "state": "CLOSED",
+      "commentCount": 0
+    },
+    {
+      "id": "I_kwDOMT5cIs7Fwp2A",
+      "title": "v2 ↔ v3 Benchmark Suite & Evaluation",
+      "author": "borisudovicic",
+      "number": 5764,
+      "repository": "elizaos/eliza",
+      "body": "**Goal**  \nCreate a repeatable, apples-to-apples benchmark suite that measures **accuracy, latency, and cost** for representative Eliza use cases. Results drive merit-based architectural decisions for v3 (and guardrails for future changes).\n\n**Why now**  \nWe need baselines on v2 and the same tests running on v3 candidates to validate improvements in **DevEx, production readiness, tool calling, streaming, and opinionated defaults**.\n\n## Scope\n\n1. **Unified runner** that can execute the same test specs against:\n   * **v2** (current runtime; actions/providers/event bus as implemented)\n   * **v3** (tool loop prototype; declarative workflows; Drizzle/Redis stack)\n2. **Scenario set** that reflects real user value and stress points:\n   * **Tool calling & workflows** (multi-step, branching, error handling)\n   * **Streaming path** (token + tool streaming)\n   * **Multilingual** (detect → translate → run → translate-back)\n   * **RAG / vector** (retrieve-then-reason with pluggable vectors)\n   * **Service events** (webhook/listener → agent response)\n   * **DevEx** proxy (boot → first streamed token; commands executed)\n   * **Interop** (OpenAI-compatible tool calls; MCP remote tool)\n   * **Deterministic workflows** (replay under fixed seeds)\n3. **Telemetry + dataset loop**\n   * Trajectory logging → dataset building → evals (LLM-as-judge + rubric)\n\n## Metric Definitions (source of truth)\n\n**Latency**\n\n* **TTFT**: time-to-first-token (ms)\n* **TTFR**: time-to-final-response (ms)\n* **TTS1**: time-to-first tool-call span (ms)\n* **Per-step latency**: tool span durations (p50/p95)\n* **Tokens/sec**: output token throughput during streaming\n\n**Cost**\n\n* **Prompt tokens / Completion tokens**\n* **Total tokens / scenario**\n* **Approx $** (using model price sheet plugged into the runner; version-pinned)\n\n**Accuracy / Reliability**\n\n* **Task success** (boolean via structured checks or rubric)\n* **Tool-call correctness** (valid schema, correct args)\n* **Groundedness** (RAG: citation presence + answer-supports-evidence score)\n* **Hallucination rate** (rubric-based)\n* **Replay determinism** (variance across n=5 runs with fixed seed)\n* **Error rate** (non-200, exception, timeout, tool failure)\n\n**DevEx proxies**\n\n* **Commands to run** (from template scaffold to first streamed token)\n* **Cold start to TTFT** (scripted create→dev→curl path)\n* **Config surface** (count of required fields; measured from template)",
+      "createdAt": "2025-08-13T10:31:03Z",
+      "closedAt": "2025-08-29T13:10:29Z",
+      "state": "CLOSED",
+      "commentCount": 0
+    },
+    {
+      "id": "I_kwDOMT5cIs7HyidA",
+      "title": "Analyze options for MCP Gateway, Add some MCP servers, add x402 layer",
+      "author": "borisudovicic",
+      "number": 5814,
+      "repository": "elizaos/eliza",
+      "body": "[https://hackmd.io/aM2pd2NbSmOMzD0X9GPYiQ](https://hackmd.io/aM2pd2NbSmOMzD0X9GPYiQ)",
+      "createdAt": "2025-08-25T13:40:42Z",
+      "closedAt": null,
+      "state": "OPEN",
+      "commentCount": 0
+    },
+    {
+      "id": "I_kwDOMT5cIs7Hx_mQ",
+      "title": "i Successfully Publish a Plugin in  23AUG but it's not visible in PR",
+      "author": "1BDO",
+      "number": 5813,
+      "repository": "elizaos/eliza",
+      "body": "plugin-delta-0.1.0",
+      "createdAt": "2025-08-25T13:01:43Z",
+      "closedAt": null,
+      "state": "OPEN",
+      "commentCount": 0
+    }
+  ],
+  "topPRs": [
+    {
+      "id": "PR_kwDOMT5cIs6lddBz",
+      "title": "merge develop",
+      "author": "tcm390",
+      "number": 5826,
+      "body": "",
+      "repository": "elizaos/eliza",
+      "createdAt": "2025-08-26T17:47:19Z",
+      "mergedAt": null,
+      "additions": 35368,
+      "deletions": 49768
+    },
+    {
+      "id": "PR_kwDOMT5cIs6lb8rP",
+      "title": "feat: scenarios dynamic prompting + spec",
+      "author": "monilpat",
+      "number": 5824,
+      "body": "# Draft Pull Request: Implement Dynamic Prompting (Multi-Turn Conversations) in ElizaOS Scenarios\r\n\r\n## 🎯 Overview\r\n\r\nThis PR implements **Dynamic Prompting** (multi-turn conversations) in ElizaOS scenarios, enabling sophisticated testing of agent behavior through extended conversations where an LLM simulates realistic user responses. This feature extends the existing single-turn scenario framework to support complex conversation flows while maintaining 100% backward compatibility.\r\n\r\n**Ticket**: [ELIZA-669](https://linear.app/eliza-labs/issue/ELIZA-669/implement-dynamic-prompting-multi-turn-conversations-in)\r\n\r\n## 🚀 Key Features\r\n\r\n### ✨ Multi-Turn Conversation Support\r\n- **LLM User Simulator**: Generates realistic, persona-driven user responses\r\n- **Conversation Orchestration**: Manages multi-turn execution with termination logic\r\n- **Turn-Level Evaluations**: Real-time assessment during conversation flow\r\n- **Advanced Evaluators**: New conversation-specific evaluation types\r\n\r\n### 🔄 Backward Compatibility\r\n- **100% Compatible**: All existing single-turn scenarios work unchanged\r\n- **Gradual Adoption**: Teams can enhance existing scenarios incrementally\r\n- **No Breaking Changes**: Existing APIs and CLI commands remain unchanged\r\n\r\n### 🧠 Intelligent Conversation Management\r\n- **Termination Conditions**: Multiple strategies for ending conversations early\r\n- **Context Retention**: Agent memory testing across conversation turns\r\n- **Emotional Intelligence**: Handling complex user personas and emotional states\r\n- **Performance Optimization**: Timeout mechanisms and resource management\r\n\r\n## 📁 Files Changed\r\n\r\n### New Files\r\n```\r\npackages/cli/src/commands/scenario/src/\r\n├── conversation-types.ts          # TypeScript interfaces for conversation components\r\n├── UserSimulator.ts              # LLM-based user response generation\r\n├── ConversationManager.ts        # Multi-turn conversation orchestration\r\n├── ConversationEvaluators.ts    # New conversation-specific evaluators\r\n└── __tests__/\r\n    ├── UserSimulator.test.ts     # Unit tests for user simulator\r\n    ├── ConversationManager.test.ts # Unit tests for conversation manager\r\n    ├── ConversationEvaluators.test.ts # Unit tests for new evaluators\r\n    ├── schema-conversation.test.ts # Schema validation tests\r\n    └── integration/\r\n        ├── conversation-flow.test.ts # Integration tests\r\n        └── backward-compatibility.test.ts # Compatibility tests\r\n```\r\n\r\n### Modified Files\r\n```\r\npackages/cli/src/commands/scenario/src/\r\n├── schema.ts                     # Extended with conversation schemas\r\n├── LocalEnvironmentProvider.ts   # Added conversation support\r\n├── E2BEnvironmentProvider.ts     # Added conversation support\r\n└── EvaluationEngine.ts           # Registered new evaluators\r\n```\r\n\r\n### New Example Files\r\n```\r\npackages/cli/src/commands/scenario/examples/\r\n├── basic-conversation.yaml       # Basic multi-turn conversation\r\n├── emotional-intelligence.yaml   # Complex persona testing\r\n├── technical-support.yaml        # Troubleshooting conversation\r\n└── knowledge-transfer.yaml       # Educational conversation\r\n```\r\n\r\n## 🔧 Technical Implementation\r\n\r\n### Schema Extensions\r\n- **ConversationConfigSchema**: Defines conversation configuration with user simulator settings\r\n- **New Evaluation Types**: `conversation_length`, `conversation_flow`, `user_satisfaction`, `context_retention`\r\n- **Backward Compatible**: Optional `conversation` field in existing `RunStepSchema`\r\n\r\n### User Simulator\r\n- **Persona-Driven**: Configurable personality, objectives, constraints, and knowledge level\r\n- **Context-Aware**: Builds prompts based on conversation history and agent responses\r\n- **Realistic Generation**: LLM-based response generation with behavioral constraints\r\n\r\n### Conversation Manager\r\n- **Multi-Turn Orchestration**: Manages conversation flow and turn execution\r\n- **Termination Logic**: Intelligent conversation ending based on multiple conditions\r\n- **Evaluation Integration**: Supports both turn-level and final evaluations\r\n- **Error Handling**: Graceful handling of failures and timeouts\r\n\r\n### New Evaluators\r\n- **ConversationLengthEvaluator**: Validates optimal conversation duration\r\n- **ConversationFlowEvaluator**: Detects required conversation patterns\r\n- **UserSatisfactionEvaluator**: Measures user satisfaction through multiple methods\r\n- **ContextRetentionEvaluator**: Verifies agent memory across conversation turns\r\n\r\n## 📋 Configuration Examples\r\n\r\n### Basic Multi-Turn Conversation\r\n```yaml\r\nrun:\r\n  - input: \"Hi, I need help with something\"\r\n    conversation:\r\n      max_turns: 4\r\n      user_simulator:\r\n        persona: \"polite customer with a billing question\"\r\n        objective: \"find out why charged twice this month\"\r\n        temperature: 0.6\r\n      final_evaluations:\r\n        - type: \"llm_judge\"\r\n          prompt: \"Did the agent successfully help resolve the billing issue?\"\r\n          expected: \"yes\"\r\n```\r\n\r\n### Advanced Emotional Intelligence Testing\r\n```yaml\r\nrun:\r\n  - input: \"This is ridiculous! Your product doesn't work!\"\r\n    conversation:\r\n      max_turns: 6\r\n      user_simulator:\r\n        persona: \"angry customer who had bad experience\"\r\n        objective: \"vent frustration but eventually want help\"\r\n        style: \"initially hostile, gradually becomes cooperative if handled well\"\r\n        constraints:\r\n          - \"Start with complaints and criticism\"\r\n          - \"Become more cooperative if agent shows empathy\"\r\n      termination_conditions:\r\n        - type: \"user_expresses_satisfaction\"\r\n        - type: \"agent_escalates_to_human\"\r\n      final_evaluations:\r\n        - type: \"user_satisfaction\"\r\n          satisfaction_threshold: 0.6\r\n        - type: \"conversation_flow\"\r\n          required_patterns: [\"empathy_then_solution\", \"clarification_cycle\"]\r\n```\r\n\r\n## 🧪 Testing Strategy\r\n\r\n### Unit Tests\r\n- **UserSimulator**: Tests persona-driven response generation and constraint handling\r\n- **ConversationManager**: Tests turn execution, termination logic, and error handling\r\n- **ConversationEvaluators**: Tests all new evaluation types with various scenarios\r\n- **Schema Validation**: Tests conversation schema validation and backward compatibility\r\n\r\n### Integration Tests\r\n- **Conversation Flow**: End-to-end conversation execution with realistic scenarios\r\n- **Provider Integration**: Tests both local and cloud environment providers\r\n- **Evaluation Integration**: Tests new evaluators with existing evaluation engine\r\n- **Backward Compatibility**: Ensures existing scenarios work unchanged\r\n\r\n### Performance Tests\r\n- **Resource Usage**: Memory and CPU usage validation for long conversations\r\n- **LLM API Optimization**: Token usage and rate limiting verification\r\n- **Timeout Handling**: Tests timeout mechanisms and graceful degradation\r\n\r\n## 📊 Performance Impact\r\n\r\n### Resource Usage\r\n- **Memory**: Additional ~50MB per conversation (configurable limits)\r\n- **CPU**: Minimal impact, primarily during LLM API calls\r\n- **Network**: Additional LLM API calls for user simulation (optimized with caching)\r\n\r\n### Execution Time\r\n- **Single-Turn Scenarios**: No impact (unchanged execution path)\r\n- **Multi-Turn Scenarios**: ~30-60 seconds per turn (configurable timeouts)\r\n- **Matrix Testing**: Parallel execution with rate limiting\r\n\r\n### LLM API Usage\r\n- **User Simulation**: ~200 tokens per turn (configurable)\r\n- **Evaluation**: ~100 tokens per evaluation (existing pattern)\r\n- **Rate Limiting**: Built-in throttling and retry logic\r\n\r\n## 🔒 Security & Reliability\r\n\r\n### Error Handling\r\n- **LLM API Failures**: Retry logic with exponential backoff\r\n- **Timeout Mechanisms**: Configurable timeouts per turn and total conversation\r\n- **Graceful Degradation**: Fallback to simpler simulation strategies\r\n- **Resource Limits**: Memory and execution time limits to prevent runaway conversations\r\n\r\n### Data Privacy\r\n- **No Persistent Storage**: Conversation data not stored beyond execution\r\n- **Transcript Export**: Optional full conversation export for debugging\r\n- **Logging Control**: Configurable debug logging levels\r\n\r\n## 🚦 Migration Guide\r\n\r\n### For Existing Scenarios\r\n**No changes required!** All existing scenarios continue to work unchanged:\r\n\r\n```yaml\r\n# Existing scenario - works exactly as before\r\nrun:\r\n  - input: \"Hello agent\"\r\n    evaluations:\r\n      - type: \"string_contains\"\r\n        value: \"hello\"\r\n```\r\n\r\n### For Enhanced Scenarios\r\nGradually add conversation features to existing scenarios:\r\n\r\n```yaml\r\n# Enhanced scenario - adds conversation while keeping existing evaluations\r\nrun:\r\n  - input: \"Hello agent\"\r\n    conversation:\r\n      max_turns: 2\r\n      user_simulator:\r\n        persona: \"friendly user\"\r\n        objective: \"have brief chat\"\r\n    evaluations:  # Keep existing evaluations for compatibility\r\n      - type: \"string_contains\"\r\n        value: \"hello\"\r\n```\r\n\r\n### For New Conversation-First Scenarios\r\nCreate scenarios designed for multi-turn testing:\r\n\r\n```yaml\r\n# New conversation-first scenario\r\nrun:\r\n  - input: \"I have a complex problem\"\r\n    conversation:\r\n      max_turns: 8\r\n      user_simulator:\r\n        persona: \"confused user with technical issue\"\r\n        objective: \"get step-by-step help\"\r\n      final_evaluations:\r\n        - type: \"user_satisfaction\"\r\n          satisfaction_threshold: 0.7\r\n        - type: \"conversation_length\"\r\n          optimal_turns: 5\r\n```\r\n\r\n## 📈 Future Enhancements\r\n\r\n### Planned Features\r\n- **Advanced Personas**: More sophisticated user personality modeling\r\n- **Multi-Agent Conversations**: Support for multiple agents in conversation\r\n- **Emotional Intelligence**: Enhanced emotional state tracking and response\r\n- **Conversation Analytics**: Advanced conversation quality metrics\r\n- **Custom Evaluators**: Framework for custom conversation evaluators\r\n\r\n### Performance Optimizations\r\n- **Response Caching**: Cache common user simulation responses\r\n- **Parallel Processing**: Concurrent evaluation execution\r\n- **Streaming Transcripts**: Real-time conversation monitoring\r\n- **Resource Pooling**: Shared LLM connection pools\r\n\r\n## ✅ Acceptance Criteria\r\n\r\n### Functional Requirements\r\n- [x] **Backward Compatibility**: All existing single-turn scenarios execute without modification\r\n- [x] **Multi-turn Execution**: Conversation scenarios execute successfully with realistic user simulation\r\n- [x] **User Simulation**: LLM generates persona-consistent, contextually appropriate responses\r\n- [x] **Termination Logic**: Conversation ends appropriately based on configured conditions\r\n- [x] **Evaluation System**: All new evaluation types provide meaningful insights\r\n- [x] **Matrix Testing**: Matrix scenarios support conversation parameters and execute correctly\r\n- [x] **Error Handling**: Graceful handling of LLM failures, timeouts, and edge cases\r\n\r\n### Performance Requirements\r\n- [x] **Execution Time**: Conversation scenarios complete within reasonable time limits (max 5 minutes for 8-turn conversation)\r\n- [x] **Memory Usage**: Memory usage remains within acceptable bounds (max 2GB for complex scenarios)\r\n- [x] **LLM API Usage**: Optimized token usage and rate limiting (max 1000 tokens per user simulation)\r\n- [x] **Resource Efficiency**: No memory leaks or resource accumulation across multiple scenarios\r\n\r\n### Quality Requirements\r\n- [x] **Test Coverage**: Comprehensive test coverage (unit: 90%, integration: 80%, e2e: 70%)\r\n- [x] **Error Handling**: Clear error messages and debugging capabilities\r\n- [x] **Documentation**: Well-documented examples and migration guide\r\n- [x] **Logging**: Comprehensive logging for debugging and monitoring\r\n- [x] **Metrics**: Performance metrics and conversation quality measurements\r\n\r\n## 🔍 Testing Instructions\r\n\r\n### Manual Testing\r\n1. **Backward Compatibility**: Run existing scenario suite to ensure no regressions\r\n2. **Basic Conversation**: Test simple multi-turn conversation scenarios\r\n3. **Complex Personas**: Test emotional intelligence and difficult user scenarios\r\n4. **Matrix Testing**: Test conversation parameters in matrix scenarios\r\n5. **Error Scenarios**: Test timeout, LLM failure, and resource limit scenarios\r\n\r\n### Automated Testing\r\n```bash\r\n# Run all tests\r\nbun test\r\n\r\n# Run conversation-specific tests\r\nbun test --grep \"conversation\"\r\n\r\n# Run backward compatibility tests\r\nbun test --grep \"backward\"\r\n\r\n# Run performance tests\r\nbun test --grep \"performance\"\r\n```\r\n\r\n## 📚 Documentation\r\n\r\n### Updated Documentation\r\n- **Dynamic Prompting Guide**: Comprehensive implementation guide\r\n- **Engineering Design**: Detailed technical design document\r\n- **Configuration Examples**: Real-world scenario examples\r\n- **Migration Guide**: Step-by-step migration instructions\r\n\r\n### New Documentation\r\n- **Conversation Best Practices**: Guidelines for effective conversation scenarios\r\n- **Persona Design Guide**: How to create realistic user personas\r\n- **Evaluation Strategies**: Advanced evaluation techniques for conversations\r\n- **Performance Tuning**: Optimization guidelines for conversation scenarios\r\n\r\n## 🤝 Review Checklist\r\n\r\n### Code Quality\r\n- [ ] **TypeScript**: All code properly typed with no `any` types\r\n- [ ] **Error Handling**: Comprehensive error handling and edge case coverage\r\n- [ ] **Logging**: Appropriate logging levels and debug information\r\n- [ ] **Documentation**: Inline code documentation and JSDoc comments\r\n- [ ] **Naming**: Clear, descriptive variable and function names\r\n\r\n### Architecture\r\n- [ ] **Separation of Concerns**: Clear boundaries between components\r\n- [ ] **Dependency Management**: Proper dependency injection and loose coupling\r\n- [ ] **Extensibility**: Framework supports future enhancements\r\n- [ ] **Performance**: Efficient resource usage and optimization\r\n- [ ] **Security**: Proper input validation and data handling\r\n\r\n### Testing\r\n- [ ] **Unit Tests**: Comprehensive unit test coverage for all components\r\n- [ ] **Integration Tests**: End-to-end testing of conversation flows\r\n- [ ] **Backward Compatibility**: Existing scenarios work unchanged\r\n- [ ] **Performance Tests**: Resource usage and timeout validation\r\n- [ ] **Error Scenarios**: Failure mode testing and recovery\r\n\r\n### Documentation\r\n- [ ] **User Guide**: Clear instructions for using conversation features\r\n- [ ] **Migration Guide**: Step-by-step migration for existing scenarios\r\n- [ ] **API Documentation**: Complete API reference for new components\r\n- [ ] **Examples**: Comprehensive example scenarios\r\n- [ ] **Troubleshooting**: Common issues and solutions\r\n\r\n## 🎉 Impact\r\n\r\nThis implementation significantly enhances ElizaOS scenario testing capabilities by enabling:\r\n\r\n1. **Realistic Agent Testing**: Multi-turn conversations that test real-world interaction patterns\r\n2. **Complex Behavior Assessment**: Evaluation of agent memory, emotional intelligence, and problem-solving\r\n3. **Comprehensive Coverage**: Testing scenarios previously impossible with single-turn interactions\r\n4. **Production Readiness**: Agent validation for complex customer support and assistance scenarios\r\n\r\nThe feature maintains full backward compatibility while providing a powerful new testing paradigm for sophisticated agent behavior evaluation.",
+      "repository": "elizaos/eliza",
+      "createdAt": "2025-08-26T15:22:47Z",
+      "mergedAt": null,
+      "additions": 6968,
+      "deletions": 167
+    },
+    {
+      "id": "PR_kwDOMT5cIs6lcZJF",
+      "title": "multi step",
+      "author": "tcm390",
+      "number": 5825,
+      "body": "",
+      "repository": "elizaos/eliza",
+      "createdAt": "2025-08-26T15:57:57Z",
+      "mergedAt": "2025-08-27T18:08:53Z",
+      "additions": 6708,
+      "deletions": 187
+    },
+    {
+      "id": "PR_kwDOMT5cIs6lr8nR",
+      "title": "Main",
+      "author": "shiedot",
+      "number": 5836,
+      "body": "<!-- Use this template by filling in information and copying and pasting relevant items out of the HTML comments. -->\r\n\r\n# Relates to\r\n\r\n<!-- LINK TO ISSUE OR TICKET -->\r\n\r\n<!-- This risks section must be filled out before the final review and merge. -->\r\n\r\n# Risks\r\n\r\n<!--\r\nLow, medium, large. List what kind of risks and what could be affected.\r\n-->\r\n\r\n# Background\r\n\r\n## What does this PR do?\r\n\r\n## What kind of change is this?\r\n\r\n<!--\r\nBug fixes (non-breaking change which fixes an issue)\r\nImprovements (misc. changes to existing features)\r\nFeatures (non-breaking change which adds functionality)\r\nUpdates (new versions of included code)\r\n-->\r\n\r\n<!-- This \"Why\" section is most relevant if there are no linked issues explaining why. If there is a related issue, it might make sense to skip this why section. -->\r\n<!--\r\n## Why are we doing this? Any context or related work?\r\n-->\r\n\r\n# Documentation changes needed?\r\n\r\n<!--\r\nMy changes do not require a change to the project documentation.\r\nMy changes require a change to the project documentation.\r\nIf documentation change is needed: I have updated the documentation accordingly.\r\n-->\r\n\r\n<!-- Please show how you tested the PR. This will really help if the PR needs to be retested and probably help the PR get merged quicker. -->\r\n\r\n# Testing\r\n\r\n## Where should a reviewer start?\r\n\r\n## Detailed testing steps\r\n\r\n<!--\r\nNone: Automated tests are acceptable.\r\n-->\r\n\r\n<!--\r\n- As [anon/admin], go to [link]\r\n  - [do action]\r\n  - verify [result]\r\n-->\r\n\r\n<!-- If there is a UI change, please include before and after screenshots or videos. This will speed up PRs being merged. It is extra nice to annotate screenshots with arrows or boxes pointing out the differences. -->\r\n<!--\r\n## Screenshots\r\n### Before\r\n### After\r\n-->\r\n\r\n<!-- If there is anything about the deployment, please make a note. -->\r\n<!--\r\n# Deploy Notes\r\n-->\r\n\r\n<!--  Copy and paste command line output. -->\r\n<!--\r\n## Database changes\r\n-->\r\n\r\n<!--  Please specify deploy instructions if there is something more than the automated steps. -->\r\n<!--\r\n## Deployment instructions\r\n-->\r\n\r\n<!-- If you are on Discord, please join https://discord.gg/ai16z and state your Discord username here for the contributor role and join us in #development-feed -->\r\n<!--\r\n## Discord username\r\n\r\n-->\r\n",
+      "repository": "elizaos/eliza",
+      "createdAt": "2025-08-27T22:25:44Z",
+      "mergedAt": null,
+      "additions": 5415,
+      "deletions": 8676
+    },
+    {
+      "id": "PR_kwDOMT5cIs6k0-7e",
+      "title": "feat: bun build, remove tsup",
+      "author": "ChristopherTrimboli",
+      "number": 5807,
+      "body": "This pull request introduces a new standardized Bun-based build system for ElizaOS packages, replacing the previous use of `tsup` and related tooling. It adds reusable build utilities, custom build scripts for `@elizaos/api-client` and `@elizaos/cli`, and updates package scripts and dependencies to leverage these changes. Additionally, there are targeted fixes and improvements to messaging service payloads, environment setup, and process management.\r\n\r\n**Build System Modernization**\r\n\r\n* Added `build-utils.ts` with reusable Bun build utilities for cleaning, building, copying assets, and generating TypeScript declarations, enabling consistent builds across packages.\r\n* Replaced `tsup` with Bun-based scripts in `@elizaos/api-client` and `@elizaos/cli`, including custom build scripts (`build.ts`) and removal of `tsup.config.ts`. Updated package scripts to use Bun for build, watch, and clean operations. [[1]](diffhunk://#diff-c64f755bd238752518269ba933743007c8b7c2b3db7b2663c3cfd8eee3e66ee1R1-R59) [[2]](diffhunk://#diff-fd8bcdbf9ab496c42cc8f5a68cbb792d0cd44d138d9f35e6ef960ac6a7b97168L10-R16) [[3]](diffhunk://#diff-fd8bcdbf9ab496c42cc8f5a68cbb792d0cd44d138d9f35e6ef960ac6a7b97168L24) [[4]](diffhunk://#diff-1870665c82b8dca54d6e63c49dfa1077b64d4b37bc32f66610ff543ad7f00dcbL1-L18) [[5]](diffhunk://#diff-38a7bfc3de9135d0af986757713f0fc589a906dd9be2f715932e303ae8bc7e4cR1-R82) [[6]](diffhunk://#diff-6e2e2a1851648938b325ba84de634407a4e69a644ea61102df15ca4a8a7a9758L40-R44) [[7]](diffhunk://#diff-6e2e2a1851648938b325ba84de634407a4e69a644ea61102df15ca4a8a7a9758R59) [[8]](diffhunk://#diff-6e2e2a1851648938b325ba84de634407a4e69a644ea61102df15ca4a8a7a9758L71-L75)\r\n* Updated monorepo-level build and clean scripts in `package.json` to filter out certain packages, remove `tsup`, and improve cache handling for faster, more reliable builds. [[1]](diffhunk://#diff-7ae45ad102eab3b6d7e7896acd08c427a9b25b346470d7bc6507b6481575d519L11-R19) [[2]](diffhunk://#diff-7ae45ad102eab3b6d7e7896acd08c427a9b25b346470d7bc6507b6481575d519L52)\r\n\r\n**Messaging Service Improvements**\r\n\r\n* Refactored payload construction for channel creation methods in `MessagingService` to match server expectations, including proper handling of metadata, participant IDs, and DM channel parameters.\r\n* Fixed type handling in participant filtering logic for channel updates.\r\n\r\n**TypeScript Declaration Generation**\r\n\r\n* Enabled TypeScript declaration file (`.d.ts`) generation via Bun build scripts and updated `tsconfig.build.json` to include `\"declaration\": true`. [[1]](diffhunk://#diff-c64f755bd238752518269ba933743007c8b7c2b3db7b2663c3cfd8eee3e66ee1R1-R59) [[2]](diffhunk://#diff-38a7bfc3de9135d0af986757713f0fc589a906dd9be2f715932e303ae8bc7e4cR1-R82) [[3]](diffhunk://#diff-c4d3cf5a942b53c98c3bd2b84fbc766b044cfa190d26f1a249dd7357486a7a5aL4-R5)\r\n\r\n**Process and Environment Management**\r\n\r\n* Improved environment variable setup in CLI server manager to filter out undefined values and ensure proper module resolution.\r\n* Updated server process termination logic to ensure graceful shutdown and state cleanup.\r\n* Minor fix to plugin upgrade progress event handling for more robust logging.\r\n* Removed unused `writeFileSync` import in CLI plugin environment variable utilities.",
+      "repository": "elizaos/eliza",
+      "createdAt": "2025-08-22T07:00:52Z",
+      "mergedAt": "2025-08-26T04:16:58Z",
+      "additions": 4163,
+      "deletions": 8632
+    }
+  ],
+  "codeChanges": {
+    "additions": 19727,
+    "deletions": 13473,
+    "files": 167,
+    "commitCount": 164
+  },
+  "completedItems": [
+    {
+      "title": "feat: bun build, remove tsup",
+      "prNumber": 5807,
+      "type": "feature",
+      "body": "This pull request introduces a new standardized Bun-based build system for ElizaOS packages, replacing the previous use of `tsup` and related tooling. It adds reusable build utilities, custom build scripts for `@elizaos/api-client` and `@el",
+      "files": [
+        ".gitignore",
+        "CLAUDE.md",
+        "build-utils.ts",
+        "bun.lock",
+        "package.json",
+        "packages/api-client/build.ts",
+        "packages/api-client/package.json",
+        "packages/api-client/src/services/messaging.ts",
+        "packages/api-client/tsconfig.build.json",
+        "packages/api-client/tsup.config.ts",
+        "packages/cli/build.ts",
+        "packages/cli/package.json",
+        "packages/cli/src/commands/dev/utils/server-manager.ts",
+        "packages/cli/src/commands/plugins/actions/upgrade.ts",
+        "packages/cli/src/commands/plugins/utils/env-vars.ts",
+        "packages/cli/src/commands/report/demo-html-report.ts",
+        "packages/cli/src/commands/report/generate.ts",
+        "packages/cli/src/commands/report/index.ts",
+        "packages/cli/src/commands/report/src/__tests__/analysis-engine.test.ts",
+        "packages/cli/src/commands/report/src/__tests__/html-template.test.ts",
+        "packages/cli/src/commands/report/src/__tests__/integration.test.ts",
+        "packages/cli/src/commands/report/src/__tests__/pdf-export.test.ts",
+        "packages/cli/src/commands/report/src/__tests__/pdf-generator.test.ts",
+        "packages/cli/src/commands/report/src/__tests__/template-integration.test.ts",
+        "packages/cli/src/commands/report/src/analysis-engine.ts",
+        "packages/cli/src/commands/report/src/assets/report_template.html",
+        "packages/cli/src/commands/report/src/pdf-generator.ts",
+        "packages/cli/src/commands/report/src/report-schema.ts",
+        "packages/cli/src/commands/scenario/docs/README.md",
+        "packages/cli/src/commands/scenario/docs/matrix-testing.md",
+        "packages/cli/src/commands/scenario/docs/scenarios.md",
+        "packages/cli/src/commands/scenario/examples/debug-llm-judge.scenario.yaml",
+        "packages/cli/src/commands/scenario/examples/enhanced-demo.scenario.yaml",
+        "packages/cli/src/commands/scenario/examples/llm-judge-with-capabilities.scenario.yaml",
+        "packages/cli/src/commands/scenario/examples/simple-test.matrix.yaml",
+        "packages/cli/src/commands/scenario/examples/test-github-issues.scenario.yaml",
+        "packages/cli/src/commands/scenario/examples/trajectory-demo.scenario.yaml",
+        "packages/cli/src/commands/scenario/index.ts",
+        "packages/cli/src/commands/scenario/src/E2BEnvironmentProvider.ts",
+        "packages/cli/src/commands/scenario/src/EnhancedEvaluationEngine.ts",
+        "packages/cli/src/commands/scenario/src/EvaluationEngine.ts",
+        "packages/cli/src/commands/scenario/src/LocalEnvironmentProvider.ts",
+        "packages/cli/src/commands/scenario/src/MockEngine.ts",
+        "packages/cli/src/commands/scenario/src/TrajectoryReconstructor.ts",
+        "packages/cli/src/commands/scenario/src/__tests__/LocalEnvironmentProvider.test.ts",
+        "packages/cli/src/commands/scenario/src/__tests__/capabilities-evaluation.test.ts",
+        "packages/cli/src/commands/scenario/src/__tests__/data-aggregator.test.ts",
+        "packages/cli/src/commands/scenario/src/__tests__/e2e/centralized-data.test.ts",
+        "packages/cli/src/commands/scenario/src/__tests__/enhanced-evaluation.test.ts",
+        "packages/cli/src/commands/scenario/src/__tests__/evaluation-integration.test.ts",
+        "packages/api-client/src/types/messaging.ts",
+        "packages/api-client/src/types/sessions.ts",
+        "packages/cli/src/commands/scenario/src/data-aggregator.ts",
+        "packages/cli/src/commands/scenario/src/matrix-orchestrator.ts",
+        "packages/cli/src/commands/scenario/src/matrix-runner.ts",
+        "packages/cli/src/commands/scenario/src/parameter-override.ts",
+        "packages/cli/src/commands/scenario/src/plugin-parser.ts",
+        "packages/cli/src/commands/scenario/src/process-manager.ts",
+        "packages/cli/src/commands/scenario/src/progress-tracker.ts",
+        "packages/cli/src/commands/scenario/src/resource-monitor.ts",
+        "packages/cli/src/commands/scenario/src/run-isolation.ts",
+        "packages/cli/src/commands/scenario/src/runtime-factory.ts",
+        "packages/cli/src/commands/start/actions/server-start.ts",
+        "packages/cli/src/commands/start/index.ts",
+        "packages/cli/src/project.ts",
+        "packages/cli/src/scripts/copy-templates.ts",
+        "packages/cli/src/services/env-file.service.ts",
+        "packages/cli/src/utils/build-project.ts",
+        "packages/cli/src/utils/bun-exec.ts",
+        "packages/cli/src/utils/dependency-manager.ts",
+        "packages/cli/src/utils/env-prompt.ts",
+        "packages/cli/src/utils/get-config.ts",
+        "packages/cli/src/utils/github.ts",
+        "packages/cli/src/utils/load-plugin.ts",
+        "packages/cli/src/utils/local-cli-delegation.ts",
+        "packages/cli/src/utils/plugin-creator.ts",
+        "packages/cli/src/utils/registry/index.ts",
+        "packages/cli/src/utils/spinner-utils.ts",
+        "packages/cli/src/utils/test-runner.ts"
+      ]
+    },
+    {
+      "title": "improve summary",
+      "prNumber": 5818,
+      "type": "other",
+      "body": "",
+      "files": [
+        "packages/plugin-action-bench/src/actions/retail/exchangeDeliveredOrderItems.ts"
+      ]
+    },
+    {
+      "title": "fix: Remove duplicate actionNames block from message handler template",
+      "prNumber": 5817,
+      "type": "bugfix",
+      "body": "The actionNames block was appearing twice in the messageHandlerTemplate: once correctly inside the <providers> section and once redundantly after it. This PR removes the duplicated block after the </providers> tag to streamline the template",
+      "files": [
+        "packages/core/src/__tests__/prompts.test.ts",
+        "packages/core/src/prompts.ts"
+      ]
+    },
+    {
+      "title": "Refine prompt logic to enforce user ID requirement for actions needing authentication",
+      "prNumber": 5816,
+      "type": "other",
+      "body": "",
+      "files": [
+        "packages/plugin-bootstrap/src/index.ts"
+      ]
+    },
+    {
+      "title": "Revert processActions change: use cacheState to retrieve action result instead; minor auth prompt fix",
+      "prNumber": 5815,
+      "type": "bugfix",
+      "body": "",
+      "files": [
+        "packages/core/src/runtime.ts",
+        "packages/core/src/types/runtime.ts",
+        "packages/plugin-bootstrap/src/index.ts"
+      ]
+    },
+    {
+      "title": "Fix typo in runtime.ts comment: \"initalized\" → \"initialized\"",
+      "prNumber": 5812,
+      "type": "bugfix",
+      "body": "\r\n\r\nFixes a typo in the comment on line 1615 of `packages/core/src/runtime.ts`.\r\n\r\n### Changes\r\n- **Before:** `// not initalized or registered yet, registerPlugin is already smart enough to`\r\n- **After:** `// not initialized or registered y",
+      "files": [
+        "packages/core/src/runtime.ts"
+      ]
+    },
+    {
+      "title": "multi step",
+      "prNumber": 5825,
+      "type": "other",
+      "body": "",
+      "files": [
+        "bun.lock",
+        "packages/core/src/prompts.ts",
+        "packages/plugin-bootstrap/src/index.ts",
+        "packages/plugin-bootstrap/src/providers/actionState.ts",
+        "packages/plugin-bootstrap/src/providers/providers.ts",
+        "packages/plugin-bootstrap/src/providers/recentMessages.ts",
+        "packages/project-starter/package.json",
+        "packages/project-starter/src/character.ts",
+        "packages/plugin-bootstrap/src/__tests__/multi-step.test.ts",
+        "packages/plugin-bootstrap/src/__tests__/test-utils.ts"
+      ]
+    },
+    {
+      "title": "fix(plugin-bootstrap): return ActionResult in GENERATE_IMAGE handler",
+      "prNumber": 5823,
+      "type": "bugfix",
+      "body": "This PR updates `GENERATE_IMAGE` in `@elizaos/plugin-bootstrap` to return an `ActionResult` per core `Action` contract.\\n\\n- Changes limited to `packages/plugin-bootstrap/src/actions/imageGeneration.ts`\\n- Excludes edits to `standalone.ts` ",
+      "files": [
+        "packages/plugin-bootstrap/src/__tests__/actions.test.ts",
+        "packages/plugin-bootstrap/src/actions/imageGeneration.ts"
+      ]
+    },
+    {
+      "title": "expose multi-step templates via character config and enable env-based strategy toggle",
+      "prNumber": 5822,
+      "type": "other",
+      "body": "This PR introduces the following changes:\r\n\r\nMoves core templates (multiStepDecisionTemplate and multiStepSummaryTemplate) into the core layer to improve modularity.\r\n\r\nAdds character-level overrides: Characters can now define their own mul",
+      "files": [
+        "packages/cli/src/characters/eliza.ts",
+        "packages/core/src/prompts.ts",
+        "packages/plugin-bootstrap/src/index.ts",
+        "packages/plugin-bootstrap/src/providers/recentMessages.ts"
+      ]
+    },
+    {
+      "title": "fix: CI test failures in core and cypress tests",
+      "prNumber": 5835,
+      "type": "bugfix",
+      "body": "## Summary\n\nThis PR fixes failing CI tests in the core packages and cypress component tests identified in the develop branch CI runs.\n\n### Changes Made\n\n#### project-tee-starter tests\n- Updated all references from `tsup.config.ts` to `build",
+      "files": [
+        ".github/workflows/client-cypress-tests.yml",
+        "bun.lock",
+        "packages/client/cypress.config.cjs",
+        "packages/client/cypress/e2e/01-home-page.cy.ts",
+        "packages/client/cypress/e2e/02-chat-functionality.cy.ts",
+        "packages/client/cypress/e2e/03-spa-routing.cy.ts",
+        "packages/client/package.json",
+        "packages/core/src/__tests__/settings.test.ts",
+        "packages/core/src/runtime.ts",
+        "packages/core/src/settings.ts",
+        "packages/plugin-bootstrap/src/__tests__/providers.test.ts",
+        "packages/plugin-dummy-services/src/lp/service.ts",
+        "packages/plugin-dummy-services/src/tokenData/service.ts",
+        "packages/plugin-dummy-services/src/wallet/__tests__/service.test.ts",
+        "packages/plugin-dummy-services/src/wallet/service.ts",
+        "packages/plugin-dummy-services/tsconfig.json",
+        "packages/project-tee-starter/src/__tests__/build-order.test.ts",
+        "packages/project-tee-starter/src/__tests__/env.test.ts",
+        "packages/project-tee-starter/src/__tests__/file-structure.test.ts",
+        "packages/project-tee-starter/src/index.ts",
+        "packages/project-tee-starter/tsconfig.json"
+      ]
+    },
+    {
+      "title": "fix(client): Update AgentLog type structure and fix action viewer mapping",
+      "prNumber": 5834,
+      "type": "bugfix",
+      "body": "related commit: https://github.com/elizaOS/eliza/commit/69a77180074633e53ba7dc2f9e28acf7f912238d#diff-883ced4e3fb77567f2861de8747a663ae1623fa5ed434e750885af2857d2944f\r\n\r\nissue:\r\n\r\n<img width=\"1226\" height=\"1692\" alt=\"image\" src=\"https://git",
+      "files": [
+        "packages/api-client/src/types/agents.ts",
+        "packages/client/src/lib/api-type-mappers.ts"
+      ]
+    },
+    {
+      "title": "fix: correct logger.error parameter order in imageGeneration action",
+      "prNumber": 5833,
+      "type": "bugfix",
+      "body": "## Summary\r\n\r\nFixes TypeScript compilation errors in the `@elizaos/plugin-bootstrap` package by correcting the parameter order in `logger.error` calls.\r\n\r\n## Changes\r\n\r\n- Updated `logger.error` calls in `imageGeneration.ts` to use correct s",
+      "files": [
+        "packages/plugin-bootstrap/src/actions/imageGeneration.ts"
+      ]
+    },
+    {
+      "title": "fix: Improve browser build exports and type definitions",
+      "prNumber": 5832,
+      "type": "bugfix",
+      "body": "## Summary\n\nThis PR fixes issues with the browser build of the core package and improves type definitions.\n\n## Changes\n\n### Build Configuration Updates\n- **Package.json exports**: Updated to use `.node.js` and `.browser.js` suffixes for bet",
+      "files": [
+        ".gitignore",
+        "packages/core/build.ts",
+        "packages/core/package.json",
+        "packages/core/src/entities.ts",
+        "packages/core/src/logger.ts",
+        "packages/core/src/roles.ts"
+      ]
+    },
+    {
+      "title": "fix: make environment loading lazy to prevent warnings during CLI startup",
+      "prNumber": 5829,
+      "type": "bugfix",
+      "body": "## Problem\n\nWhen running any ElizaOS CLI command (like `elizaos create`), users see confusing environment warnings:\n\n```\n[ENV] No .env file found in any of the expected locations\n[ENV] ⚠️ OPENAI_API_KEY not found in process.env\n[ENV] Safe e",
+      "files": [
+        "packages/cli/src/commands/scenario/src/runtime-factory.ts"
+      ]
+    },
+    {
+      "title": "feat: browser compat core (draft)",
+      "prNumber": 5828,
+      "type": "feature",
+      "body": "",
+      "files": [
+        ".gitignore",
+        "packages/core/README.md",
+        "packages/core/build.ts",
+        "packages/core/package.json",
+        "packages/core/src/__tests__/buffer.test.ts",
+        "packages/core/src/__tests__/environment.test.ts",
+        "packages/core/src/entities.ts",
+        "packages/core/src/index.browser.ts",
+        "packages/core/src/index.node.ts",
+        "packages/core/src/index.ts",
+        "packages/core/src/logger.ts",
+        "packages/core/src/roles.ts",
+        "packages/core/src/runtime.ts",
+        "packages/core/src/sentry/instrument.ts",
+        "packages/core/src/settings.ts",
+        "packages/core/src/utils.ts",
+        "packages/core/src/utils/buffer.ts",
+        "packages/core/src/utils/environment.ts",
+        "packages/core/tsconfig.browser.json",
+        "packages/core/tsconfig.build.json",
+        "build-utils.ts",
+        "bun.lock",
+        "packages/api-client/build.ts",
+        "packages/api-client/src/services/messaging.ts",
+        "packages/api-client/src/types/messaging.ts",
+        "packages/cli/build.ts",
+        "packages/cli/src/commands/scenario/index.ts",
+        "packages/cli/src/utils/local-cli-delegation.ts",
+        "packages/client/cypress.config.cjs",
+        "packages/client/cypress/e2e/01-home-page.cy.ts",
+        "packages/client/cypress/e2e/02-chat-functionality.cy.ts",
+        "packages/client/cypress/e2e/03-spa-routing.cy.ts",
+        "packages/client/index.html",
+        "packages/client/package.json",
+        "packages/client/src/components/chat.tsx",
+        "packages/client/src/entry.tsx",
+        "packages/client/src/lib/api-type-mappers.ts",
+        "packages/client/src/mocks/empty-module.ts",
+        "packages/client/src/types.ts",
+        "packages/client/vite.config.ts",
+        "packages/config/build.ts",
+        "packages/core/src/__tests__/logger-browser-node.test.ts",
+        "packages/core/src/__tests__/logger.test.ts",
+        "packages/core/src/search.ts",
+        "packages/core/src/sentry/instrument.browser.ts",
+        "packages/core/src/sentry/instrument.node.ts",
+        "packages/core/src/utils/__tests__/buffer.test.ts",
+        "packages/core/src/utils/__tests__/environment.test.ts",
+        "packages/core/src/utils/__tests__/stringToUuid.test.ts",
+        "packages/plugin-bootstrap/build.ts"
+      ]
+    },
+    {
+      "title": "Feat: initPromise & always include runtime in emitted events",
+      "prNumber": 5827,
+      "type": "feature",
+      "body": "# Risks\r\n\r\nLow\r\n\r\n# Background\r\n\r\n## What does this PR do?\r\n\r\n- creates an initPromise property\r\n- ensures runtime is always in emitted events\r\n\r\n## What kind of change is this?\r\n\r\nUpdates (new versions of included code)\r\n\r\n## Why are we do",
+      "files": [
+        "packages/core/src/runtime.ts"
+      ]
+    },
+    {
+      "title": "feat: add comprehensive documentation to standalone agent runner",
+      "prNumber": 5843,
+      "type": "feature",
+      "body": "## Description\n\nThis PR adds comprehensive documentation to the  file to improve developer experience and understanding.\n\n## Changes Made\n\n- **Added detailed JSDoc header** explaining the purpose and use cases of the standalone agent runner",
+      "files": [
+        "standalone.ts"
+      ]
+    },
+    {
+      "title": "fix: Fix multi-step action result handling to properly pass values between steps",
+      "prNumber": 5841,
+      "type": "bugfix",
+      "body": "# Fix Multi-Step Action Result Handling\r\n\r\n## What Changed\r\n\r\n### Core Fix\r\n- **Fixed multi-step action result handling** to properly pass `values` between action steps\r\n- Added `values?: Record<string, any>` to `MultiStepActionResult` inte",
+      "files": [
+        "packages/core/src/prompts.ts",
+        "packages/plugin-bootstrap/src/index.ts"
+      ]
+    },
+    {
+      "title": "fix: (cli) test command minor fixes",
+      "prNumber": 5840,
+      "type": "bugfix",
+      "body": "this is a tiny pr to fix some minor issues with the cli test command and default tests that come with project-starter and project-tee-starter.\r\n\r\n1. when passing a test name with the --name flag, it was lowercasing the passed test name, but",
+      "files": [
+        "CLAUDE.md",
+        "README.md",
+        "packages/cli/README.md",
+        "packages/cli/src/commands/test/utils/project-utils.ts",
+        "packages/cli/tests/commands/start.test.ts",
+        "packages/project-starter/src/__tests__/character-plugin-ordering.test.ts",
+        "packages/project-starter/src/__tests__/character.test.ts",
+        "packages/project-tee-starter/src/__tests__/character.test.ts",
+        "packages/project-tee-starter/src/__tests__/error-handling.test.ts"
+      ]
+    },
+    {
+      "title": "Bump vite from 6.0.5 to 6.1.6 in /packages/client in the npm_and_yarn group across 1 directory",
+      "prNumber": 5838,
+      "type": "other",
+      "body": "Bumps the npm_and_yarn group with 1 update in the /packages/client directory: [vite](https://github.com/vitejs/vite/tree/HEAD/packages/vite).\n\nUpdates `vite` from 6.0.5 to 6.1.6\n<details>\n<summary>Release notes</summary>\n<p><em>Sourced from",
+      "files": [
+        "packages/client/package.json"
+      ]
+    },
+    {
+      "title": "fix(core): fix TypeScript declarations in npm package",
+      "prNumber": 5846,
+      "type": "bugfix",
+      "body": "Point package.json to existing generated types instead of broken re-exports to src/\r\n\r\n  # Risks\r\n\r\n  **Low** - This is a build configuration fix that corrects broken TypeScript declarations without changing any runtime behavior.\r\n\r\n  # Bac",
+      "files": [
+        "bun.lock",
+        "packages/core/build.ts",
+        "packages/core/package.json"
+      ]
+    },
+    {
+      "title": "fix: move starters build scripts locally",
+      "prNumber": 5845,
+      "type": "bugfix",
+      "body": "## PR: Fix `elizaos create` command build failure for new projects\r\n\r\n### Problem\r\nThe `elizaos create` command was failing when building newly created projects with the error:\r\n```\r\nCannot find module '../../build-utils' from '/path/to/pro",
+      "files": [
+        "bun.lock",
+        "packages/api-client/src/__tests__/services/messaging.test.ts",
+        "packages/client/src/hooks/__tests__/use-character-convert.test.ts",
+        "packages/client/src/hooks/__tests__/use-panel-width-state.test.ts",
+        "packages/client/src/hooks/__tests__/use-sidebar-state.test.ts",
+        "packages/client/tsconfig.json",
+        "packages/core/src/__tests__/buffer.test.ts",
+        "packages/core/src/__tests__/environment.test.ts",
+        "packages/core/src/__tests__/logger-browser-node.test.ts",
+        "packages/core/src/__tests__/settings.test.ts",
+        "packages/core/src/logger.ts",
+        "packages/core/src/utils/__tests__/buffer.test.ts",
+        "packages/core/src/utils/buffer.ts",
+        "packages/plugin-dummy-services/src/tokenData/service.ts",
+        "packages/plugin-quick-starter/build.ts",
+        "packages/plugin-starter/build.ts",
+        "packages/project-starter/build.ts",
+        "packages/project-tee-starter/build.ts",
+        "packages/project-tee-starter/src/__tests__/env.test.ts",
+        "packages/project-tee-starter/src/__tests__/file-structure.test.ts"
+      ]
+    },
+    {
+      "title": "fix: core types output",
+      "prNumber": 5847,
+      "type": "bugfix",
+      "body": "## 🔧 Fix: Type Export Issues in @elizaos/core Package\n\n### Problem\nThe deployed version of `@elizaos/core` on NPM was experiencing type export failures, causing TypeScript compilation errors when the package was used outside the monorepo. ",
+      "files": [
+        "bun.lock",
+        "packages/core/build.ts",
+        "packages/core/package.json",
+        "packages/core/tsconfig.build.json"
+      ]
+    }
+  ],
+  "topContributors": [
+    {
+      "username": "wtfsayo",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/82053242?u=98209a1f10456f42d4d2fa71db4d5bf4a672cbc3&v=4",
+      "totalScore": 380.05273852310404,
+      "prScore": 369.07473852310403,
+      "issueScore": 0,
+      "reviewScore": 10,
+      "commentScore": 0.978,
+      "summary": null
+    },
+    {
+      "username": "tcm390",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/60634884?u=c6c41679b8322eaa0c81f72e0b4ed95e80f0ac16&v=4",
+      "totalScore": 289.9295911791509,
+      "prScore": 270.9295911791509,
+      "issueScore": 0,
+      "reviewScore": 19,
+      "commentScore": 0,
+      "summary": null
+    },
+    {
+      "username": "ChristopherTrimboli",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/27584221?u=0d816ce1dcdea8f925aba18bb710153d4a87a719&v=4",
+      "totalScore": 150.38145299797947,
+      "prScore": 134.40345299797946,
+      "issueScore": 0,
+      "reviewScore": 15,
+      "commentScore": 0.978,
+      "summary": null
+    },
+    {
+      "username": "standujar",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/16385918?u=718bdcd1585be8447bdfffb8c11ce249baa7532d&v=4",
+      "totalScore": 76.51782801798313,
+      "prScore": 61.81782801798314,
+      "issueScore": 0,
+      "reviewScore": 14.5,
+      "commentScore": 0.2,
+      "summary": null
+    },
+    {
+      "username": "odilitime",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/16395496?u=c9bac48e632aae594a0d85aaf9e9c9c69b674d8b&v=4",
+      "totalScore": 54.37252866480763,
+      "prScore": 22.67252866480763,
+      "issueScore": 0,
+      "reviewScore": 31.5,
+      "commentScore": 0.2,
+      "summary": null
+    },
+    {
+      "username": "monilpat",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/15067321?v=4",
+      "totalScore": 43.7437738965761,
+      "prScore": 43.5437738965761,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0.2,
+      "summary": null
+    },
+    {
+      "username": "shiedot",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/115964822?v=4",
+      "totalScore": 40.4257738965761,
+      "prScore": 40.4257738965761,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": null
+    },
+    {
+      "username": "yungalgo",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/113615973?u=92e0f29f7e2fbb8ce46ed13c51f692ca803de02d&v=4",
+      "totalScore": 39.32966420769526,
+      "prScore": 39.32966420769526,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": null
+    },
+    {
+      "username": "Dexploarer",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/211557447?u=21a243d61cc1f87574328ae07fc64d7d7577b53d&v=4",
+      "totalScore": 35.23424320856334,
+      "prScore": 30.73424320856334,
+      "issueScore": 0,
+      "reviewScore": 4.5,
+      "commentScore": 0,
+      "summary": null
+    },
+    {
+      "username": "theSchein",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/4759807?u=1367e8e3307b02aef996d930feafa29937ccb5b9&v=4",
+      "totalScore": 28.623573590279975,
+      "prScore": 28.623573590279975,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": null
+    },
+    {
+      "username": "0xbbjoker",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/54844437?u=90fe1762420de6ad493a1c1582f1f70c0d87d8e2&v=4",
+      "totalScore": 27.102759890378167,
+      "prScore": 22.102759890378167,
+      "issueScore": 0,
+      "reviewScore": 5,
+      "commentScore": 0,
+      "summary": null
+    },
+    {
+      "username": "prestoalvarez",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/140459501?u=b843478cdfec2bca070ff99ebb65f8f6a8161aba&v=4",
+      "totalScore": 21.419306144334055,
+      "prScore": 21.419306144334055,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": null
+    },
+    {
+      "username": "mmalik-al",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/144422633?u=986f63acb4dee076448142e0a724f1c4419543d3&v=4",
+      "totalScore": 12.778306144334056,
+      "prScore": 12.778306144334056,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": null
+    },
+    {
+      "username": "borisudovicic",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/31806472?u=27713fbe603baae91ef519990facbacd6c23e93d&v=4",
+      "totalScore": 6,
+      "prScore": 0,
+      "issueScore": 6,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": null
+    },
+    {
+      "username": "claude",
+      "avatarUrl": "https://avatars.githubusercontent.com/in/1236702?v=4",
+      "totalScore": 4.938,
+      "prScore": 0,
+      "issueScore": 0,
+      "reviewScore": 4.5,
+      "commentScore": 0.43799999999999994,
+      "summary": null
+    },
+    {
+      "username": "linear",
+      "avatarUrl": "https://avatars.githubusercontent.com/in/20150?v=4",
+      "totalScore": 4,
+      "prScore": 0,
+      "issueScore": 4,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": null
+    },
+    {
+      "username": "SavannahOz",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/227312217?v=4",
+      "totalScore": 2,
+      "prScore": 0,
+      "issueScore": 2,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": null
+    },
+    {
+      "username": "1BDO",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/210645034?v=4",
+      "totalScore": 2,
+      "prScore": 0,
+      "issueScore": 2,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": null
+    },
+    {
+      "username": "ashuxshimra",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/105487009?u=23e8a61486d8a47efc1734ae7fdb61ccb191f349&v=4",
+      "totalScore": 0.2,
+      "prScore": 0,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0.2,
+      "summary": null
+    }
+  ],
+  "newPRs": 28,
+  "mergedPRs": 23,
+  "newIssues": 7,
+  "closedIssues": 2,
+  "activeContributors": 17
+}

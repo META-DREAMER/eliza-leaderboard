@@ -1,0 +1,359 @@
+1:"$Sreact.fragment"
+2:I[4817319,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"IntervalSelector"]
+3:I[6998365,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"LlmCopyButton"]
+f:I[3642796,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],""]
+10:I[3238488,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"StatCardsDisplay"]
+1d:I[4261541,["/eliza-leaderboard/_next/static/chunks/b33bcbdcb3f88354.js","/eliza-leaderboard/_next/static/chunks/8ba59154b6704904.js"],"OutletBoundary"]
+1e:"$Sreact.suspense"
+4:T942,<!-- CURSOR_SUMMARY -->
+> [!NOTE]
+> Agents now use randomly generated UUIDs (not names) for identity; duplicate names are allowed, with loader/runtime/server/DB updated plus migrations and tests.
+> 
+> - **Core/runtime (`packages/core`)**:
+>   - Generate `agentId` via `uuidv4()` (no name-derived IDs).
+>   - `ensureAgentExists` now requires `agent.id`, updates/creates strictly by UUID.
+>   - Logs/messages reference `agent.id`.
+> - **Server (`packages/server`)**:
+>   - Loader `jsonToCharacter` assigns `id` if missing and supports env prefixes by `name` and `id`.
+>   - Agent CRUD create path uses provided `character.id` (no name-to-UUID), and updates active runtimes in-place.
+>   - Added tests for loader UUID generation and CRUD behavior with duplicate names.
+> - **SQL Plugin (`packages/plugin-sql`)**:
+>   - Schema: drop unique constraint on `agents.name`.
+>   - `createAgent` checks duplicate `id` only; allows duplicate `name`.
+>   - Integration and migration tests verifying duplicate-name support, UUID-based CRUD, and constraint removal.
+> - **CLI (`packages/cli`)**:
+>   - Scenario factory assigns random `id` to test character (no name-based ID).
+> - **Project starter**:
+>   - Character docs note auto-generated `id` and option to set a fixed UUID.
+> - **Tests**:
+>   - Extensive suites across core/server/sql to ensure UUID independence from names and proper migrations.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit 93f269089b99832050651406cf7047f4a9392463. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+- New Features
+  - Agents/characters now use randomly generated UUIDs for identity; multiple agents can share the same name.
+  - Loader auto-assigns an ID when missing; explicit IDs are preserved.
+  - Environment variable prefixing now derives from the agent ID for consistent configuration.
+- Documentation
+  - Starter character docs updated to explain ID generation and how to set a fixed ID.
+- Chores
+  - Database schema updated to remove the unique constraint on agent names, enabling duplicate names while keeping ID-based operations.
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->5:T1009,# Relates to
+
+Fixes issue where agent plugins/services are not properly updated when using PATCH endpoint to modify agent configuration, and fixes race condition causing service initialization errors during agent restart.
+
+# Risks
+
+**Medium**
+
+- Changes agent update logic to force restart when plugins change
+- Modifies service stop behavior to be synchronous
+- Could impact agent uptime during configuration updates
+- Affects all agents using the PATCH endpoint for updates
+
+# Background
+
+## What does this PR do?
+
+This PR fixes two critical issues:
+
+1. **Agent Plugin Update Bug**: When updating an agent via PATCH `/api/agents/:agentId` and changing the `plugins` array, the plugins were not being reloaded. The agent continued using the old plugins/services even after the database was updated.
+
+2. **Service Stop Race Condition**: The `unregisterAgent` method was not awaiting service shutdown, causing services to be incompletely stopped before agent restart. This led to errors like "Attempted to assign to readonly property" when services (Telegram, Discord) tried to reinitialize.
+
+**Changes:**
+
+1. **`packages/server/src/api/agents/crud.ts`**:
+   - Detects plugin changes by comparing current and updated agent configurations
+   - Forces full agent restart (unregister + startAgents) when plugins change
+   - Preserves in-place updates for non-critical character property changes
+   - Adds detailed logging for restart decisions
+
+2. **`packages/server/src/index.ts`**:
+   - Changes `agent.stop().catch(...)` to `await agent.stop()`
+   - Ensures all services (Discord, Telegram, etc.) are completely stopped before proceeding
+   - Prevents race conditions when restarting agents
+   - Fixes "Attempted to assign to readonly property" errors in Telegram/Discord clients
+
+## What kind of change is this?
+
+- [x] Bug fixes (non-breaking change which fixes an issue)
+- [x] Improvements (misc. changes to existing features)
+
+# Documentation changes needed?
+
+- [x] My changes do not require a change to the project documentation.
+
+The changes are internal fixes to existing functionality and don't change the API surface.
+
+# Testing
+
+## Where should a reviewer start?
+
+1. Review the plugin change detection logic in `crud.ts` (lines 219-228)
+2. Review the restart vs update decision logic (lines 232-250)
+3. Review the await change in `index.ts` (line 1273)
+
+## Detailed testing steps
+
+### Test 1: Plugin Update with Restart
+1. Start an agent with a set of plugins (e.g., `["bootstrap", "discord", "knowledge"]`)
+2. Use PATCH to update the agent and remove a plugin (e.g., remove `"knowledge"`)
+   ```bash
+   curl -X PATCH http://localhost:3000/api/agents/{agentId} \
+     -H "Content-Type: application/json" \
+     -d '{"plugins": ["bootstrap", "discord"]}'
+   ```
+3. Verify the logs show:
+   - `[AGENT UPDATE] Agent {id} requires restart due to plugins changes`
+   - `[AGENT UPDATE] Restarting agent {id} due to configuration changes`
+   - `[AGENT UPDATE] Agent {id} restarted successfully`
+4. Verify the removed plugin's services are no longer available
+5. Check that plugin routes are updated (e.g., `/knowledge/` routes should be gone)
+
+### Test 2: Character Update without Restart
+1. Start an agent
+2. Use PATCH to update only character properties (e.g., `name`, `bio`)
+   ```bash
+   curl -X PATCH http://localhost:3000/api/agents/{agentId} \
+     -H "Content-Type: application/json" \
+     -d '{"name": "New Name", "bio": "Updated bio"}'
+   ```
+3. Verify the logs show:
+   - `[AGENT UPDATE] Updated active agent {id} without restart`
+4. Verify the agent continues running without interruption
+
+### Test 3: Service Stop Behavior
+1. Start an agent with multiple services (Discord, Telegram, etc.)
+2. Update the agent to trigger a restart (change plugins)
+3. Verify no errors occur during service shutdown
+4. Verify all services are cleanly stopped before restart begins:
+   - Look for `[AGENT UNREGISTER] All services stopped for agent {id}`
+5. Verify the agent restarts successfully with all new services
+6:T4dc,- Changed error.errors to error.issues to match ZodError API
+- Fixed error handling in plugin-starter and project-starter
+- Added proper error handling for non-ZodError cases
+- Ensures consistency with plugin-quick-starter implementation
+
+<!-- CURSOR_SUMMARY -->
+---
+
+> [!NOTE]
+> Switches validation to ZodError.issues with fallback and unified non-ZodError messages; adds tests to verify error handling.
+> 
+> - **Validation/Error Handling**:
+>   - Update `init` in `packages/plugin-quick-starter/src/plugin.ts`, `packages/plugin-starter/src/plugin.ts`, and `packages/project-starter/src/plugin.ts` to use `z.ZodError.issues` (with fallback) and wrap non-ZodError exceptions as `Invalid plugin configuration: ...`.
+>   - Minor import cleanup in `plugin-quick-starter` plugin file.
+> - **Tests**:
+>   - Add tests in `packages/plugin-quick-starter/src/__tests__/plugin.test.ts` covering ZodError `issues` messages, fallback when `issues` is undefined, and non-ZodError cases.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit b863d1ac0967e494b9d9a1667b3757abbd07edd7. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->7:Td3f,On Oct 6, 2025, the ElizaOS project saw significant progress in core framework stability and agent management, with key refactoring efforts for the ElizaOS/Server, migration to UUID-only agent identification, and critical bug fixes addressing plugin reloading and runtime initialization. An emerging challenge involves TypeScript import errors in Eliza CLI 1.61, which is actively being investigated.
+
+## 🚨 Needs Attention
+- **Urgent Discussions**: [elizaos/eliza#6031](https://github.com/elizaos/eliza/issues/6031) Discussion continues regarding TypeScript import errors in Eliza CLI 1.61, with detailed output provided, indicating a potential package-related issue that needs further investigation.
+
+## ✅ Completed Work
+### Core Framework Refactoring & Configuration
+- Continued the multi-phase refactoring of the ElizaOS/Server, integrating new config and plugin modules to enhance modularity and extensibility. [elizaos/eliza#6037](https://github.com/elizaos/eliza/pull/6037)
+- Added support for `SERVER_PORT` configuration, improving flexibility for deployment environments. [elizaos/eliza#6038](https://github.com/elizaos/eliza/pull/6038)
+
+### Agent & Plugin Stability
+- Migrated to a UUID-only agent identification system, streamlining agent management and consistency. [elizaos/eliza#6036](https://github.com/elizaos/eliza/pull/6036)
+- Addressed a critical bug where agent plugins were not reloading correctly on `PATCH` updates and resolved a service stop race condition. [elizaos/eliza#6040](https://github.com/elizaos/eliza/pull/6040)
+- Fixed an issue in plugins to use the correct `ZodError.issues` API, ensuring proper error handling for invalid plugin configurations. [elizaos/eliza#6035](https://github.com/elizaos/eliza/pull/6035)
+
+### Runtime & Service Reliability
+- Ensured that the runtime database is initialized before task access, preventing potential errors and improving task execution reliability. [elizaos/eliza#6039](https://github.com/elizaos/eliza/pull/6039)
+- Implemented a fix in service interfaces to skip test execution for types-only packages, optimizing the build process. [elizaos/eliza#6034](https://github.com/elizaos/eliza/pull/6034)
+
+## 🏗️ Work in Progress
+### New Pull Requests
+- **elizaos/eliza**
+    - [fix: agent plugins not reloading on PATCH update and service stop race condition](https://github.com/elizaos/eliza/pull/6040)
+    - [fix(task): ensure runtime database is initialized before task access](https://github.com/elizaos/eliza/pull/6039)
+    - [support SERVER_PORT](https://github.com/elizaos/eliza/pull/6038)
+    - [feat(core): add config and plugin modules - phase 4 - refactor ElizaOS/Server](https://github.com/elizaos/eliza/pull/6037)
+    - [feat: migrate to UUID-only agent identification](https://github.com/elizaos/eliza/pull/6036)
+    - [fix(plugins): use correct ZodError.issues API instead of .errors](https://github.com/elizaos/eliza/pull/6035)
+    - [fix(service-interfaces): skip test execution for types-only package](https://github.com/elizaos/eliza/pull/6034)
+
+## 🐞 Issue Triage
+### Active Issues
+- **elizaos/eliza**
+    - [TypeScript Import Errors in Eliza CLI 1.61](https://github.com/elizaos/eliza/issues/6031)
+
+## ✨ Contributor Spotlight
+- **matteo-brandolino**: Provided detailed diagnostic output for the TypeScript import errors in Eliza CLI 1.61, significantly aiding in narrowing down the issue.0:{"buildId":"US8XLB_zHXYj_PVAECGcd","rsc":["$","$1","c",{"children":[["$","div",null,{"className":"container mx-auto px-6 py-8 md:px-8","children":["$","div",null,{"className":"mx-auto max-w-4xl","children":[["$","div",null,{"className":"mb-4 flex flex-col justify-between sm:flex-row","children":[["$","$L2",null,{"currentInterval":"day","currentDate":"2025-10-06"}],["$","$L3",null,{"metrics":{"date":"2025-10-06","interval":{"intervalStart":"$D2025-10-06T00:00:00.000Z","intervalEnd":"$D2025-10-07T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":7,"merged":0,"total":7},"issues":{"new":0,"closed":0,"total":0},"activeContributors":3,"codeChanges":{"additions":0,"deletions":0,"files":0,"commitCount":16},"topContributors":[{"username":"0xbbjoker","avatarUrl":"https://avatars.githubusercontent.com/u/54844437?u=90fe1762420de6ad493a1c1582f1f70c0d87d8e2&v=4","totalScore":113.06742356361077,"prScore":112.72742356361077,"issueScore":0,"reviewScore":0,"commentScore":0.33999999999999997,"summary":"0xbbjoker: Primarily focused on bug fixes and feature work, merging a significant PR in elizaos/eliza#6034 that involved substantial code changes (+758/-146 lines) to skip test execution for types-only packages, while also opening two new feature and bug fix PRs. Their work today involved modifying 22 files with a primary focus on bugfix work (86%) and feature work (14%), impacting both code and tests."},{"username":"standujar","avatarUrl":"https://avatars.githubusercontent.com/u/16385918?u=718bdcd1585be8447bdfffb8c11ce249baa7532d&v=4","totalScore":111.31030428090084,"prScore":106.61030428090083,"issueScore":0,"reviewScore":4.5,"commentScore":0.2,"summary":"standujar: Focused on significant feature development and refactoring, merging two substantial PRs in elizaos/eliza, including #6037 which introduced new config and plugin modules with over 4k lines added, and #6040 which addressed a bug related to agent plugin reloading. Their work primarily involved feature development, bug fixes, and refactoring, with a notable portion dedicated to tests."},{"username":"odilitime","avatarUrl":"https://avatars.githubusercontent.com/u/16395496?u=c9bac48e632aae594a0d85aaf9e9c9c69b674d8b&v=4","totalScore":22.936521226679158,"prScore":22.73652122667916,"issueScore":0,"reviewScore":0,"commentScore":0.2,"summary":"odilitime: Focused on supporting `SERVER_PORT` by merging PR elizaos/eliza#6038, which involved modifying 2 files with a net change of +3/-2 lines. This work primarily focused on other work, indicating a broad contribution to the codebase."}],"focusAreas":[],"topIssues":[],"topPullRequests":[{"id":"PR_kwDOMT5cIs6sMtSD","title":"feat: migrate to UUID-only agent identification","author":"0xbbjoker","number":6036,"body":"$4","repository":"elizaos/eliza","createdAt":"2025-10-06T06:52:46Z","mergedAt":"2025-10-17T11:57:29Z","additions":1824,"deletions":124},{"id":"PR_kwDOMT5cIs6sW7SH","title":"feat(core): add config and plugin modules - phase 4 - refactor ElizaOS/Server","author":"standujar","number":6037,"body":"\n\n<!-- This is an auto-generated comment: release notes by coderabbit.ai -->\n\n## Summary by CodeRabbit\n\n- New Features\n  - Added plugin management with auto-install, loading, validation, and dependency resolution.\n  - Introduced configuration utilities: character parsing/validation/defaults, environment variable loading from .env, and secrets population from local env files.\n  - Expanded public API to expose configuration and plugin modules.\n\n- Tests\n  - Added comprehensive test suites for plugin management, character config, environment loading, and secrets handling, including edge cases and dependency ordering.\n\n<!-- end of auto-generated comment: release notes by coderabbit.ai -->","repository":"elizaos/eliza","createdAt":"2025-10-06T20:06:24Z","mergedAt":"2025-10-09T09:23:41Z","additions":1582,"deletions":1270},{"id":"PR_kwDOMT5cIs6sXx03","title":"fix: agent plugins not reloading on PATCH update and service stop race condition","author":"standujar","number":6040,"body":"$5","repository":"elizaos/eliza","createdAt":"2025-10-06T21:13:42Z","mergedAt":"2025-10-07T11:51:13Z","additions":516,"deletions":17},{"id":"PR_kwDOMT5cIs6sMNek","title":"fix(plugins): use correct ZodError.issues API instead of .errors","author":"0xbbjoker","number":6035,"body":"$6","repository":"elizaos/eliza","createdAt":"2025-10-06T05:43:31Z","mergedAt":"2025-10-16T06:35:37Z","additions":72,"deletions":13},{"id":"PR_kwDOMT5cIs6sXpTv","title":"fix(task): ensure runtime database is initialized before task access","author":"standujar","number":6039,"body":"","repository":"elizaos/eliza","createdAt":"2025-10-06T21:03:09Z","mergedAt":null,"additions":31,"deletions":2},{"id":"PR_kwDOMT5cIs6sXdG8","title":"support SERVER_PORT","author":"odilitime","number":6038,"body":"<!-- CURSOR_SUMMARY -->\n> [!NOTE]\n> Add support for SERVER_PORT to configure the HTTP server port (falls back to --port or 3000).\n> \n> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit 43fe2b28976eb02a145956e3f60df0af5fd85936. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>\n<!-- /CURSOR_SUMMARY -->","repository":"elizaos/eliza","createdAt":"2025-10-06T20:48:00Z","mergedAt":"2025-10-07T11:23:12Z","additions":19,"deletions":2},{"id":"PR_kwDOMT5cIs6sMG9k","title":"fix(service-interfaces): skip test execution for types-only package","author":"0xbbjoker","number":6034,"body":"The @elizaos/service-interfaces package contains only TypeScript interface\r\ndefinitions and has no runtime logic or tests. The test script was failing\r\nwhen running `bun run test` from the project root because bun test exits\r\nwith code 1 when no test files are found.\r\n\r\nChanged the test scripts to explicitly skip test execution with a clear\r\nmessage, allowing the monorepo test suite to complete successfully.\n\n<!-- CURSOR_SUMMARY -->\n---\n\n> [!NOTE]\n> Replace `packages/service-interfaces` test scripts with no-op commands that skip tests and exit 0.\n> \n> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit 2c02661e40cbd07868c90f7844c09045cf7beb9e. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>\n<!-- /CURSOR_SUMMARY -->","repository":"elizaos/eliza","createdAt":"2025-10-06T05:25:10Z","mergedAt":"2025-10-08T08:07:32Z","additions":3,"deletions":3}],"detailedContributorSummaries":{"0xbbjoker":"0xbbjoker: Primarily focused on bug fixes and feature work, merging a significant PR in elizaos/eliza#6034 that involved substantial code changes (+758/-146 lines) to skip test execution for types-only packages, while also opening two new feature and bug fix PRs. Their work today involved modifying 22 files with a primary focus on bugfix work (86%) and feature work (14%), impacting both code and tests.","odilitime":"odilitime: Focused on supporting `SERVER_PORT` by merging PR elizaos/eliza#6038, which involved modifying 2 files with a net change of +3/-2 lines. This work primarily focused on other work, indicating a broad contribution to the codebase.","standujar":"standujar: Focused on significant feature development and refactoring, merging two substantial PRs in elizaos/eliza, including #6037 which introduced new config and plugin modules with over 4k lines added, and #6040 which addressed a bug related to agent plugin reloading. Their work primarily involved feature development, bug fixes, and refactoring, with a notable portion dedicated to tests."}},"summaryContent":"$7","className":"self-end sm:self-start"}]]}],"$L8","$L9","$La"]}]}],["$Lb","$Lc","$Ld"],"$Le"]}],"loading":null,"isPartial":false}
+8:["$","div",null,{"className":"mb-6","children":["$","div",null,{"className":"flex items-center justify-between","children":[[["$","$Lf",null,{"href":"/summary/day/2025-10-05","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left mr-2 h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"children":"Previous"}],false],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$Lf",null,{"href":"/summary/day/2025-10-05","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Previous"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]],["$","div",null,{"className":"flex flex-col items-center","children":[["$","div",null,{"className":"text-sm font-medium text-gray-500","children":["Daily"," Summary"]}],["$","time",null,{"dateTime":"2025-10-06","className":"text-md font-bold","children":"Oct 6, 2025"}]]}],[["$","$Lf",null,{"href":"/summary/day/2025-10-07","children":[false,["$","span",null,{"children":"Next"}],["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right ml-2 h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}]],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$Lf",null,{"href":"/summary/day/2025-10-07","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Next"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]]]}]}]
+11:T942,<!-- CURSOR_SUMMARY -->
+> [!NOTE]
+> Agents now use randomly generated UUIDs (not names) for identity; duplicate names are allowed, with loader/runtime/server/DB updated plus migrations and tests.
+> 
+> - **Core/runtime (`packages/core`)**:
+>   - Generate `agentId` via `uuidv4()` (no name-derived IDs).
+>   - `ensureAgentExists` now requires `agent.id`, updates/creates strictly by UUID.
+>   - Logs/messages reference `agent.id`.
+> - **Server (`packages/server`)**:
+>   - Loader `jsonToCharacter` assigns `id` if missing and supports env prefixes by `name` and `id`.
+>   - Agent CRUD create path uses provided `character.id` (no name-to-UUID), and updates active runtimes in-place.
+>   - Added tests for loader UUID generation and CRUD behavior with duplicate names.
+> - **SQL Plugin (`packages/plugin-sql`)**:
+>   - Schema: drop unique constraint on `agents.name`.
+>   - `createAgent` checks duplicate `id` only; allows duplicate `name`.
+>   - Integration and migration tests verifying duplicate-name support, UUID-based CRUD, and constraint removal.
+> - **CLI (`packages/cli`)**:
+>   - Scenario factory assigns random `id` to test character (no name-based ID).
+> - **Project starter**:
+>   - Character docs note auto-generated `id` and option to set a fixed UUID.
+> - **Tests**:
+>   - Extensive suites across core/server/sql to ensure UUID independence from names and proper migrations.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit 93f269089b99832050651406cf7047f4a9392463. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+- New Features
+  - Agents/characters now use randomly generated UUIDs for identity; multiple agents can share the same name.
+  - Loader auto-assigns an ID when missing; explicit IDs are preserved.
+  - Environment variable prefixing now derives from the agent ID for consistent configuration.
+- Documentation
+  - Starter character docs updated to explain ID generation and how to set a fixed ID.
+- Chores
+  - Database schema updated to remove the unique constraint on agent names, enabling duplicate names while keeping ID-based operations.
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->12:T1009,# Relates to
+
+Fixes issue where agent plugins/services are not properly updated when using PATCH endpoint to modify agent configuration, and fixes race condition causing service initialization errors during agent restart.
+
+# Risks
+
+**Medium**
+
+- Changes agent update logic to force restart when plugins change
+- Modifies service stop behavior to be synchronous
+- Could impact agent uptime during configuration updates
+- Affects all agents using the PATCH endpoint for updates
+
+# Background
+
+## What does this PR do?
+
+This PR fixes two critical issues:
+
+1. **Agent Plugin Update Bug**: When updating an agent via PATCH `/api/agents/:agentId` and changing the `plugins` array, the plugins were not being reloaded. The agent continued using the old plugins/services even after the database was updated.
+
+2. **Service Stop Race Condition**: The `unregisterAgent` method was not awaiting service shutdown, causing services to be incompletely stopped before agent restart. This led to errors like "Attempted to assign to readonly property" when services (Telegram, Discord) tried to reinitialize.
+
+**Changes:**
+
+1. **`packages/server/src/api/agents/crud.ts`**:
+   - Detects plugin changes by comparing current and updated agent configurations
+   - Forces full agent restart (unregister + startAgents) when plugins change
+   - Preserves in-place updates for non-critical character property changes
+   - Adds detailed logging for restart decisions
+
+2. **`packages/server/src/index.ts`**:
+   - Changes `agent.stop().catch(...)` to `await agent.stop()`
+   - Ensures all services (Discord, Telegram, etc.) are completely stopped before proceeding
+   - Prevents race conditions when restarting agents
+   - Fixes "Attempted to assign to readonly property" errors in Telegram/Discord clients
+
+## What kind of change is this?
+
+- [x] Bug fixes (non-breaking change which fixes an issue)
+- [x] Improvements (misc. changes to existing features)
+
+# Documentation changes needed?
+
+- [x] My changes do not require a change to the project documentation.
+
+The changes are internal fixes to existing functionality and don't change the API surface.
+
+# Testing
+
+## Where should a reviewer start?
+
+1. Review the plugin change detection logic in `crud.ts` (lines 219-228)
+2. Review the restart vs update decision logic (lines 232-250)
+3. Review the await change in `index.ts` (line 1273)
+
+## Detailed testing steps
+
+### Test 1: Plugin Update with Restart
+1. Start an agent with a set of plugins (e.g., `["bootstrap", "discord", "knowledge"]`)
+2. Use PATCH to update the agent and remove a plugin (e.g., remove `"knowledge"`)
+   ```bash
+   curl -X PATCH http://localhost:3000/api/agents/{agentId} \
+     -H "Content-Type: application/json" \
+     -d '{"plugins": ["bootstrap", "discord"]}'
+   ```
+3. Verify the logs show:
+   - `[AGENT UPDATE] Agent {id} requires restart due to plugins changes`
+   - `[AGENT UPDATE] Restarting agent {id} due to configuration changes`
+   - `[AGENT UPDATE] Agent {id} restarted successfully`
+4. Verify the removed plugin's services are no longer available
+5. Check that plugin routes are updated (e.g., `/knowledge/` routes should be gone)
+
+### Test 2: Character Update without Restart
+1. Start an agent
+2. Use PATCH to update only character properties (e.g., `name`, `bio`)
+   ```bash
+   curl -X PATCH http://localhost:3000/api/agents/{agentId} \
+     -H "Content-Type: application/json" \
+     -d '{"name": "New Name", "bio": "Updated bio"}'
+   ```
+3. Verify the logs show:
+   - `[AGENT UPDATE] Updated active agent {id} without restart`
+4. Verify the agent continues running without interruption
+
+### Test 3: Service Stop Behavior
+1. Start an agent with multiple services (Discord, Telegram, etc.)
+2. Update the agent to trigger a restart (change plugins)
+3. Verify no errors occur during service shutdown
+4. Verify all services are cleanly stopped before restart begins:
+   - Look for `[AGENT UNREGISTER] All services stopped for agent {id}`
+5. Verify the agent restarts successfully with all new services
+13:T4dc,- Changed error.errors to error.issues to match ZodError API
+- Fixed error handling in plugin-starter and project-starter
+- Added proper error handling for non-ZodError cases
+- Ensures consistency with plugin-quick-starter implementation
+
+<!-- CURSOR_SUMMARY -->
+---
+
+> [!NOTE]
+> Switches validation to ZodError.issues with fallback and unified non-ZodError messages; adds tests to verify error handling.
+> 
+> - **Validation/Error Handling**:
+>   - Update `init` in `packages/plugin-quick-starter/src/plugin.ts`, `packages/plugin-starter/src/plugin.ts`, and `packages/project-starter/src/plugin.ts` to use `z.ZodError.issues` (with fallback) and wrap non-ZodError exceptions as `Invalid plugin configuration: ...`.
+>   - Minor import cleanup in `plugin-quick-starter` plugin file.
+> - **Tests**:
+>   - Add tests in `packages/plugin-quick-starter/src/__tests__/plugin.test.ts` covering ZodError `issues` messages, fallback when `issues` is undefined, and non-ZodError cases.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit b863d1ac0967e494b9d9a1667b3757abbd07edd7. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->9:["$","div",null,{"className":"mb-8 space-y-6","children":[["$","$L10",null,{"metrics":{"date":"2025-10-06","interval":{"intervalStart":"$D2025-10-06T00:00:00.000Z","intervalEnd":"$D2025-10-07T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":7,"merged":0,"total":7},"issues":{"new":0,"closed":0,"total":0},"activeContributors":3,"codeChanges":{"additions":0,"deletions":0,"files":0,"commitCount":16},"topContributors":[{"username":"0xbbjoker","avatarUrl":"https://avatars.githubusercontent.com/u/54844437?u=90fe1762420de6ad493a1c1582f1f70c0d87d8e2&v=4","totalScore":113.06742356361077,"prScore":112.72742356361077,"issueScore":0,"reviewScore":0,"commentScore":0.33999999999999997,"summary":"0xbbjoker: Primarily focused on bug fixes and feature work, merging a significant PR in elizaos/eliza#6034 that involved substantial code changes (+758/-146 lines) to skip test execution for types-only packages, while also opening two new feature and bug fix PRs. Their work today involved modifying 22 files with a primary focus on bugfix work (86%) and feature work (14%), impacting both code and tests."},{"username":"standujar","avatarUrl":"https://avatars.githubusercontent.com/u/16385918?u=718bdcd1585be8447bdfffb8c11ce249baa7532d&v=4","totalScore":111.31030428090084,"prScore":106.61030428090083,"issueScore":0,"reviewScore":4.5,"commentScore":0.2,"summary":"standujar: Focused on significant feature development and refactoring, merging two substantial PRs in elizaos/eliza, including #6037 which introduced new config and plugin modules with over 4k lines added, and #6040 which addressed a bug related to agent plugin reloading. Their work primarily involved feature development, bug fixes, and refactoring, with a notable portion dedicated to tests."},{"username":"odilitime","avatarUrl":"https://avatars.githubusercontent.com/u/16395496?u=c9bac48e632aae594a0d85aaf9e9c9c69b674d8b&v=4","totalScore":22.936521226679158,"prScore":22.73652122667916,"issueScore":0,"reviewScore":0,"commentScore":0.2,"summary":"odilitime: Focused on supporting `SERVER_PORT` by merging PR elizaos/eliza#6038, which involved modifying 2 files with a net change of +3/-2 lines. This work primarily focused on other work, indicating a broad contribution to the codebase."}],"focusAreas":[],"topIssues":[],"topPullRequests":[{"id":"PR_kwDOMT5cIs6sMtSD","title":"feat: migrate to UUID-only agent identification","author":"0xbbjoker","number":6036,"body":"$11","repository":"elizaos/eliza","createdAt":"2025-10-06T06:52:46Z","mergedAt":"2025-10-17T11:57:29Z","additions":1824,"deletions":124},{"id":"PR_kwDOMT5cIs6sW7SH","title":"feat(core): add config and plugin modules - phase 4 - refactor ElizaOS/Server","author":"standujar","number":6037,"body":"\n\n<!-- This is an auto-generated comment: release notes by coderabbit.ai -->\n\n## Summary by CodeRabbit\n\n- New Features\n  - Added plugin management with auto-install, loading, validation, and dependency resolution.\n  - Introduced configuration utilities: character parsing/validation/defaults, environment variable loading from .env, and secrets population from local env files.\n  - Expanded public API to expose configuration and plugin modules.\n\n- Tests\n  - Added comprehensive test suites for plugin management, character config, environment loading, and secrets handling, including edge cases and dependency ordering.\n\n<!-- end of auto-generated comment: release notes by coderabbit.ai -->","repository":"elizaos/eliza","createdAt":"2025-10-06T20:06:24Z","mergedAt":"2025-10-09T09:23:41Z","additions":1582,"deletions":1270},{"id":"PR_kwDOMT5cIs6sXx03","title":"fix: agent plugins not reloading on PATCH update and service stop race condition","author":"standujar","number":6040,"body":"$12","repository":"elizaos/eliza","createdAt":"2025-10-06T21:13:42Z","mergedAt":"2025-10-07T11:51:13Z","additions":516,"deletions":17},{"id":"PR_kwDOMT5cIs6sMNek","title":"fix(plugins): use correct ZodError.issues API instead of .errors","author":"0xbbjoker","number":6035,"body":"$13","repository":"elizaos/eliza","createdAt":"2025-10-06T05:43:31Z","mergedAt":"2025-10-16T06:35:37Z","additions":72,"deletions":13},{"id":"PR_kwDOMT5cIs6sXpTv","title":"fix(task): ensure runtime database is initialized before task access","author":"standujar","number":6039,"body":"","repository":"elizaos/eliza","createdAt":"2025-10-06T21:03:09Z","mergedAt":null,"additions":31,"deletions":2},{"id":"PR_kwDOMT5cIs6sXdG8","title":"support SERVER_PORT","author":"odilitime","number":6038,"body":"<!-- CURSOR_SUMMARY -->\n> [!NOTE]\n> Add support for SERVER_PORT to configure the HTTP server port (falls back to --port or 3000).\n> \n> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit 43fe2b28976eb02a145956e3f60df0af5fd85936. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>\n<!-- /CURSOR_SUMMARY -->","repository":"elizaos/eliza","createdAt":"2025-10-06T20:48:00Z","mergedAt":"2025-10-07T11:23:12Z","additions":19,"deletions":2},{"id":"PR_kwDOMT5cIs6sMG9k","title":"fix(service-interfaces): skip test execution for types-only package","author":"0xbbjoker","number":6034,"body":"The @elizaos/service-interfaces package contains only TypeScript interface\r\ndefinitions and has no runtime logic or tests. The test script was failing\r\nwhen running `bun run test` from the project root because bun test exits\r\nwith code 1 when no test files are found.\r\n\r\nChanged the test scripts to explicitly skip test execution with a clear\r\nmessage, allowing the monorepo test suite to complete successfully.\n\n<!-- CURSOR_SUMMARY -->\n---\n\n> [!NOTE]\n> Replace `packages/service-interfaces` test scripts with no-op commands that skip tests and exit 0.\n> \n> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit 2c02661e40cbd07868c90f7844c09045cf7beb9e. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>\n<!-- /CURSOR_SUMMARY -->","repository":"elizaos/eliza","createdAt":"2025-10-06T05:25:10Z","mergedAt":"2025-10-08T08:07:32Z","additions":3,"deletions":3}],"detailedContributorSummaries":{"0xbbjoker":"0xbbjoker: Primarily focused on bug fixes and feature work, merging a significant PR in elizaos/eliza#6034 that involved substantial code changes (+758/-146 lines) to skip test execution for types-only packages, while also opening two new feature and bug fix PRs. Their work today involved modifying 22 files with a primary focus on bugfix work (86%) and feature work (14%), impacting both code and tests.","odilitime":"odilitime: Focused on supporting `SERVER_PORT` by merging PR elizaos/eliza#6038, which involved modifying 2 files with a net change of +3/-2 lines. This work primarily focused on other work, indicating a broad contribution to the codebase.","standujar":"standujar: Focused on significant feature development and refactoring, merging two substantial PRs in elizaos/eliza, including #6037 which introduced new config and plugin modules with over 4k lines added, and #6040 which addressed a bug related to agent plugin reloading. Their work primarily involved feature development, bug fixes, and refactoring, with a notable portion dedicated to tests."}}}],"$L14"]}]
+a:["$","div",null,{"className":"prose prose-sm mx-auto mt-8 dark:prose-invert sm:prose lg:prose-lg xl:prose-xl","children":[["$","p","p-0",{"children":"On Oct 6, 2025, the ElizaOS project saw significant progress in core framework stability and agent management, with key refactoring efforts for the ElizaOS/Server, migration to UUID-only agent identification, and critical bug fixes addressing plugin reloading and runtime initialization. An emerging challenge involves TypeScript import errors in Eliza CLI 1.61, which is actively being investigated."}],"\n",["$","h2","h2-0",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"🚨 Needs Attention","position":{"start":{"line":3,"column":4,"offset":405},"end":{"line":3,"column":22,"offset":423}}}],"position":{"start":{"line":3,"column":1,"offset":402},"end":{"line":3,"column":22,"offset":423}}},"children":"🚨 Needs Attention"}],"\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"Urgent Discussions"}],": ",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/6031","children":"elizaos/eliza#6031"}]," Discussion continues regarding TypeScript import errors in Eliza CLI 1.61, with detailed output provided, indicating a potential package-related issue that needs further investigation."]}],"\n"]}],"\n",["$","h2","h2-1",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"✅ Completed Work","position":{"start":{"line":6,"column":4,"offset":706},"end":{"line":6,"column":20,"offset":722}}}],"position":{"start":{"line":6,"column":1,"offset":703},"end":{"line":6,"column":20,"offset":722}}},"children":"✅ Completed Work"}],"\n",["$","h3","h3-0",{"children":"Core Framework Refactoring & Configuration"}],"\n",["$","ul","ul-1",{"children":["\n",["$","li","li-0",{"children":["Continued the multi-phase refactoring of the ElizaOS/Server, integrating new config and plugin modules to enhance modularity and extensibility. ",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/6037","children":"elizaos/eliza#6037"}]]}],"\n",["$","li","li-1",{"children":["Added support for ",["$","code","code-0",{"children":"SERVER_PORT"}]," configuration, improving flexibility for deployment environments. ",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/6038","children":"elizaos/eliza#6038"}]]}],"\n"]}],"\n",["$","h3","h3-1",{"children":"Agent & Plugin Stability"}],"\n",["$","ul","ul-2",{"children":["\n",["$","li","li-0",{"children":["Migrated to a UUID-only agent identification system, streamlining agent management and consistency. ",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/6036","children":"elizaos/eliza#6036"}]]}],"\n",["$","li","li-1",{"children":["Addressed a critical bug where agent plugins were not reloading correctly on ",["$","code","code-0",{"children":"PATCH"}]," updates and resolved a service stop race condition. ",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/6040","children":"elizaos/eliza#6040"}]]}],"\n",["$","li","li-2",{"children":["Fixed an issue in plugins to use the correct ",["$","code","code-0",{"children":"ZodError.issues"}]," API, ensuring proper error handling for invalid plugin configurations. ",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/6035","children":"elizaos/eliza#6035"}]]}],"\n"]}],"\n",["$","h3","h3-2",{"children":"Runtime & Service Reliability"}],"\n",["$","ul","ul-3",{"children":["\n",["$","li","li-0",{"children":["Ensured that the runtime database is initialized before task access, preventing potential errors and improving task execution reliability. ",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/6039","children":"elizaos/eliza#6039"}]]}],"\n",["$","li","li-1",{"children":["Implemented a fix in service interfaces to skip test execution for types-only packages, optimizing the build process. ",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/6034","children":"elizaos/eliza#6034"}]]}],"\n"]}],"\n","$L15","\n","$L16","\n","$L17","\n","$L18","\n","$L19","\n","$L1a","\n","$L1b","\n","$L1c"]}]
+b:["$","script","script-0",{"src":"/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","async":true}]
+c:["$","script","script-1",{"src":"/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","async":true}]
+d:["$","script","script-2",{"src":"/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js","async":true}]
+e:["$","$L1d",null,{"children":["$","$1e",null,{"name":"Next.MetadataOutlet","children":"$@1f"}]}]
+14:["$","div",null,{"className":"rounded-lg border bg-card text-card-foreground shadow-sm","children":[["$","div",null,{"className":"flex flex-col space-y-1.5 p-6 py-4","children":["$","div",null,{"className":"tracking-tight text-sm font-medium","children":["$undefined","Code Changes"]}]}],["$","div",null,{"className":"p-6 pt-0","children":["$","div",null,{"className":"grid grid-cols-2 gap-4 md:grid-cols-4","children":[["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-git-commit-vertical h-5 w-5","aria-hidden":"true","children":[["$","path","1holv5",{"d":"M12 3v6"}],["$","circle","1v7zrd",{"cx":"12","cy":"12","r":"3"}],["$","path","a9ows0",{"d":"M12 15v6"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":16}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Commits"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-file-code h-5 w-5","aria-hidden":"true","children":[["$","path","1oefj6",{"d":"M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"}],["$","path","wfsgrz",{"d":"M14 2v5a1 1 0 0 0 1 1h5"}],["$","path","1tg20x",{"d":"M10 12.5 8 15l2 2.5"}],["$","path","yinavb",{"d":"m14 12.5 2 2.5-2 2.5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":0}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Files Changed"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-green-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-up h-5 w-5 text-green-500","aria-hidden":"true","children":[["$","path","hav0vg",{"d":"m5 12 7-7 7 7"}],["$","path","x0mq9r",{"d":"M12 19V5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-green-500","children":"+0"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Added"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-red-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-down h-5 w-5 text-red-500","aria-hidden":"true","children":[["$","path","s699le",{"d":"M12 5v14"}],["$","path","1idqje",{"d":"m19 12-7 7-7-7"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-red-500","children":"-0"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Deleted"}]]}]]}]]}]}]]}]
+15:["$","h2","h2-2",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"🏗️ Work in Progress","position":{"start":{"line":20,"column":4,"offset":2178},"end":{"line":20,"column":24,"offset":2198}}}],"position":{"start":{"line":20,"column":1,"offset":2175},"end":{"line":20,"column":24,"offset":2198}}},"children":"🏗️ Work in Progress"}]
+16:["$","h3","h3-3",{"children":"New Pull Requests"}]
+17:["$","ul","ul-4",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"elizaos/eliza"}],"\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/6040","children":"fix: agent plugins not reloading on PATCH update and service stop race condition"}]}],"\n",["$","li","li-1",{"children":["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/6039","children":"fix(task): ensure runtime database is initialized before task access"}]}],"\n",["$","li","li-2",{"children":["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/6038","children":"support SERVER_PORT"}]}],"\n",["$","li","li-3",{"children":["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/6037","children":"feat(core): add config and plugin modules - phase 4 - refactor ElizaOS/Server"}]}],"\n",["$","li","li-4",{"children":["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/6036","children":"feat: migrate to UUID-only agent identification"}]}],"\n",["$","li","li-5",{"children":["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/6035","children":"fix(plugins): use correct ZodError.issues API instead of .errors"}]}],"\n",["$","li","li-6",{"children":["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/6034","children":"fix(service-interfaces): skip test execution for types-only package"}]}],"\n"]}],"\n"]}],"\n"]}]
+18:["$","h2","h2-3",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"🐞 Issue Triage","position":{"start":{"line":31,"column":4,"offset":3038},"end":{"line":31,"column":19,"offset":3053}}}],"position":{"start":{"line":31,"column":1,"offset":3035},"end":{"line":31,"column":19,"offset":3053}}},"children":"🐞 Issue Triage"}]
+19:["$","h3","h3-4",{"children":"Active Issues"}]
+1a:["$","ul","ul-5",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"elizaos/eliza"}],"\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/6031","children":"TypeScript Import Errors in Eliza CLI 1.61"}]}],"\n"]}],"\n"]}],"\n"]}]
+1b:["$","h2","h2-4",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"✨ Contributor Spotlight","position":{"start":{"line":36,"column":4,"offset":3193},"end":{"line":36,"column":27,"offset":3216}}}],"position":{"start":{"line":36,"column":1,"offset":3190},"end":{"line":36,"column":27,"offset":3216}}},"children":"✨ Contributor Spotlight"}]
+1c:["$","ul","ul-6",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"matteo-brandolino"}],": Provided detailed diagnostic output for the TypeScript import errors in Eliza CLI 1.61, significantly aiding in narrowing down the issue."]}],"\n"]}]
+1f:null

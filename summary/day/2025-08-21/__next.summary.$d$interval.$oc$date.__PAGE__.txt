@@ -1,0 +1,1204 @@
+1:"$Sreact.fragment"
+2:I[4817319,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"IntervalSelector"]
+3:I[6998365,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"LlmCopyButton"]
+13:I[3642796,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],""]
+14:I[3238488,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"StatCardsDisplay"]
+1d:I[4261541,["/eliza-leaderboard/_next/static/chunks/b33bcbdcb3f88354.js","/eliza-leaderboard/_next/static/chunks/8ba59154b6704904.js"],"OutletBoundary"]
+1e:"$Sreact.suspense"
+4:T184b,# 🚀 Streaming Support for ElizaOS Core Runtime
+
+## Overview
+This PR introduces comprehensive streaming support to the ElizaOS core runtime, enabling real-time, token-by-token responses from language models. This is a significant enhancement that improves user experience through faster perceived response times and enables new use cases like real-time transcription and audio streaming.
+
+## Key Changes
+
+### 1. Core Runtime Enhancements (`packages/core`)
+
+#### New Streaming Types and Interfaces
+- **`ModelStream<T>`**: Type alias for `AsyncIterable<T>` representing streaming data
+- **`ModelStreamHandler`**: Interface for registering streaming model implementations
+- **Stream Chunk Types**: 
+  - `TextStreamChunk`: For text generation streaming (delta events with partial text)
+  - `TranscriptionStreamChunk`: For audio transcription streaming (partial transcripts)
+  - `TextToSpeechStreamChunk`: For TTS streaming (audio chunks)
+  - Base types: `ModelStreamFinishChunk`, `ModelStreamErrorChunk`, `ModelStreamUsageChunk`
+
+#### Runtime Implementation
+- **Stream Registry**: New `streamModels` Map to store streaming handlers by model type
+- **`registerModelStream()`**: Register streaming handlers with priority-based resolution
+- **`getModelStream()`**: Retrieve the highest-priority streaming handler for a model type
+- **Stream Normalization**: `wrapReadableStream()` utility that normalizes different stream types:
+  - Native `AsyncIterable` objects
+  - Web `ReadableStream` API
+  - Node.js `Readable` streams
+
+#### Unified `useModel` API
+Instead of adding a separate `useModelStream` function, streaming is elegantly integrated into the existing `useModel` API through overloads:
+
+```typescript
+// Non-streaming (default)
+const result = await runtime.useModel(ModelType.TEXT_LARGE, { prompt: "Hello" });
+
+// Streaming via event parameter
+const stream = await runtime.useModel(
+  ModelType.TEXT_LARGE, 
+  { prompt: "Hello" },
+  'STREAMING_TEXT'
+);
+
+for await (const chunk of stream) {
+  if (chunk.event === 'delta') {
+    console.log(chunk.delta); // Partial text
+  }
+}
+```
+
+### 2. OpenAI Plugin Integration (`plugin-openai`)
+
+#### Streaming Implementations
+- **Text Generation**: Uses `@ai-sdk/openai`'s `streamText` for GPT models
+  - Yields delta chunks with partial text
+  - Includes usage statistics (token counts)
+  - Proper finish events with complete output
+  
+- **Text-to-Speech**: Streaming audio generation
+  - Yields audio chunks for real-time playback
+  - Fallback to single chunk if response isn't streamable
+
+#### Type Safety
+- All streaming handlers are fully typed with no `any` casts
+- Local type definitions to handle module resolution
+- Conditional registration based on runtime capabilities
+
+### 3. Testing Infrastructure
+
+#### Core Streaming Tests (`packages/core/src/__tests__/streaming.test.ts`)
+- Tests for streaming handler registration and priority resolution
+- Fallback behavior when no streaming handler exists
+- Event emission during streaming
+- Proper async iteration over stream chunks
+
+### 4. Type Safety Improvements
+
+#### Complete Type Coverage
+- **No more `any` types**: All parameters and returns are properly typed
+- **Generic constraints**: Using TypeScript generics to maintain type relationships
+- **Mapped types**: `ModelParamsMap`, `ModelResultMap`, `ModelStreamChunkMap` for type-safe model operations
+- **Overloaded signatures**: Clean API with proper return type inference
+
+#### Fixed Issues
+- Tokenizer parameters now include required `modelType` field
+- Proper type assertions only where necessary (stream type detection)
+- All explicit casts removed in favor of proper typing
+
+## Benefits
+
+### For Users
+- **Faster Time-to-First-Token**: Users see responses begin immediately
+- **Better UX**: Progressive loading instead of waiting for complete responses
+- **Real-time Features**: Enables live transcription, streaming audio, etc.
+
+### For Developers
+- **Simple API**: Streaming integrated into existing `useModel` function
+- **Type Safety**: Full TypeScript support with no `any` types
+- **Flexibility**: Support for different stream formats and sources
+- **Extensibility**: Easy to add new streaming model types
+
+## Technical Highlights
+
+### Stream Event Types
+```typescript
+// Text streaming example
+{ event: 'delta', delta: 'Hello' }
+{ event: 'delta', delta: ' world' }
+{ event: 'usage', tokens: { prompt: 5, completion: 2, total: 7 } }
+{ event: 'finish', output: 'Hello world' }
+```
+
+### Error Handling
+- Graceful fallback to non-streaming when handlers unavailable
+- Proper error propagation through stream chunks
+- Abort signal support for cancellation
+
+### Performance
+- Minimal overhead for non-streaming calls
+- Efficient stream normalization without buffering
+- Priority-based handler selection for optimal provider choice
+
+## Breaking Changes
+None! The implementation is fully backward compatible:
+- Existing `useModel` calls work unchanged
+- Streaming is opt-in via the event parameter
+- Plugins without streaming support continue to work
+
+## Migration Guide
+To enable streaming in your code:
+
+```typescript
+// Before (still works)
+const response = await runtime.useModel(ModelType.TEXT_LARGE, {
+  prompt: "Write a story"
+});
+
+// After (with streaming)
+const stream = await runtime.useModel(
+  ModelType.TEXT_LARGE,
+  { prompt: "Write a story" },
+  'STREAMING_TEXT'
+);
+
+for await (const chunk of stream) {
+  if (chunk.event === 'delta') {
+    process.stdout.write(chunk.delta);
+  }
+}
+```
+
+## Testing
+- ✅ All existing tests pass
+- ✅ New streaming-specific tests added
+- ✅ Type checking passes with no errors
+- ✅ No regression in non-streaming functionality
+
+## Future Enhancements
+- WebSocket/SSE transport for browser clients
+- Streaming support for more model types (embeddings, image generation)
+- Stream transformation utilities (buffering, throttling)
+- Progress indicators for long-running streams
+
+---
+
+This implementation provides a robust, type-safe foundation for streaming in ElizaOS while maintaining full backward compatibility and excellent developer experience.
+5:Tbe6,This major update brings the ElizaOS MCP plugin up to par with the latest Model Context Protocol specification (August 2025), adding modern transport support, enhanced security, and new MCP features.
+
+## ✨ Key Features Added
+
+### 🚀 Modern Transport Layer
+- Add support for StreamableHTTPClientTransport (modern HTTP transport)
+- Use StreamableHTTPClientTransport for 'http' and 'streamable-http' types
+- Maintain backward compatibility with legacy SSE transport
+- Add deprecation warnings for 'sse' transport type
+
+### 🔒 Enhanced Security
+- Add comprehensive security warnings for MCP server connections
+- Add security warnings for tool execution (arbitrary code execution)
+- Add security warnings for resource access (data exposure)
+- Update README with detailed security considerations section
+- Add compliance notes referencing MCP Specification 2025-06-18
+
+### 📝 New MCP Features: Prompts Support
+- Add GET_PROMPT action for retrieving and using prompt templates
+- Add prompt fetching and processing in McpService
+- Add Prompt type support throughout the codebase
+- Add prompt validation and argument handling
+- Update provider data to include prompts information
+
+### 📚 Improved Documentation
+- Update README with modern transport type examples
+- Add comprehensive security guidelines and best practices
+- Update configuration examples to promote modern transports
+- Add deprecation warnings for legacy configurations
+- Document new Prompts feature with usage examples
+
+### 🔧 Technical Improvements
+- Update to latest MCP SDK version (1.12.1)
+- Add proper TypeScript types for new features
+- Improve error handling for prompt operations
+- Add AbortSignal timeout support for modern transports
+- Apply code formatting and style improvements
+
+## 🔧 Breaking Changes
+None - all changes maintain backward compatibility while encouraging migration to modern standards.
+
+## 📋 Migration Guide
+Users are encouraged to update their transport configurations:
+- Change 'sse' to 'streamable-http' or 'http' for better performance
+- Review security warnings in logs for compliance
+- Explore new Prompts feature for structured AI interactions
+
+🤖 Generated with [Claude Code](https://claude.ai/code)
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+- New Features
+  - Added Prompts support: discover, select, and use templated prompts from connected servers.
+  - Introduced GET_PROMPT action for prompt-driven workflows.
+  - Added modern HTTP streaming transport for MCP connections.
+
+- Documentation
+  - Updated README with Prompts in feature list.
+  - Revised configuration to recommend modern transport, added timeouts, and introduced a legacy (not recommended) section.
+  - Added a new multi-server example with a modern web server.
+
+- Security
+  - Significantly expanded security guidance with principles, warnings, best practices, and compliance notes.
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->6:Tfd2,## Session Metadata Propagation for Plugin Actions
+
+### Overview
+This PR implements session metadata propagation throughout the ElizaOS message processing pipeline, enabling plugins and actions to access custom session metadata (like `ethAddress`, authentication tokens, or platform-specific data) that was provided during session creation.
+
+### Problem
+Previously, when creating a session with custom metadata via the REST API, this metadata was not accessible to plugin actions. This was particularly problematic for Web3 integrations where wallet addresses and other user context needed to persist across the session.
+
+### Solution
+Implemented a complete metadata propagation flow from session creation through to action handlers:
+
+```
+Session Creation → Channel Metadata → Message Metadata → Memory Object → Action Handler
+```
+
+### Changes Made
+
+#### 1. **Session API Enhancement** (`packages/server/src/api/messaging/sessions.ts`)
+- Modified message sending to fetch and merge channel metadata (containing session metadata)
+- Ensures session metadata is included in all messages sent within that session
+
+#### 2. **Message Bus Service Update** (`packages/server/src/services/message.ts`)
+- Updated `createAgentMemory` to preserve all message metadata in Memory objects
+- Session metadata now flows through to actions via `message.metadata`
+
+#### 3. **Comprehensive Test Coverage**
+- ✅ Added test: "should propagate session metadata to messages" in `sessions.test.ts`
+- ✅ Added test: "should preserve session metadata when creating memories" in `message-bus.test.ts`
+- ✅ Added test: "should handle messages without metadata gracefully" in `message-bus.test.ts`
+
+#### 4. **Documentation & Examples**
+- 📝 Created example action demonstrating metadata access (`examples/session-metadata-access.ts`)
+- 📚 Added comprehensive documentation (`docs/session-metadata-propagation.md`)
+
+### Usage Example
+
+**Creating a session with metadata:**
+```typescript
+POST /api/messaging/sessions
+{
+  "agentId": "agent-123",
+  "userId": "user-456",
+  "metadata": {
+    "ethAddress": "0x1234567890123456789012345678901234567890",
+    "platform": "web3",
+    "userPlan": "premium"
+  }
+}
+```
+
+**Accessing in your action:**
+```typescript
+handler: async (runtime: IAgentRuntime, message: Memory): Promise<boolean> => {
+  const metadata = message.metadata || {};
+  const ethAddress = metadata.ethAddress; // ✅ Now accessible!
+  const sessionId = metadata.sessionId;
+  
+  if (ethAddress) {
+    logger.info(`Processing Web3 request for wallet: ${ethAddress}`);
+    // Your Web3 logic here
+  }
+  
+  return true;
+}
+```
+
+### Use Cases
+- 🔐 **Web3 Integration**: Pass wallet addresses and chain preferences
+- 🎫 **Authentication**: Include auth tokens and user permissions
+- 🌍 **Platform Context**: Store platform-specific information (Discord server ID, etc.)
+- ⚙️ **User Preferences**: Persist language, timezone, output format across messages
+
+### Testing
+All tests pass ✅
+```bash
+bun test --filter metadata  # Run metadata-specific tests
+bun test sessions.test.ts  # Run session tests
+bun test message-bus.test.ts  # Run message bus tests
+```
+
+### Breaking Changes
+None - This implementation is fully backward compatible.
+
+### Migration Guide
+For existing implementations:
+1. Update session creation to include metadata
+2. Modify actions to read from `message.metadata`
+3. No changes required if not using metadata
+
+### Checklist
+- [x] Code changes implemented
+- [x] Tests added and passing
+- [x] Documentation updated
+- [x] Example code provided
+- [x] Backward compatibility maintained
+- [x] No breaking changes
+
+### Related Issues
+Addresses the need for session context in plugin actions, particularly for Web3 integrations where wallet addresses need to be accessible throughout the session lifecycle.
+
+---
+**Note for reviewers**: The key files to review are:
+- `packages/server/src/api/messaging/sessions.ts` (lines 745-780)
+- `packages/server/src/services/message.ts` (lines 388-407)
+- Test files for verification of the implementation7:Tebf,
+# Relates to
+
+This PR addresses an issue with the plugin installation logic, as tracked in the branch issue/plugin-install-fix.
+
+# Risks
+
+Low. The changes are confined to the plugin installation script within the CLI. The potential risk is that installing a plugin via the CLI might fail, but it should not affect any other part of the system.
+
+# Background
+
+## What does this PR do?
+
+This PR updates the logic for installing plugins using the CLI to ensure greater reliability.
+
+## What kind of change is this?
+
+Improvement (misc. changes to existing features)
+
+
+## Why are we doing this? Any context or related work?
+Previously, when installing a plugin from a GitHub URL, the CLI would assume the plugin's package name was the same as the repository name (e.g., elizaOS/plugin-xyz would be assumed to be plugin-xyz). This assumption is often incorrect, as the actual name field in the plugin's package.json can be different (e.g., @eliza/plugin-xyz).
+This led to problems in post-installation steps, like setting up environment variables, because the CLI was looking for the wrong package name in the project's dependencies.
+This PR fixes that. Now, after installing the plugin, the code reads the project's package.json file to find the actual package name that was just added. This makes the process more robust and removes the faulty assumption, ensuring that post-installation steps work correctly regardless of how the plugin is named.
+
+# Documentation changes needed?
+
+My changes do not require a change to the project documentation.
+
+
+# Testing
+
+## Where should a reviewer start?
+
+A reviewer should start by examining the diff in packages/cli/src/commands/plugins/actions/install.ts.
+
+## Detailed testing steps
+
+From the eliza package root, attempt to install a plugin using the CLI.
+Run the command: bun eliza plugins:install <plugin-name> (e.g., bun eliza plugins:install @eliza-plugins/dummy-services).
+Verify that the command completes successfully and the plugin is added to the project's dependencies.
+Run a command from the newly installed plugin to ensure it was loaded correctly.
+
+OLD****
+All required variables are set - your plugin should work!
+
+Next steps:
+- Restart your application to load new environment variables
+- Configure remaining 1 variables in your .env file if needed
+- Check the plugin documentation for additional setup steps
+
+xxxxx@Mac my-agent-morpheus % elizaos plugins installed-plugins
+
+┌──────────────────────────┐
+│  === Plugins Added: ===  │
+└──────────────────────────┘
+@elizaos/plugin-bootstrap
+@elizaos/plugin-openai
+@elizaos/plugin-sql
+
+
+NEW****
+Your @elizaos/plugin-morpheus plugin is ready to use!
+
+Next steps:
+- Restart your application to load the new environment variables
+- Check your .env file if you need to modify any values later
+
+│
+└  ✓ Plugin installed successfully!
+
+Next steps:
+1. Add "@elizaos/plugin-morpheus" to your character file's plugins array:
+
+   {
+     "name": "YourAgent",
+     "plugins": ["@elizaos/plugin-morpheus"],
+     ...
+   }
+
+2. Restart your application to load the plugin
+3. Configure any required environment variables
+4. Check the plugin documentation for additional setup
+xxxx@Mac my-agent-morpheus % elizaos plugins installed-plugins
+
+┌──────────────────────────┐
+│  === Plugins Added: ===  │
+└──────────────────────────┘
+@elizaos/plugin-bootstrap
+@elizaos/plugin-morpheus
+@elizaos/plugin-openai
+@elizaos/plugin-sql
+
+
+## Discord username
+@bowtiedbluefin
+8:T514,## Summary
+• Add @elizaos-plugins/plugin-aigateway to the plugin registry
+• Universal AI Gateway integration plugin for elizaOS
+• Provides access to 100+ AI models through unified gateways
+
+## Plugin Details
+- **Repository**: https://github.com/dexploarer/plugin-aigateway
+- **Package**: @elizaos/plugin-aigateway
+- **Version**: 1.0.0
+- **Features**: Text generation, image generation, embeddings, model listing
+- **Supported Gateways**: Vercel AI Gateway, OpenRouter, and custom gateways
+
+## Quality Assurance
+✅ All tests pass (25/25)
+✅ Clean TypeScript build
+✅ Code formatted with prettier
+✅ No console.log statements in production code
+✅ Follows ElizaOS plugin architecture
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+- Documentation
+  - Added RSS feed plugin to the Available Plugins list in README.
+
+- Chores
+  - Updated registry metadata: added @elizaos-plugins/plugin-rss-feed, @elizaos/plugin-twitter-rss, and @elizaos-plugins/plugin-aigateway.
+  - Bumped patch versions for multiple plugins and removed several v1 branch pins.
+  - Adjusted supports flags and updated last updated timestamp.
+  - Expanded index with mappings for the new plugins.
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->9:Tab7,<!-- Use this template by filling in information and copying and pasting relevant items out of the HTML comments. -->
+
+# Relates to
+
+<!-- LINK TO ISSUE OR TICKET -->
+https://github.com/elizaOS/eliza/issues/5616
+<!-- This risks section must be filled out before the final review and merge. -->
+
+# Risks
+
+<!--
+Low, medium, large. List what kind of risks and what could be affected.
+-->
+Medium: adding dir logic 
+# Background
+
+## What does this PR do?
+
+Fixed bug: When running `elizaos create myproject`, the `.elizadb` directory was incorrectly created in the current directory instead of inside the new project. Fixed by updating to always use the target project directory as the base path when creating a new project. Now database files are properly contained within the project directory at `myproject/.eliza/.elizadb`.
+
+
+## What kind of change is this?
+
+<!--
+Bug fixes (non-breaking change which fixes an issue)
+Improvements (misc. changes to existing features)
+Features (non-breaking change which adds functionality)
+Updates (new versions of included code)
+-->
+
+<!-- This "Why" section is most relevant if there are no linked issues explaining why. If there is a related issue, it might make sense to skip this why section. -->
+<!--
+## Why are we doing this? Any context or related work?
+-->
+
+# Documentation changes needed?
+
+<!--
+My changes do not require a change to the project documentation.
+My changes require a change to the project documentation.
+If documentation change is needed: I have updated the documentation accordingly.
+-->
+
+<!-- Please show how you tested the PR. This will really help if the PR needs to be retested and probably help the PR get merged quicker. -->
+
+# Testing
+
+## Where should a reviewer start?
+
+## Detailed testing steps
+
+<!--
+None: Automated tests are acceptable.
+-->
+
+<!--
+- As [anon/admin], go to [link]
+  - [do action]
+  - verify [result]
+-->
+
+<!-- If there is a UI change, please include before and after screenshots or videos. This will speed up PRs being merged. It is extra nice to annotate screenshots with arrows or boxes pointing out the differences. -->
+<!--
+## Screenshots
+### Before
+### After
+-->
+
+<!-- If there is anything about the deployment, please make a note. -->
+<!--
+# Deploy Notes
+-->
+
+<!--  Copy and paste command line output. -->
+<!--
+## Database changes
+-->
+
+<!--  Please specify deploy instructions if there is something more than the automated steps. -->
+<!--
+## Deployment instructions
+-->
+
+<!-- If you are on Discord, please join https://discord.gg/ai16z and state your Discord username here for the contributor role and join us in #development-feed -->
+<!--
+## Discord username
+
+-->
+a:T5ff,## Summary
+
+This PR converts the `packages/docs` directory from tracked files to a git submodule pointing to the external documentation repository at https://github.com/elizaos/docs.
+
+## Changes
+
+- Removed 171 documentation files that were previously tracked in the main repository
+- Added `packages/docs` as a git submodule
+- Updated `.gitmodules` configuration
+
+## Motivation
+
+- **Separation of Concerns**: Documentation can be maintained and versioned independently
+- **Reduced Repository Size**: Removes ~41,000 lines of documentation from the main codebase
+- **Independent Documentation Updates**: Documentation changes won't clutter the main repository's history
+- **Easier Documentation Management**: The docs team can work independently with their own CI/CD
+
+## Impact
+
+- The existing `postinstall` script (`scripts/init-submodules.sh`) will automatically initialize the submodule when developers run `bun install` or `npm install`
+- No manual submodule initialization required by developers
+- The documentation will still be available at the same location (`packages/docs`)
+- Build processes that depend on the documentation will work as expected
+
+## Statistics
+
+- 172 files changed
+- 2 insertions (+)
+- 41,487 deletions (-)
+
+## Testing
+
+- [x] Submodule properly initialized and points to https://github.com/elizaos/docs
+- [x] Documentation files are accessible after submodule initialization
+- [x] No broken references in the main repository
+- [x] Confirmed `postinstall` script handles submodule initialization automaticallyb:T672,Daily Project Summary for Aug 21, 2025
+
+Today's focus was on significant infrastructure improvements within the core ElizaOS framework, including a major documentation overhaul and critical bug fixes for system stability. Additionally, efforts continued to expand the ElizaOS plugin ecosystem with a new AI Gateway Plugin integration.
+
+## 🚨 Needs Attention 
+- **Pull Requests to Review**:
+    - [elizaos-plugins/plugin-mcp#16](https://github.com/elizaos-plugins/plugin-mcp/pull/16): This PR to update the MCP plugin has been open since June 18, 2025, and requires review.
+    - [elizaos-plugins/registry#203](https://github.com/elizaos-plugins/registry/pull/203): This newly opened PR to add the AI Gateway Plugin to the registry is awaiting review.
+
+## ✅ Completed Work
+### Core System Infrastructure & Stability
+- **Documentation Infrastructure Overhaul**: The `packages/docs` directory in `elizaos/eliza` was converted into a Git submodule, streamlining documentation management and reducing the main repository's size. ([elizaos/eliza#5803](https://github.com/elizaos/eliza/pull/5803))
+- **Critical Bug Fixes**: Enhanced core system stability by ensuring proper session metadata propagation for plugin actions and resolving `plugin-sql` test issues related to timestamp handling. ([elizaos/eliza#5805](https://github.com/elizaos/eliza/pull/5805), [elizaos/eliza#5802](https://github.com/elizaos/eliza/pull/5802))
+
+## 🏗️ Work in Progress
+- **New Pull Requests**:
+    - **elizaos-plugins/registry**:
+        - [elizaos-plugins/registry#203](https://github.com/elizaos-plugins/registry/pull/203): Add AI Gateway Plugin to ElizaOS Registry.0:{"buildId":"US8XLB_zHXYj_PVAECGcd","rsc":["$","$1","c",{"children":[["$","div",null,{"className":"container mx-auto px-6 py-8 md:px-8","children":["$","div",null,{"className":"mx-auto max-w-4xl","children":[["$","div",null,{"className":"mb-4 flex flex-col justify-between sm:flex-row","children":[["$","$L2",null,{"currentInterval":"day","currentDate":"2025-08-21"}],["$","$L3",null,{"metrics":{"date":"2025-08-21","interval":{"intervalStart":"$D2025-08-21T00:00:00.000Z","intervalEnd":"$D2025-08-22T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":5,"merged":3,"total":5},"issues":{"new":0,"closed":0,"total":0},"activeContributors":7,"codeChanges":{"additions":299,"deletions":902,"files":62,"commitCount":36},"topContributors":[{"username":"wtfsayo","avatarUrl":"https://avatars.githubusercontent.com/u/82053242?u=98209a1f10456f42d4d2fa71db4d5bf4a672cbc3&v=4","totalScore":54.488773896576106,"prScore":54.1487738965761,"issueScore":0,"reviewScore":0,"commentScore":0.33999999999999997,"summary":"wtfsayo: Focused on significant refactoring work, notably converting `packages/docs` to a git submodule in elizaos/eliza via PR #5803, which involved a substantial reduction of 41,487 lines. Their primary focus was on documentation-related changes, accounting for 96% of modified files."},{"username":"Dexploarer","avatarUrl":"https://avatars.githubusercontent.com/u/211557447?u=21a243d61cc1f87574328ae07fc64d7d7577b53d&v=4","totalScore":49.15048198176414,"prScore":49.15048198176414,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"Dexploarer: Focused on feature development, opening two new pull requests: elizaos-plugins/plugin-m#16 to update the MCP plugin and elizaos-plugins/registry#203 to add the AI Gateway Plugin to the ElizaOS Registry, reflecting work on new features and other tasks across code, documentation, and configuration files."},{"username":"ChristopherTrimboli","avatarUrl":"https://avatars.githubusercontent.com/u/27584221?u=de148a498b5af814e037c2975112fadd09df743f&v=4","totalScore":46.407593866981316,"prScore":45.96959386698131,"issueScore":0,"reviewScore":0,"commentScore":0.43799999999999994,"summary":"ChristopherTrimboli: Focused on bug fixes, merging a significant PR in elizaos/eliza (#5805) that addressed metadata in sessions, demonstrating impact through code changes across 230 files. Their work was primarily split between bugfix and other work, with an even distribution between code and test file types."},{"username":"odilitime","avatarUrl":"https://avatars.githubusercontent.com/u/16395496?u=c9bac48e632aae594a0d85aaf9e9c9c69b674d8b&v=4","totalScore":45.64584140063009,"prScore":45.44584140063009,"issueScore":0,"reviewScore":0,"commentScore":0.2,"summary":"odilitime: Focused on improving test stability by merging a significant PR in elizaos/eliza (#5802) that involved substantial code changes, primarily in tests. Their work today focused on other work, refactoring, and tests, with a strong emphasis on test files."},{"username":"monilpat","avatarUrl":"https://avatars.githubusercontent.com/u/15067321?v=4","totalScore":5.438,"prScore":0,"issueScore":0,"reviewScore":5,"commentScore":0.43799999999999994,"summary":"monilpat: Focused on a mix of other work and bug fixes, modifying 57 files with 8 commits (+4258/-490 lines), and also provided one approval review and three PR comments."}],"focusAreas":[{"area":"docs","count":47},{"area":"plugin-sql","count":7},{"area":"server","count":4},{"area":"core","count":1}],"topIssues":[],"topPullRequests":[{"id":"PR_kwDOMT5cIs6ePDWm","title":"feat: training models on own data","author":"lalalune","number":5510,"body":"The goal of this plugin-training is to insert as a custom reasoning module which self-trains on the agent's data and the runs online after training. It's very WIP, and demonstrates a few of these steps, such as training a custom DeepSeek distilled model on together.ai from data, and overriding the internal models with the DeepSeek models. Some of it is still vibe code trash.\r\n\r\nIt was developed on the 'next' branch and might need a little work to integrate into current develop, especially wrt how we integrate the custom reasoning. It's also a bit messy and needs some consistency, and we should make CustomReasoningService into a shared IReasoningService type.","repository":"elizaos/eliza","createdAt":"2025-07-10T05:58:47Z","mergedAt":null,"additions":18236,"deletions":0},{"id":"PR_kwDOMT5cIs6eONK4","title":"Add new types","author":"lalalune","number":5505,"body":"This PR adds some new types, including IPlanningService and other planning types, and some needed type additions to plugins. Also refactors out \"primitives\" since that's a bit random and ugly, instead we have uuid, metadata and the others were moved to messaging to be more appropriate to the nomenclature","repository":"elizaos/eliza","createdAt":"2025-07-10T03:36:06Z","mergedAt":null,"additions":2080,"deletions":130},{"id":"PR_kwDOMT5cIs6j3Xuz","title":"streaming useModel /core","author":"ChristopherTrimboli","number":5777,"body":"$4","repository":"elizaos/eliza","createdAt":"2025-08-15T16:48:42Z","mergedAt":null,"additions":1024,"deletions":185},{"id":"PR_kwDOOqp3ps6kqP4J","title":"feat: update MCP plugin to align with MCP specification 2025-06-18","author":"Dexploarer","number":16,"body":"$5","repository":"elizaos-plugins/plugin-mcp","createdAt":"2025-08-21T10:40:17Z","mergedAt":null,"additions":475,"deletions":26},{"id":"PR_kwDOMT5cIs6kv00E","title":"fix: metadata in sessions","author":"ChristopherTrimboli","number":5805,"body":"$6","repository":"elizaos/eliza","createdAt":"2025-08-21T19:04:04Z","mergedAt":"2025-08-21T22:54:12Z","additions":236,"deletions":4},{"id":"PR_kwDOMT5cIs6d_zWl","title":"feat: update plugin install logic","author":"bowtiedbluefin","number":5464,"body":"$7","repository":"elizaos/eliza","createdAt":"2025-07-08T18:51:28Z","mergedAt":null,"additions":131,"deletions":3},{"id":"PR_kwDONkg7v86kqeIj","title":"Add AI Gateway Plugin to ElizaOS Registry","author":"Dexploarer","number":203,"body":"$8","repository":"elizaos-plugins/registry","createdAt":"2025-08-21T11:03:50Z","mergedAt":null,"additions":106,"deletions":59},{"id":"PR_kwDOMT5cIs6kmlKq","title":"fix: plugin-sql test","author":"odilitime","number":5802,"body":"# Risks\r\n\r\nMedium, not sure this is what we want\r\n\r\n# Background\r\n\r\n## What does this PR do?\r\n\r\n- make plugin-sql tests pass for me from monorepo\r\n- mainly createdAt have to be a date object for w/e reason now for pglite (timestamps no longer valid)\r\n- optimizes createMemory from calling searchMemories as much\r\n\r\n## What kind of change is this?\r\n\r\nBug fixes (non-breaking change which fixes an issue)\r\n\r\n## Why are we doing this? Any context or related work?\r\n\r\nJust was trying to make more of the CI pass\r\n\r\n# Documentation changes needed?\r\n\r\nMy changes do not require a change to the project documentation.","repository":"elizaos/eliza","createdAt":"2025-08-21T03:14:09Z","mergedAt":"2025-08-21T13:45:57Z","additions":61,"deletions":43},{"id":"PR_kwDOMT5cIs6fpARU","title":"feat/issue 5616: target project dir for .elizadb","author":"ai16z-demirix","number":5633,"body":"$9","repository":"elizaos/eliza","createdAt":"2025-07-18T21:50:37Z","mergedAt":null,"additions":4,"deletions":1},{"id":"PR_kwDOMT5cIs6kq-Px","title":"feat: Convert packages/docs to git submodule from elizaos/docs","author":"wtfsayo","number":5803,"body":"$a","repository":"elizaos/eliza","createdAt":"2025-08-21T11:53:15Z","mergedAt":"2025-08-21T12:12:45Z","additions":2,"deletions":41487}],"detailedContributorSummaries":{"ChristopherTrimboli":"ChristopherTrimboli: Focused on bug fixes, merging a significant PR in elizaos/eliza (#5805) that addressed metadata in sessions, demonstrating impact through code changes across 230 files. Their work was primarily split between bugfix and other work, with an even distribution between code and test file types.","Dexploarer":"Dexploarer: Focused on feature development, opening two new pull requests: elizaos-plugins/plugin-m#16 to update the MCP plugin and elizaos-plugins/registry#203 to add the AI Gateway Plugin to the ElizaOS Registry, reflecting work on new features and other tasks across code, documentation, and configuration files.","monilpat":"monilpat: Focused on a mix of other work and bug fixes, modifying 57 files with 8 commits (+4258/-490 lines), and also provided one approval review and three PR comments.","odilitime":"odilitime: Focused on improving test stability by merging a significant PR in elizaos/eliza (#5802) that involved substantial code changes, primarily in tests. Their work today focused on other work, refactoring, and tests, with a strong emphasis on test files.","wtfsayo":"wtfsayo: Focused on significant refactoring work, notably converting `packages/docs` to a git submodule in elizaos/eliza via PR #5803, which involved a substantial reduction of 41,487 lines. Their primary focus was on documentation-related changes, accounting for 96% of modified files."}},"summaryContent":"$b","className":"self-end sm:self-start"}]]}],"$Lc","$Ld","$Le"]}]}],["$Lf","$L10","$L11"],"$L12"]}],"loading":null,"isPartial":false}
+c:["$","div",null,{"className":"mb-6","children":["$","div",null,{"className":"flex items-center justify-between","children":[[["$","$L13",null,{"href":"/summary/day/2025-08-20","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left mr-2 h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"children":"Previous"}],false],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$L13",null,{"href":"/summary/day/2025-08-20","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Previous"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]],["$","div",null,{"className":"flex flex-col items-center","children":[["$","div",null,{"className":"text-sm font-medium text-gray-500","children":["Daily"," Summary"]}],["$","time",null,{"dateTime":"2025-08-21","className":"text-md font-bold","children":"Aug 21, 2025"}]]}],[["$","$L13",null,{"href":"/summary/day/2025-08-22","children":[false,["$","span",null,{"children":"Next"}],["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right ml-2 h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}]],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$L13",null,{"href":"/summary/day/2025-08-22","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Next"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]]]}]}]
+15:T184b,# 🚀 Streaming Support for ElizaOS Core Runtime
+
+## Overview
+This PR introduces comprehensive streaming support to the ElizaOS core runtime, enabling real-time, token-by-token responses from language models. This is a significant enhancement that improves user experience through faster perceived response times and enables new use cases like real-time transcription and audio streaming.
+
+## Key Changes
+
+### 1. Core Runtime Enhancements (`packages/core`)
+
+#### New Streaming Types and Interfaces
+- **`ModelStream<T>`**: Type alias for `AsyncIterable<T>` representing streaming data
+- **`ModelStreamHandler`**: Interface for registering streaming model implementations
+- **Stream Chunk Types**: 
+  - `TextStreamChunk`: For text generation streaming (delta events with partial text)
+  - `TranscriptionStreamChunk`: For audio transcription streaming (partial transcripts)
+  - `TextToSpeechStreamChunk`: For TTS streaming (audio chunks)
+  - Base types: `ModelStreamFinishChunk`, `ModelStreamErrorChunk`, `ModelStreamUsageChunk`
+
+#### Runtime Implementation
+- **Stream Registry**: New `streamModels` Map to store streaming handlers by model type
+- **`registerModelStream()`**: Register streaming handlers with priority-based resolution
+- **`getModelStream()`**: Retrieve the highest-priority streaming handler for a model type
+- **Stream Normalization**: `wrapReadableStream()` utility that normalizes different stream types:
+  - Native `AsyncIterable` objects
+  - Web `ReadableStream` API
+  - Node.js `Readable` streams
+
+#### Unified `useModel` API
+Instead of adding a separate `useModelStream` function, streaming is elegantly integrated into the existing `useModel` API through overloads:
+
+```typescript
+// Non-streaming (default)
+const result = await runtime.useModel(ModelType.TEXT_LARGE, { prompt: "Hello" });
+
+// Streaming via event parameter
+const stream = await runtime.useModel(
+  ModelType.TEXT_LARGE, 
+  { prompt: "Hello" },
+  'STREAMING_TEXT'
+);
+
+for await (const chunk of stream) {
+  if (chunk.event === 'delta') {
+    console.log(chunk.delta); // Partial text
+  }
+}
+```
+
+### 2. OpenAI Plugin Integration (`plugin-openai`)
+
+#### Streaming Implementations
+- **Text Generation**: Uses `@ai-sdk/openai`'s `streamText` for GPT models
+  - Yields delta chunks with partial text
+  - Includes usage statistics (token counts)
+  - Proper finish events with complete output
+  
+- **Text-to-Speech**: Streaming audio generation
+  - Yields audio chunks for real-time playback
+  - Fallback to single chunk if response isn't streamable
+
+#### Type Safety
+- All streaming handlers are fully typed with no `any` casts
+- Local type definitions to handle module resolution
+- Conditional registration based on runtime capabilities
+
+### 3. Testing Infrastructure
+
+#### Core Streaming Tests (`packages/core/src/__tests__/streaming.test.ts`)
+- Tests for streaming handler registration and priority resolution
+- Fallback behavior when no streaming handler exists
+- Event emission during streaming
+- Proper async iteration over stream chunks
+
+### 4. Type Safety Improvements
+
+#### Complete Type Coverage
+- **No more `any` types**: All parameters and returns are properly typed
+- **Generic constraints**: Using TypeScript generics to maintain type relationships
+- **Mapped types**: `ModelParamsMap`, `ModelResultMap`, `ModelStreamChunkMap` for type-safe model operations
+- **Overloaded signatures**: Clean API with proper return type inference
+
+#### Fixed Issues
+- Tokenizer parameters now include required `modelType` field
+- Proper type assertions only where necessary (stream type detection)
+- All explicit casts removed in favor of proper typing
+
+## Benefits
+
+### For Users
+- **Faster Time-to-First-Token**: Users see responses begin immediately
+- **Better UX**: Progressive loading instead of waiting for complete responses
+- **Real-time Features**: Enables live transcription, streaming audio, etc.
+
+### For Developers
+- **Simple API**: Streaming integrated into existing `useModel` function
+- **Type Safety**: Full TypeScript support with no `any` types
+- **Flexibility**: Support for different stream formats and sources
+- **Extensibility**: Easy to add new streaming model types
+
+## Technical Highlights
+
+### Stream Event Types
+```typescript
+// Text streaming example
+{ event: 'delta', delta: 'Hello' }
+{ event: 'delta', delta: ' world' }
+{ event: 'usage', tokens: { prompt: 5, completion: 2, total: 7 } }
+{ event: 'finish', output: 'Hello world' }
+```
+
+### Error Handling
+- Graceful fallback to non-streaming when handlers unavailable
+- Proper error propagation through stream chunks
+- Abort signal support for cancellation
+
+### Performance
+- Minimal overhead for non-streaming calls
+- Efficient stream normalization without buffering
+- Priority-based handler selection for optimal provider choice
+
+## Breaking Changes
+None! The implementation is fully backward compatible:
+- Existing `useModel` calls work unchanged
+- Streaming is opt-in via the event parameter
+- Plugins without streaming support continue to work
+
+## Migration Guide
+To enable streaming in your code:
+
+```typescript
+// Before (still works)
+const response = await runtime.useModel(ModelType.TEXT_LARGE, {
+  prompt: "Write a story"
+});
+
+// After (with streaming)
+const stream = await runtime.useModel(
+  ModelType.TEXT_LARGE,
+  { prompt: "Write a story" },
+  'STREAMING_TEXT'
+);
+
+for await (const chunk of stream) {
+  if (chunk.event === 'delta') {
+    process.stdout.write(chunk.delta);
+  }
+}
+```
+
+## Testing
+- ✅ All existing tests pass
+- ✅ New streaming-specific tests added
+- ✅ Type checking passes with no errors
+- ✅ No regression in non-streaming functionality
+
+## Future Enhancements
+- WebSocket/SSE transport for browser clients
+- Streaming support for more model types (embeddings, image generation)
+- Stream transformation utilities (buffering, throttling)
+- Progress indicators for long-running streams
+
+---
+
+This implementation provides a robust, type-safe foundation for streaming in ElizaOS while maintaining full backward compatibility and excellent developer experience.
+16:Tbe6,This major update brings the ElizaOS MCP plugin up to par with the latest Model Context Protocol specification (August 2025), adding modern transport support, enhanced security, and new MCP features.
+
+## ✨ Key Features Added
+
+### 🚀 Modern Transport Layer
+- Add support for StreamableHTTPClientTransport (modern HTTP transport)
+- Use StreamableHTTPClientTransport for 'http' and 'streamable-http' types
+- Maintain backward compatibility with legacy SSE transport
+- Add deprecation warnings for 'sse' transport type
+
+### 🔒 Enhanced Security
+- Add comprehensive security warnings for MCP server connections
+- Add security warnings for tool execution (arbitrary code execution)
+- Add security warnings for resource access (data exposure)
+- Update README with detailed security considerations section
+- Add compliance notes referencing MCP Specification 2025-06-18
+
+### 📝 New MCP Features: Prompts Support
+- Add GET_PROMPT action for retrieving and using prompt templates
+- Add prompt fetching and processing in McpService
+- Add Prompt type support throughout the codebase
+- Add prompt validation and argument handling
+- Update provider data to include prompts information
+
+### 📚 Improved Documentation
+- Update README with modern transport type examples
+- Add comprehensive security guidelines and best practices
+- Update configuration examples to promote modern transports
+- Add deprecation warnings for legacy configurations
+- Document new Prompts feature with usage examples
+
+### 🔧 Technical Improvements
+- Update to latest MCP SDK version (1.12.1)
+- Add proper TypeScript types for new features
+- Improve error handling for prompt operations
+- Add AbortSignal timeout support for modern transports
+- Apply code formatting and style improvements
+
+## 🔧 Breaking Changes
+None - all changes maintain backward compatibility while encouraging migration to modern standards.
+
+## 📋 Migration Guide
+Users are encouraged to update their transport configurations:
+- Change 'sse' to 'streamable-http' or 'http' for better performance
+- Review security warnings in logs for compliance
+- Explore new Prompts feature for structured AI interactions
+
+🤖 Generated with [Claude Code](https://claude.ai/code)
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+- New Features
+  - Added Prompts support: discover, select, and use templated prompts from connected servers.
+  - Introduced GET_PROMPT action for prompt-driven workflows.
+  - Added modern HTTP streaming transport for MCP connections.
+
+- Documentation
+  - Updated README with Prompts in feature list.
+  - Revised configuration to recommend modern transport, added timeouts, and introduced a legacy (not recommended) section.
+  - Added a new multi-server example with a modern web server.
+
+- Security
+  - Significantly expanded security guidance with principles, warnings, best practices, and compliance notes.
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->17:Tfd2,## Session Metadata Propagation for Plugin Actions
+
+### Overview
+This PR implements session metadata propagation throughout the ElizaOS message processing pipeline, enabling plugins and actions to access custom session metadata (like `ethAddress`, authentication tokens, or platform-specific data) that was provided during session creation.
+
+### Problem
+Previously, when creating a session with custom metadata via the REST API, this metadata was not accessible to plugin actions. This was particularly problematic for Web3 integrations where wallet addresses and other user context needed to persist across the session.
+
+### Solution
+Implemented a complete metadata propagation flow from session creation through to action handlers:
+
+```
+Session Creation → Channel Metadata → Message Metadata → Memory Object → Action Handler
+```
+
+### Changes Made
+
+#### 1. **Session API Enhancement** (`packages/server/src/api/messaging/sessions.ts`)
+- Modified message sending to fetch and merge channel metadata (containing session metadata)
+- Ensures session metadata is included in all messages sent within that session
+
+#### 2. **Message Bus Service Update** (`packages/server/src/services/message.ts`)
+- Updated `createAgentMemory` to preserve all message metadata in Memory objects
+- Session metadata now flows through to actions via `message.metadata`
+
+#### 3. **Comprehensive Test Coverage**
+- ✅ Added test: "should propagate session metadata to messages" in `sessions.test.ts`
+- ✅ Added test: "should preserve session metadata when creating memories" in `message-bus.test.ts`
+- ✅ Added test: "should handle messages without metadata gracefully" in `message-bus.test.ts`
+
+#### 4. **Documentation & Examples**
+- 📝 Created example action demonstrating metadata access (`examples/session-metadata-access.ts`)
+- 📚 Added comprehensive documentation (`docs/session-metadata-propagation.md`)
+
+### Usage Example
+
+**Creating a session with metadata:**
+```typescript
+POST /api/messaging/sessions
+{
+  "agentId": "agent-123",
+  "userId": "user-456",
+  "metadata": {
+    "ethAddress": "0x1234567890123456789012345678901234567890",
+    "platform": "web3",
+    "userPlan": "premium"
+  }
+}
+```
+
+**Accessing in your action:**
+```typescript
+handler: async (runtime: IAgentRuntime, message: Memory): Promise<boolean> => {
+  const metadata = message.metadata || {};
+  const ethAddress = metadata.ethAddress; // ✅ Now accessible!
+  const sessionId = metadata.sessionId;
+  
+  if (ethAddress) {
+    logger.info(`Processing Web3 request for wallet: ${ethAddress}`);
+    // Your Web3 logic here
+  }
+  
+  return true;
+}
+```
+
+### Use Cases
+- 🔐 **Web3 Integration**: Pass wallet addresses and chain preferences
+- 🎫 **Authentication**: Include auth tokens and user permissions
+- 🌍 **Platform Context**: Store platform-specific information (Discord server ID, etc.)
+- ⚙️ **User Preferences**: Persist language, timezone, output format across messages
+
+### Testing
+All tests pass ✅
+```bash
+bun test --filter metadata  # Run metadata-specific tests
+bun test sessions.test.ts  # Run session tests
+bun test message-bus.test.ts  # Run message bus tests
+```
+
+### Breaking Changes
+None - This implementation is fully backward compatible.
+
+### Migration Guide
+For existing implementations:
+1. Update session creation to include metadata
+2. Modify actions to read from `message.metadata`
+3. No changes required if not using metadata
+
+### Checklist
+- [x] Code changes implemented
+- [x] Tests added and passing
+- [x] Documentation updated
+- [x] Example code provided
+- [x] Backward compatibility maintained
+- [x] No breaking changes
+
+### Related Issues
+Addresses the need for session context in plugin actions, particularly for Web3 integrations where wallet addresses need to be accessible throughout the session lifecycle.
+
+---
+**Note for reviewers**: The key files to review are:
+- `packages/server/src/api/messaging/sessions.ts` (lines 745-780)
+- `packages/server/src/services/message.ts` (lines 388-407)
+- Test files for verification of the implementation18:Tebf,
+# Relates to
+
+This PR addresses an issue with the plugin installation logic, as tracked in the branch issue/plugin-install-fix.
+
+# Risks
+
+Low. The changes are confined to the plugin installation script within the CLI. The potential risk is that installing a plugin via the CLI might fail, but it should not affect any other part of the system.
+
+# Background
+
+## What does this PR do?
+
+This PR updates the logic for installing plugins using the CLI to ensure greater reliability.
+
+## What kind of change is this?
+
+Improvement (misc. changes to existing features)
+
+
+## Why are we doing this? Any context or related work?
+Previously, when installing a plugin from a GitHub URL, the CLI would assume the plugin's package name was the same as the repository name (e.g., elizaOS/plugin-xyz would be assumed to be plugin-xyz). This assumption is often incorrect, as the actual name field in the plugin's package.json can be different (e.g., @eliza/plugin-xyz).
+This led to problems in post-installation steps, like setting up environment variables, because the CLI was looking for the wrong package name in the project's dependencies.
+This PR fixes that. Now, after installing the plugin, the code reads the project's package.json file to find the actual package name that was just added. This makes the process more robust and removes the faulty assumption, ensuring that post-installation steps work correctly regardless of how the plugin is named.
+
+# Documentation changes needed?
+
+My changes do not require a change to the project documentation.
+
+
+# Testing
+
+## Where should a reviewer start?
+
+A reviewer should start by examining the diff in packages/cli/src/commands/plugins/actions/install.ts.
+
+## Detailed testing steps
+
+From the eliza package root, attempt to install a plugin using the CLI.
+Run the command: bun eliza plugins:install <plugin-name> (e.g., bun eliza plugins:install @eliza-plugins/dummy-services).
+Verify that the command completes successfully and the plugin is added to the project's dependencies.
+Run a command from the newly installed plugin to ensure it was loaded correctly.
+
+OLD****
+All required variables are set - your plugin should work!
+
+Next steps:
+- Restart your application to load new environment variables
+- Configure remaining 1 variables in your .env file if needed
+- Check the plugin documentation for additional setup steps
+
+xxxxx@Mac my-agent-morpheus % elizaos plugins installed-plugins
+
+┌──────────────────────────┐
+│  === Plugins Added: ===  │
+└──────────────────────────┘
+@elizaos/plugin-bootstrap
+@elizaos/plugin-openai
+@elizaos/plugin-sql
+
+
+NEW****
+Your @elizaos/plugin-morpheus plugin is ready to use!
+
+Next steps:
+- Restart your application to load the new environment variables
+- Check your .env file if you need to modify any values later
+
+│
+└  ✓ Plugin installed successfully!
+
+Next steps:
+1. Add "@elizaos/plugin-morpheus" to your character file's plugins array:
+
+   {
+     "name": "YourAgent",
+     "plugins": ["@elizaos/plugin-morpheus"],
+     ...
+   }
+
+2. Restart your application to load the plugin
+3. Configure any required environment variables
+4. Check the plugin documentation for additional setup
+xxxx@Mac my-agent-morpheus % elizaos plugins installed-plugins
+
+┌──────────────────────────┐
+│  === Plugins Added: ===  │
+└──────────────────────────┘
+@elizaos/plugin-bootstrap
+@elizaos/plugin-morpheus
+@elizaos/plugin-openai
+@elizaos/plugin-sql
+
+
+## Discord username
+@bowtiedbluefin
+19:T514,## Summary
+• Add @elizaos-plugins/plugin-aigateway to the plugin registry
+• Universal AI Gateway integration plugin for elizaOS
+• Provides access to 100+ AI models through unified gateways
+
+## Plugin Details
+- **Repository**: https://github.com/dexploarer/plugin-aigateway
+- **Package**: @elizaos/plugin-aigateway
+- **Version**: 1.0.0
+- **Features**: Text generation, image generation, embeddings, model listing
+- **Supported Gateways**: Vercel AI Gateway, OpenRouter, and custom gateways
+
+## Quality Assurance
+✅ All tests pass (25/25)
+✅ Clean TypeScript build
+✅ Code formatted with prettier
+✅ No console.log statements in production code
+✅ Follows ElizaOS plugin architecture
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+- Documentation
+  - Added RSS feed plugin to the Available Plugins list in README.
+
+- Chores
+  - Updated registry metadata: added @elizaos-plugins/plugin-rss-feed, @elizaos/plugin-twitter-rss, and @elizaos-plugins/plugin-aigateway.
+  - Bumped patch versions for multiple plugins and removed several v1 branch pins.
+  - Adjusted supports flags and updated last updated timestamp.
+  - Expanded index with mappings for the new plugins.
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->1a:Tab7,<!-- Use this template by filling in information and copying and pasting relevant items out of the HTML comments. -->
+
+# Relates to
+
+<!-- LINK TO ISSUE OR TICKET -->
+https://github.com/elizaOS/eliza/issues/5616
+<!-- This risks section must be filled out before the final review and merge. -->
+
+# Risks
+
+<!--
+Low, medium, large. List what kind of risks and what could be affected.
+-->
+Medium: adding dir logic 
+# Background
+
+## What does this PR do?
+
+Fixed bug: When running `elizaos create myproject`, the `.elizadb` directory was incorrectly created in the current directory instead of inside the new project. Fixed by updating to always use the target project directory as the base path when creating a new project. Now database files are properly contained within the project directory at `myproject/.eliza/.elizadb`.
+
+
+## What kind of change is this?
+
+<!--
+Bug fixes (non-breaking change which fixes an issue)
+Improvements (misc. changes to existing features)
+Features (non-breaking change which adds functionality)
+Updates (new versions of included code)
+-->
+
+<!-- This "Why" section is most relevant if there are no linked issues explaining why. If there is a related issue, it might make sense to skip this why section. -->
+<!--
+## Why are we doing this? Any context or related work?
+-->
+
+# Documentation changes needed?
+
+<!--
+My changes do not require a change to the project documentation.
+My changes require a change to the project documentation.
+If documentation change is needed: I have updated the documentation accordingly.
+-->
+
+<!-- Please show how you tested the PR. This will really help if the PR needs to be retested and probably help the PR get merged quicker. -->
+
+# Testing
+
+## Where should a reviewer start?
+
+## Detailed testing steps
+
+<!--
+None: Automated tests are acceptable.
+-->
+
+<!--
+- As [anon/admin], go to [link]
+  - [do action]
+  - verify [result]
+-->
+
+<!-- If there is a UI change, please include before and after screenshots or videos. This will speed up PRs being merged. It is extra nice to annotate screenshots with arrows or boxes pointing out the differences. -->
+<!--
+## Screenshots
+### Before
+### After
+-->
+
+<!-- If there is anything about the deployment, please make a note. -->
+<!--
+# Deploy Notes
+-->
+
+<!--  Copy and paste command line output. -->
+<!--
+## Database changes
+-->
+
+<!--  Please specify deploy instructions if there is something more than the automated steps. -->
+<!--
+## Deployment instructions
+-->
+
+<!-- If you are on Discord, please join https://discord.gg/ai16z and state your Discord username here for the contributor role and join us in #development-feed -->
+<!--
+## Discord username
+
+-->
+1b:T5ff,## Summary
+
+This PR converts the `packages/docs` directory from tracked files to a git submodule pointing to the external documentation repository at https://github.com/elizaos/docs.
+
+## Changes
+
+- Removed 171 documentation files that were previously tracked in the main repository
+- Added `packages/docs` as a git submodule
+- Updated `.gitmodules` configuration
+
+## Motivation
+
+- **Separation of Concerns**: Documentation can be maintained and versioned independently
+- **Reduced Repository Size**: Removes ~41,000 lines of documentation from the main codebase
+- **Independent Documentation Updates**: Documentation changes won't clutter the main repository's history
+- **Easier Documentation Management**: The docs team can work independently with their own CI/CD
+
+## Impact
+
+- The existing `postinstall` script (`scripts/init-submodules.sh`) will automatically initialize the submodule when developers run `bun install` or `npm install`
+- No manual submodule initialization required by developers
+- The documentation will still be available at the same location (`packages/docs`)
+- Build processes that depend on the documentation will work as expected
+
+## Statistics
+
+- 172 files changed
+- 2 insertions (+)
+- 41,487 deletions (-)
+
+## Testing
+
+- [x] Submodule properly initialized and points to https://github.com/elizaos/docs
+- [x] Documentation files are accessible after submodule initialization
+- [x] No broken references in the main repository
+- [x] Confirmed `postinstall` script handles submodule initialization automaticallyd:["$","div",null,{"className":"mb-8 space-y-6","children":[["$","$L14",null,{"metrics":{"date":"2025-08-21","interval":{"intervalStart":"$D2025-08-21T00:00:00.000Z","intervalEnd":"$D2025-08-22T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":5,"merged":3,"total":5},"issues":{"new":0,"closed":0,"total":0},"activeContributors":7,"codeChanges":{"additions":299,"deletions":902,"files":62,"commitCount":36},"topContributors":[{"username":"wtfsayo","avatarUrl":"https://avatars.githubusercontent.com/u/82053242?u=98209a1f10456f42d4d2fa71db4d5bf4a672cbc3&v=4","totalScore":54.488773896576106,"prScore":54.1487738965761,"issueScore":0,"reviewScore":0,"commentScore":0.33999999999999997,"summary":"wtfsayo: Focused on significant refactoring work, notably converting `packages/docs` to a git submodule in elizaos/eliza via PR #5803, which involved a substantial reduction of 41,487 lines. Their primary focus was on documentation-related changes, accounting for 96% of modified files."},{"username":"Dexploarer","avatarUrl":"https://avatars.githubusercontent.com/u/211557447?u=21a243d61cc1f87574328ae07fc64d7d7577b53d&v=4","totalScore":49.15048198176414,"prScore":49.15048198176414,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"Dexploarer: Focused on feature development, opening two new pull requests: elizaos-plugins/plugin-m#16 to update the MCP plugin and elizaos-plugins/registry#203 to add the AI Gateway Plugin to the ElizaOS Registry, reflecting work on new features and other tasks across code, documentation, and configuration files."},{"username":"ChristopherTrimboli","avatarUrl":"https://avatars.githubusercontent.com/u/27584221?u=de148a498b5af814e037c2975112fadd09df743f&v=4","totalScore":46.407593866981316,"prScore":45.96959386698131,"issueScore":0,"reviewScore":0,"commentScore":0.43799999999999994,"summary":"ChristopherTrimboli: Focused on bug fixes, merging a significant PR in elizaos/eliza (#5805) that addressed metadata in sessions, demonstrating impact through code changes across 230 files. Their work was primarily split between bugfix and other work, with an even distribution between code and test file types."},{"username":"odilitime","avatarUrl":"https://avatars.githubusercontent.com/u/16395496?u=c9bac48e632aae594a0d85aaf9e9c9c69b674d8b&v=4","totalScore":45.64584140063009,"prScore":45.44584140063009,"issueScore":0,"reviewScore":0,"commentScore":0.2,"summary":"odilitime: Focused on improving test stability by merging a significant PR in elizaos/eliza (#5802) that involved substantial code changes, primarily in tests. Their work today focused on other work, refactoring, and tests, with a strong emphasis on test files."},{"username":"monilpat","avatarUrl":"https://avatars.githubusercontent.com/u/15067321?v=4","totalScore":5.438,"prScore":0,"issueScore":0,"reviewScore":5,"commentScore":0.43799999999999994,"summary":"monilpat: Focused on a mix of other work and bug fixes, modifying 57 files with 8 commits (+4258/-490 lines), and also provided one approval review and three PR comments."}],"focusAreas":[{"area":"docs","count":47},{"area":"plugin-sql","count":7},{"area":"server","count":4},{"area":"core","count":1}],"topIssues":[],"topPullRequests":[{"id":"PR_kwDOMT5cIs6ePDWm","title":"feat: training models on own data","author":"lalalune","number":5510,"body":"The goal of this plugin-training is to insert as a custom reasoning module which self-trains on the agent's data and the runs online after training. It's very WIP, and demonstrates a few of these steps, such as training a custom DeepSeek distilled model on together.ai from data, and overriding the internal models with the DeepSeek models. Some of it is still vibe code trash.\r\n\r\nIt was developed on the 'next' branch and might need a little work to integrate into current develop, especially wrt how we integrate the custom reasoning. It's also a bit messy and needs some consistency, and we should make CustomReasoningService into a shared IReasoningService type.","repository":"elizaos/eliza","createdAt":"2025-07-10T05:58:47Z","mergedAt":null,"additions":18236,"deletions":0},{"id":"PR_kwDOMT5cIs6eONK4","title":"Add new types","author":"lalalune","number":5505,"body":"This PR adds some new types, including IPlanningService and other planning types, and some needed type additions to plugins. Also refactors out \"primitives\" since that's a bit random and ugly, instead we have uuid, metadata and the others were moved to messaging to be more appropriate to the nomenclature","repository":"elizaos/eliza","createdAt":"2025-07-10T03:36:06Z","mergedAt":null,"additions":2080,"deletions":130},{"id":"PR_kwDOMT5cIs6j3Xuz","title":"streaming useModel /core","author":"ChristopherTrimboli","number":5777,"body":"$15","repository":"elizaos/eliza","createdAt":"2025-08-15T16:48:42Z","mergedAt":null,"additions":1024,"deletions":185},{"id":"PR_kwDOOqp3ps6kqP4J","title":"feat: update MCP plugin to align with MCP specification 2025-06-18","author":"Dexploarer","number":16,"body":"$16","repository":"elizaos-plugins/plugin-mcp","createdAt":"2025-08-21T10:40:17Z","mergedAt":null,"additions":475,"deletions":26},{"id":"PR_kwDOMT5cIs6kv00E","title":"fix: metadata in sessions","author":"ChristopherTrimboli","number":5805,"body":"$17","repository":"elizaos/eliza","createdAt":"2025-08-21T19:04:04Z","mergedAt":"2025-08-21T22:54:12Z","additions":236,"deletions":4},{"id":"PR_kwDOMT5cIs6d_zWl","title":"feat: update plugin install logic","author":"bowtiedbluefin","number":5464,"body":"$18","repository":"elizaos/eliza","createdAt":"2025-07-08T18:51:28Z","mergedAt":null,"additions":131,"deletions":3},{"id":"PR_kwDONkg7v86kqeIj","title":"Add AI Gateway Plugin to ElizaOS Registry","author":"Dexploarer","number":203,"body":"$19","repository":"elizaos-plugins/registry","createdAt":"2025-08-21T11:03:50Z","mergedAt":null,"additions":106,"deletions":59},{"id":"PR_kwDOMT5cIs6kmlKq","title":"fix: plugin-sql test","author":"odilitime","number":5802,"body":"# Risks\r\n\r\nMedium, not sure this is what we want\r\n\r\n# Background\r\n\r\n## What does this PR do?\r\n\r\n- make plugin-sql tests pass for me from monorepo\r\n- mainly createdAt have to be a date object for w/e reason now for pglite (timestamps no longer valid)\r\n- optimizes createMemory from calling searchMemories as much\r\n\r\n## What kind of change is this?\r\n\r\nBug fixes (non-breaking change which fixes an issue)\r\n\r\n## Why are we doing this? Any context or related work?\r\n\r\nJust was trying to make more of the CI pass\r\n\r\n# Documentation changes needed?\r\n\r\nMy changes do not require a change to the project documentation.","repository":"elizaos/eliza","createdAt":"2025-08-21T03:14:09Z","mergedAt":"2025-08-21T13:45:57Z","additions":61,"deletions":43},{"id":"PR_kwDOMT5cIs6fpARU","title":"feat/issue 5616: target project dir for .elizadb","author":"ai16z-demirix","number":5633,"body":"$1a","repository":"elizaos/eliza","createdAt":"2025-07-18T21:50:37Z","mergedAt":null,"additions":4,"deletions":1},{"id":"PR_kwDOMT5cIs6kq-Px","title":"feat: Convert packages/docs to git submodule from elizaos/docs","author":"wtfsayo","number":5803,"body":"$1b","repository":"elizaos/eliza","createdAt":"2025-08-21T11:53:15Z","mergedAt":"2025-08-21T12:12:45Z","additions":2,"deletions":41487}],"detailedContributorSummaries":{"ChristopherTrimboli":"ChristopherTrimboli: Focused on bug fixes, merging a significant PR in elizaos/eliza (#5805) that addressed metadata in sessions, demonstrating impact through code changes across 230 files. Their work was primarily split between bugfix and other work, with an even distribution between code and test file types.","Dexploarer":"Dexploarer: Focused on feature development, opening two new pull requests: elizaos-plugins/plugin-m#16 to update the MCP plugin and elizaos-plugins/registry#203 to add the AI Gateway Plugin to the ElizaOS Registry, reflecting work on new features and other tasks across code, documentation, and configuration files.","monilpat":"monilpat: Focused on a mix of other work and bug fixes, modifying 57 files with 8 commits (+4258/-490 lines), and also provided one approval review and three PR comments.","odilitime":"odilitime: Focused on improving test stability by merging a significant PR in elizaos/eliza (#5802) that involved substantial code changes, primarily in tests. Their work today focused on other work, refactoring, and tests, with a strong emphasis on test files.","wtfsayo":"wtfsayo: Focused on significant refactoring work, notably converting `packages/docs` to a git submodule in elizaos/eliza via PR #5803, which involved a substantial reduction of 41,487 lines. Their primary focus was on documentation-related changes, accounting for 96% of modified files."}}}],"$L1c"]}]
+e:["$","div",null,{"className":"prose prose-sm mx-auto mt-8 dark:prose-invert sm:prose lg:prose-lg xl:prose-xl","children":[["$","p","p-0",{"children":"Daily Project Summary for Aug 21, 2025"}],"\n",["$","p","p-1",{"children":"Today's focus was on significant infrastructure improvements within the core ElizaOS framework, including a major documentation overhaul and critical bug fixes for system stability. Additionally, efforts continued to expand the ElizaOS plugin ecosystem with a new AI Gateway Plugin integration."}],"\n",["$","h2","h2-0",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"🚨 Needs Attention","position":{"start":{"line":5,"column":4,"offset":339},"end":{"line":5,"column":22,"offset":357}}}],"position":{"start":{"line":5,"column":1,"offset":336},"end":{"line":5,"column":23,"offset":358}}},"children":"🚨 Needs Attention"}],"\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"Pull Requests to Review"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos-plugins/plugin-mcp/pull/16","children":"elizaos-plugins/plugin-mcp#16"}],": This PR to update the MCP plugin has been open since June 18, 2025, and requires review."]}],"\n",["$","li","li-1",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos-plugins/registry/pull/203","children":"elizaos-plugins/registry#203"}],": This newly opened PR to add the AI Gateway Plugin to the registry is awaiting review."]}],"\n"]}],"\n"]}],"\n"]}],"\n",["$","h2","h2-1",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"✅ Completed Work","position":{"start":{"line":10,"column":4,"offset":755},"end":{"line":10,"column":20,"offset":771}}}],"position":{"start":{"line":10,"column":1,"offset":752},"end":{"line":10,"column":20,"offset":771}}},"children":"✅ Completed Work"}],"\n",["$","h3","h3-0",{"children":"Core System Infrastructure & Stability"}],"\n",["$","ul","ul-1",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"Documentation Infrastructure Overhaul"}],": The ",["$","code","code-0",{"children":"packages/docs"}]," directory in ",["$","code","code-1",{"children":"elizaos/eliza"}]," was converted into a Git submodule, streamlining documentation management and reducing the main repository's size. (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5803","children":"elizaos/eliza#5803"}],")"]}],"\n",["$","li","li-1",{"children":[["$","strong","strong-0",{"children":"Critical Bug Fixes"}],": Enhanced core system stability by ensuring proper session metadata propagation for plugin actions and resolving ",["$","code","code-0",{"children":"plugin-sql"}]," test issues related to timestamp handling. (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5805","children":"elizaos/eliza#5805"}],", ",["$","a","a-1",{"href":"https://github.com/elizaos/eliza/pull/5802","children":"elizaos/eliza#5802"}],")"]}],"\n"]}],"\n",["$","h2","h2-2",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"🏗️ Work in Progress","position":{"start":{"line":15,"column":4,"offset":1422},"end":{"line":15,"column":24,"offset":1442}}}],"position":{"start":{"line":15,"column":1,"offset":1419},"end":{"line":15,"column":24,"offset":1442}}},"children":"🏗️ Work in Progress"}],"\n",["$","ul","ul-2",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"New Pull Requests"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"elizaos-plugins/registry"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos-plugins/registry/pull/203","children":"elizaos-plugins/registry#203"}],": Add AI Gateway Plugin to ElizaOS Registry."]}],"\n"]}],"\n"]}],"\n"]}],"\n"]}],"\n"]}]]}]
+f:["$","script","script-0",{"src":"/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","async":true}]
+10:["$","script","script-1",{"src":"/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","async":true}]
+11:["$","script","script-2",{"src":"/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js","async":true}]
+12:["$","$L1d",null,{"children":["$","$1e",null,{"name":"Next.MetadataOutlet","children":"$@1f"}]}]
+1c:["$","div",null,{"className":"rounded-lg border bg-card text-card-foreground shadow-sm","children":[["$","div",null,{"className":"flex flex-col space-y-1.5 p-6 py-4","children":["$","div",null,{"className":"tracking-tight text-sm font-medium","children":["$undefined","Code Changes"]}]}],["$","div",null,{"className":"p-6 pt-0","children":["$","div",null,{"className":"grid grid-cols-2 gap-4 md:grid-cols-4","children":[["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-git-commit-vertical h-5 w-5","aria-hidden":"true","children":[["$","path","1holv5",{"d":"M12 3v6"}],["$","circle","1v7zrd",{"cx":"12","cy":"12","r":"3"}],["$","path","a9ows0",{"d":"M12 15v6"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":36}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Commits"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-file-code h-5 w-5","aria-hidden":"true","children":[["$","path","1oefj6",{"d":"M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"}],["$","path","wfsgrz",{"d":"M14 2v5a1 1 0 0 0 1 1h5"}],["$","path","1tg20x",{"d":"M10 12.5 8 15l2 2.5"}],["$","path","yinavb",{"d":"m14 12.5 2 2.5-2 2.5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":62}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Files Changed"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-green-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-up h-5 w-5 text-green-500","aria-hidden":"true","children":[["$","path","hav0vg",{"d":"m5 12 7-7 7 7"}],["$","path","x0mq9r",{"d":"M12 19V5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-green-500","children":"+299"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Added"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-red-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-down h-5 w-5 text-red-500","aria-hidden":"true","children":[["$","path","s699le",{"d":"M12 5v14"}],["$","path","1idqje",{"d":"m19 12-7 7-7-7"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-red-500","children":"-902"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Deleted"}]]}]]}]]}]}]]}]
+1f:null

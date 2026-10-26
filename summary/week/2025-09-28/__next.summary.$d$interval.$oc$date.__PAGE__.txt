@@ -1,0 +1,2024 @@
+1:"$Sreact.fragment"
+2:I[4817319,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"IntervalSelector"]
+3:I[6998365,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"LlmCopyButton"]
+1f:I[3642796,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],""]
+20:I[3238488,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"StatCardsDisplay"]
+3a:I[4261541,["/eliza-leaderboard/_next/static/chunks/b33bcbdcb3f88354.js","/eliza-leaderboard/_next/static/chunks/8ba59154b6704904.js"],"OutletBoundary"]
+3b:"$Sreact.suspense"
+4:T5a4,**Describe the bug**
+
+When initializing `AgentRuntime`, the following code in `runtime.ts`:
+`tsthis.agent = await this.adapter.getAgent(this.character.id);`
+
+throws an unhandled exception if:
+ - the agents table does not exist (e.g. migrations incomplete), or
+ - character.id is missing/undefined.
+
+This prevents runtime startup and crashes the process.
+
+
+
+**To Reproduce**
+
+Run AgentRuntime with a new Postgres database where the agents table has not been created.
+Or, start with a character config missing an id field.
+Observe the runtime crash with getAgent error.
+
+**Expected behavior**
+If getAgent() fails due to a missing record, the runtime should gracefully create the agent with createAgent().
+If character.id is missing, a clear error should be logged, not an unhandled exception.
+
+**Screenshots**
+N/A but here are the logs
+```
+Database operation failed (attempt 1/3): Failed query: select "id", "name", "bio" from "agents"
+2025-09-25 14:53:12 params: , nextRetryIn: 1.9s
+2025-09-25 14:53:14  Warn       Database operation failed (attempt 2/3): Failed query: select "id", "name", "bio" from "agents"
+2025-09-25 14:53:14 params: , nextRetryIn: 2.8s
+2025-09-25 14:53:17  Error      Max retry attempts reached: Failed query: select "id", "name", "bio" from "agents"
+2025-09-25 14:53:17 params: , totalAttempts: 3
+```
+
+**Additional context**
+Proposed fix is to wrap getAgent() in a try/catch and fall back to createAgent() where possible.5:T140d,## Summary
+
+This PR significantly enhances the Agent Runs sidebar interface with improved Timeline visualization, better space utilization, and enhanced data extraction.
+
+## Key Changes
+
+### 1. Sidebar Size & Space Optimization
+- **Increased sidebar max width** from 50% to 85% - allows sidebar to take over more screen space
+- **Reduced min width** from 20% to 15% - chat panel can compress more
+- **Removed Timeline tab padding** for maximum space utilization
+- **Increased API limits**: Default 100 runs (from 20), max 500 runs (from 100)
+
+### 2. Timeline UI Improvements
+- **Replaced traces column with dropdown** - more space-efficient design
+- **Compact dropdown items** - single-line layout with Run ID instead of timestamp
+- **Run ID-based naming** - Changed from `Run 8:20:48 AM` to `Run 12345678` for stable identifiers
+- **Improved flexbox layout** - proper flex-shrink/flex-grow conventions in SpanCard 3-column layout
+
+### 3. Visual Design Enhancements
+- **Eliza theme colors** throughout - replaced hardcoded gray/blue/red colors with CSS variables
+- **Selection states** - Added `bg-accent/50` with border, hover states, smooth transitions
+- **Better spacing** - Added py-3 px-2, gap-x-3, rounded corners, shadows
+- **Vertical centering** - Items properly aligned with `items-center`
+- **Reduced margins** - Removed excessive spacing between child runs
+
+### 4. Data Extraction Improvements
+- **Enhanced prompt extraction** - Supports multi-prompt arrays, extracts from params.prompt
+- **Enhanced response extraction** - Extracts from response.content, response.text, result field
+- **Token count extraction** - Handles response.usage and top-level usage objects  
+- **Cost tracking** - Extracts from response.cost when available
+- **Server-side data** - API now includes params, response, usage, prompts, cost in MODEL_USED and ACTION_COMPLETED events
+
+### 5. Theme & Accessibility
+- **Dark mode fixes** - All text uses `text-foreground` instead of `text-gray-950`
+- **Plain text default** - In/Out tab defaults to plain text view (easier to read)
+- **Conditional badges** - Cost and tokens only show when defined (no more '$ undefined')
+- **Theme-aware borders** - Using `border-border` instead of hardcoded colors
+
+## Files Modified
+
+### Client
+- `packages/client/src/components/chat.tsx` - Sidebar size limits
+- `packages/client/src/components/agent-sidebar.tsx` - Timeline padding removal
+- `packages/client/src/components/agent-runs/AgentRunTimeline.tsx` - Layout adjustments
+- `packages/client/src/components/agent-prism/TraceViewer.tsx` - Dropdown implementation
+- `packages/client/src/components/agent-prism/SpanCard/SpanCard.tsx` - Flexbox, spacing, selection
+- `packages/client/src/components/agent-prism/TreeView.tsx` - Padding and spacing
+- `packages/client/src/components/agent-prism/TraceList/*.tsx` - Text colors
+- `packages/client/src/components/agent-prism/DetailsView/*.tsx` - Theme colors, default view
+- `packages/client/src/lib/eliza-span-adapter.ts` - Enhanced data extraction
+
+### Server
+- `packages/server/src/api/agents/runs.ts` - API limits and enhanced event data
+
+## Testing
+- ✅ Timeline tab displays properly
+- ✅ Dropdown shows all runs with details
+- ✅ Selection highlights correctly
+- ✅ Dark mode text is visible
+- ✅ Input/output data displays when available
+- ✅ Sidebar can resize to 85% width
+
+## Screenshots
+See attached screenshots showing the improved layout and theme integration.
+
+<!-- CURSOR_SUMMARY -->
+---
+
+> [!NOTE]
+> Adds Agent Prism-based trace UI (TraceViewer, SpanCards, DetailsView) with new deps and adapters, replaces legacy timeline, and enriches server run events (params/response/usage/prompts/cost) to improve span rendering and filtering.
+> 
+> - **UI (Client)**:
+>   - **Agent Prism Integration**: Add `TraceViewer`, `SpanCard`, `DetailsView`, badges, tabs, inputs, and shared theming under `components/agent-prism/` with span filtering util; install `@evilmartians/agent-prism-data/types`, `react-json-pretty`, `classnames`.
+>   - **Timeline Replacement**: Rework `AgentRunTimeline` to fetch run details in parallel and render via `TraceViewer` using `eliza-span-adapter` conversions; add loading states.
+>   - **Sidebar/Layout Tweaks**: Adjust agent sidebar timeline padding and chat sidebar resizable bounds (min 15%, max 85%).
+> - **Data Mapping**:
+>   - Add `eliza-span-adapter` to convert Eliza run summaries/details to Prism `TraceRecord`/`TraceSpan` (prompt/response, tokens, cost) and `filterSpansRecursively` util.
+> - **Server (API)**:
+>   - Enrich `MODEL_USED` and `ACTION_COMPLETED` events with `params`, `response`, `usage`, `prompts`, `prompt`, `inputTokens`, `outputTokens`, `cost` for better client rendering.
+> - **Theme/UX**:
+>   - Consistent `text-foreground`/`border-border`, compact dropdown trace selector, copy buttons, badges, improved selection/hover states.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit d40f8a77336764b6af1cbd8a54c4a39e4942c84c. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->6:Tb27,## Description
+
+This PR adds a comprehensive agent runs visualization timeline component that provides detailed insights into agent execution flow and performance metrics.
+
+### Key Features
+
+- **Timeline Visualization**: Interactive timeline showing agent runs with expandable details
+- **Performance Metrics**: Display execution time, memory usage, and status information  
+- **Run Details**: Comprehensive view of messages, actions, evaluators, and providers
+- **Interactive UI**: Collapsible sections, hover effects, and responsive design
+- **Status Indicators**: Visual status badges and progress indicators
+
+### Components Added
+
+-  - Main timeline component with full agent run visualization
+- Comprehensive TypeScript types for agent run data structures
+- Interactive UI elements with proper accessibility support
+
+### Technical Implementation
+
+- Built with React and TypeScript
+- Uses Lucide React icons for consistent UI
+- Responsive design with proper mobile support
+- Optimized rendering for large datasets
+- Clean, maintainable component architecture
+
+### Testing
+
+- Component renders correctly with agent run data
+- Interactive elements function as expected
+- Responsive design tested across different screen sizes
+
+This enhancement significantly improves the agent monitoring and debugging experience by providing detailed visual insights into agent execution patterns.
+
+<!-- CURSOR_SUMMARY -->
+---
+
+> [!NOTE]
+> Adds an interactive agent run timeline with new client hooks and server endpoints (with caching) backed by SQL adapter summaries and core types.
+> 
+> - **Frontend (client)**:
+>   - **Timeline UI**: New `AgentRunTimeline` component and a "Timeline" tab in `agent-sidebar` to visualize runs and nested events with durations/status.
+>   - **Data Hooks**: Add `useAgentRuns` and `useAgentRunDetail` for polling run lists and details.
+>   - **Styles**: Timeline status classes added in `index.css`.
+> - **Backend (server)**:
+>   - **Runs API**: Implement `GET /:agentId/runs` and `GET /:agentId/runs/:runId` with aggregation, optional filters, and short-term caching; falls back to log aggregation if adapter summary unavailable.
+> - **Core/DB**:
+>   - **Types**: Introduce `RunStatus`, `AgentRunSummary`, `AgentRunSummaryResult` and `IDatabaseAdapter.getAgentRunSummaries`.
+>   - **SQL Adapter**: Implement `getAgentRunSummaries` in `BaseDrizzleAdapter` for efficient run listing and counts.
+> - **API Client**:
+>   - Wire up `RunsService` on `ElizaClient` (exposed for hooks usage).
+> - **Dependencies**:
+>   - Add `vis-timeline`, `vis-data` and related peer deps.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit 80bff571f516eafdbe07c3efe09eaf89fd6d0484. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->7:T130c,This pull request primarily refactors code formatting for improved readability and consistency, focusing on function arguments, array/object literals, and callback formatting. No logic changes are introduced; all updates are stylistic, targeting trailing commas, indentation, and callback arrow function syntax. Additionally, minor formatting updates are made to configuration files.
+
+Formatting and code style improvements:
+
+* Standardized callback formatting in test files and utility functions by using multiline arrow functions and consistent indentation, improving readability in files such as `agent.test.ts`, `character-plugin-ordering.test.ts`, and `ollama-plugin-installation.test.ts`. [[1]](diffhunk://#diff-27cf8d520b4335e7a380e99c2ae2d2a4e1fae652f25ab139482b7d7fb2ccd30bL362-R367) [[2]](diffhunk://#diff-27cf8d520b4335e7a380e99c2ae2d2a4e1fae652f25ab139482b7d7fb2ccd30bL397-R402) [[3]](diffhunk://#diff-27cf8d520b4335e7a380e99c2ae2d2a4e1fae652f25ab139482b7d7fb2ccd30bL414-R425) [[4]](diffhunk://#diff-27cf8d520b4335e7a380e99c2ae2d2a4e1fae652f25ab139482b7d7fb2ccd30bL436-R445) [[5]](diffhunk://#diff-27cf8d520b4335e7a380e99c2ae2d2a4e1fae652f25ab139482b7d7fb2ccd30bL446-R463) [[6]](diffhunk://#diff-27cf8d520b4335e7a380e99c2ae2d2a4e1fae652f25ab139482b7d7fb2ccd30bL478-R493) [[7]](diffhunk://#diff-27cf8d520b4335e7a380e99c2ae2d2a4e1fae652f25ab139482b7d7fb2ccd30bL505-R535) [[8]](diffhunk://#diff-ece06e17a19dbcecb7ba701aa31eda0042c6e850de24ff09593cca08d4f56c7eL22-R24) [[9]](diffhunk://#diff-f364d5de4085248d075b006be9349dc58177d84a795828921d0770f381c5126bL60-R60) [[10]](diffhunk://#diff-f364d5de4085248d075b006be9349dc58177d84a795828921d0770f381c5126bL80-R78) [[11]](diffhunk://#diff-f364d5de4085248d075b006be9349dc58177d84a795828921d0770f381c5126bL101-R97) [[12]](diffhunk://#diff-f364d5de4085248d075b006be9349dc58177d84a795828921d0770f381c5126bL120-R116) [[13]](diffhunk://#diff-f364d5de4085248d075b006be9349dc58177d84a795828921d0770f381c5126bL129-R127)
+* Refactored object and array literals to use single-line formatting and trailing commas for consistency in files such as `lerna.json`, `recursion-prevention.test.ts`, and `validation.ts`. [[1]](diffhunk://#diff-2d72bdead8afa0798d18995311992d684348a694c2d5e214e8e4d2b6153e4821L3-R14) [[2]](diffhunk://#diff-0b17f392943e64a4ad310166e18aecc1c36ac50a40d97f7032c81f33175764c2L48-R49) [[3]](diffhunk://#diff-0b17f392943e64a4ad310166e18aecc1c36ac50a40d97f7032c81f33175764c2L62-R63) [[4]](diffhunk://#diff-0b17f392943e64a4ad310166e18aecc1c36ac50a40d97f7032c81f33175764c2L77-R78) [[5]](diffhunk://#diff-1c2713f7bf29769ac9471ca185258c66195fe94fedfabb232d116d539620ae4fL54-R61)
+* Improved multiline argument formatting in function calls and error logging, enhancing clarity in files like `e2e-tests.ts`, `plugin-parser.ts`, `data-aggregator.ts`, `scenario/index.ts`, and `local-cli-delegation.ts`. [[1]](diffhunk://#diff-8b775212a1c2704ac4d6a1b4936c6e884b9b5f50ac743ffc313547f3ef1b33d4L138-R148) [[2]](diffhunk://#diff-b6753a3bb07daa9cef087506d2dd92c45de733b048829bec8b9c09256257c740L88-R90) [[3]](diffhunk://#diff-b6753a3bb07daa9cef087506d2dd92c45de733b048829bec8b9c09256257c740L166-R170) [[4]](diffhunk://#diff-9e2606224c867588aef1e44b41eee4c8d5a91f2abb5d4c27157a62599e7dc0c0L178-R187) [[5]](diffhunk://#diff-ef3705731497978ddf0a8bfeff4a9ee09b9f3fe11491df16931496575ce6df45L135-R137) [[6]](diffhunk://#diff-ef3705731497978ddf0a8bfeff4a9ee09b9f3fe11491df16931496575ce6df45L147-R151) [[7]](diffhunk://#diff-97324efdf1393e7f6997f06f7e8f76f786c8cb2131a1c1cdce8a574070be83bdL140-R144)
+* Updated test environment setup and command options to use consistent formatting and argument passing, including trailing commas and multiline function calls. [[1]](diffhunk://#diff-27cf8d520b4335e7a380e99c2ae2d2a4e1fae652f25ab139482b7d7fb2ccd30bL68-R68) [[2]](diffhunk://#diff-27cf8d520b4335e7a380e99c2ae2d2a4e1fae652f25ab139482b7d7fb2ccd30bL241-R244) [[3]](diffhunk://#diff-e4632f53d4b35636af568acd817ea172675e16d87eb8f818f6539f1c5ab5a8a3L167-R167)
+
+<!-- CURSOR_SUMMARY -->
+---
+
+> [!NOTE]
+> Standardizes code style across the repo (arrays/objects, callbacks, multiline args, trailing commas, imports) and tidies configs/tests with no functional changes.
+> 
+> - **Code Style/Formatting**:
+>   - Standardizes callback/arrow function spacing, multiline argument formatting, and trailing commas.
+>   - Normalizes object/array literals and import ordering across CLI, core, server, plugins, and tests.
+> - **Configs/JSON**:
+>   - Compacts/normalizes `lerna.json` and tsconfig files.
+> - **Tests**:
+>   - Aligns test code with new formatting (no behavioral changes).
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit 2531a172f6601b563446142a197aa9e72b97c91b. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->8:Td34,## Summary
+
+This PR addresses code quality improvements through formatting standardization and a variable declaration fix.
+
+## Changes
+
+### Code Formatting
+- **Quote Standardization**: Converted double quotes to single quotes across all client-side components for consistency
+- **Formatting Consistency**: Applied consistent code formatting to:
+  - Agent Prism components (Avatar, Badge, Button, CollapseAndExpandControls, etc.)
+  - Trace viewer and span card components
+  - Chat components
+  - Configuration files (tsconfig.json, lerna.json)
+
+### Bug Fix
+- **Schema Transformer** (`packages/plugin-sql/src/runtime-migrator/schema-transformer.ts`):
+  - Changed `let result` to `const result` on line 128
+  - The variable is never reassigned after initialization, making it a good candidate for `const`
+  - This follows best practices for immutable variable declarations
+
+### Other Improvements
+- Improved code readability through better line breaks and indentation
+- Applied consistent formatting to CLI tests and server API code
+- Reduced overall line count from 1385 to 1124 (-261 lines) through more efficient formatting
+
+## Impact
+
+- **No Functional Changes**: All changes are formatting-related except for the const fix
+- **Improved Code Quality**: More consistent codebase following project style guidelines
+- **Better Type Safety**: Using `const` instead of `let` for immutable variables
+
+## Testing
+
+- All existing tests should pass as no functional logic was changed
+- The const fix is a minor improvement that doesn't affect runtime behavior
+
+## Files Changed (42 files)
+
+### Core Components
+- `packages/cli/src/commands/start/index.ts`
+- `packages/cli/tests/commands/dev.test.ts`
+- `packages/cli/tests/commands/start.test.ts`
+
+### Client Components (Agent Prism)
+- 30+ component files in `packages/client/src/components/agent-prism/`
+- Utility files: `agent-prism-utils.ts`, `eliza-span-adapter.ts`
+
+### Plugin & Server
+- `packages/plugin-sql/src/runtime-migrator/schema-transformer.ts`
+- `packages/server/src/api/agents/runs.ts`
+
+### Configuration
+- `lerna.json`
+- `tsconfig.json`
+
+<!-- CURSOR_SUMMARY -->
+---
+
+> [!NOTE]
+> Standardizes quotes/formatting across the client UI, tests, and configs, and replaces a let with const in the SQL schema transformer.
+> 
+> - **Client (agent-prism UI)**:
+>   - Quote/style normalization and minor formatting across `packages/client/src/components/agent-prism/**` (no logic changes).
+>   - Trace viewer, span card, tabs, and utilities (`agent-prism-utils.ts`, `eliza-span-adapter.ts`) reformatted.
+> - **CLI Tests**:
+>   - Formatting/line-wrap adjustments in `packages/cli/tests/commands/{dev,start}.test.ts`.
+> - **Server**:
+>   - Minor log string formatting in `packages/server/src/api/agents/runs.ts`.
+> - **Plugin SQL**:
+>   - In `packages/plugin-sql/src/runtime-migrator/schema-transformer.ts`, replace `let result` with `const result`.
+> - **Config**:
+>   - Compact arrays/formatting in `lerna.json` and `tsconfig.json`.
+> - **Other**:
+>   - Minor non-functional formatting in `packages/client/src/components/chat.tsx` and `agent-runs/AgentRunTimeline.tsx`.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit fc94a1ce795f68129069b0ac6e0a2ca9eb94906b. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->9:T618,bumps le' deps, :pogchamp:
+
+<!-- CURSOR_SUMMARY -->
+---
+
+> [!NOTE]
+> Updates dependencies across `packages/*` and root, including major tooling and runtime bumps (TypeScript, ESLint, Vite, Puppeteer, dotenv, langchain, uuid, Sentry, and more).
+> 
+> - **Root**:
+>   - Bump `@types/node`, `@types/uuid`, `lerna`.
+> - **packages/cli**:
+>   - Upgrade runtime deps: `@anthropic-ai/claude-code`, `@anthropic-ai/sdk`, `@elizaos/plugin-openai`, `dotenv`, `globby`, `ora`, `type-fest`.
+>   - Dev tooling: `cross-env`, `prettier`, `puppeteer`, `typescript`, `vite`.
+> - **packages/client**:
+>   - UI/runtime: `@react-spring/web`, `lucide-react`, `react-resizable-panels`, `tailwind-merge`.
+>   - Testing/build: `@cypress/vite-dev-server`, `@testing-library/react`, `cypress`, `globals`, `jsdom`, `rollup-plugin-visualizer`, `vite`, `typescript` and `typescript-eslint`, `@vitejs/plugin-react-swc`, `eslint-import-resolver-typescript`.
+>   - Types: `@types/react`.
+> - **packages/core**:
+>   - Runtime: `dotenv`, `langchain`, `uuid`.
+>   - Dev tooling: `@types/uuid`, `prettier`, `typescript`.
+> - **packages/server**:
+>   - Runtime: `@sentry/node`, `@types/multer`, `dotenv`, `express-rate-limit`.
+>   - Dev tooling: `prettier`, `tsx`, `which`.
+> - **packages/api-client**:
+>   - Dev tooling: `eslint`.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit 2523cc679c7a38ea7da4ad13b38a62e714965cd7. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->a:T146b,# Relates to
+
+Depends on eliza core PR: `feature/mention-context-refactor` (introduces MentionContext interface)
+
+Related to issue discussing problems with fuzzy matching for character name detection in Discord plugin
+
+# Risks
+
+**Medium Risk**
+- Changes mention detection behavior in Discord messages
+
+# Background
+
+## What does this PR do?
+
+This PR refactors the Discord plugin to adopt the new platform-agnostic `MentionContext` interface
+
+**Added:**
+- ✅ `mentionContext` metadata collection in message handler
+  - `isMention`: Platform-native @mention detection
+  - `isReply`: Reply to bot's message detection
+  - `isThread`: Thread participation detection
+  - `mentionType`: Categorizes mention type for debugging
+
+**Preserved:**
+- ✅ `DISCORD_SHOULD_RESPOND_ONLY_TO_MENTIONS` for strict mode
+- ✅ Strict mode early return (platform layer gating before bootstrap)
+
+**Key Architecture:**
+- Discord plugin provides FACTS only (mentionContext metadata)
+- Bootstrap LLM handles text-based mention detection naturally
+- Strict mode operates at platform layer (early return)
+- Natural mode relies on LLM intelligence for context analysis
+
+# Documentation changes needed?
+
+- [x] My changes require a change to the project documentation
+- Documentation needed for:
+  - Explanation of new `mentionContext` behavior
+  - Clarification of strict mode (`DISCORD_SHOULD_RESPOND_ONLY_TO_MENTIONS`) behavior
+
+# Testing
+
+## Where should a reviewer start?
+
+1. Review `mentionContext` collection in `src/messages.ts` (search for "mentionContext")
+2. Review strict mode implementation in `src/messages.ts` (search for "shouldRespondOnlyToMentions")
+3. Run test suite to verify coverage
+
+## Detailed testing steps
+
+**Automated Tests:**
+
+```bash
+# Discord plugin tests (17 tests)
+bun test __tests__/messageManager.test.ts
+```
+
+**Test Coverage:**
+- ✅ `__tests__/messageManager.test.ts`
+  - Updated all existing tests to work with mentionContext
+  - Added 13 new tests in 3 groups:
+    1. **mentionContext metadata tests (5 tests)**
+       - Direct @mention sets isMention=true
+       - Reply to bot sets isReply=true
+       - Thread participation sets isThread=true
+       - Regular message has all false
+       - mentionType is correctly categorized
+    2. **Strict mode tests (4 tests)**
+       - Processes DMs in strict mode
+       - Processes @mentions in strict mode
+       - Processes replies to bot in strict mode
+       - Ignores regular messages in strict mode
+    3. **Natural mode tests (3 tests)**
+       - Processes all message types in natural mode
+       - Adds mentionContext to all messages
+       - Lets LLM decide based on context
+  - **Result: 17 pass, 0 fail**
+
+**Manual Testing (Discord Bot):**
+
+1. **Test strict mode** (`DISCORD_SHOULD_RESPOND_ONLY_TO_MENTIONS=true`):
+   ```
+   ✅ @BotName hello          → Should respond (platform mention)
+   ✅ Reply to bot's message  → Should respond (reply to bot)
+   ✅ DM to bot               → Should respond (DM)
+   ❌ Hey BotName, help me    → Should NOT respond (text mention ignored in strict mode)
+   ❌ BotName is cool         → Should NOT respond (reference ignored)
+   ❌ Reply to user message   → Should NOT respond (not a reply to bot)
+   ```
+
+2. **Test natural mode** (default, no strict mode):
+   ```
+   ✅ @BotName hello               → Should respond (platform mention)
+   ✅ Hey BotName, help me         → Should respond (LLM detects direct address)
+   ✅ BotNamee can you help?       → Should respond (LLM handles typos)
+   ✅ Where is BotName?            → Should respond (LLM detects indirect question)
+   ❌ I talked to BotName yesterday → Should NOT respond (LLM detects past reference)
+   ❌ BotName's code is great      → Should NOT respond (LLM detects possessive reference)
+   ```
+
+## Screenshots
+
+N/A - This is backend message processing with no UI changes
+
+# Deploy Notes
+
+## Deployment instructions
+
+**Prerequisites:**
+- ⚠️ **Wait for eliza core v1.6.2 release** (with MentionContext interface)
+- This PR uses `@elizaos/core: ^1.5.15` which will automatically pick up v1.6.x
+
+**Breaking change migration:**
+- Users wanting strict mention-only mode should use `DISCORD_SHOULD_RESPOND_ONLY_TO_MENTIONS=true`
+- Users wanting natural text mention detection should use default mode (no setting needed)
+
+**No database changes required**
+
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+* New Features
+  * New Discord settings: ignore bot messages, ignore DMs, respond only to mentions.
+  * Smarter message handling with mention context (mentions, replies, threads) for stricter or natural modes.
+  * Ability to fetch eligible text-channel members with caching for large servers.
+* Bug Fixes
+  * Safer handling when channel type is missing and clearer validation errors.
+  * More consistent and informative error logging.
+* Tests
+  * Expanded coverage for mentions, replies, threads, DMs, and audio attachments.
+* Chores
+  * Version bump to 1.3.0 and dependency updates.
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->b:Te26,## Description
+
+Fixes #6017
+
+When running `elizaos start` or `elizaos dev` in a plugin directory, the CLI would detect the plugin and create a ProjectAgent with the plugin in its plugins array, but would **not pass these plugins** to `server.startAgents()`.
+
+This resulted in the plugin never being loaded into the runtime, despite being correctly detected and stored in `ProjectAgent.plugins`.
+
+## Root Cause
+
+The start command was extracting only the `character` from each `ProjectAgent` and passing them to `server.startAgents()`:
+
+```typescript
+// Old code - BUG
+const charactersToStart = projectAgents.map((pa) => pa.character);
+const runtimes = await server.startAgents(charactersToStart);
+// ❌ projectAgent.plugins were never passed!
+```
+
+## Solution
+
+Modified the start command to iterate through `projectAgents` individually and pass each agent's specific plugins to `server.startAgents()`:
+
+```typescript
+// New code - FIXED
+for (const projectAgent of projectAgents) {
+  const agentPlugins = projectAgent.plugins || [];
+  const [runtime] = await server.startAgents([projectAgent.character], agentPlugins);
+  // ✅ Plugin objects are now passed!
+}
+```
+
+## How It Works
+
+`server.startAgents()` processes plugins from two sources:
+
+1. **String plugin names** from `character.plugins` (e.g., `'@elizaos/plugin-sql'`, `'@elizaos/plugin-bootstrap'`)
+2. **Plugin objects** from the `plugins` parameter (your plugin with all actions, providers, services)
+
+Both are merged into the final plugin list for the runtime.
+
+## Changes
+
+- Modified start command to iterate through projectAgents individually
+- Extract and pass `projectAgent.plugins` to `server.startAgents()` as the second parameter  
+- Added `IAgentRuntime` type import for proper typing
+- Dev command automatically benefits since it spawns 'start' as subprocess
+
+## Testing
+
+Both commands now properly:
+- ✅ Detect plugin projects
+- ✅ Create "Eliza (Test Mode)" character
+- ✅ **Load your plugin with all its actions, providers, services**
+- ✅ Call the plugin's init function
+
+Tested by running:
+```bash
+elizaos start    # in plugin directory
+elizaos dev      # in plugin directory
+```
+
+## Impact
+
+- **`elizaos start`**: Directly fixed
+- **`elizaos dev`**: Automatically fixed (spawns `start` as subprocess)
+
+Both commands will now correctly load plugins when run in plugin directories.
+
+<!-- CURSOR_SUMMARY -->
+---
+
+> [!NOTE]
+> Ensure ProjectAgent.plugins are passed to the server at startup and add end-to-end tests verifying plugin loading in dev/start when run inside plugin directories.
+> 
+> - **CLI (start command)**:
+>   - Pass each `ProjectAgent`'s `plugins` to `server.startAgents(...)` and start agents individually.
+>   - Two-phase flow: start all agents (collect `IAgentRuntime`s) then run `init` functions.
+>   - Improved logging and error handling around agent startup and init.
+>   - Import `IAgentRuntime` for proper typing.
+> - **Tests**:
+>   - Add e2e tests in `packages/cli/tests/commands/{start,dev}.test.ts` to verify plugin loading when run in a plugin directory (clones `plugin-openai`, builds, starts server, checks `/api/agents`).
+>   - Enhance test utilities in `packages/cli/tests/commands/test-utils.ts` with `cloneAndSetupPlugin`, `spawnCommand`, and process management tweaks.
+> - **Config**:
+>   - Minor `tsconfig.json` cleanup (formatting/structure).
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit 8a404f352b3a70c486fb57c76bb72b6e60c999c1. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->c:T1297,# Relates to
+
+Issue discussing the need for platform-agnostic mention detection
+
+# Risks
+
+**Medium Risk**
+- Changes core message flow logic in bootstrap
+- Modifies shouldRespond template and provider
+- Affects LLM decision-making for response behavior
+- Impacts all platforms that depend on bootstrap logic
+
+# Background
+
+## What does this PR do?
+
+This PR introduces a platform-agnostic mention detection system through the `MentionContext` interface:
+
+**Core Changes:**
+- Adds `MentionContext` interface to `Content` type in `packages/core/src/types/primitives.ts`
+  - Provides universal structure for platform mention metadata (isMention, isReply, isThread)
+  - Enables platforms to provide facts without implementing detection logic
+
+- Enhances `shouldRespondTemplate` in `packages/core/src/prompts.ts`
+  - Adds explicit "IMPORTANT RULES FOR RESPONDING" section
+  - Clarifies "talking TO" vs "talking ABOUT" distinction
+  - Instructs LLM to handle text mentions, typos, and variations naturally
+
+- Enriches `shouldRespondProvider` in `packages/plugin-bootstrap/src/providers/shouldRespond.ts`
+  - Adds 10+ examples covering edge cases (direct mentions, typos, indirect questions, references)
+  - Teaches LLM to distinguish interpellation from mere references
+
+- Modifies `shouldBypassShouldRespond` in `packages/plugin-bootstrap/src/index.ts`
+  - Accepts optional `mentionContext` parameter
+  - Implements fast-path optimization: skips LLM call for platform-native mentions (@mentions, replies)
+  - Saves tokens and improves response time for obvious mentions
+
+**Key Architecture Principles:**
+- Bootstrap remains 100% platform-agnostic (no Discord/Telegram/etc specific logic)
+- Platforms provide FACTS only via mentionContext
+- LLM analyzes context and makes intelligent decisions
+- Fast path for platform mentions, LLM path for text analysis
+
+## What kind of change is this?
+
+- [x] Features (adds platform-agnostic MentionContext interface)
+- [x] Improvements (refactors mention detection to be more intelligent and extensible)
+
+# Documentation changes needed?
+
+- [x] My changes require a change to the project documentation
+- Documentation needed for:
+  - `MentionContext` interface usage guide for plugin developers
+  - How platforms should populate mentionContext metadata
+  - Fast-path optimization behavior explanation
+
+# Testing
+
+## Where should a reviewer start?
+
+1. Review the `MentionContext` interface in `packages/core/src/types/primitives.ts`
+2. Check the enhanced prompt in `packages/core/src/prompts.ts` (search for "IMPORTANT RULES FOR RESPONDING")
+3. Review enriched examples in `packages/plugin-bootstrap/src/providers/shouldRespond.ts`
+4. Check `shouldBypassShouldRespond` changes in `packages/plugin-bootstrap/src/index.ts`
+5. Run test suites to verify coverage
+
+## Detailed testing steps
+
+**Automated Tests:**
+
+```bash
+# Core prompts tests (8 tests)
+bun test packages/core/src/__tests__/prompts.test.ts
+
+# Bootstrap logic tests (21 tests, 6 new for mentionContext)
+bun test packages/plugin-bootstrap/src/__tests__/logic.test.ts
+```
+
+**Test Coverage:**
+- ✅ `packages/core/src/__tests__/prompts.test.ts`
+  - Verifies shouldRespondTemplate contains new "IMPORTANT RULES FOR RESPONDING" section
+  - Checks for "talking TO" vs "talking ABOUT" instructions
+  - **Result: 8 pass, 0 fail**
+
+- ✅ `packages/plugin-bootstrap/src/__tests__/logic.test.ts`
+  - New describe block: "shouldBypassShouldRespond with mentionContext"
+  - 6 new tests covering:
+    1. DM channel bypass
+    2. Platform mention bypass (isMention=true)
+    3. Reply to bot bypass (isReply=true)
+    4. No bypass for regular messages
+    5. client_chat source bypass
+    6. Platform agnostic behavior (discord, telegram, twitter, slack)
+  - **Result: 21 pass, 0 fail**
+
+**Manual Integration Testing:**
+- Platforms implementing mentionContext will need to test with real messages
+- Verify LLM correctly distinguishes "Hey BotName, help me" (RESPOND) vs "BotName's code is great" (IGNORE)
+- Verify fast-path works for @mentions (no unnecessary LLM calls)
+
+## Screenshots
+
+N/A - This is core infrastructure with no UI changes
+
+# Deploy Notes
+
+## Deployment instructions
+
+**Standard deployment:**
+1. Merge this PR to main
+2. Release as v1.6.2 (or next minor version)
+3. No breaking changes - fully backward compatible
+4. Platforms can adopt mentionContext incrementally (optional parameter)
+
+**For platform plugin developers:**
+- Existing plugins continue to work without changes
+- To adopt mentionContext, populate it in message content before passing to bootstrap
+- Reference Discord plugin implementation as example
+
+**No database changes required**
+d:Taf5,### Summary
+- Added `publishConfig.access = public` to `@elizaos/service-interfaces`.
+- Extended release workflow to publish new/unpublished packages individually if bulk Lerna publish fails, keeping versions and dist-tags in sync.
+
+### What changed
+- In `packages/service-interfaces/package.json`:
+  - Added `publishConfig` so a new scoped package publishes publicly to npm.
+- In `.github/workflows/release.yaml`:
+  - Added a fallback step after the main `lerna publish from-package`:
+    - Enumerates monorepo packages via `lerna ls --json`.
+    - For each, checks `npm view <name>@<version>`.
+    - Publishes any not yet on npm using `npm publish --access public --tag <dist-tag>`.
+  - Keeps existing versioning flow via Lerna; no change to tagging or git steps.
+
+### Why
+- CI failed when publishing the newly added `@elizaos/service-interfaces`:
+  - New scoped package lacked `publishConfig.access=public`.
+  - Bulk publish can leave new packages unpublished; the fallback ensures first-time publishes succeed automatically.
+
+### How it works
+- Primary path: `lerna publish from-package --dist-tag <alpha|beta|latest>`.
+- Fallback (only on failure): publish only the missing packages with the same dist-tag, preserving version alignment with the rest of the release.
+
+### Impact
+- New packages (like `@elizaos/service-interfaces`) will publish on first release without manual intervention.
+- Existing packages are unaffected; versions remain synchronized via `lerna version`.
+
+### Security
+- Continues using `secrets.NPM_TOKEN` for auth.
+- No changes to permission scopes.
+
+### Verification
+- Re-run the release workflow on `develop`/`main` or create a GitHub release:
+  - Confirm all packages publish with the expected dist-tag (`alpha`, `beta`, or `latest`).
+  - Verify `@elizaos/service-interfaces@<version>` exists on npm.
+
+### Files touched
+- `packages/service-interfaces/package.json`
+- `.github/workflows/release.yaml`
+
+<!-- CURSOR_SUMMARY -->
+---
+
+> [!NOTE]
+> Adds public publish config for @elizaos/service-interfaces and a workflow fallback to individually publish any packages left unpublished after bulk Lerna publish.
+> 
+> - **CI/CD (release workflow)**:
+>   - Adds a fallback step to individually publish unpublished packages when `lerna publish from-package` fails, using `lerna ls --json` + `npm view` checks and publishing with the same `dist-tag`.
+> - **Package config**:
+>   - Sets `publishConfig.access = public` in `packages/service-interfaces/package.json` to ensure public publishing of the new scoped package.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit efa85e4089481c2d19c712650bda7627bbaf20f9. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->e:T6f8,<!-- CURSOR_SUMMARY -->
+> [!NOTE]
+> Updates tool execution to AI SDK v5 by parsing tool results from step content and using stepCountIs for stopping, returns steps, and bumps core/TypeScript versions.
+> 
+> - **Text generation (`src/models/text.ts`)**:
+>   - Use `stopWhen = stepCountIs(maxSteps)` instead of `maxSteps` for tool execution limits.
+>   - Parse tool results from step `content` entries of type `tool-result`, with base64 decoding.
+>   - Return `steps` alongside `text`, `toolCalls`, and `toolResults`; adjust logging to `debug`.
+> - **Types (`src/types/index.ts`)**:
+>   - Extend `ToolResponse` with optional `steps` structure (typed `toolCalls`, `toolResults`, `text`, `finishReason`).
+> - **Dependencies**:
+>   - Bump `@elizaos/core` to `^1.6.1`; upgrade `typescript` to `^5.9.3`.
+> - **Package**:
+>   - Version bump to `1.5.14`.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit e09208519177736662f32ffdff77faa5782daf16. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+* **New Features**
+  * Tool responses can now include optional step-by-step metadata (tool calls/results, text, finish reason) for clearer multi-step interaction visibility.
+
+* **Refactor**
+  * Improved reliability of tool result capture and controlled execution via step-based processing.
+  * Reduced log verbosity during generation and tool execution.
+
+* **Chores**
+  * Bumped version to 1.5.14.
+  * Updated dependencies, including @elizaos/core and TypeScript, for compatibility and stability.
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->f:T531,<!-- CURSOR_SUMMARY -->
+> [!NOTE]
+> Upgrade `zod` to `4.1.11` across the monorepo and align package resolutions.
+> 
+> - **Dependencies**:
+>   - Upgrade `zod` to `4.1.11` in:
+>     - `packages/cli/package.json`
+>     - `packages/core/package.json`
+>     - `packages/plugin-quick-starter/package.json` (also update `resolutions.zod`)
+>     - `packages/plugin-starter/package.json` (also update `resolutions.zod`)
+>     - `packages/project-starter/package.json`
+>     - `packages/project-tee-starter/package.json`
+>   - Lockfile updated to reflect the new `zod` version and related transitive adjustments.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit a7a7c8bda698bb251bcc0805ebca940104b735b3. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+- Chores
+  - Upgraded the validation library to the latest major version across CLI, core, and starter templates/plugins.
+  - Aligns all packages on a consistent version for improved compatibility and maintenance.
+  - No user-facing features changed; behavior should remain the same.
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->10:T741,# Core Cleanup: Remove legacy service initialization code
+
+## Problem Statement
+
+Part of Core Cleanup #5911:
+- Remove legacy code paths (double-inits, redundant type guards)
+- Audit and refactor type definitions across runtime
+- Clean up redundant initialization patterns
+
+Previously, we had two separate but related requirements:
+
+1. **Services need to wait for embedding model** - Services (like Twitter plugin) must wait for embedding model availability, otherwise the app would crash
+2. **Contributors wanted to register plugins after runtime startup** - This required distinguishing between initial registration vs. post-startup registration
+
+The solution was:
+- **Service queue (`servicesInitQueue`)** - Services were queued and only registered after embedding model was ready
+- **`isInitialized` flag** - Used to distinguish: if runtime is initialized, register service immediately; otherwise, push to queue for later registration
+
+## Solution
+
+Clean up legacy initialization patterns and make operations idempotent:
+
+- **Remove redundant `isInitialized` flag** - Legacy double-init protection
+- **Remove `servicesInitQueue`** - Simplify to direct promise-based waiting
+- **Add proper type annotation** - `initPromise: Promise<void>`
+- **Make operations idempotent** - Prevent duplicate migrations and adapter init
+- **Simplify service registration** - Services wait for `initPromise` directly
+
+## Key Changes
+
+- Remove legacy `isInitialized` flag and associated guard logic
+- Remove `servicesInitQueue` - services now wait for `initPromise` directly  
+- Add proper TypeScript typing for `initPromise`
+- Make `adapter.init()` and `runPluginMigrations()` idempotent
+- Add migration tracking with `migratedPlugins` set
+
+## Files Changed
+
+- `packages/core/src/runtime.ts` - Legacy code cleanup and type improvements11:T585,## Issue
+
+TypeScript was throwing an error:
+```
+File '/Users/studio/Documents/GitHub/eliza/packages/core' not found.
+```
+
+## Root Cause
+
+The root `tsconfig.json` had a `references` array pointing to `packages/core`, but TypeScript project references require a `tsconfig.json` file in the referenced directory with `composite: true`. The `packages/core` directory only contains `tsconfig.declarations.json`, which is not a valid project reference target.
+
+## Solution
+
+Removed the invalid `references` array and `files` array from the root `tsconfig.json`. The path mappings for `@elizaos/core` are still present and functional, so imports will continue to work correctly.
+
+## Testing
+
+- Verified TypeScript no longer throws the file not found error
+- Path mappings remain intact for module resolution
+
+<!-- CURSOR_SUMMARY -->
+---
+
+> [!NOTE]
+> Remove invalid project references and files from root tsconfig; reformat arrays.
+> 
+> - **Config**:
+>   - `tsconfig.json`:
+>     - Remove `references` and `files` from root config.
+>     - Preserve `paths` mappings; no module resolution changes.
+>     - Reformat `lib` and `paths` arrays to multi-line.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit 7b5a88eaf8c95139d1f13f95a2dab10f806942da. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->12:T825,# Relates to
+
+Fixes missing shouldRespondProvider registration in bootstrap plugin
+
+# Risks
+
+Low. This change restores functionality that was accidentally removed. It only affects the shouldRespond logic in the bootstrap plugin by properly registering and exporting the provider.
+
+# Background
+
+## What does this PR do?
+
+This PR registers and exports the `shouldRespondProvider` in the bootstrap plugin, which was previously defined but not registered in the plugin's providers array or exported from the providers index.
+
+## What kind of change is this?
+
+Bug fixes (non-breaking change which fixes an issue)
+
+# Documentation changes needed?
+
+My changes do not require a change to the project documentation.
+
+# Testing
+
+## Where should a reviewer start?
+
+Check that the `shouldRespondProvider` is:
+1. Exported in `packages/plugin-bootstrap/src/providers/index.ts`
+2. Registered in the providers array in `packages/plugin-bootstrap/src/index.ts`
+
+## Detailed testing steps
+
+- Verify the bootstrap plugin builds successfully
+- Confirm that the shouldRespond logic now executes when processing messages
+- Test that the agent properly evaluates whether to respond based on message context
+
+# Deploy Notes
+
+None. This is a straightforward bug fix that restores missing provider registration.
+
+<!-- CURSOR_SUMMARY -->
+---
+
+> [!NOTE]
+> Registers and exports shouldRespondProvider in the bootstrap plugin, tweaks its example text assembly, and enables noEmit in tsconfig.
+> 
+> - **Plugin Bootstrap**:
+>   - **Providers**: Register `shouldRespondProvider` in `src/index.ts` and export it from `src/providers/index.ts`.
+>   - **shouldRespond**: Minor refactor to assemble examples (`examplesText`) before adding header.
+> - **Build/Config**:
+>   - `tsconfig.json`: Enable `"noEmit": true`.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit d1d611d765372b13e8c383e0721bbccc895e366a. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->13:T4b0,<!-- CURSOR_SUMMARY -->
+> [!NOTE]
+> Bumps package to 1.5.15, adds zod as a peer dependency, and updates @elizaos/core to ^1.6.0-alpha.4.
+> 
+> - **Config**:
+>   - Bump package version to `1.5.15` in `package.json`.
+>   - Add `peerDependencies` for `zod` (`^3.25.76 || ^4.1.8`).
+>   - Update dependency `@elizaos/core` to `^1.6.0-alpha.4`.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit dbd6703ded9d7709fb7a2489543e5b7cc09711a4. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+* **Chores**
+  * Bumped app version to 1.5.15.
+  * Updated core dependency to a newer pre-release, aligning with the latest platform improvements.
+  * Added zod as a peer dependency to improve compatibility and reduce duplicate installations (supports 3.x and 4.x).
+  
+* **Notes**
+  * No changes to public APIs or exported entities.
+  * Users should ensure a compatible version of zod is installed in their environment.
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->14:T66e,### Summary
+- Downgrade log level from error to warn on failed dynamic import in `packages/server/src/managers/PluginLoader.ts`.
+- Rationale: initial import failure is frequently recoverable (auto-install/optional deps). Logging as error is noisy and suggests server fault. Warn is more appropriate while retaining retry/fallback.
+
+### Issue
+When a plugin is not yet installed or has an optional peer dependency missing, the first dynamic import commonly fails, but the loader immediately attempts `pluginInstaller.tryInstall(pluginName)`. Emitting an error-level log at this initial failure confuses operators and log monitors, making healthy self-healing flows look like incidents.
+
+### Change
+- Error → Warn for first import failure:
+  - before: `logger.error("Failed to load plugin ${pluginName}: ${error}")`
+  - after: `logger.warn("Failed to load plugin ${pluginName}: ${error}")`
+- No behavior changes to install/retry/fallback flow.
+
+### Testing
+- Manual test by simulating missing plugin; verified warn log and installer path executed.
+- No API changes; unit scope trivial.
+
+### Risk
+- Low. Only log level change.
+
+### Affected files
+- `packages/server/src/managers/PluginLoader.ts`
+
+<!-- CURSOR_SUMMARY -->
+---
+
+> [!NOTE]
+> Downgrades the first dynamic import failure in `PluginLoader.loadAndPreparePlugin` from error to warn without changing install/retry behavior.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit 1cf81c172df7f17e748fa244f8fd60abc0069581. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->15:T4cd,## Description
+
+This PR adds the @elizaos/plugin-relay package to the ElizaOS plugin registry.
+
+## Changes
+- Added `@elizaos/plugin-relay` entry pointing to `github:elizaos-plugins/plugin-relay` in alphabetical order in index.json
+
+## Purpose
+This addition allows users to discover and install the plugin-relay package through the ElizaOS plugin registry system.
+
+## Package Source
+- Repository: https://github.com/elizaos-plugins/plugin-relay
+
+<!-- CURSOR_SUMMARY -->
+---
+
+> [!NOTE]
+> Adds `@elizaos/plugin-relay` to the plugin registry in `index.json`.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit 5f668416d79b589993b170d198c1cfc3736e58ce. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+- New Features
+  - Added the Relay plugin to the public plugin registry, enabling easy discovery and installation via “@elizaos/plugin-relay”.
+  - No changes required for existing setups; compatible with current configurations.
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->16:T416,<!-- CURSOR_SUMMARY -->
+> [!NOTE]
+> Deletes `packages/plugin-sql/src/schema/factory.ts` and `packages/plugin-sql/src/__tests__/integration/schema-factory.test.ts`.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit 82a1c0a172f85492f5af67609688264e06209f4d. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+* **Refactor**
+  * Removed the schema factory and cross-database helpers for defining tables and columns. This is a breaking change; consumers should migrate to database-specific/ORM-native definitions for columns, indexes, checks, and foreign keys, and handle defaults directly.
+
+* **Tests**
+  * Removed related integration tests for PostgreSQL and pglite behaviors.
+
+* **Chores**
+  * Cleaned up references to deprecated schema utilities.
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->17:Teaf,# Overall Project Weekly Summary (Sep 28 - 4, 2025)
+
+## Executive Summary
+This week, our efforts centered on strengthening the ElizaOS framework by improving stability, developer experience, and agent observability. We introduced a powerful new visualization tool for tracking agent behavior, while simultaneously overhauling core components and resolving critical bugs to create a more robust and efficient platform for future development.
+
+### Key Strategic Initiatives & Outcomes
+
+**Enhancing Agent Observability and Insight**
+To empower developers and users, we focused on making it easier to understand and debug agent behavior.
+- A new interactive timeline was launched to provide a detailed, step-by-step visualization of an agent's execution flow, improving transparency and diagnostics in [elizaos/eliza](https://github.com/elizaos/eliza).
+- The user interface for analyzing agent runs was further refined, making the data easier to interpret and use effectively in [elizaos/eliza](https://github.com/elizaos/eliza).
+
+**Strengthening Core Stability and Developer Workflow**
+This initiative aimed to create a more reliable and productive development environment, accelerating future innovation.
+- Foundational parts of the agent runtime and SQL plugin were overhauled to improve robustness and simplify future maintenance in [elizaos/eliza](https://github.com/elizaos/eliza).
+- A critical bug preventing developers from starting the application via the command line was fixed, restoring a key development workflow in [elizaos/eliza](https://github.com/elizaos/eliza).
+- The entire codebase was modernized by updating major dependencies and applying standardized code formatting, ensuring a more consistent and stable foundation in [elizaos/eliza](https://github.com/elizaos/eliza).
+
+## Repository Spotlights
+
+### elizaos/eliza
+Work in the main repository focused on foundational stability, developer experience, and a major user-facing feature for agent observability.
+
+- **Features & Enhancements:**
+  - Introduced a new interactive timeline component to provide detailed insights into agent execution flow ([#6016](https://github.com/elizaos/eliza/pull/6016)) and followed up with UI enhancements for better data visualization ([#6023](https://github.com/elizaos/eliza/pull/6023)).
+  - Refactored the core agent runtime for improved stability and streamlined service registration ([#5998](https://github.com/elizaos/eliza/pull/5998), [#6004](https://github.com/elizaos/eliza/pull/6004)).
+  - Overhauled the SQL plugin's migration system to improve long-term maintainability ([#5990](https://github.com/elizaos/eliza/pull/5990)).
+
+- **Bug Fixes:**
+  - Resolved a critical issue where CLI commands like `elizaos start` failed to load plugins, unblocking a major developer workflow ([#6021](https://github.com/elizaos/eliza/pull/6021), resolving [#6017](https://github.com/elizaos/eliza/issues/6017)).
+  - Restored accidentally removed functionality in the bootstrap plugin, ensuring agents respond as expected ([#6024](https://github.com/elizaos/eliza/pull/6024)).
+  - Addressed a runtime crash during initialization, improving overall framework stability ([#6003](https://github.com/elizaos/eliza/issues/6003)).
+
+- **Maintenance:**
+  - Completed a major dependency update across the monorepo, modernizing key libraries like TypeScript, Vite, and Sentry ([#6025](https://github.com/elizaos/eliza/pull/6025)).
+  - Applied repository-wide code formatting to standardize style and improve readability ([#6011](https://github.com/elizaos/eliza/pull/6011), [#6027](https://github.com/elizaos/eliza/pull/6027)).
+  - Streamlined the repository by removing obsolete Docker and development container files ([#6026](https://github.com/elizaos/eliza/pull/6026)).0:{"buildId":"US8XLB_zHXYj_PVAECGcd","rsc":["$","$1","c",{"children":[["$","div",null,{"className":"container mx-auto px-6 py-8 md:px-8","children":["$","div",null,{"className":"mx-auto max-w-4xl","children":[["$","div",null,{"className":"mb-4 flex flex-col justify-between sm:flex-row","children":[["$","$L2",null,{"currentInterval":"week","currentDate":"2025-09-28"}],["$","$L3",null,{"metrics":{"date":"2025-09-28","interval":{"intervalStart":"$D2025-09-28T00:00:00.000Z","intervalEnd":"$D2025-10-05T00:00:00.000Z","intervalType":"week"},"pullRequests":{"new":21,"merged":24,"total":26},"issues":{"new":6,"closed":5,"total":9},"activeContributors":10,"codeChanges":{"additions":34966,"deletions":6752,"files":217,"commitCount":220},"topContributors":[{"username":"wtfsayo","avatarUrl":"https://avatars.githubusercontent.com/u/82053242?u=98209a1f10456f42d4d2fa71db4d5bf4a672cbc3&v=4","totalScore":424.61903177491155,"prScore":413.60503177491154,"issueScore":0,"reviewScore":9.5,"commentScore":1.5139999999999998,"summary":"wtfsayo: Delivered a high volume of work this week, primarily focused on enhancing the client-side agent experience while also addressing various bugs and chores across the system. Their most significant contributions were two major features in the `elizaos/eliza` repository: adding an agent runs visualization timeline (#6016) and a substantial enhancement to the agent runs sidebar (#6023, +17k lines). Alongside this feature development, they merged several fixes and chores, including disabling a local endpoint in production (#6014) and adding a new plugin to the registry (#234), demonstrating a broad focus on both new functionality and system maintenance."},{"username":"standujar","avatarUrl":"https://avatars.githubusercontent.com/u/16385918?u=718bdcd1585be8447bdfffb8c11ce249baa7532d&v=4","totalScore":238.7303088561218,"prScore":229.0923088561218,"issueScore":0,"reviewScore":9,"commentScore":0.6379999999999999,"summary":"standujar: This week, standujar drove significant architectural improvements across the Eliza ecosystem, landing a massive fix in the core repository (elizaos/eliza#6024, +15k lines) to correctly register a key provider. They also introduced a new `mentionContext` interface (elizaos/eliza#6030) and refactored the Discord plugin to adopt it (elizaos-plugins/plugin-discord#19). This work demonstrates a strong focus on refactoring and bug fixes across core application code and tests."},{"username":"0xbbjoker","avatarUrl":"https://avatars.githubusercontent.com/u/54844437?u=90fe1762420de6ad493a1c1582f1f70c0d87d8e2&v=4","totalScore":107.73557323619082,"prScore":96.9355732361908,"issueScore":0,"reviewScore":10,"commentScore":0.8,"summary":"0xbbjoker: This week, 0xbbjoker focused on maintenance and bug fixes, merging a fix for an issue in the OpenAI plugin (elizaos-plugins/plugin-openai#16) and removing a significant amount of unused code in elizaos/eliza#6029. They also supported the team by reviewing 2 PRs and commenting on an issue. Their activity shows a primary focus on bug fixes and configuration file changes across the codebase."},{"username":"ChristopherTrimboli","avatarUrl":"https://avatars.githubusercontent.com/u/27584221?u=de148a498b5af814e037c2975112fadd09df743f&v=4","totalScore":89.52282068848854,"prScore":85.02282068848854,"issueScore":0,"reviewScore":4.5,"commentScore":0,"summary":"ChristopherTrimboli: Focused on project dependencies and build processes within the `elizaos/eliza` repository. They resolved a package publishing issue on NPM (elizaos/eliza#6012) and merged a significant dependency update (elizaos/eliza#6025). This work, spanning 13 commits and 179 modified files, shows a primary focus on bugfixes and configuration."},{"username":"odilitime","avatarUrl":"https://avatars.githubusercontent.com/u/16395496?u=c9bac48e632aae594a0d85aaf9e9c9c69b674d8b&v=4","totalScore":16.438000000000002,"prScore":0,"issueScore":0,"reviewScore":16,"commentScore":0.43799999999999994,"summary":"odilitime: Focused on supporting the team through code review this week, conducting 3 reviews that resulted in 2 approvals and 1 request for changes, and leaving 3 comments on pull requests."},{"username":"linear","avatarUrl":"https://avatars.githubusercontent.com/in/20150?v=4","totalScore":14,"prScore":0,"issueScore":14,"reviewScore":0,"commentScore":0,"summary":"linear: Focused on project planning and ideation within the elizaos/eliza repository this week. They created several issues to define future work, including a feature proposal (#6020), finalizing cloud wireframes (#6019), and conducting a SWOT analysis (#6018). They also reported a bug related to local development commands (#6017)."},{"username":"matteo-brandolino","avatarUrl":"https://avatars.githubusercontent.com/u/49117857?u=28be1833532b4c849d42f50867bd960807756272&v=4","totalScore":4.3,"prScore":0,"issueScore":4.3,"reviewScore":0,"commentScore":0,"summary":"matteo-brandolino: Contributed to the stability of the Eliza CLI by identifying and reporting a bug related to import resolution. He opened issue elizaos/eliza#6031 to track this problem, which has since been closed."},{"username":"borisudovicic","avatarUrl":"https://avatars.githubusercontent.com/u/31806472?u=c0478c34097551ba98aaa71edb33af0885a72d69&v=4","totalScore":4,"prScore":0,"issueScore":4,"reviewScore":0,"commentScore":0,"summary":"borisudovicic: Focused on defining and tracking work in the elizaos/eliza repository this week. They created and subsequently closed three issues, outlining potential features such as a \"Bond Desk Agent\" (#5767), an \"Observability GUI for event runs\" (#5868), and a new Discord plugin configuration option (#6013)."}],"focusAreas":[{"area":"client","count":76},{"area":"plugin-sql","count":52},{"area":"core","count":35},{"area":"cli","count":25},{"area":"server","count":23},{"area":"service-interfaces","count":17},{"area":"plugin-bootstrap","count":8},{"area":"src","count":5},{"area":"test-utils","count":4},{"area":"api-client","count":2}],"topIssues":[{"id":"I_kwDOMT5cIs7PXS9F","title":"Imports not found in index.ts with Eliza CLI 1.61","author":"matteo-brandolino","number":6031,"repository":"elizaos/eliza","body":"## Describe the bug\nWhen creating a new project using `elizaos create`, some imports in `index.ts` fail:\nModule '\"@Elizaos/core\"' has no exported member 'logger'.ts(2305) Module '\"@Elizaos/core\"' has no exported member 'IAgentRuntime'.ts(2305) Module '\"@Elizaos/core\"' has no exported member 'ProjectAgent'.ts(2305)\nCopy code\n\n## To Reproduce\n1. Install Eliza CLI 1.61.  \n2. Run `elizaos create` to generate a new project.  \n3. Open `index.ts` and try to import `logger`, `IAgentRuntime`, or `ProjectAgent` from `@Elizaos/core`.  \n\n## Expected behavior\nThese members should be correctly exported and importable from `@Elizaos/core` in a newly generated project.  \n\n## Screenshots\n<!-- Add screenshots if applicable -->\n\n## Additional context\n- Eliza CLI version: 1.61  \n- This occurs immediately after project creation without any modifications.  \n- Possible regression from previous versions of `@Elizaos/core`.","createdAt":"2025-10-02T21:26:47Z","closedAt":"2025-10-09T22:20:47Z","state":"CLOSED","commentCount":2},{"id":"I_kwDOMT5cIs7F0iCC","title":"Bond Desk Agent","author":"borisudovicic","number":5767,"repository":"elizaos/eliza","body":"Check out the base trading agent we made for hackathon for this. Could be used potentially.\n\n[https://github.com/wtfsayo/otaku](https://github.com/wtfsayo/otaku)\n\nProbably using bond protocol infrastructure.\n\n[https://bondprotocol.finance/](https://bondprotocol.finance/)","createdAt":"2025-08-13T15:20:32Z","closedAt":"2025-10-01T14:21:51Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7JUUNl","title":"Observability GUI for event runs","author":"borisudovicic","number":5868,"repository":"elizaos/eliza","body":"Need this level of visibility/ui for event runs [https://content.trigger.dev/agent-parallelization.mp4](https://content.trigger.dev/agent-parallelization.mp4)","createdAt":"2025-09-02T21:30:19Z","closedAt":"2025-10-01T14:21:52Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7N3ORS","title":"Unhandled exception when getAgents() fails in runtime.ts (missing agents table)","author":"digitalsimboja","number":6003,"repository":"elizaos/eliza","body":"$4","createdAt":"2025-09-25T14:04:41Z","closedAt":"2025-09-28T07:57:03Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7Om1SJ","title":"elizaos dev and elizaos start command in plugin directory doesnt work anymore","author":"linear","number":6017,"repository":"elizaos/eliza","body":"\\`elizaos dev\\` or `elizaos start` in plugin directory should load plugin with test character","createdAt":"2025-09-29T19:17:21Z","closedAt":"2025-09-30T08:53:00Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7OacIr","title":"Add Config Option for Discord Plugin to Only Respond to Mentions/Name Calls","author":"borisudovicic","number":6013,"repository":"elizaos/eliza","body":"Introduce a configuration option in the Eliza Discord plugin so that the agent only responds when explicitly mentioned, or when directly called by its configured name.","createdAt":"2025-09-29T03:08:24Z","closedAt":"2025-10-01T14:21:47Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7OrbQt","title":"Ship Prank Caller / AI Crank Yankers","author":"linear","number":6020,"repository":"elizaos/eliza","body":"","createdAt":"2025-09-30T04:17:48Z","closedAt":"2026-04-12T18:51:40Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7Ora6K","title":"Cloud Wireframes Sealed & Agreed On","author":"linear","number":6019,"repository":"elizaos/eliza","body":"","createdAt":"2025-09-30T04:17:11Z","closedAt":"2025-10-10T07:27:43Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7OraEg","title":"SWOT Agent Analysis","author":"linear","number":6018,"repository":"elizaos/eliza","body":"","createdAt":"2025-09-30T04:15:31Z","closedAt":"2025-10-22T15:47:44Z","state":"CLOSED","commentCount":0}],"topPullRequests":[{"id":"PR_kwDOO65CGs6qXsmU","title":"Update to Zod v4 and dependencies","author":"standujar","number":1,"body":"Not tested.\n\n<!-- This is an auto-generated comment: release notes by coderabbit.ai -->\n\n## Summary by CodeRabbit\n\n- Chores\n  - Bumped app version to 1.3.3.\n  - Upgraded key dependencies to latest compatible versions for improved stability, compatibility, and security.\n  - Aligned dependency resolutions to avoid version conflicts.\n  - No changes to user-facing behavior or public APIs are expected.\n\n<!-- end of auto-generated comment: release notes by coderabbit.ai -->","repository":"elizaos-plugins/plugin-autocoder","createdAt":"2025-09-24T20:59:30Z","mergedAt":"2025-10-03T13:22:31Z","additions":12774,"deletions":15},{"id":"PR_kwDOMT5cIs6pYAwb","title":"chore: refactor dynamic migrations","author":"0xbbjoker","number":5990,"body":"","repository":"elizaos/eliza","createdAt":"2025-09-18T20:36:13Z","mergedAt":"2025-09-30T14:14:36Z","additions":11933,"deletions":1673},{"id":"PR_kwDOMT5cIs6rUKkg","title":"feat(client): Enhanced Agent Runs Sidebar with Improved Timeline UI","author":"wtfsayo","number":6023,"body":"$5","repository":"elizaos/eliza","createdAt":"2025-09-30T11:45:29Z","mergedAt":"2025-09-30T15:05:32Z","additions":3892,"deletions":685},{"id":"PR_kwDOMT5cIs6rCpmo","title":"feat(client): Add agent runs visualization timeline","author":"wtfsayo","number":6016,"body":"$6","repository":"elizaos/eliza","createdAt":"2025-09-29T08:41:43Z","mergedAt":"2025-09-29T15:33:21Z","additions":1398,"deletions":82},{"id":"PR_kwDOMT5cIs6q86kD","title":"chore(lint): ran linter across the repo","author":"wtfsayo","number":6011,"body":"$7","repository":"elizaos/eliza","createdAt":"2025-09-28T16:03:51Z","mergedAt":"2025-09-28T16:03:58Z","additions":1126,"deletions":1056},{"id":"PR_kwDOMT5cIs6rfDzg","title":"fix: code formatting standardization and const declaration fix","author":"wtfsayo","number":6027,"body":"$8","repository":"elizaos/eliza","createdAt":"2025-10-01T06:35:43Z","mergedAt":"2025-10-01T06:36:18Z","additions":1124,"deletions":1385},{"id":"PR_kwDOMT5cIs6qTmMU","title":"refactor type definitions across runtime.","author":"tcm390","number":5998,"body":"","repository":"elizaos/eliza","createdAt":"2025-09-24T14:48:48Z","mergedAt":"2025-09-28T15:56:49Z","additions":896,"deletions":499},{"id":"PR_kwDOMT5cIs6rVJ2G","title":"feat: bump deps","author":"ChristopherTrimboli","number":6025,"body":"$9","repository":"elizaos/eliza","createdAt":"2025-09-30T12:57:12Z","mergedAt":"2025-10-01T06:28:47Z","additions":621,"deletions":585},{"id":"PR_kwDOOtXZkc6rw2QF","title":"refactor: use new mentionContext interface","author":"standujar","number":19,"body":"$a","repository":"elizaos-plugins/plugin-discord","createdAt":"2025-10-02T12:56:49Z","mergedAt":"2025-10-04T14:45:52Z","additions":543,"deletions":477},{"id":"PR_kwDOMT5cIs6rP4xD","title":"fix(cli): pass ProjectAgent.plugins to server.startAgents in start command","author":"wtfsayo","number":6021,"body":"$b","repository":"elizaos/eliza","createdAt":"2025-09-30T06:23:52Z","mergedAt":"2025-09-30T08:52:59Z","additions":471,"deletions":39},{"id":"PR_kwDOOtXZkc6rUZp9","title":"feat: add shouldRespondToCharacterName setting","author":"standujar","number":18,"body":"\n\n<!-- This is an auto-generated comment: release notes by coderabbit.ai -->\n\n## Summary by CodeRabbit\n\n- New Features\n  - New Discord settings: ignore bot messages, ignore direct messages, or respond only when mentioned.\n  - Smarter mention handling: recognizes bot name case-insensitively and in replies/threads for more accurate responses.\n  - Improved channel member awareness to enhance mention and response behavior.\n\n- Improvements\n  - Clearer, more actionable error messages and logging.\n  - More resilient messaging flow with better handling of typing indicators and message chunks.\n\n- Chores\n  - Version bump to 1.3.0.\n  - Dependency updates, including core library and new Levenshtein utility.\n\n<!-- end of auto-generated comment: release notes by coderabbit.ai -->","repository":"elizaos-plugins/plugin-discord","createdAt":"2025-09-30T12:02:48Z","mergedAt":null,"additions":383,"deletions":474},{"id":"PR_kwDOMT5cIs6rxG2c","title":"feat: Add mentionContext interface and improve shouldRespond logic","author":"standujar","number":6030,"body":"$c","repository":"elizaos/eliza","createdAt":"2025-10-02T13:20:09Z","mergedAt":"2025-10-05T11:20:06Z","additions":295,"deletions":167},{"id":"PR_kwDOOtXZkc6lsWxw","title":"Support embeds/forwards, clientReadyPromise, DISCORD_LISTEN_CHANNEL_MESSAGE event","author":"odilitime","number":17,"body":"\n\n<!-- This is an auto-generated comment: release notes by coderabbit.ai -->\n## Summary by CodeRabbit\n\n- New Features\n  - Processed messages now include embed titles/descriptions, referenced-message context (including channel/guild when different), and code blocks extracted as attachments with in-text references.\n  - Configurable listening channels via environment variables; messages from those channels are ingested with metadata, attachments, reply links, timestamps, and source info.\n  - Added public methods to fetch channel members and register send handlers.\n\n- Refactor\n  - Startup now awaits client readiness before processing events; channel filtering centralized during event listener setup and inbound routing.\n\n- Chores\n  - Improved runtime logging and observability for channel configuration, inbound routing, login errors, and non-listening-channel messages.\n<!-- end of auto-generated comment: release notes by coderabbit.ai -->","repository":"elizaos-plugins/plugin-discord","createdAt":"2025-08-27T23:20:40Z","mergedAt":"2025-10-02T12:40:18Z","additions":158,"deletions":18},{"id":"PR_kwDOMT5cIs6q_XeM","title":"fix: new package publishing on NPM, add public publish config","author":"ChristopherTrimboli","number":6012,"body":"$d","repository":"elizaos/eliza","createdAt":"2025-09-29T01:36:40Z","mergedAt":"2025-09-29T01:38:36Z","additions":103,"deletions":71},{"id":"PR_kwDONNAI986rzZm6","title":"chore: add some elizaos plugins","author":"standujar","number":152,"body":"","repository":"elizaos/elizaos.github.io","createdAt":"2025-10-02T16:43:05Z","mergedAt":"2025-10-02T18:58:06Z","additions":50,"deletions":0},{"id":"PR_kwDOOiniuM6rmtrc","title":"fix: AI SDK v5 tool results extraction from steps content","author":"standujar","number":15,"body":"$e","repository":"elizaos-plugins/plugin-openrouter","createdAt":"2025-10-01T17:27:09Z","mergedAt":"2025-10-01T18:41:11Z","additions":47,"deletions":28},{"id":"PR_kwDOMT5cIs6rBJt3","title":"chore: update zod pckg version","author":"0xbbjoker","number":6015,"body":"$f","repository":"elizaos/eliza","createdAt":"2025-09-29T06:15:46Z","mergedAt":"2025-09-29T06:17:15Z","additions":30,"deletions":32},{"id":"PR_kwDOMT5cIs6qjTGU","title":"refactor(core): make runtime initialization idempotent and improve service registration coordination","author":"tcm390","number":6004,"body":"$10","repository":"elizaos/eliza","createdAt":"2025-09-25T16:59:26Z","mergedAt":"2025-09-28T12:16:01Z","additions":27,"deletions":19},{"id":"PR_kwDOMT5cIs6rBJjx","title":"chore: disable local env endpoint in production","author":"wtfsayo","number":6014,"body":"This PR enforces a production guard on /api/system/env/local.\n\n- GET /api/system/env/local returns 403 in production\n- POST /api/system/env/local returns 403 in production\n\nRationale: Prevent exposing or mutating local .env via API in prod.\n\n<!-- CURSOR_SUMMARY -->\n---\n\n> [!NOTE]\n> Blocks GET/POST `api/system/environment:/local` in production, returning 403 to prevent reading or writing local `.env`.\n> \n> - **Backend**:\n>   - **`packages/server/src/api/system/environment.ts`**:\n>     - Add production guard (`NODE_ENV === 'production'`) to `GET /local` and `POST /local` routes.\n>     - Return `403 FORBIDDEN` with error message when invoked in production.\n> \n> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit 06cdd0ca37daf24a074660d886bf803a87b66fe3. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>\n<!-- /CURSOR_SUMMARY -->","repository":"elizaos/eliza","createdAt":"2025-09-29T06:15:25Z","mergedAt":"2025-09-29T16:11:39Z","additions":19,"deletions":0},{"id":"PR_kwDOMT5cIs6rQBme","title":"fix(config): remove invalid project references from root tsconfig","author":"wtfsayo","number":6022,"body":"$11","repository":"elizaos/eliza","createdAt":"2025-09-30T06:39:36Z","mergedAt":"2025-09-30T06:45:28Z","additions":18,"deletions":12},{"id":"PR_kwDOMT5cIs6rUWFx","title":"fix: register and export shouldRespondProvider in bootstrap plugin","author":"standujar","number":6024,"body":"$12","repository":"elizaos/eliza","createdAt":"2025-09-30T11:57:59Z","mergedAt":"2025-10-01T06:29:12Z","additions":6,"deletions":2},{"id":"PR_kwDON0mV_86rAKoX","title":"fix: zod issue","author":"0xbbjoker","number":16,"body":"$13","repository":"elizaos-plugins/plugin-openai","createdAt":"2025-09-29T04:06:30Z","mergedAt":"2025-09-29T04:28:22Z","additions":5,"deletions":2},{"id":"PR_kwDOMT5cIs6q7X4n","title":"fix(server): downgrade plugin import failure from error to warn","author":"wtfsayo","number":6010,"body":"$14","repository":"elizaos/eliza","createdAt":"2025-09-28T12:04:13Z","mergedAt":"2025-09-28T12:05:51Z","additions":1,"deletions":1},{"id":"PR_kwDONkg7v86r0yyH","title":"feat: Add @elizaos/plugin-relay to registry","author":"wtfsayo","number":234,"body":"$15","repository":"elizaos-plugins/registry","createdAt":"2025-10-02T19:01:00Z","mergedAt":"2025-10-02T19:01:33Z","additions":1,"deletions":0},{"id":"PR_kwDOMT5cIs6re_01","title":"chore: remove obsolete Docker and devcontainer files","author":"wtfsayo","number":6026,"body":"Removes obsolete files that are no longer needed:\n- .devcontainer/Dockerfile\n- .devcontainer/devcontainer.json\n- Dockerfile.docs\n- docker-compose-docs.yaml\n\nThese files were already deleted from the filesystem and this PR stages and commits their removal.\n\n<!-- CURSOR_SUMMARY -->\n---\n\n> [!NOTE]\n> Delete unused devcontainer configs and docs Docker/compose files.\n> \n> - **Tooling/Config Cleanup**:\n>   - Remove devcontainer files: `.devcontainer/Dockerfile`, `.devcontainer/devcontainer.json`.\n>   - Remove docs containerization files: `Dockerfile.docs`, `docker-compose-docs.yaml`.\n> \n> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit 6a8be0debc81e8a0a99acd55516228d57988c09f. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>\n<!-- /CURSOR_SUMMARY -->","repository":"elizaos/eliza","createdAt":"2025-10-01T06:27:48Z","mergedAt":"2025-10-01T06:28:20Z","additions":0,"deletions":88},{"id":"PR_kwDOMT5cIs6rsqF8","title":"chore: remove unused SchemaFactory code","author":"0xbbjoker","number":6029,"body":"$16","repository":"elizaos/eliza","createdAt":"2025-10-02T06:20:38Z","mergedAt":"2025-10-03T20:15:07Z","additions":0,"deletions":289}],"detailedContributorSummaries":{"0xbbjoker":"0xbbjoker: This week, 0xbbjoker focused on maintenance and bug fixes, merging a fix for an issue in the OpenAI plugin (elizaos-plugins/plugin-openai#16) and removing a significant amount of unused code in elizaos/eliza#6029. They also supported the team by reviewing 2 PRs and commenting on an issue. Their activity shows a primary focus on bug fixes and configuration file changes across the codebase.","ChristopherTrimboli":"ChristopherTrimboli: Focused on project dependencies and build processes within the `elizaos/eliza` repository. They resolved a package publishing issue on NPM (elizaos/eliza#6012) and merged a significant dependency update (elizaos/eliza#6025). This work, spanning 13 commits and 179 modified files, shows a primary focus on bugfixes and configuration.","borisudovicic":"borisudovicic: Focused on defining and tracking work in the elizaos/eliza repository this week. They created and subsequently closed three issues, outlining potential features such as a \"Bond Desk Agent\" (#5767), an \"Observability GUI for event runs\" (#5868), and a new Discord plugin configuration option (#6013).","linear":"linear: Focused on project planning and ideation within the elizaos/eliza repository this week. They created several issues to define future work, including a feature proposal (#6020), finalizing cloud wireframes (#6019), and conducting a SWOT analysis (#6018). They also reported a bug related to local development commands (#6017).","matteo-brandolino":"matteo-brandolino: Contributed to the stability of the Eliza CLI by identifying and reporting a bug related to import resolution. He opened issue elizaos/eliza#6031 to track this problem, which has since been closed.","odilitime":"odilitime: Focused on supporting the team through code review this week, conducting 3 reviews that resulted in 2 approvals and 1 request for changes, and leaving 3 comments on pull requests.","standujar":"standujar: This week, standujar drove significant architectural improvements across the Eliza ecosystem, landing a massive fix in the core repository (elizaos/eliza#6024, +15k lines) to correctly register a key provider. They also introduced a new `mentionContext` interface (elizaos/eliza#6030) and refactored the Discord plugin to adopt it (elizaos-plugins/plugin-discord#19). This work demonstrates a strong focus on refactoring and bug fixes across core application code and tests.","wtfsayo":"wtfsayo: Delivered a high volume of work this week, primarily focused on enhancing the client-side agent experience while also addressing various bugs and chores across the system. Their most significant contributions were two major features in the `elizaos/eliza` repository: adding an agent runs visualization timeline (#6016) and a substantial enhancement to the agent runs sidebar (#6023, +17k lines). Alongside this feature development, they merged several fixes and chores, including disabling a local endpoint in production (#6014) and adding a new plugin to the registry (#234), demonstrating a broad focus on both new functionality and system maintenance."}},"summaryContent":"$17","className":"self-end sm:self-start"}]]}],"$L18","$L19","$L1a"]}]}],["$L1b","$L1c","$L1d"],"$L1e"]}],"loading":null,"isPartial":false}
+18:["$","div",null,{"className":"mb-6","children":["$","div",null,{"className":"flex items-center justify-between","children":[[["$","$L1f",null,{"href":"/summary/week/2025-09-21","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left mr-2 h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"children":"Previous"}],false],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$L1f",null,{"href":"/summary/week/2025-09-21","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Previous"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]],["$","div",null,{"className":"flex flex-col items-center","children":[["$","div",null,{"className":"text-sm font-medium text-gray-500","children":["Weekly"," Summary"]}],["$","time",null,{"dateTime":"2025-09-28","className":"text-md font-bold","children":"Sep 28 - 4, 2025"}]]}],[["$","$L1f",null,{"href":"/summary/week/2025-10-05","children":[false,["$","span",null,{"children":"Next"}],["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right ml-2 h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}]],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$L1f",null,{"href":"/summary/week/2025-10-05","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Next"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]]]}]}]
+21:T5a4,**Describe the bug**
+
+When initializing `AgentRuntime`, the following code in `runtime.ts`:
+`tsthis.agent = await this.adapter.getAgent(this.character.id);`
+
+throws an unhandled exception if:
+ - the agents table does not exist (e.g. migrations incomplete), or
+ - character.id is missing/undefined.
+
+This prevents runtime startup and crashes the process.
+
+
+
+**To Reproduce**
+
+Run AgentRuntime with a new Postgres database where the agents table has not been created.
+Or, start with a character config missing an id field.
+Observe the runtime crash with getAgent error.
+
+**Expected behavior**
+If getAgent() fails due to a missing record, the runtime should gracefully create the agent with createAgent().
+If character.id is missing, a clear error should be logged, not an unhandled exception.
+
+**Screenshots**
+N/A but here are the logs
+```
+Database operation failed (attempt 1/3): Failed query: select "id", "name", "bio" from "agents"
+2025-09-25 14:53:12 params: , nextRetryIn: 1.9s
+2025-09-25 14:53:14  Warn       Database operation failed (attempt 2/3): Failed query: select "id", "name", "bio" from "agents"
+2025-09-25 14:53:14 params: , nextRetryIn: 2.8s
+2025-09-25 14:53:17  Error      Max retry attempts reached: Failed query: select "id", "name", "bio" from "agents"
+2025-09-25 14:53:17 params: , totalAttempts: 3
+```
+
+**Additional context**
+Proposed fix is to wrap getAgent() in a try/catch and fall back to createAgent() where possible.22:T140d,## Summary
+
+This PR significantly enhances the Agent Runs sidebar interface with improved Timeline visualization, better space utilization, and enhanced data extraction.
+
+## Key Changes
+
+### 1. Sidebar Size & Space Optimization
+- **Increased sidebar max width** from 50% to 85% - allows sidebar to take over more screen space
+- **Reduced min width** from 20% to 15% - chat panel can compress more
+- **Removed Timeline tab padding** for maximum space utilization
+- **Increased API limits**: Default 100 runs (from 20), max 500 runs (from 100)
+
+### 2. Timeline UI Improvements
+- **Replaced traces column with dropdown** - more space-efficient design
+- **Compact dropdown items** - single-line layout with Run ID instead of timestamp
+- **Run ID-based naming** - Changed from `Run 8:20:48 AM` to `Run 12345678` for stable identifiers
+- **Improved flexbox layout** - proper flex-shrink/flex-grow conventions in SpanCard 3-column layout
+
+### 3. Visual Design Enhancements
+- **Eliza theme colors** throughout - replaced hardcoded gray/blue/red colors with CSS variables
+- **Selection states** - Added `bg-accent/50` with border, hover states, smooth transitions
+- **Better spacing** - Added py-3 px-2, gap-x-3, rounded corners, shadows
+- **Vertical centering** - Items properly aligned with `items-center`
+- **Reduced margins** - Removed excessive spacing between child runs
+
+### 4. Data Extraction Improvements
+- **Enhanced prompt extraction** - Supports multi-prompt arrays, extracts from params.prompt
+- **Enhanced response extraction** - Extracts from response.content, response.text, result field
+- **Token count extraction** - Handles response.usage and top-level usage objects  
+- **Cost tracking** - Extracts from response.cost when available
+- **Server-side data** - API now includes params, response, usage, prompts, cost in MODEL_USED and ACTION_COMPLETED events
+
+### 5. Theme & Accessibility
+- **Dark mode fixes** - All text uses `text-foreground` instead of `text-gray-950`
+- **Plain text default** - In/Out tab defaults to plain text view (easier to read)
+- **Conditional badges** - Cost and tokens only show when defined (no more '$ undefined')
+- **Theme-aware borders** - Using `border-border` instead of hardcoded colors
+
+## Files Modified
+
+### Client
+- `packages/client/src/components/chat.tsx` - Sidebar size limits
+- `packages/client/src/components/agent-sidebar.tsx` - Timeline padding removal
+- `packages/client/src/components/agent-runs/AgentRunTimeline.tsx` - Layout adjustments
+- `packages/client/src/components/agent-prism/TraceViewer.tsx` - Dropdown implementation
+- `packages/client/src/components/agent-prism/SpanCard/SpanCard.tsx` - Flexbox, spacing, selection
+- `packages/client/src/components/agent-prism/TreeView.tsx` - Padding and spacing
+- `packages/client/src/components/agent-prism/TraceList/*.tsx` - Text colors
+- `packages/client/src/components/agent-prism/DetailsView/*.tsx` - Theme colors, default view
+- `packages/client/src/lib/eliza-span-adapter.ts` - Enhanced data extraction
+
+### Server
+- `packages/server/src/api/agents/runs.ts` - API limits and enhanced event data
+
+## Testing
+- ✅ Timeline tab displays properly
+- ✅ Dropdown shows all runs with details
+- ✅ Selection highlights correctly
+- ✅ Dark mode text is visible
+- ✅ Input/output data displays when available
+- ✅ Sidebar can resize to 85% width
+
+## Screenshots
+See attached screenshots showing the improved layout and theme integration.
+
+<!-- CURSOR_SUMMARY -->
+---
+
+> [!NOTE]
+> Adds Agent Prism-based trace UI (TraceViewer, SpanCards, DetailsView) with new deps and adapters, replaces legacy timeline, and enriches server run events (params/response/usage/prompts/cost) to improve span rendering and filtering.
+> 
+> - **UI (Client)**:
+>   - **Agent Prism Integration**: Add `TraceViewer`, `SpanCard`, `DetailsView`, badges, tabs, inputs, and shared theming under `components/agent-prism/` with span filtering util; install `@evilmartians/agent-prism-data/types`, `react-json-pretty`, `classnames`.
+>   - **Timeline Replacement**: Rework `AgentRunTimeline` to fetch run details in parallel and render via `TraceViewer` using `eliza-span-adapter` conversions; add loading states.
+>   - **Sidebar/Layout Tweaks**: Adjust agent sidebar timeline padding and chat sidebar resizable bounds (min 15%, max 85%).
+> - **Data Mapping**:
+>   - Add `eliza-span-adapter` to convert Eliza run summaries/details to Prism `TraceRecord`/`TraceSpan` (prompt/response, tokens, cost) and `filterSpansRecursively` util.
+> - **Server (API)**:
+>   - Enrich `MODEL_USED` and `ACTION_COMPLETED` events with `params`, `response`, `usage`, `prompts`, `prompt`, `inputTokens`, `outputTokens`, `cost` for better client rendering.
+> - **Theme/UX**:
+>   - Consistent `text-foreground`/`border-border`, compact dropdown trace selector, copy buttons, badges, improved selection/hover states.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit d40f8a77336764b6af1cbd8a54c4a39e4942c84c. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->23:Tb27,## Description
+
+This PR adds a comprehensive agent runs visualization timeline component that provides detailed insights into agent execution flow and performance metrics.
+
+### Key Features
+
+- **Timeline Visualization**: Interactive timeline showing agent runs with expandable details
+- **Performance Metrics**: Display execution time, memory usage, and status information  
+- **Run Details**: Comprehensive view of messages, actions, evaluators, and providers
+- **Interactive UI**: Collapsible sections, hover effects, and responsive design
+- **Status Indicators**: Visual status badges and progress indicators
+
+### Components Added
+
+-  - Main timeline component with full agent run visualization
+- Comprehensive TypeScript types for agent run data structures
+- Interactive UI elements with proper accessibility support
+
+### Technical Implementation
+
+- Built with React and TypeScript
+- Uses Lucide React icons for consistent UI
+- Responsive design with proper mobile support
+- Optimized rendering for large datasets
+- Clean, maintainable component architecture
+
+### Testing
+
+- Component renders correctly with agent run data
+- Interactive elements function as expected
+- Responsive design tested across different screen sizes
+
+This enhancement significantly improves the agent monitoring and debugging experience by providing detailed visual insights into agent execution patterns.
+
+<!-- CURSOR_SUMMARY -->
+---
+
+> [!NOTE]
+> Adds an interactive agent run timeline with new client hooks and server endpoints (with caching) backed by SQL adapter summaries and core types.
+> 
+> - **Frontend (client)**:
+>   - **Timeline UI**: New `AgentRunTimeline` component and a "Timeline" tab in `agent-sidebar` to visualize runs and nested events with durations/status.
+>   - **Data Hooks**: Add `useAgentRuns` and `useAgentRunDetail` for polling run lists and details.
+>   - **Styles**: Timeline status classes added in `index.css`.
+> - **Backend (server)**:
+>   - **Runs API**: Implement `GET /:agentId/runs` and `GET /:agentId/runs/:runId` with aggregation, optional filters, and short-term caching; falls back to log aggregation if adapter summary unavailable.
+> - **Core/DB**:
+>   - **Types**: Introduce `RunStatus`, `AgentRunSummary`, `AgentRunSummaryResult` and `IDatabaseAdapter.getAgentRunSummaries`.
+>   - **SQL Adapter**: Implement `getAgentRunSummaries` in `BaseDrizzleAdapter` for efficient run listing and counts.
+> - **API Client**:
+>   - Wire up `RunsService` on `ElizaClient` (exposed for hooks usage).
+> - **Dependencies**:
+>   - Add `vis-timeline`, `vis-data` and related peer deps.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit 80bff571f516eafdbe07c3efe09eaf89fd6d0484. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->24:T130c,This pull request primarily refactors code formatting for improved readability and consistency, focusing on function arguments, array/object literals, and callback formatting. No logic changes are introduced; all updates are stylistic, targeting trailing commas, indentation, and callback arrow function syntax. Additionally, minor formatting updates are made to configuration files.
+
+Formatting and code style improvements:
+
+* Standardized callback formatting in test files and utility functions by using multiline arrow functions and consistent indentation, improving readability in files such as `agent.test.ts`, `character-plugin-ordering.test.ts`, and `ollama-plugin-installation.test.ts`. [[1]](diffhunk://#diff-27cf8d520b4335e7a380e99c2ae2d2a4e1fae652f25ab139482b7d7fb2ccd30bL362-R367) [[2]](diffhunk://#diff-27cf8d520b4335e7a380e99c2ae2d2a4e1fae652f25ab139482b7d7fb2ccd30bL397-R402) [[3]](diffhunk://#diff-27cf8d520b4335e7a380e99c2ae2d2a4e1fae652f25ab139482b7d7fb2ccd30bL414-R425) [[4]](diffhunk://#diff-27cf8d520b4335e7a380e99c2ae2d2a4e1fae652f25ab139482b7d7fb2ccd30bL436-R445) [[5]](diffhunk://#diff-27cf8d520b4335e7a380e99c2ae2d2a4e1fae652f25ab139482b7d7fb2ccd30bL446-R463) [[6]](diffhunk://#diff-27cf8d520b4335e7a380e99c2ae2d2a4e1fae652f25ab139482b7d7fb2ccd30bL478-R493) [[7]](diffhunk://#diff-27cf8d520b4335e7a380e99c2ae2d2a4e1fae652f25ab139482b7d7fb2ccd30bL505-R535) [[8]](diffhunk://#diff-ece06e17a19dbcecb7ba701aa31eda0042c6e850de24ff09593cca08d4f56c7eL22-R24) [[9]](diffhunk://#diff-f364d5de4085248d075b006be9349dc58177d84a795828921d0770f381c5126bL60-R60) [[10]](diffhunk://#diff-f364d5de4085248d075b006be9349dc58177d84a795828921d0770f381c5126bL80-R78) [[11]](diffhunk://#diff-f364d5de4085248d075b006be9349dc58177d84a795828921d0770f381c5126bL101-R97) [[12]](diffhunk://#diff-f364d5de4085248d075b006be9349dc58177d84a795828921d0770f381c5126bL120-R116) [[13]](diffhunk://#diff-f364d5de4085248d075b006be9349dc58177d84a795828921d0770f381c5126bL129-R127)
+* Refactored object and array literals to use single-line formatting and trailing commas for consistency in files such as `lerna.json`, `recursion-prevention.test.ts`, and `validation.ts`. [[1]](diffhunk://#diff-2d72bdead8afa0798d18995311992d684348a694c2d5e214e8e4d2b6153e4821L3-R14) [[2]](diffhunk://#diff-0b17f392943e64a4ad310166e18aecc1c36ac50a40d97f7032c81f33175764c2L48-R49) [[3]](diffhunk://#diff-0b17f392943e64a4ad310166e18aecc1c36ac50a40d97f7032c81f33175764c2L62-R63) [[4]](diffhunk://#diff-0b17f392943e64a4ad310166e18aecc1c36ac50a40d97f7032c81f33175764c2L77-R78) [[5]](diffhunk://#diff-1c2713f7bf29769ac9471ca185258c66195fe94fedfabb232d116d539620ae4fL54-R61)
+* Improved multiline argument formatting in function calls and error logging, enhancing clarity in files like `e2e-tests.ts`, `plugin-parser.ts`, `data-aggregator.ts`, `scenario/index.ts`, and `local-cli-delegation.ts`. [[1]](diffhunk://#diff-8b775212a1c2704ac4d6a1b4936c6e884b9b5f50ac743ffc313547f3ef1b33d4L138-R148) [[2]](diffhunk://#diff-b6753a3bb07daa9cef087506d2dd92c45de733b048829bec8b9c09256257c740L88-R90) [[3]](diffhunk://#diff-b6753a3bb07daa9cef087506d2dd92c45de733b048829bec8b9c09256257c740L166-R170) [[4]](diffhunk://#diff-9e2606224c867588aef1e44b41eee4c8d5a91f2abb5d4c27157a62599e7dc0c0L178-R187) [[5]](diffhunk://#diff-ef3705731497978ddf0a8bfeff4a9ee09b9f3fe11491df16931496575ce6df45L135-R137) [[6]](diffhunk://#diff-ef3705731497978ddf0a8bfeff4a9ee09b9f3fe11491df16931496575ce6df45L147-R151) [[7]](diffhunk://#diff-97324efdf1393e7f6997f06f7e8f76f786c8cb2131a1c1cdce8a574070be83bdL140-R144)
+* Updated test environment setup and command options to use consistent formatting and argument passing, including trailing commas and multiline function calls. [[1]](diffhunk://#diff-27cf8d520b4335e7a380e99c2ae2d2a4e1fae652f25ab139482b7d7fb2ccd30bL68-R68) [[2]](diffhunk://#diff-27cf8d520b4335e7a380e99c2ae2d2a4e1fae652f25ab139482b7d7fb2ccd30bL241-R244) [[3]](diffhunk://#diff-e4632f53d4b35636af568acd817ea172675e16d87eb8f818f6539f1c5ab5a8a3L167-R167)
+
+<!-- CURSOR_SUMMARY -->
+---
+
+> [!NOTE]
+> Standardizes code style across the repo (arrays/objects, callbacks, multiline args, trailing commas, imports) and tidies configs/tests with no functional changes.
+> 
+> - **Code Style/Formatting**:
+>   - Standardizes callback/arrow function spacing, multiline argument formatting, and trailing commas.
+>   - Normalizes object/array literals and import ordering across CLI, core, server, plugins, and tests.
+> - **Configs/JSON**:
+>   - Compacts/normalizes `lerna.json` and tsconfig files.
+> - **Tests**:
+>   - Aligns test code with new formatting (no behavioral changes).
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit 2531a172f6601b563446142a197aa9e72b97c91b. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->25:Td34,## Summary
+
+This PR addresses code quality improvements through formatting standardization and a variable declaration fix.
+
+## Changes
+
+### Code Formatting
+- **Quote Standardization**: Converted double quotes to single quotes across all client-side components for consistency
+- **Formatting Consistency**: Applied consistent code formatting to:
+  - Agent Prism components (Avatar, Badge, Button, CollapseAndExpandControls, etc.)
+  - Trace viewer and span card components
+  - Chat components
+  - Configuration files (tsconfig.json, lerna.json)
+
+### Bug Fix
+- **Schema Transformer** (`packages/plugin-sql/src/runtime-migrator/schema-transformer.ts`):
+  - Changed `let result` to `const result` on line 128
+  - The variable is never reassigned after initialization, making it a good candidate for `const`
+  - This follows best practices for immutable variable declarations
+
+### Other Improvements
+- Improved code readability through better line breaks and indentation
+- Applied consistent formatting to CLI tests and server API code
+- Reduced overall line count from 1385 to 1124 (-261 lines) through more efficient formatting
+
+## Impact
+
+- **No Functional Changes**: All changes are formatting-related except for the const fix
+- **Improved Code Quality**: More consistent codebase following project style guidelines
+- **Better Type Safety**: Using `const` instead of `let` for immutable variables
+
+## Testing
+
+- All existing tests should pass as no functional logic was changed
+- The const fix is a minor improvement that doesn't affect runtime behavior
+
+## Files Changed (42 files)
+
+### Core Components
+- `packages/cli/src/commands/start/index.ts`
+- `packages/cli/tests/commands/dev.test.ts`
+- `packages/cli/tests/commands/start.test.ts`
+
+### Client Components (Agent Prism)
+- 30+ component files in `packages/client/src/components/agent-prism/`
+- Utility files: `agent-prism-utils.ts`, `eliza-span-adapter.ts`
+
+### Plugin & Server
+- `packages/plugin-sql/src/runtime-migrator/schema-transformer.ts`
+- `packages/server/src/api/agents/runs.ts`
+
+### Configuration
+- `lerna.json`
+- `tsconfig.json`
+
+<!-- CURSOR_SUMMARY -->
+---
+
+> [!NOTE]
+> Standardizes quotes/formatting across the client UI, tests, and configs, and replaces a let with const in the SQL schema transformer.
+> 
+> - **Client (agent-prism UI)**:
+>   - Quote/style normalization and minor formatting across `packages/client/src/components/agent-prism/**` (no logic changes).
+>   - Trace viewer, span card, tabs, and utilities (`agent-prism-utils.ts`, `eliza-span-adapter.ts`) reformatted.
+> - **CLI Tests**:
+>   - Formatting/line-wrap adjustments in `packages/cli/tests/commands/{dev,start}.test.ts`.
+> - **Server**:
+>   - Minor log string formatting in `packages/server/src/api/agents/runs.ts`.
+> - **Plugin SQL**:
+>   - In `packages/plugin-sql/src/runtime-migrator/schema-transformer.ts`, replace `let result` with `const result`.
+> - **Config**:
+>   - Compact arrays/formatting in `lerna.json` and `tsconfig.json`.
+> - **Other**:
+>   - Minor non-functional formatting in `packages/client/src/components/chat.tsx` and `agent-runs/AgentRunTimeline.tsx`.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit fc94a1ce795f68129069b0ac6e0a2ca9eb94906b. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->26:T618,bumps le' deps, :pogchamp:
+
+<!-- CURSOR_SUMMARY -->
+---
+
+> [!NOTE]
+> Updates dependencies across `packages/*` and root, including major tooling and runtime bumps (TypeScript, ESLint, Vite, Puppeteer, dotenv, langchain, uuid, Sentry, and more).
+> 
+> - **Root**:
+>   - Bump `@types/node`, `@types/uuid`, `lerna`.
+> - **packages/cli**:
+>   - Upgrade runtime deps: `@anthropic-ai/claude-code`, `@anthropic-ai/sdk`, `@elizaos/plugin-openai`, `dotenv`, `globby`, `ora`, `type-fest`.
+>   - Dev tooling: `cross-env`, `prettier`, `puppeteer`, `typescript`, `vite`.
+> - **packages/client**:
+>   - UI/runtime: `@react-spring/web`, `lucide-react`, `react-resizable-panels`, `tailwind-merge`.
+>   - Testing/build: `@cypress/vite-dev-server`, `@testing-library/react`, `cypress`, `globals`, `jsdom`, `rollup-plugin-visualizer`, `vite`, `typescript` and `typescript-eslint`, `@vitejs/plugin-react-swc`, `eslint-import-resolver-typescript`.
+>   - Types: `@types/react`.
+> - **packages/core**:
+>   - Runtime: `dotenv`, `langchain`, `uuid`.
+>   - Dev tooling: `@types/uuid`, `prettier`, `typescript`.
+> - **packages/server**:
+>   - Runtime: `@sentry/node`, `@types/multer`, `dotenv`, `express-rate-limit`.
+>   - Dev tooling: `prettier`, `tsx`, `which`.
+> - **packages/api-client**:
+>   - Dev tooling: `eslint`.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit 2523cc679c7a38ea7da4ad13b38a62e714965cd7. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->27:T146b,# Relates to
+
+Depends on eliza core PR: `feature/mention-context-refactor` (introduces MentionContext interface)
+
+Related to issue discussing problems with fuzzy matching for character name detection in Discord plugin
+
+# Risks
+
+**Medium Risk**
+- Changes mention detection behavior in Discord messages
+
+# Background
+
+## What does this PR do?
+
+This PR refactors the Discord plugin to adopt the new platform-agnostic `MentionContext` interface
+
+**Added:**
+- ✅ `mentionContext` metadata collection in message handler
+  - `isMention`: Platform-native @mention detection
+  - `isReply`: Reply to bot's message detection
+  - `isThread`: Thread participation detection
+  - `mentionType`: Categorizes mention type for debugging
+
+**Preserved:**
+- ✅ `DISCORD_SHOULD_RESPOND_ONLY_TO_MENTIONS` for strict mode
+- ✅ Strict mode early return (platform layer gating before bootstrap)
+
+**Key Architecture:**
+- Discord plugin provides FACTS only (mentionContext metadata)
+- Bootstrap LLM handles text-based mention detection naturally
+- Strict mode operates at platform layer (early return)
+- Natural mode relies on LLM intelligence for context analysis
+
+# Documentation changes needed?
+
+- [x] My changes require a change to the project documentation
+- Documentation needed for:
+  - Explanation of new `mentionContext` behavior
+  - Clarification of strict mode (`DISCORD_SHOULD_RESPOND_ONLY_TO_MENTIONS`) behavior
+
+# Testing
+
+## Where should a reviewer start?
+
+1. Review `mentionContext` collection in `src/messages.ts` (search for "mentionContext")
+2. Review strict mode implementation in `src/messages.ts` (search for "shouldRespondOnlyToMentions")
+3. Run test suite to verify coverage
+
+## Detailed testing steps
+
+**Automated Tests:**
+
+```bash
+# Discord plugin tests (17 tests)
+bun test __tests__/messageManager.test.ts
+```
+
+**Test Coverage:**
+- ✅ `__tests__/messageManager.test.ts`
+  - Updated all existing tests to work with mentionContext
+  - Added 13 new tests in 3 groups:
+    1. **mentionContext metadata tests (5 tests)**
+       - Direct @mention sets isMention=true
+       - Reply to bot sets isReply=true
+       - Thread participation sets isThread=true
+       - Regular message has all false
+       - mentionType is correctly categorized
+    2. **Strict mode tests (4 tests)**
+       - Processes DMs in strict mode
+       - Processes @mentions in strict mode
+       - Processes replies to bot in strict mode
+       - Ignores regular messages in strict mode
+    3. **Natural mode tests (3 tests)**
+       - Processes all message types in natural mode
+       - Adds mentionContext to all messages
+       - Lets LLM decide based on context
+  - **Result: 17 pass, 0 fail**
+
+**Manual Testing (Discord Bot):**
+
+1. **Test strict mode** (`DISCORD_SHOULD_RESPOND_ONLY_TO_MENTIONS=true`):
+   ```
+   ✅ @BotName hello          → Should respond (platform mention)
+   ✅ Reply to bot's message  → Should respond (reply to bot)
+   ✅ DM to bot               → Should respond (DM)
+   ❌ Hey BotName, help me    → Should NOT respond (text mention ignored in strict mode)
+   ❌ BotName is cool         → Should NOT respond (reference ignored)
+   ❌ Reply to user message   → Should NOT respond (not a reply to bot)
+   ```
+
+2. **Test natural mode** (default, no strict mode):
+   ```
+   ✅ @BotName hello               → Should respond (platform mention)
+   ✅ Hey BotName, help me         → Should respond (LLM detects direct address)
+   ✅ BotNamee can you help?       → Should respond (LLM handles typos)
+   ✅ Where is BotName?            → Should respond (LLM detects indirect question)
+   ❌ I talked to BotName yesterday → Should NOT respond (LLM detects past reference)
+   ❌ BotName's code is great      → Should NOT respond (LLM detects possessive reference)
+   ```
+
+## Screenshots
+
+N/A - This is backend message processing with no UI changes
+
+# Deploy Notes
+
+## Deployment instructions
+
+**Prerequisites:**
+- ⚠️ **Wait for eliza core v1.6.2 release** (with MentionContext interface)
+- This PR uses `@elizaos/core: ^1.5.15` which will automatically pick up v1.6.x
+
+**Breaking change migration:**
+- Users wanting strict mention-only mode should use `DISCORD_SHOULD_RESPOND_ONLY_TO_MENTIONS=true`
+- Users wanting natural text mention detection should use default mode (no setting needed)
+
+**No database changes required**
+
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+* New Features
+  * New Discord settings: ignore bot messages, ignore DMs, respond only to mentions.
+  * Smarter message handling with mention context (mentions, replies, threads) for stricter or natural modes.
+  * Ability to fetch eligible text-channel members with caching for large servers.
+* Bug Fixes
+  * Safer handling when channel type is missing and clearer validation errors.
+  * More consistent and informative error logging.
+* Tests
+  * Expanded coverage for mentions, replies, threads, DMs, and audio attachments.
+* Chores
+  * Version bump to 1.3.0 and dependency updates.
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->28:Te26,## Description
+
+Fixes #6017
+
+When running `elizaos start` or `elizaos dev` in a plugin directory, the CLI would detect the plugin and create a ProjectAgent with the plugin in its plugins array, but would **not pass these plugins** to `server.startAgents()`.
+
+This resulted in the plugin never being loaded into the runtime, despite being correctly detected and stored in `ProjectAgent.plugins`.
+
+## Root Cause
+
+The start command was extracting only the `character` from each `ProjectAgent` and passing them to `server.startAgents()`:
+
+```typescript
+// Old code - BUG
+const charactersToStart = projectAgents.map((pa) => pa.character);
+const runtimes = await server.startAgents(charactersToStart);
+// ❌ projectAgent.plugins were never passed!
+```
+
+## Solution
+
+Modified the start command to iterate through `projectAgents` individually and pass each agent's specific plugins to `server.startAgents()`:
+
+```typescript
+// New code - FIXED
+for (const projectAgent of projectAgents) {
+  const agentPlugins = projectAgent.plugins || [];
+  const [runtime] = await server.startAgents([projectAgent.character], agentPlugins);
+  // ✅ Plugin objects are now passed!
+}
+```
+
+## How It Works
+
+`server.startAgents()` processes plugins from two sources:
+
+1. **String plugin names** from `character.plugins` (e.g., `'@elizaos/plugin-sql'`, `'@elizaos/plugin-bootstrap'`)
+2. **Plugin objects** from the `plugins` parameter (your plugin with all actions, providers, services)
+
+Both are merged into the final plugin list for the runtime.
+
+## Changes
+
+- Modified start command to iterate through projectAgents individually
+- Extract and pass `projectAgent.plugins` to `server.startAgents()` as the second parameter  
+- Added `IAgentRuntime` type import for proper typing
+- Dev command automatically benefits since it spawns 'start' as subprocess
+
+## Testing
+
+Both commands now properly:
+- ✅ Detect plugin projects
+- ✅ Create "Eliza (Test Mode)" character
+- ✅ **Load your plugin with all its actions, providers, services**
+- ✅ Call the plugin's init function
+
+Tested by running:
+```bash
+elizaos start    # in plugin directory
+elizaos dev      # in plugin directory
+```
+
+## Impact
+
+- **`elizaos start`**: Directly fixed
+- **`elizaos dev`**: Automatically fixed (spawns `start` as subprocess)
+
+Both commands will now correctly load plugins when run in plugin directories.
+
+<!-- CURSOR_SUMMARY -->
+---
+
+> [!NOTE]
+> Ensure ProjectAgent.plugins are passed to the server at startup and add end-to-end tests verifying plugin loading in dev/start when run inside plugin directories.
+> 
+> - **CLI (start command)**:
+>   - Pass each `ProjectAgent`'s `plugins` to `server.startAgents(...)` and start agents individually.
+>   - Two-phase flow: start all agents (collect `IAgentRuntime`s) then run `init` functions.
+>   - Improved logging and error handling around agent startup and init.
+>   - Import `IAgentRuntime` for proper typing.
+> - **Tests**:
+>   - Add e2e tests in `packages/cli/tests/commands/{start,dev}.test.ts` to verify plugin loading when run in a plugin directory (clones `plugin-openai`, builds, starts server, checks `/api/agents`).
+>   - Enhance test utilities in `packages/cli/tests/commands/test-utils.ts` with `cloneAndSetupPlugin`, `spawnCommand`, and process management tweaks.
+> - **Config**:
+>   - Minor `tsconfig.json` cleanup (formatting/structure).
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit 8a404f352b3a70c486fb57c76bb72b6e60c999c1. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->29:T1297,# Relates to
+
+Issue discussing the need for platform-agnostic mention detection
+
+# Risks
+
+**Medium Risk**
+- Changes core message flow logic in bootstrap
+- Modifies shouldRespond template and provider
+- Affects LLM decision-making for response behavior
+- Impacts all platforms that depend on bootstrap logic
+
+# Background
+
+## What does this PR do?
+
+This PR introduces a platform-agnostic mention detection system through the `MentionContext` interface:
+
+**Core Changes:**
+- Adds `MentionContext` interface to `Content` type in `packages/core/src/types/primitives.ts`
+  - Provides universal structure for platform mention metadata (isMention, isReply, isThread)
+  - Enables platforms to provide facts without implementing detection logic
+
+- Enhances `shouldRespondTemplate` in `packages/core/src/prompts.ts`
+  - Adds explicit "IMPORTANT RULES FOR RESPONDING" section
+  - Clarifies "talking TO" vs "talking ABOUT" distinction
+  - Instructs LLM to handle text mentions, typos, and variations naturally
+
+- Enriches `shouldRespondProvider` in `packages/plugin-bootstrap/src/providers/shouldRespond.ts`
+  - Adds 10+ examples covering edge cases (direct mentions, typos, indirect questions, references)
+  - Teaches LLM to distinguish interpellation from mere references
+
+- Modifies `shouldBypassShouldRespond` in `packages/plugin-bootstrap/src/index.ts`
+  - Accepts optional `mentionContext` parameter
+  - Implements fast-path optimization: skips LLM call for platform-native mentions (@mentions, replies)
+  - Saves tokens and improves response time for obvious mentions
+
+**Key Architecture Principles:**
+- Bootstrap remains 100% platform-agnostic (no Discord/Telegram/etc specific logic)
+- Platforms provide FACTS only via mentionContext
+- LLM analyzes context and makes intelligent decisions
+- Fast path for platform mentions, LLM path for text analysis
+
+## What kind of change is this?
+
+- [x] Features (adds platform-agnostic MentionContext interface)
+- [x] Improvements (refactors mention detection to be more intelligent and extensible)
+
+# Documentation changes needed?
+
+- [x] My changes require a change to the project documentation
+- Documentation needed for:
+  - `MentionContext` interface usage guide for plugin developers
+  - How platforms should populate mentionContext metadata
+  - Fast-path optimization behavior explanation
+
+# Testing
+
+## Where should a reviewer start?
+
+1. Review the `MentionContext` interface in `packages/core/src/types/primitives.ts`
+2. Check the enhanced prompt in `packages/core/src/prompts.ts` (search for "IMPORTANT RULES FOR RESPONDING")
+3. Review enriched examples in `packages/plugin-bootstrap/src/providers/shouldRespond.ts`
+4. Check `shouldBypassShouldRespond` changes in `packages/plugin-bootstrap/src/index.ts`
+5. Run test suites to verify coverage
+
+## Detailed testing steps
+
+**Automated Tests:**
+
+```bash
+# Core prompts tests (8 tests)
+bun test packages/core/src/__tests__/prompts.test.ts
+
+# Bootstrap logic tests (21 tests, 6 new for mentionContext)
+bun test packages/plugin-bootstrap/src/__tests__/logic.test.ts
+```
+
+**Test Coverage:**
+- ✅ `packages/core/src/__tests__/prompts.test.ts`
+  - Verifies shouldRespondTemplate contains new "IMPORTANT RULES FOR RESPONDING" section
+  - Checks for "talking TO" vs "talking ABOUT" instructions
+  - **Result: 8 pass, 0 fail**
+
+- ✅ `packages/plugin-bootstrap/src/__tests__/logic.test.ts`
+  - New describe block: "shouldBypassShouldRespond with mentionContext"
+  - 6 new tests covering:
+    1. DM channel bypass
+    2. Platform mention bypass (isMention=true)
+    3. Reply to bot bypass (isReply=true)
+    4. No bypass for regular messages
+    5. client_chat source bypass
+    6. Platform agnostic behavior (discord, telegram, twitter, slack)
+  - **Result: 21 pass, 0 fail**
+
+**Manual Integration Testing:**
+- Platforms implementing mentionContext will need to test with real messages
+- Verify LLM correctly distinguishes "Hey BotName, help me" (RESPOND) vs "BotName's code is great" (IGNORE)
+- Verify fast-path works for @mentions (no unnecessary LLM calls)
+
+## Screenshots
+
+N/A - This is core infrastructure with no UI changes
+
+# Deploy Notes
+
+## Deployment instructions
+
+**Standard deployment:**
+1. Merge this PR to main
+2. Release as v1.6.2 (or next minor version)
+3. No breaking changes - fully backward compatible
+4. Platforms can adopt mentionContext incrementally (optional parameter)
+
+**For platform plugin developers:**
+- Existing plugins continue to work without changes
+- To adopt mentionContext, populate it in message content before passing to bootstrap
+- Reference Discord plugin implementation as example
+
+**No database changes required**
+2a:Taf5,### Summary
+- Added `publishConfig.access = public` to `@elizaos/service-interfaces`.
+- Extended release workflow to publish new/unpublished packages individually if bulk Lerna publish fails, keeping versions and dist-tags in sync.
+
+### What changed
+- In `packages/service-interfaces/package.json`:
+  - Added `publishConfig` so a new scoped package publishes publicly to npm.
+- In `.github/workflows/release.yaml`:
+  - Added a fallback step after the main `lerna publish from-package`:
+    - Enumerates monorepo packages via `lerna ls --json`.
+    - For each, checks `npm view <name>@<version>`.
+    - Publishes any not yet on npm using `npm publish --access public --tag <dist-tag>`.
+  - Keeps existing versioning flow via Lerna; no change to tagging or git steps.
+
+### Why
+- CI failed when publishing the newly added `@elizaos/service-interfaces`:
+  - New scoped package lacked `publishConfig.access=public`.
+  - Bulk publish can leave new packages unpublished; the fallback ensures first-time publishes succeed automatically.
+
+### How it works
+- Primary path: `lerna publish from-package --dist-tag <alpha|beta|latest>`.
+- Fallback (only on failure): publish only the missing packages with the same dist-tag, preserving version alignment with the rest of the release.
+
+### Impact
+- New packages (like `@elizaos/service-interfaces`) will publish on first release without manual intervention.
+- Existing packages are unaffected; versions remain synchronized via `lerna version`.
+
+### Security
+- Continues using `secrets.NPM_TOKEN` for auth.
+- No changes to permission scopes.
+
+### Verification
+- Re-run the release workflow on `develop`/`main` or create a GitHub release:
+  - Confirm all packages publish with the expected dist-tag (`alpha`, `beta`, or `latest`).
+  - Verify `@elizaos/service-interfaces@<version>` exists on npm.
+
+### Files touched
+- `packages/service-interfaces/package.json`
+- `.github/workflows/release.yaml`
+
+<!-- CURSOR_SUMMARY -->
+---
+
+> [!NOTE]
+> Adds public publish config for @elizaos/service-interfaces and a workflow fallback to individually publish any packages left unpublished after bulk Lerna publish.
+> 
+> - **CI/CD (release workflow)**:
+>   - Adds a fallback step to individually publish unpublished packages when `lerna publish from-package` fails, using `lerna ls --json` + `npm view` checks and publishing with the same `dist-tag`.
+> - **Package config**:
+>   - Sets `publishConfig.access = public` in `packages/service-interfaces/package.json` to ensure public publishing of the new scoped package.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit efa85e4089481c2d19c712650bda7627bbaf20f9. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->2b:T6f8,<!-- CURSOR_SUMMARY -->
+> [!NOTE]
+> Updates tool execution to AI SDK v5 by parsing tool results from step content and using stepCountIs for stopping, returns steps, and bumps core/TypeScript versions.
+> 
+> - **Text generation (`src/models/text.ts`)**:
+>   - Use `stopWhen = stepCountIs(maxSteps)` instead of `maxSteps` for tool execution limits.
+>   - Parse tool results from step `content` entries of type `tool-result`, with base64 decoding.
+>   - Return `steps` alongside `text`, `toolCalls`, and `toolResults`; adjust logging to `debug`.
+> - **Types (`src/types/index.ts`)**:
+>   - Extend `ToolResponse` with optional `steps` structure (typed `toolCalls`, `toolResults`, `text`, `finishReason`).
+> - **Dependencies**:
+>   - Bump `@elizaos/core` to `^1.6.1`; upgrade `typescript` to `^5.9.3`.
+> - **Package**:
+>   - Version bump to `1.5.14`.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit e09208519177736662f32ffdff77faa5782daf16. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+* **New Features**
+  * Tool responses can now include optional step-by-step metadata (tool calls/results, text, finish reason) for clearer multi-step interaction visibility.
+
+* **Refactor**
+  * Improved reliability of tool result capture and controlled execution via step-based processing.
+  * Reduced log verbosity during generation and tool execution.
+
+* **Chores**
+  * Bumped version to 1.5.14.
+  * Updated dependencies, including @elizaos/core and TypeScript, for compatibility and stability.
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->2c:T531,<!-- CURSOR_SUMMARY -->
+> [!NOTE]
+> Upgrade `zod` to `4.1.11` across the monorepo and align package resolutions.
+> 
+> - **Dependencies**:
+>   - Upgrade `zod` to `4.1.11` in:
+>     - `packages/cli/package.json`
+>     - `packages/core/package.json`
+>     - `packages/plugin-quick-starter/package.json` (also update `resolutions.zod`)
+>     - `packages/plugin-starter/package.json` (also update `resolutions.zod`)
+>     - `packages/project-starter/package.json`
+>     - `packages/project-tee-starter/package.json`
+>   - Lockfile updated to reflect the new `zod` version and related transitive adjustments.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit a7a7c8bda698bb251bcc0805ebca940104b735b3. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+- Chores
+  - Upgraded the validation library to the latest major version across CLI, core, and starter templates/plugins.
+  - Aligns all packages on a consistent version for improved compatibility and maintenance.
+  - No user-facing features changed; behavior should remain the same.
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->2d:T741,# Core Cleanup: Remove legacy service initialization code
+
+## Problem Statement
+
+Part of Core Cleanup #5911:
+- Remove legacy code paths (double-inits, redundant type guards)
+- Audit and refactor type definitions across runtime
+- Clean up redundant initialization patterns
+
+Previously, we had two separate but related requirements:
+
+1. **Services need to wait for embedding model** - Services (like Twitter plugin) must wait for embedding model availability, otherwise the app would crash
+2. **Contributors wanted to register plugins after runtime startup** - This required distinguishing between initial registration vs. post-startup registration
+
+The solution was:
+- **Service queue (`servicesInitQueue`)** - Services were queued and only registered after embedding model was ready
+- **`isInitialized` flag** - Used to distinguish: if runtime is initialized, register service immediately; otherwise, push to queue for later registration
+
+## Solution
+
+Clean up legacy initialization patterns and make operations idempotent:
+
+- **Remove redundant `isInitialized` flag** - Legacy double-init protection
+- **Remove `servicesInitQueue`** - Simplify to direct promise-based waiting
+- **Add proper type annotation** - `initPromise: Promise<void>`
+- **Make operations idempotent** - Prevent duplicate migrations and adapter init
+- **Simplify service registration** - Services wait for `initPromise` directly
+
+## Key Changes
+
+- Remove legacy `isInitialized` flag and associated guard logic
+- Remove `servicesInitQueue` - services now wait for `initPromise` directly  
+- Add proper TypeScript typing for `initPromise`
+- Make `adapter.init()` and `runPluginMigrations()` idempotent
+- Add migration tracking with `migratedPlugins` set
+
+## Files Changed
+
+- `packages/core/src/runtime.ts` - Legacy code cleanup and type improvements2e:T585,## Issue
+
+TypeScript was throwing an error:
+```
+File '/Users/studio/Documents/GitHub/eliza/packages/core' not found.
+```
+
+## Root Cause
+
+The root `tsconfig.json` had a `references` array pointing to `packages/core`, but TypeScript project references require a `tsconfig.json` file in the referenced directory with `composite: true`. The `packages/core` directory only contains `tsconfig.declarations.json`, which is not a valid project reference target.
+
+## Solution
+
+Removed the invalid `references` array and `files` array from the root `tsconfig.json`. The path mappings for `@elizaos/core` are still present and functional, so imports will continue to work correctly.
+
+## Testing
+
+- Verified TypeScript no longer throws the file not found error
+- Path mappings remain intact for module resolution
+
+<!-- CURSOR_SUMMARY -->
+---
+
+> [!NOTE]
+> Remove invalid project references and files from root tsconfig; reformat arrays.
+> 
+> - **Config**:
+>   - `tsconfig.json`:
+>     - Remove `references` and `files` from root config.
+>     - Preserve `paths` mappings; no module resolution changes.
+>     - Reformat `lib` and `paths` arrays to multi-line.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit 7b5a88eaf8c95139d1f13f95a2dab10f806942da. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->2f:T825,# Relates to
+
+Fixes missing shouldRespondProvider registration in bootstrap plugin
+
+# Risks
+
+Low. This change restores functionality that was accidentally removed. It only affects the shouldRespond logic in the bootstrap plugin by properly registering and exporting the provider.
+
+# Background
+
+## What does this PR do?
+
+This PR registers and exports the `shouldRespondProvider` in the bootstrap plugin, which was previously defined but not registered in the plugin's providers array or exported from the providers index.
+
+## What kind of change is this?
+
+Bug fixes (non-breaking change which fixes an issue)
+
+# Documentation changes needed?
+
+My changes do not require a change to the project documentation.
+
+# Testing
+
+## Where should a reviewer start?
+
+Check that the `shouldRespondProvider` is:
+1. Exported in `packages/plugin-bootstrap/src/providers/index.ts`
+2. Registered in the providers array in `packages/plugin-bootstrap/src/index.ts`
+
+## Detailed testing steps
+
+- Verify the bootstrap plugin builds successfully
+- Confirm that the shouldRespond logic now executes when processing messages
+- Test that the agent properly evaluates whether to respond based on message context
+
+# Deploy Notes
+
+None. This is a straightforward bug fix that restores missing provider registration.
+
+<!-- CURSOR_SUMMARY -->
+---
+
+> [!NOTE]
+> Registers and exports shouldRespondProvider in the bootstrap plugin, tweaks its example text assembly, and enables noEmit in tsconfig.
+> 
+> - **Plugin Bootstrap**:
+>   - **Providers**: Register `shouldRespondProvider` in `src/index.ts` and export it from `src/providers/index.ts`.
+>   - **shouldRespond**: Minor refactor to assemble examples (`examplesText`) before adding header.
+> - **Build/Config**:
+>   - `tsconfig.json`: Enable `"noEmit": true`.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit d1d611d765372b13e8c383e0721bbccc895e366a. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->30:T4b0,<!-- CURSOR_SUMMARY -->
+> [!NOTE]
+> Bumps package to 1.5.15, adds zod as a peer dependency, and updates @elizaos/core to ^1.6.0-alpha.4.
+> 
+> - **Config**:
+>   - Bump package version to `1.5.15` in `package.json`.
+>   - Add `peerDependencies` for `zod` (`^3.25.76 || ^4.1.8`).
+>   - Update dependency `@elizaos/core` to `^1.6.0-alpha.4`.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit dbd6703ded9d7709fb7a2489543e5b7cc09711a4. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+* **Chores**
+  * Bumped app version to 1.5.15.
+  * Updated core dependency to a newer pre-release, aligning with the latest platform improvements.
+  * Added zod as a peer dependency to improve compatibility and reduce duplicate installations (supports 3.x and 4.x).
+  
+* **Notes**
+  * No changes to public APIs or exported entities.
+  * Users should ensure a compatible version of zod is installed in their environment.
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->31:T66e,### Summary
+- Downgrade log level from error to warn on failed dynamic import in `packages/server/src/managers/PluginLoader.ts`.
+- Rationale: initial import failure is frequently recoverable (auto-install/optional deps). Logging as error is noisy and suggests server fault. Warn is more appropriate while retaining retry/fallback.
+
+### Issue
+When a plugin is not yet installed or has an optional peer dependency missing, the first dynamic import commonly fails, but the loader immediately attempts `pluginInstaller.tryInstall(pluginName)`. Emitting an error-level log at this initial failure confuses operators and log monitors, making healthy self-healing flows look like incidents.
+
+### Change
+- Error → Warn for first import failure:
+  - before: `logger.error("Failed to load plugin ${pluginName}: ${error}")`
+  - after: `logger.warn("Failed to load plugin ${pluginName}: ${error}")`
+- No behavior changes to install/retry/fallback flow.
+
+### Testing
+- Manual test by simulating missing plugin; verified warn log and installer path executed.
+- No API changes; unit scope trivial.
+
+### Risk
+- Low. Only log level change.
+
+### Affected files
+- `packages/server/src/managers/PluginLoader.ts`
+
+<!-- CURSOR_SUMMARY -->
+---
+
+> [!NOTE]
+> Downgrades the first dynamic import failure in `PluginLoader.loadAndPreparePlugin` from error to warn without changing install/retry behavior.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit 1cf81c172df7f17e748fa244f8fd60abc0069581. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->32:T4cd,## Description
+
+This PR adds the @elizaos/plugin-relay package to the ElizaOS plugin registry.
+
+## Changes
+- Added `@elizaos/plugin-relay` entry pointing to `github:elizaos-plugins/plugin-relay` in alphabetical order in index.json
+
+## Purpose
+This addition allows users to discover and install the plugin-relay package through the ElizaOS plugin registry system.
+
+## Package Source
+- Repository: https://github.com/elizaos-plugins/plugin-relay
+
+<!-- CURSOR_SUMMARY -->
+---
+
+> [!NOTE]
+> Adds `@elizaos/plugin-relay` to the plugin registry in `index.json`.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit 5f668416d79b589993b170d198c1cfc3736e58ce. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+- New Features
+  - Added the Relay plugin to the public plugin registry, enabling easy discovery and installation via “@elizaos/plugin-relay”.
+  - No changes required for existing setups; compatible with current configurations.
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->33:T416,<!-- CURSOR_SUMMARY -->
+> [!NOTE]
+> Deletes `packages/plugin-sql/src/schema/factory.ts` and `packages/plugin-sql/src/__tests__/integration/schema-factory.test.ts`.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit 82a1c0a172f85492f5af67609688264e06209f4d. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+* **Refactor**
+  * Removed the schema factory and cross-database helpers for defining tables and columns. This is a breaking change; consumers should migrate to database-specific/ORM-native definitions for columns, indexes, checks, and foreign keys, and handle defaults directly.
+
+* **Tests**
+  * Removed related integration tests for PostgreSQL and pglite behaviors.
+
+* **Chores**
+  * Cleaned up references to deprecated schema utilities.
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->19:["$","div",null,{"className":"mb-8 space-y-6","children":[["$","$L20",null,{"metrics":{"date":"2025-09-28","interval":{"intervalStart":"$D2025-09-28T00:00:00.000Z","intervalEnd":"$D2025-10-05T00:00:00.000Z","intervalType":"week"},"pullRequests":{"new":21,"merged":24,"total":26},"issues":{"new":6,"closed":5,"total":9},"activeContributors":10,"codeChanges":{"additions":34966,"deletions":6752,"files":217,"commitCount":220},"topContributors":[{"username":"wtfsayo","avatarUrl":"https://avatars.githubusercontent.com/u/82053242?u=98209a1f10456f42d4d2fa71db4d5bf4a672cbc3&v=4","totalScore":424.61903177491155,"prScore":413.60503177491154,"issueScore":0,"reviewScore":9.5,"commentScore":1.5139999999999998,"summary":"wtfsayo: Delivered a high volume of work this week, primarily focused on enhancing the client-side agent experience while also addressing various bugs and chores across the system. Their most significant contributions were two major features in the `elizaos/eliza` repository: adding an agent runs visualization timeline (#6016) and a substantial enhancement to the agent runs sidebar (#6023, +17k lines). Alongside this feature development, they merged several fixes and chores, including disabling a local endpoint in production (#6014) and adding a new plugin to the registry (#234), demonstrating a broad focus on both new functionality and system maintenance."},{"username":"standujar","avatarUrl":"https://avatars.githubusercontent.com/u/16385918?u=718bdcd1585be8447bdfffb8c11ce249baa7532d&v=4","totalScore":238.7303088561218,"prScore":229.0923088561218,"issueScore":0,"reviewScore":9,"commentScore":0.6379999999999999,"summary":"standujar: This week, standujar drove significant architectural improvements across the Eliza ecosystem, landing a massive fix in the core repository (elizaos/eliza#6024, +15k lines) to correctly register a key provider. They also introduced a new `mentionContext` interface (elizaos/eliza#6030) and refactored the Discord plugin to adopt it (elizaos-plugins/plugin-discord#19). This work demonstrates a strong focus on refactoring and bug fixes across core application code and tests."},{"username":"0xbbjoker","avatarUrl":"https://avatars.githubusercontent.com/u/54844437?u=90fe1762420de6ad493a1c1582f1f70c0d87d8e2&v=4","totalScore":107.73557323619082,"prScore":96.9355732361908,"issueScore":0,"reviewScore":10,"commentScore":0.8,"summary":"0xbbjoker: This week, 0xbbjoker focused on maintenance and bug fixes, merging a fix for an issue in the OpenAI plugin (elizaos-plugins/plugin-openai#16) and removing a significant amount of unused code in elizaos/eliza#6029. They also supported the team by reviewing 2 PRs and commenting on an issue. Their activity shows a primary focus on bug fixes and configuration file changes across the codebase."},{"username":"ChristopherTrimboli","avatarUrl":"https://avatars.githubusercontent.com/u/27584221?u=de148a498b5af814e037c2975112fadd09df743f&v=4","totalScore":89.52282068848854,"prScore":85.02282068848854,"issueScore":0,"reviewScore":4.5,"commentScore":0,"summary":"ChristopherTrimboli: Focused on project dependencies and build processes within the `elizaos/eliza` repository. They resolved a package publishing issue on NPM (elizaos/eliza#6012) and merged a significant dependency update (elizaos/eliza#6025). This work, spanning 13 commits and 179 modified files, shows a primary focus on bugfixes and configuration."},{"username":"odilitime","avatarUrl":"https://avatars.githubusercontent.com/u/16395496?u=c9bac48e632aae594a0d85aaf9e9c9c69b674d8b&v=4","totalScore":16.438000000000002,"prScore":0,"issueScore":0,"reviewScore":16,"commentScore":0.43799999999999994,"summary":"odilitime: Focused on supporting the team through code review this week, conducting 3 reviews that resulted in 2 approvals and 1 request for changes, and leaving 3 comments on pull requests."},{"username":"linear","avatarUrl":"https://avatars.githubusercontent.com/in/20150?v=4","totalScore":14,"prScore":0,"issueScore":14,"reviewScore":0,"commentScore":0,"summary":"linear: Focused on project planning and ideation within the elizaos/eliza repository this week. They created several issues to define future work, including a feature proposal (#6020), finalizing cloud wireframes (#6019), and conducting a SWOT analysis (#6018). They also reported a bug related to local development commands (#6017)."},{"username":"matteo-brandolino","avatarUrl":"https://avatars.githubusercontent.com/u/49117857?u=28be1833532b4c849d42f50867bd960807756272&v=4","totalScore":4.3,"prScore":0,"issueScore":4.3,"reviewScore":0,"commentScore":0,"summary":"matteo-brandolino: Contributed to the stability of the Eliza CLI by identifying and reporting a bug related to import resolution. He opened issue elizaos/eliza#6031 to track this problem, which has since been closed."},{"username":"borisudovicic","avatarUrl":"https://avatars.githubusercontent.com/u/31806472?u=c0478c34097551ba98aaa71edb33af0885a72d69&v=4","totalScore":4,"prScore":0,"issueScore":4,"reviewScore":0,"commentScore":0,"summary":"borisudovicic: Focused on defining and tracking work in the elizaos/eliza repository this week. They created and subsequently closed three issues, outlining potential features such as a \"Bond Desk Agent\" (#5767), an \"Observability GUI for event runs\" (#5868), and a new Discord plugin configuration option (#6013)."}],"focusAreas":[{"area":"client","count":76},{"area":"plugin-sql","count":52},{"area":"core","count":35},{"area":"cli","count":25},{"area":"server","count":23},{"area":"service-interfaces","count":17},{"area":"plugin-bootstrap","count":8},{"area":"src","count":5},{"area":"test-utils","count":4},{"area":"api-client","count":2}],"topIssues":[{"id":"I_kwDOMT5cIs7PXS9F","title":"Imports not found in index.ts with Eliza CLI 1.61","author":"matteo-brandolino","number":6031,"repository":"elizaos/eliza","body":"## Describe the bug\nWhen creating a new project using `elizaos create`, some imports in `index.ts` fail:\nModule '\"@Elizaos/core\"' has no exported member 'logger'.ts(2305) Module '\"@Elizaos/core\"' has no exported member 'IAgentRuntime'.ts(2305) Module '\"@Elizaos/core\"' has no exported member 'ProjectAgent'.ts(2305)\nCopy code\n\n## To Reproduce\n1. Install Eliza CLI 1.61.  \n2. Run `elizaos create` to generate a new project.  \n3. Open `index.ts` and try to import `logger`, `IAgentRuntime`, or `ProjectAgent` from `@Elizaos/core`.  \n\n## Expected behavior\nThese members should be correctly exported and importable from `@Elizaos/core` in a newly generated project.  \n\n## Screenshots\n<!-- Add screenshots if applicable -->\n\n## Additional context\n- Eliza CLI version: 1.61  \n- This occurs immediately after project creation without any modifications.  \n- Possible regression from previous versions of `@Elizaos/core`.","createdAt":"2025-10-02T21:26:47Z","closedAt":"2025-10-09T22:20:47Z","state":"CLOSED","commentCount":2},{"id":"I_kwDOMT5cIs7F0iCC","title":"Bond Desk Agent","author":"borisudovicic","number":5767,"repository":"elizaos/eliza","body":"Check out the base trading agent we made for hackathon for this. Could be used potentially.\n\n[https://github.com/wtfsayo/otaku](https://github.com/wtfsayo/otaku)\n\nProbably using bond protocol infrastructure.\n\n[https://bondprotocol.finance/](https://bondprotocol.finance/)","createdAt":"2025-08-13T15:20:32Z","closedAt":"2025-10-01T14:21:51Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7JUUNl","title":"Observability GUI for event runs","author":"borisudovicic","number":5868,"repository":"elizaos/eliza","body":"Need this level of visibility/ui for event runs [https://content.trigger.dev/agent-parallelization.mp4](https://content.trigger.dev/agent-parallelization.mp4)","createdAt":"2025-09-02T21:30:19Z","closedAt":"2025-10-01T14:21:52Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7N3ORS","title":"Unhandled exception when getAgents() fails in runtime.ts (missing agents table)","author":"digitalsimboja","number":6003,"repository":"elizaos/eliza","body":"$21","createdAt":"2025-09-25T14:04:41Z","closedAt":"2025-09-28T07:57:03Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7Om1SJ","title":"elizaos dev and elizaos start command in plugin directory doesnt work anymore","author":"linear","number":6017,"repository":"elizaos/eliza","body":"\\`elizaos dev\\` or `elizaos start` in plugin directory should load plugin with test character","createdAt":"2025-09-29T19:17:21Z","closedAt":"2025-09-30T08:53:00Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7OacIr","title":"Add Config Option for Discord Plugin to Only Respond to Mentions/Name Calls","author":"borisudovicic","number":6013,"repository":"elizaos/eliza","body":"Introduce a configuration option in the Eliza Discord plugin so that the agent only responds when explicitly mentioned, or when directly called by its configured name.","createdAt":"2025-09-29T03:08:24Z","closedAt":"2025-10-01T14:21:47Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7OrbQt","title":"Ship Prank Caller / AI Crank Yankers","author":"linear","number":6020,"repository":"elizaos/eliza","body":"","createdAt":"2025-09-30T04:17:48Z","closedAt":"2026-04-12T18:51:40Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7Ora6K","title":"Cloud Wireframes Sealed & Agreed On","author":"linear","number":6019,"repository":"elizaos/eliza","body":"","createdAt":"2025-09-30T04:17:11Z","closedAt":"2025-10-10T07:27:43Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7OraEg","title":"SWOT Agent Analysis","author":"linear","number":6018,"repository":"elizaos/eliza","body":"","createdAt":"2025-09-30T04:15:31Z","closedAt":"2025-10-22T15:47:44Z","state":"CLOSED","commentCount":0}],"topPullRequests":[{"id":"PR_kwDOO65CGs6qXsmU","title":"Update to Zod v4 and dependencies","author":"standujar","number":1,"body":"Not tested.\n\n<!-- This is an auto-generated comment: release notes by coderabbit.ai -->\n\n## Summary by CodeRabbit\n\n- Chores\n  - Bumped app version to 1.3.3.\n  - Upgraded key dependencies to latest compatible versions for improved stability, compatibility, and security.\n  - Aligned dependency resolutions to avoid version conflicts.\n  - No changes to user-facing behavior or public APIs are expected.\n\n<!-- end of auto-generated comment: release notes by coderabbit.ai -->","repository":"elizaos-plugins/plugin-autocoder","createdAt":"2025-09-24T20:59:30Z","mergedAt":"2025-10-03T13:22:31Z","additions":12774,"deletions":15},{"id":"PR_kwDOMT5cIs6pYAwb","title":"chore: refactor dynamic migrations","author":"0xbbjoker","number":5990,"body":"","repository":"elizaos/eliza","createdAt":"2025-09-18T20:36:13Z","mergedAt":"2025-09-30T14:14:36Z","additions":11933,"deletions":1673},{"id":"PR_kwDOMT5cIs6rUKkg","title":"feat(client): Enhanced Agent Runs Sidebar with Improved Timeline UI","author":"wtfsayo","number":6023,"body":"$22","repository":"elizaos/eliza","createdAt":"2025-09-30T11:45:29Z","mergedAt":"2025-09-30T15:05:32Z","additions":3892,"deletions":685},{"id":"PR_kwDOMT5cIs6rCpmo","title":"feat(client): Add agent runs visualization timeline","author":"wtfsayo","number":6016,"body":"$23","repository":"elizaos/eliza","createdAt":"2025-09-29T08:41:43Z","mergedAt":"2025-09-29T15:33:21Z","additions":1398,"deletions":82},{"id":"PR_kwDOMT5cIs6q86kD","title":"chore(lint): ran linter across the repo","author":"wtfsayo","number":6011,"body":"$24","repository":"elizaos/eliza","createdAt":"2025-09-28T16:03:51Z","mergedAt":"2025-09-28T16:03:58Z","additions":1126,"deletions":1056},{"id":"PR_kwDOMT5cIs6rfDzg","title":"fix: code formatting standardization and const declaration fix","author":"wtfsayo","number":6027,"body":"$25","repository":"elizaos/eliza","createdAt":"2025-10-01T06:35:43Z","mergedAt":"2025-10-01T06:36:18Z","additions":1124,"deletions":1385},{"id":"PR_kwDOMT5cIs6qTmMU","title":"refactor type definitions across runtime.","author":"tcm390","number":5998,"body":"","repository":"elizaos/eliza","createdAt":"2025-09-24T14:48:48Z","mergedAt":"2025-09-28T15:56:49Z","additions":896,"deletions":499},{"id":"PR_kwDOMT5cIs6rVJ2G","title":"feat: bump deps","author":"ChristopherTrimboli","number":6025,"body":"$26","repository":"elizaos/eliza","createdAt":"2025-09-30T12:57:12Z","mergedAt":"2025-10-01T06:28:47Z","additions":621,"deletions":585},{"id":"PR_kwDOOtXZkc6rw2QF","title":"refactor: use new mentionContext interface","author":"standujar","number":19,"body":"$27","repository":"elizaos-plugins/plugin-discord","createdAt":"2025-10-02T12:56:49Z","mergedAt":"2025-10-04T14:45:52Z","additions":543,"deletions":477},{"id":"PR_kwDOMT5cIs6rP4xD","title":"fix(cli): pass ProjectAgent.plugins to server.startAgents in start command","author":"wtfsayo","number":6021,"body":"$28","repository":"elizaos/eliza","createdAt":"2025-09-30T06:23:52Z","mergedAt":"2025-09-30T08:52:59Z","additions":471,"deletions":39},{"id":"PR_kwDOOtXZkc6rUZp9","title":"feat: add shouldRespondToCharacterName setting","author":"standujar","number":18,"body":"\n\n<!-- This is an auto-generated comment: release notes by coderabbit.ai -->\n\n## Summary by CodeRabbit\n\n- New Features\n  - New Discord settings: ignore bot messages, ignore direct messages, or respond only when mentioned.\n  - Smarter mention handling: recognizes bot name case-insensitively and in replies/threads for more accurate responses.\n  - Improved channel member awareness to enhance mention and response behavior.\n\n- Improvements\n  - Clearer, more actionable error messages and logging.\n  - More resilient messaging flow with better handling of typing indicators and message chunks.\n\n- Chores\n  - Version bump to 1.3.0.\n  - Dependency updates, including core library and new Levenshtein utility.\n\n<!-- end of auto-generated comment: release notes by coderabbit.ai -->","repository":"elizaos-plugins/plugin-discord","createdAt":"2025-09-30T12:02:48Z","mergedAt":null,"additions":383,"deletions":474},{"id":"PR_kwDOMT5cIs6rxG2c","title":"feat: Add mentionContext interface and improve shouldRespond logic","author":"standujar","number":6030,"body":"$29","repository":"elizaos/eliza","createdAt":"2025-10-02T13:20:09Z","mergedAt":"2025-10-05T11:20:06Z","additions":295,"deletions":167},{"id":"PR_kwDOOtXZkc6lsWxw","title":"Support embeds/forwards, clientReadyPromise, DISCORD_LISTEN_CHANNEL_MESSAGE event","author":"odilitime","number":17,"body":"\n\n<!-- This is an auto-generated comment: release notes by coderabbit.ai -->\n## Summary by CodeRabbit\n\n- New Features\n  - Processed messages now include embed titles/descriptions, referenced-message context (including channel/guild when different), and code blocks extracted as attachments with in-text references.\n  - Configurable listening channels via environment variables; messages from those channels are ingested with metadata, attachments, reply links, timestamps, and source info.\n  - Added public methods to fetch channel members and register send handlers.\n\n- Refactor\n  - Startup now awaits client readiness before processing events; channel filtering centralized during event listener setup and inbound routing.\n\n- Chores\n  - Improved runtime logging and observability for channel configuration, inbound routing, login errors, and non-listening-channel messages.\n<!-- end of auto-generated comment: release notes by coderabbit.ai -->","repository":"elizaos-plugins/plugin-discord","createdAt":"2025-08-27T23:20:40Z","mergedAt":"2025-10-02T12:40:18Z","additions":158,"deletions":18},{"id":"PR_kwDOMT5cIs6q_XeM","title":"fix: new package publishing on NPM, add public publish config","author":"ChristopherTrimboli","number":6012,"body":"$2a","repository":"elizaos/eliza","createdAt":"2025-09-29T01:36:40Z","mergedAt":"2025-09-29T01:38:36Z","additions":103,"deletions":71},{"id":"PR_kwDONNAI986rzZm6","title":"chore: add some elizaos plugins","author":"standujar","number":152,"body":"","repository":"elizaos/elizaos.github.io","createdAt":"2025-10-02T16:43:05Z","mergedAt":"2025-10-02T18:58:06Z","additions":50,"deletions":0},{"id":"PR_kwDOOiniuM6rmtrc","title":"fix: AI SDK v5 tool results extraction from steps content","author":"standujar","number":15,"body":"$2b","repository":"elizaos-plugins/plugin-openrouter","createdAt":"2025-10-01T17:27:09Z","mergedAt":"2025-10-01T18:41:11Z","additions":47,"deletions":28},{"id":"PR_kwDOMT5cIs6rBJt3","title":"chore: update zod pckg version","author":"0xbbjoker","number":6015,"body":"$2c","repository":"elizaos/eliza","createdAt":"2025-09-29T06:15:46Z","mergedAt":"2025-09-29T06:17:15Z","additions":30,"deletions":32},{"id":"PR_kwDOMT5cIs6qjTGU","title":"refactor(core): make runtime initialization idempotent and improve service registration coordination","author":"tcm390","number":6004,"body":"$2d","repository":"elizaos/eliza","createdAt":"2025-09-25T16:59:26Z","mergedAt":"2025-09-28T12:16:01Z","additions":27,"deletions":19},{"id":"PR_kwDOMT5cIs6rBJjx","title":"chore: disable local env endpoint in production","author":"wtfsayo","number":6014,"body":"This PR enforces a production guard on /api/system/env/local.\n\n- GET /api/system/env/local returns 403 in production\n- POST /api/system/env/local returns 403 in production\n\nRationale: Prevent exposing or mutating local .env via API in prod.\n\n<!-- CURSOR_SUMMARY -->\n---\n\n> [!NOTE]\n> Blocks GET/POST `api/system/environment:/local` in production, returning 403 to prevent reading or writing local `.env`.\n> \n> - **Backend**:\n>   - **`packages/server/src/api/system/environment.ts`**:\n>     - Add production guard (`NODE_ENV === 'production'`) to `GET /local` and `POST /local` routes.\n>     - Return `403 FORBIDDEN` with error message when invoked in production.\n> \n> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit 06cdd0ca37daf24a074660d886bf803a87b66fe3. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>\n<!-- /CURSOR_SUMMARY -->","repository":"elizaos/eliza","createdAt":"2025-09-29T06:15:25Z","mergedAt":"2025-09-29T16:11:39Z","additions":19,"deletions":0},{"id":"PR_kwDOMT5cIs6rQBme","title":"fix(config): remove invalid project references from root tsconfig","author":"wtfsayo","number":6022,"body":"$2e","repository":"elizaos/eliza","createdAt":"2025-09-30T06:39:36Z","mergedAt":"2025-09-30T06:45:28Z","additions":18,"deletions":12},{"id":"PR_kwDOMT5cIs6rUWFx","title":"fix: register and export shouldRespondProvider in bootstrap plugin","author":"standujar","number":6024,"body":"$2f","repository":"elizaos/eliza","createdAt":"2025-09-30T11:57:59Z","mergedAt":"2025-10-01T06:29:12Z","additions":6,"deletions":2},{"id":"PR_kwDON0mV_86rAKoX","title":"fix: zod issue","author":"0xbbjoker","number":16,"body":"$30","repository":"elizaos-plugins/plugin-openai","createdAt":"2025-09-29T04:06:30Z","mergedAt":"2025-09-29T04:28:22Z","additions":5,"deletions":2},{"id":"PR_kwDOMT5cIs6q7X4n","title":"fix(server): downgrade plugin import failure from error to warn","author":"wtfsayo","number":6010,"body":"$31","repository":"elizaos/eliza","createdAt":"2025-09-28T12:04:13Z","mergedAt":"2025-09-28T12:05:51Z","additions":1,"deletions":1},{"id":"PR_kwDONkg7v86r0yyH","title":"feat: Add @elizaos/plugin-relay to registry","author":"wtfsayo","number":234,"body":"$32","repository":"elizaos-plugins/registry","createdAt":"2025-10-02T19:01:00Z","mergedAt":"2025-10-02T19:01:33Z","additions":1,"deletions":0},{"id":"PR_kwDOMT5cIs6re_01","title":"chore: remove obsolete Docker and devcontainer files","author":"wtfsayo","number":6026,"body":"Removes obsolete files that are no longer needed:\n- .devcontainer/Dockerfile\n- .devcontainer/devcontainer.json\n- Dockerfile.docs\n- docker-compose-docs.yaml\n\nThese files were already deleted from the filesystem and this PR stages and commits their removal.\n\n<!-- CURSOR_SUMMARY -->\n---\n\n> [!NOTE]\n> Delete unused devcontainer configs and docs Docker/compose files.\n> \n> - **Tooling/Config Cleanup**:\n>   - Remove devcontainer files: `.devcontainer/Dockerfile`, `.devcontainer/devcontainer.json`.\n>   - Remove docs containerization files: `Dockerfile.docs`, `docker-compose-docs.yaml`.\n> \n> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit 6a8be0debc81e8a0a99acd55516228d57988c09f. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>\n<!-- /CURSOR_SUMMARY -->","repository":"elizaos/eliza","createdAt":"2025-10-01T06:27:48Z","mergedAt":"2025-10-01T06:28:20Z","additions":0,"deletions":88},{"id":"PR_kwDOMT5cIs6rsqF8","title":"chore: remove unused SchemaFactory code","author":"0xbbjoker","number":6029,"body":"$33","repository":"elizaos/eliza","createdAt":"2025-10-02T06:20:38Z","mergedAt":"2025-10-03T20:15:07Z","additions":0,"deletions":289}],"detailedContributorSummaries":{"0xbbjoker":"0xbbjoker: This week, 0xbbjoker focused on maintenance and bug fixes, merging a fix for an issue in the OpenAI plugin (elizaos-plugins/plugin-openai#16) and removing a significant amount of unused code in elizaos/eliza#6029. They also supported the team by reviewing 2 PRs and commenting on an issue. Their activity shows a primary focus on bug fixes and configuration file changes across the codebase.","ChristopherTrimboli":"ChristopherTrimboli: Focused on project dependencies and build processes within the `elizaos/eliza` repository. They resolved a package publishing issue on NPM (elizaos/eliza#6012) and merged a significant dependency update (elizaos/eliza#6025). This work, spanning 13 commits and 179 modified files, shows a primary focus on bugfixes and configuration.","borisudovicic":"borisudovicic: Focused on defining and tracking work in the elizaos/eliza repository this week. They created and subsequently closed three issues, outlining potential features such as a \"Bond Desk Agent\" (#5767), an \"Observability GUI for event runs\" (#5868), and a new Discord plugin configuration option (#6013).","linear":"linear: Focused on project planning and ideation within the elizaos/eliza repository this week. They created several issues to define future work, including a feature proposal (#6020), finalizing cloud wireframes (#6019), and conducting a SWOT analysis (#6018). They also reported a bug related to local development commands (#6017).","matteo-brandolino":"matteo-brandolino: Contributed to the stability of the Eliza CLI by identifying and reporting a bug related to import resolution. He opened issue elizaos/eliza#6031 to track this problem, which has since been closed.","odilitime":"odilitime: Focused on supporting the team through code review this week, conducting 3 reviews that resulted in 2 approvals and 1 request for changes, and leaving 3 comments on pull requests.","standujar":"standujar: This week, standujar drove significant architectural improvements across the Eliza ecosystem, landing a massive fix in the core repository (elizaos/eliza#6024, +15k lines) to correctly register a key provider. They also introduced a new `mentionContext` interface (elizaos/eliza#6030) and refactored the Discord plugin to adopt it (elizaos-plugins/plugin-discord#19). This work demonstrates a strong focus on refactoring and bug fixes across core application code and tests.","wtfsayo":"wtfsayo: Delivered a high volume of work this week, primarily focused on enhancing the client-side agent experience while also addressing various bugs and chores across the system. Their most significant contributions were two major features in the `elizaos/eliza` repository: adding an agent runs visualization timeline (#6016) and a substantial enhancement to the agent runs sidebar (#6023, +17k lines). Alongside this feature development, they merged several fixes and chores, including disabling a local endpoint in production (#6014) and adding a new plugin to the registry (#234), demonstrating a broad focus on both new functionality and system maintenance."}}}],"$L34"]}]
+1a:["$","div",null,{"className":"prose prose-sm mx-auto mt-8 dark:prose-invert sm:prose lg:prose-lg xl:prose-xl","children":[["$","h2","h2-0",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"Executive Summary","position":{"start":{"line":3,"column":4,"offset":56},"end":{"line":3,"column":21,"offset":73}}}],"position":{"start":{"line":3,"column":1,"offset":53},"end":{"line":3,"column":21,"offset":73}}},"children":"Executive Summary"}],"\n",["$","p","p-0",{"children":"This week, our efforts centered on strengthening the ElizaOS framework by improving stability, developer experience, and agent observability. We introduced a powerful new visualization tool for tracking agent behavior, while simultaneously overhauling core components and resolving critical bugs to create a more robust and efficient platform for future development."}],"\n",["$","h3","h3-0",{"children":"Key Strategic Initiatives & Outcomes"}],"\n",["$","p","p-1",{"children":[["$","strong","strong-0",{"children":"Enhancing Agent Observability and Insight"}],"\nTo empower developers and users, we focused on making it easier to understand and debug agent behavior."]}],"\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["A new interactive timeline was launched to provide a detailed, step-by-step visualization of an agent's execution flow, improving transparency and diagnostics in ",["$","a","a-0",{"href":"https://github.com/elizaos/eliza","children":"elizaos/eliza"}],"."]}],"\n",["$","li","li-1",{"children":["The user interface for analyzing agent runs was further refined, making the data easier to interpret and use effectively in ",["$","a","a-0",{"href":"https://github.com/elizaos/eliza","children":"elizaos/eliza"}],"."]}],"\n"]}],"\n",["$","p","p-2",{"children":[["$","strong","strong-0",{"children":"Strengthening Core Stability and Developer Workflow"}],"\nThis initiative aimed to create a more reliable and productive development environment, accelerating future innovation."]}],"\n",["$","ul","ul-1",{"children":["\n",["$","li","li-0",{"children":["Foundational parts of the agent runtime and SQL plugin were overhauled to improve robustness and simplify future maintenance in ",["$","a","a-0",{"href":"https://github.com/elizaos/eliza","children":"elizaos/eliza"}],"."]}],"\n",["$","li","li-1",{"children":["A critical bug preventing developers from starting the application via the command line was fixed, restoring a key development workflow in ",["$","a","a-0",{"href":"https://github.com/elizaos/eliza","children":"elizaos/eliza"}],"."]}],"\n",["$","li","li-2",{"children":["The entire codebase was modernized by updating major dependencies and applying standardized code formatting, ensuring a more consistent and stable foundation in ",["$","a","a-0",{"href":"https://github.com/elizaos/eliza","children":"elizaos/eliza"}],"."]}],"\n"]}],"\n",["$","h2","h2-1",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"Repository Spotlights","position":{"start":{"line":19,"column":4,"offset":1794},"end":{"line":19,"column":25,"offset":1815}}}],"position":{"start":{"line":19,"column":1,"offset":1791},"end":{"line":19,"column":25,"offset":1815}}},"children":"Repository Spotlights"}],"\n",["$","h3","h3-1",{"children":"elizaos/eliza"}],"\n",["$","p","p-3",{"children":"Work in the main repository focused on foundational stability, developer experience, and a major user-facing feature for agent observability."}],"\n",["$","ul","ul-2",{"children":["\n",["$","li","li-0",{"children":["\n",["$","p","p-0",{"children":["$","strong","strong-0",{"children":"Features & Enhancements:"}]}],"\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["Introduced a new interactive timeline component to provide detailed insights into agent execution flow (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/6016","children":"#6016"}],") and followed up with UI enhancements for better data visualization (","$L35",")."]}],"\n","$L36","\n","$L37","\n"]}],"\n"]}],"\n","$L38","\n","$L39","\n"]}]]}]
+1b:["$","script","script-0",{"src":"/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","async":true}]
+1c:["$","script","script-1",{"src":"/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","async":true}]
+1d:["$","script","script-2",{"src":"/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js","async":true}]
+1e:["$","$L3a",null,{"children":["$","$3b",null,{"name":"Next.MetadataOutlet","children":"$@3c"}]}]
+34:["$","div",null,{"className":"rounded-lg border bg-card text-card-foreground shadow-sm","children":[["$","div",null,{"className":"flex flex-col space-y-1.5 p-6 py-4","children":["$","div",null,{"className":"tracking-tight text-sm font-medium","children":["$undefined","Code Changes"]}]}],["$","div",null,{"className":"p-6 pt-0","children":["$","div",null,{"className":"grid grid-cols-2 gap-4 md:grid-cols-4","children":[["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-git-commit-vertical h-5 w-5","aria-hidden":"true","children":[["$","path","1holv5",{"d":"M12 3v6"}],["$","circle","1v7zrd",{"cx":"12","cy":"12","r":"3"}],["$","path","a9ows0",{"d":"M12 15v6"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":220}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Commits"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-file-code h-5 w-5","aria-hidden":"true","children":[["$","path","1oefj6",{"d":"M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"}],["$","path","wfsgrz",{"d":"M14 2v5a1 1 0 0 0 1 1h5"}],["$","path","1tg20x",{"d":"M10 12.5 8 15l2 2.5"}],["$","path","yinavb",{"d":"m14 12.5 2 2.5-2 2.5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":217}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Files Changed"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-green-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-up h-5 w-5 text-green-500","aria-hidden":"true","children":[["$","path","hav0vg",{"d":"m5 12 7-7 7 7"}],["$","path","x0mq9r",{"d":"M12 19V5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-green-500","children":"+34,966"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Added"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-red-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-down h-5 w-5 text-red-500","aria-hidden":"true","children":[["$","path","s699le",{"d":"M12 5v14"}],["$","path","1idqje",{"d":"m19 12-7 7-7-7"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-red-500","children":"-6,752"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Deleted"}]]}]]}]]}]}]]}]
+35:["$","a","a-1",{"href":"https://github.com/elizaos/eliza/pull/6023","children":"#6023"}]
+36:["$","li","li-1",{"children":["Refactored the core agent runtime for improved stability and streamlined service registration (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5998","children":"#5998"}],", ",["$","a","a-1",{"href":"https://github.com/elizaos/eliza/pull/6004","children":"#6004"}],")."]}]
+37:["$","li","li-2",{"children":["Overhauled the SQL plugin's migration system to improve long-term maintainability (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5990","children":"#5990"}],")."]}]
+38:["$","li","li-1",{"children":["\n",["$","p","p-0",{"children":["$","strong","strong-0",{"children":"Bug Fixes:"}]}],"\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["Resolved a critical issue where CLI commands like ",["$","code","code-0",{"children":"elizaos start"}]," failed to load plugins, unblocking a major developer workflow (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/6021","children":"#6021"}],", resolving ",["$","a","a-1",{"href":"https://github.com/elizaos/eliza/issues/6017","children":"#6017"}],")."]}],"\n",["$","li","li-1",{"children":["Restored accidentally removed functionality in the bootstrap plugin, ensuring agents respond as expected (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/6024","children":"#6024"}],")."]}],"\n",["$","li","li-2",{"children":["Addressed a runtime crash during initialization, improving overall framework stability (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/6003","children":"#6003"}],")."]}],"\n"]}],"\n"]}]
+39:["$","li","li-2",{"children":["\n",["$","p","p-0",{"children":["$","strong","strong-0",{"children":"Maintenance:"}]}],"\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["Completed a major dependency update across the monorepo, modernizing key libraries like TypeScript, Vite, and Sentry (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/6025","children":"#6025"}],")."]}],"\n",["$","li","li-1",{"children":["Applied repository-wide code formatting to standardize style and improve readability (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/6011","children":"#6011"}],", ",["$","a","a-1",{"href":"https://github.com/elizaos/eliza/pull/6027","children":"#6027"}],")."]}],"\n",["$","li","li-2",{"children":["Streamlined the repository by removing obsolete Docker and development container files (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/6026","children":"#6026"}],")."]}],"\n"]}],"\n"]}]
+3c:null

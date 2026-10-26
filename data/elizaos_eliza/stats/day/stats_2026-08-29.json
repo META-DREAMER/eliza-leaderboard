@@ -1,0 +1,587 @@
+{
+  "interval": {
+    "intervalStart": "2026-08-29T00:00:00.000Z",
+    "intervalEnd": "2026-08-30T00:00:00.000Z",
+    "intervalType": "day"
+  },
+  "repository": "elizaos/eliza",
+  "overview": "From 2026-08-29 to 2026-08-30, elizaos/eliza had 70 new PRs (18 merged), 0 new issues, and 30 active contributors.",
+  "topIssues": [],
+  "topPRs": [
+    {
+      "id": "PR_kwDOMT5cIs8AAAABBZ64wQ",
+      "title": "feat(cloud): wire bounded backup admission caller",
+      "author": "standujar",
+      "number": 29870,
+      "body": "## Summary\n\n- add the production Worker caller boundary for V3 periodic-backup admission on the existing minute trigger\n- require unforgeable in-process scheduler provenance and a deterministic scheduled-time owner identity\n- keep the caller explicitly OFF in root, staging, and production unless the exact binding value is `\"1\"`\n- compose only the existing enrollment, claim, reservation, and defer database authorities\n- bound each invocation to 64 enrollment turns, 4,096 claim turns, 800 claimed items, and a scheduler-anchored 45-second deadline\n- drain every acquired batch through reservation or exact defer accounting before propagating failure, deadline, or cancellation\n- report only this durable caller's non-2xx/throws as failed Cron events, call `noRetry()` after all siblings settle, and preserve legacy fanout behavior\n- retain the legacy six-hour backup caller until separately authorized staging evidence proves replacement\n\n## Safety boundary\n\nThis slice does not capture a sandbox, call a backup provider, discover/create capacity, autoscale, deploy, enable staging/production, remove the legacy caller, or make a Ready/merge transition.\n\n## Verification\n\n- Bun 1.3.14 targeted matrix: 38 tests, 227 assertions, 0 failures\n- deterministic proof: 10,640 items across 64 shards and four priorities drain in fourteen minute ticks with no duplicate reservation or starvation\n- route provenance/auth/disabled-first/error semantics, Cron event-level retry suppression, fanout POST coverage, Wrangler schedule parity, and scheduled identity coverage\n- codegen: 705 mounted routes, 127 shards, 3 intentional skips, 0 unconverted; generated router and shard-key hashes revalidated\n- cloud-shared and cloud-api typechecks; Wrangler production bundle dry-run only\n- `verify:cloud`: 84/84 on exact head `814cb55a57864179df78bfb7b2aea7a0467b06b3`\n- two independent exact-SHA reviews: no P0-P3 findings\n\nThe caller does not change the PostgreSQL repository authorities. Their real 10,640-row evidence remains on the parent reservation stack; a fresh local reacquisition attempt for this slice stopped before assertions because the ephemeral PostgreSQL harness did not become ready.\n\nAdvances #24407. Stacked on #29785.\n",
+      "repository": "elizaos/eliza",
+      "createdAt": "2026-08-29T01:22:45Z",
+      "mergedAt": null,
+      "additions": 23027,
+      "deletions": 97
+    },
+    {
+      "id": "PR_kwDOMT5cIs8AAAABBcoxqA",
+      "title": "feat(cloud): fence exact restore settlement and cleanup",
+      "author": "standujar",
+      "number": 29926,
+      "body": "## Scope\n- Persist exact restore provider intent, locator, and settlement under the durable restore authority.\n- Serialize cleanup through cleanup_in_progress with claim-fenced begin, finish, release, and takeover.\n- Add per-replacement vault seed receipts and prevent exact cleanup from bypassing the dedicated fence.\n- Keep provider success and cleanup capacity settlement atomic and replay-safe.\n\n## Validation\n- cloud-shared typecheck\n- migration, replacement-attempt, authority, quarantine/race, API, and lock-order suites pass\n- real PostgreSQL lock suite has 9 local skips because no DSN or Docker database was provided\n\n## Stack\nDepends on the exact restore secret transport Draft. Part of #20726. Draft only; no rollout or merge requested.",
+      "repository": "elizaos/eliza",
+      "createdAt": "2026-08-29T14:59:48Z",
+      "mergedAt": null,
+      "additions": 7493,
+      "deletions": 532
+    },
+    {
+      "id": "PR_kwDOMT5cIs8AAAABBcoy7w",
+      "title": "feat(cloud): compose exact restore create and cleanup",
+      "author": "standujar",
+      "number": 29929,
+      "body": "## Scope\n- Compose durable reservation, vault seed, exact Docker create, settlement, and reconciliation.\n- Preserve the create claim through provider settlement and release it only on durable completion.\n- Reconcile unresolved cleanup from the DB locator with deterministic cleanup receipts.\n- Keep activation, boot, routing publication, and commit outside this disabled-first runtime.\n\n## Validation\n- cloud-shared typecheck\n- runtime plus API boundary: 34 pass, 0 fail\n- full stacked targeted matrix, Biome, and diff-check pass\n\n## Stack\nTop Draft of this bounded exact restore lot. Part of #20726. Draft only; no rollout or merge requested.",
+      "repository": "elizaos/eliza",
+      "createdAt": "2026-08-29T14:59:54Z",
+      "mergedAt": null,
+      "additions": 5897,
+      "deletions": 65
+    },
+    {
+      "id": "PR_kwDOMT5cIs8AAAABBbTZDw",
+      "title": "fix(core,sql): complete bounded large-content paging",
+      "author": "hermesagent270-commits",
+      "number": 29896,
+      "body": "## Summary\n\nCompletes the remaining acceptance work for #25140 on top of #29754:\n\n- adds an explicit authorized, caller-bounded legacy-content reindex contract\n- locks and size-checks the parent before fetching legacy source bytes, with a 16 MiB hard ceiling\n- atomically publishes the bounded parent descriptor and immutable segment generation\n- threads page and reindex reads through the requester's PostgreSQL entity context so restrictive RLS and pushed-down access predicates compose\n- exposes the reindex operation through the runtime\n- adds a 10 MiB PGlite restart/reassembly proof and a real PostgreSQL/RLS authorization proof\n\nThis is intended as a completion/replacement for #29754, whose current body explicitly defers the legacy migration and PostgreSQL/RLS acceptance items.\n\n## Verified evidence\n\n- `bun run --cwd packages/core typecheck`\n- `bun run --cwd plugins/plugin-sql typecheck`\n- `bun run --cwd plugins/plugin-sql build`\n- PGlite real integration: 7/7 passed, including bounded 10 MiB legacy reindex, exact reassembly, and restart\n- PostgreSQL 16 + pgvector real RLS integration: 1/1 passed, including wrong-room denial and per-page reauthorization\n- core paging/segmentation tests: 16/16 passed\n- root `bun run verify`: 375/375 turbo tasks plus all repository audits passed\n\nCloses #25140\n",
+      "repository": "elizaos/eliza",
+      "createdAt": "2026-08-29T08:18:52Z",
+      "mergedAt": null,
+      "additions": 4228,
+      "deletions": 23
+    },
+    {
+      "id": "PR_kwDOMT5cIs8AAAABBd7eOQ",
+      "title": "feat(agent): secure exact restore candidate filesystem (#20726)",
+      "author": "standujar",
+      "number": 29959,
+      "body": "## Scope\n\nAdds the private Agent filesystem boundary needed to stage an exact restore-v3 candidate for #20726. The implementation is split into authority/control, durable JSON, payload, and tree proof/cleanup modules behind one small facade.\n\nThis PR does not materialize PGlite/character/media/state/vault components, boot a candidate, publish activation, or route traffic.\n\n## Guarantees\n\n- production is Linux-only and descriptor-bound through `/proc/self/fd`; every traversed directory is opened `O_DIRECTORY|O_NOFOLLOW`\n- one persistent kernel `flock` remains bound to the attempt-root inode across pathname rename\n- payload owner/receipt sidecars allow exact crash and lost-response replay without persisting the owner token itself\n- canonical durable JSON uses no-replace link publication plus parent-directory fsync and exact crash repair\n- payloads reject symlinks, hardlinks, overflow, replaced inodes, and other owners; provider-owned buffers/descriptors are disposed on late abort\n- canonical JSON rejects sparse arrays, accessors, symbol keys, and undeclared properties\n- cleanup preflights the bounded tree and uses an internal cleanup deadline\n- non-Linux pathname emulation is available only with the explicit test-only flag under `NODE_ENV=test`; production fails closed\n\n## Proof\n\n- Linux container with real `/proc` and kernel flock: 15/15, 59 assertions\n- macOS explicit test-only emulation: 15/15, 59 assertions\n- Agent TypeScript: green\n- Biome: green\n- git diff --check: green\n- no residual test container or flock/sleep helper\n\n## Explicit platform limit\n\n`flock` is advisory for cooperative participants. Node does not expose the full `openat2`/`unlinkat`/`linkat(AT_EMPTY_PATH)` set used to eliminate every last-component race against a deliberately non-cooperative same-UID process. Ancestors remain descriptor-bound/no-follow and final identities are revalidated; deployments must keep the staging root private to this Agent authority.\n\nDraft only. Keep stacked on #29958; do not mark Ready or merge without explicit authorization.",
+      "repository": "elizaos/eliza",
+      "createdAt": "2026-08-29T21:51:06Z",
+      "mergedAt": null,
+      "additions": 4200,
+      "deletions": 0
+    }
+  ],
+  "codeChanges": {
+    "additions": 8108,
+    "deletions": 797,
+    "files": 108,
+    "commitCount": 173
+  },
+  "completedItems": [
+    {
+      "title": "integration: preserve Nubs stable VPS mobile baseline",
+      "prNumber": 29674,
+      "type": "other",
+      "body": "## Purpose\n\nDurable integration lane for the Pixel/LP3 VPS demo baseline. It rebases the already-reviewed mobile keyboard, Calendar simplification, notification unification, deterministic view navigation, and planner-stream timing changes o",
+      "files": [
+        "packages/core/src/__tests__/planner-happy-path.test.ts",
+        "packages/core/src/services/message.shortcut-gate.test.ts",
+        "packages/core/src/services/message.ts",
+        "packages/ui/src/chat/slash-menu.test.ts",
+        "packages/ui/src/chat/slash-menu.ts",
+        "packages/ui/src/components/shell/ChatOverlay.test.tsx",
+        "packages/ui/src/components/shell/ChatOverlay.tsx",
+        "packages/ui/src/components/shell/chat-panel-layout.test.ts",
+        "packages/ui/src/components/shell/chat-panel-layout.ts",
+        "packages/ui/src/state/useCloudState.same-tab-login.test.tsx",
+        "packages/ui/src/state/useCloudState.ts",
+        "packages/ui/src/widgets/HOME_CONTENT_TAXONOMY.md",
+        "packages/ui/src/widgets/home-priority-integration.test.ts",
+        "packages/ui/src/widgets/registry.ts",
+        "packages/ui/src/widgets/registry.visibility-drift.test.ts",
+        "plugins/plugin-calendar/src/components/calendar/CalendarPage.test.tsx",
+        "plugins/plugin-calendar/src/components/calendar/CalendarPage.tsx",
+        "plugins/plugin-calendar/src/components/calendar/SimpleCalendarView.test.tsx",
+        "plugins/plugin-calendar/src/components/calendar/SimpleCalendarView.tsx",
+        ".github/workflows/app-live-e2e.yml",
+        "packages/app/index.html",
+        "packages/app/public/_headers",
+        "packages/app/test/cloud-live-continuity-contract.test.ts",
+        "packages/app/test/cloud-live-continuity-contract.ts",
+        "packages/app/test/cloud-live-dedicated-adoption-consent.ts",
+        "packages/app/test/cloud-live-optional-action.ts",
+        "packages/app/test/cloud-live-trajectory-diagnostic.test.ts",
+        "packages/app/test/cloud-live-trajectory-diagnostic.ts",
+        "packages/app/test/pages-csp.test.ts",
+        "packages/app/test/ui-smoke/cloud-live-optional-action.spec.ts",
+        "packages/app/test/ui-smoke/cloud-live.spec.ts",
+        "packages/scripts/__tests__/app-live-e2e-workflow.test.ts",
+        "packages/ui/src/cloud/public-pages/pages/login/steward-login-section.oauth-launch.test.tsx",
+        "packages/ui/src/components/pages/Launcher.test.tsx",
+        "packages/ui/src/components/pages/Launcher.tsx",
+        "packages/ui/src/components/views/DynamicViewLoader.test.tsx",
+        "packages/ui/src/components/views/DynamicViewLoader.tsx",
+        "packages/ui/src/hooks/useViewCatalog.authority.test.tsx",
+        "packages/ui/src/hooks/useViewCatalog.ts",
+        "packages/ui/src/state/useChatSend.test.tsx"
+      ]
+    },
+    {
+      "title": "fix(core): restore triage adapter route-cache FIFO bound",
+      "prNumber": 29649,
+      "type": "bugfix",
+      "body": "Fixes #29629\n\n# Relates to\n\n- #29629\n- Collateral from #28112 (complete-retention sweep). This restores a process-memory cache bound, not a content cap.\n\nDefinition of Done: full standard in [`CONTRIBUTING.md`](../CONTRIBUTING.md).\n\n- [x] T",
+      "files": [
+        "packages/core/src/features/messaging/triage/__tests__/triage-service.test.ts",
+        "packages/core/src/features/messaging/triage/triage-service.ts"
+      ]
+    },
+    {
+      "title": "fix(context): preserve complete semantic evidence",
+      "prNumber": 29505,
+      "type": "bugfix",
+      "body": "Closes #29406.\n\n## Summary\n\nPR #29403 exposed a category error: making a lossy semantic clamp Unicode-safe still discards the evidence needed to plan, judge, debug, or retry correctly. This change removes the clamps instead.\n\n- preserve com",
+      "files": [
+        "packages/app-core/platforms/electrobun/src/shell-sync-relay.test.ts",
+        "packages/app-core/platforms/electrobun/src/shell-sync-relay.ts",
+        "packages/core/src/__tests__/prompt-integrity-policy.test.ts",
+        "packages/scenario-runner/src/executor.test.ts",
+        "packages/scenario-runner/src/executor.ts",
+        "packages/scenario-runner/src/final-checks/index.ts",
+        "packages/scenario-runner/src/judge.test.ts",
+        "packages/scenario-runner/src/judge.ts",
+        "packages/scenario-runner/src/reporter.complete-text.test.ts",
+        "packages/scenario-runner/src/reporter.test.ts",
+        "packages/scenario-runner/src/reporter.truncate.test.ts",
+        "packages/scenario-runner/src/reporter.ts",
+        "packages/scenario-runner/src/runtime-factory.test.ts",
+        "packages/scenario-runner/src/runtime-factory.ts",
+        "packages/scenario-runner/src/scenario-assertions/__tests__/calendar-assertions.test.ts",
+        "packages/scenario-runner/src/scenario-assertions/__tests__/effect-assertions.test.ts",
+        "packages/scenario-runner/src/scenario-assertions/calendar-assertions.ts",
+        "packages/scenario-runner/src/scenario-assertions/effect-assertions.ts",
+        "plugins/plugin-agent-skills/src/security/skill-scanner.test.ts",
+        "plugins/plugin-agent-skills/src/security/skill-scanner.ts",
+        "plugins/plugin-cloud-apps/__tests__/reference-resolution.test.ts",
+        "plugins/plugin-cloud-apps/src/client.ts",
+        "plugins/plugin-personal-assistant/src/lifeops/service-helpers-reminder.ts"
+      ]
+    },
+    {
+      "title": "fix(cloud): classify standing from primary",
+      "prNumber": 29504,
+      "type": "bugfix",
+      "body": "",
+      "files": [
+        "packages/cloud/shared/src/lib/auth-inference-api-key.test.ts",
+        "packages/cloud/shared/src/lib/services/inference-api-key-auth.ts",
+        "packages/cloud/shared/src/lib/services/inference-auth-context.test.ts",
+        "packages/cloud/shared/src/lib/services/inference-auth-context.ts",
+        "packages/cloud/shared/src/lib/services/inference-hot-path-benchmark.test.ts",
+        "packages/cloud/shared/src/lib/services/inference-session-auth-context.test.ts",
+        "packages/cloud/shared/src/lib/services/inference-session-auth-context.ts"
+      ]
+    },
+    {
+      "title": "fix(ui): fence model config loads by lifecycle",
+      "prNumber": 29807,
+      "type": "bugfix",
+      "body": "Closes #29803\n\n## Summary\n\n- reset the mounted lifetime on each effect setup, including React StrictMode replay\n- fence every catalog/config completion by both lifecycle generation and monotonic load generation\n- prove current success/error",
+      "files": [
+        "packages/ui/src/components/settings/ModelConfigurationPanel.test.tsx",
+        "packages/ui/src/components/settings/useModelConfiguration.ts"
+      ]
+    },
+    {
+      "title": "fix(app-core): preserve bounded shell command errors",
+      "prNumber": 29797,
+      "type": "bugfix",
+      "body": "Closes #29796.\n\n## Summary\n\n- remove silent 2,000-character truncation from supported shell command errors\n- define a 64 KiB UTF-8 renderer/native error contract\n- preserve supported errors exactly after well-formed Unicode normalization\n- ",
+      "files": [
+        "packages/app-core/platforms/electrobun/src/shell-sync-relay.test.ts",
+        "packages/app-core/platforms/electrobun/src/shell-sync-relay.ts"
+      ]
+    },
+    {
+      "title": "fix(ui): restore view lifecycle recovery fixture",
+      "prNumber": 29791,
+      "type": "bugfix",
+      "body": "Closes #29790.\n\n## What changed\n\n- mount the isolated lifecycle harness under the complete translation context required by the real per-view crash fallback\n- keep the fixture deterministic and offline by using a minimal English/default-valu",
+      "files": [
+        "packages/ui/src/components/views/__e2e__/run-view-lifecycle-e2e.mjs",
+        "packages/ui/src/components/views/__e2e__/view-lifecycle-fixture.tsx"
+      ]
+    },
+    {
+      "title": "fix(ui): isolate launcher catalog source failures",
+      "prNumber": 29789,
+      "type": "bugfix",
+      "body": "Closes #29788\n\n## What changed\n\n- Keep healthy built-in launcher entries usable when optional catalog or installed-app sources fail.\n- Coordinate optional-source settlement and retry on the same authority-scoped shared cache keys used by ev",
+      "files": [
+        "packages/ui/src/components/pages/Launcher.test.tsx",
+        "packages/ui/src/components/pages/Launcher.tsx",
+        "packages/ui/src/hooks/useViewCatalog.authority.test.tsx",
+        "packages/ui/src/hooks/useViewCatalog.ts"
+      ]
+    },
+    {
+      "title": "fix(ui,shared): repair Develop Full story-gate residues (#29506)",
+      "prNumber": 29757,
+      "type": "bugfix",
+      "body": "## Summary\n\nRe-scoped follow-up for #29506. #29643 landed repairs for five of the seven Story Gate regressions (cache-stats definition-list structure, code-block aria, game-modal contrast, AppWorkspaceContent keyboard focusability via Scrol",
+      "files": [
+        "bun.lock",
+        "packages/shared/package.json",
+        "packages/shared/src/terminal/theme.test.ts",
+        "packages/shared/src/terminal/theme.ts",
+        "packages/ui/src/components/shell/SlashCommandMenu.error-state.test.tsx",
+        "packages/ui/src/components/shell/SlashCommandMenu.tsx",
+        "packages/ui/src/styles/base.css"
+      ]
+    },
+    {
+      "title": "test(cloud): gate live Dedicated adoption consent",
+      "prNumber": 29744,
+      "type": "tests",
+      "body": "# Relates to\n\nCloses #29712.\n\n- [x] This PR targets `develop` and is rebased onto the latest `origin/develop` with zero conflicts.\n- [x] `bun install` and `bun run verify` were run after sync; the exact unrelated `develop` blocker is record",
+      "files": [
+        ".github/workflows/app-live-e2e.yml",
+        "packages/app/test/cloud-live-continuity-contract.test.ts",
+        "packages/app/test/cloud-live-continuity-contract.ts",
+        "packages/app/test/cloud-live-optional-action.ts",
+        "packages/app/test/cloud-live-trajectory-diagnostic.test.ts",
+        "packages/app/test/cloud-live-trajectory-diagnostic.ts",
+        "packages/app/test/ui-smoke/cloud-live-optional-action.spec.ts",
+        "packages/app/test/ui-smoke/cloud-live.spec.ts",
+        "packages/scripts/__tests__/app-live-e2e-workflow.test.ts",
+        "packages/app/test/cloud-live-dedicated-adoption-consent.ts"
+      ]
+    },
+    {
+      "title": "fix(ui): authenticate protected dynamic view bundles",
+      "prNumber": 29953,
+      "type": "bugfix",
+      "body": "Closes #29952\n\n## Summary\n\n- fetch protected host-external view bundles through the active authenticated `ElizaClient` transport\n- accept only the page origin or the active API-client origin, so paired previews validate the same authority t",
+      "files": [
+        "packages/app/index.html",
+        "packages/app/public/_headers",
+        "packages/app/test/pages-csp.test.ts",
+        "packages/ui/src/components/views/DynamicViewLoader.test.tsx",
+        "packages/ui/src/components/views/DynamicViewLoader.tsx"
+      ]
+    },
+    {
+      "title": "fix(ui): skip Cloud billing polls for remote runtimes",
+      "prNumber": 29945,
+      "type": "bugfix",
+      "body": "Closes #29944.\n\n## What changed\n- Treat a user-selected persisted remote runtime like an immutable build-pinned remote for ambient Cloud polling.\n- Preserve explicit Cloud login/session verification.\n- Add the exact remote runtime + rejecte",
+      "files": [
+        "packages/ui/src/state/useCloudState.same-tab-login.test.tsx",
+        "packages/ui/src/state/useCloudState.ts"
+      ]
+    },
+    {
+      "title": "fix(cloud): preserve hosted logout authority",
+      "prNumber": 29910,
+      "type": "bugfix",
+      "body": "# Relates to\n\nFixes #29889\n\nDefinition of Done: full standard in [`CONTRIBUTING.md`](../CONTRIBUTING.md).\n\n- [x] This PR targets `develop` and is rebased onto the latest `origin/develop` with zero conflicts (`git fetch origin && git rebase ",
+      "files": [
+        "packages/cloud/api/auth/logout/route.test.ts",
+        "packages/cloud/api/auth/logout/route.ts",
+        "packages/cloud/shared/src/lib/auth/workers-hono-auth.api-key.test.ts",
+        "packages/cloud/shared/src/lib/auth/workers-hono-auth.ts",
+        "packages/ui/src/cloud/app-mode/AppModeEntryRoute.sso.test.tsx",
+        "packages/ui/src/cloud/app-mode/AppModeEntryRoute.tsx",
+        "packages/ui/src/cloud/join/JoinPage.sso-handoff.test.tsx",
+        "packages/ui/src/cloud/join/JoinPage.tsx",
+        "packages/ui/src/cloud/public-pages/pages/login/steward-login-section.email-login.test.tsx",
+        "packages/ui/src/cloud/public-pages/pages/login/steward-login-section.tsx",
+        "packages/ui/src/cloud/sso-bridge/sso-bridge.test.ts",
+        "packages/ui/src/cloud/sso-bridge/sso-bridge.ts"
+      ]
+    },
+    {
+      "title": "fix(cloud): scope provisioning deploy cleanliness to used source",
+      "prNumber": 29905,
+      "type": "bugfix",
+      "body": "Closes #29904\n\n## What changed\n\nThe exact-SHA provisioning deploy still resets, cleans, and verifies the superproject, but excludes retained dirt inside native submodule worktrees. This daemon/migration path neither initializes nor consumes",
+      "files": [
+        ".github/workflows/deploy-eliza-provisioning-worker.yml",
+        "packages/cloud/scripts/admin/daemons/provisioning-worker-env-reconcile.test.ts"
+      ]
+    },
+    {
+      "title": "fix(cloud): bind Steward auth to provisioning worker",
+      "prNumber": 29903,
+      "type": "bugfix",
+      "body": "Closes #29902\n\n## What changed\n\n- requires the staging/production protected Steward URL and platform key before the provisioning host can mutate\n- forwards both bindings through the pinned SSH boundary\n- atomically reconciles them into the ",
+      "files": [
+        ".github/workflows/deploy-eliza-provisioning-worker.yml",
+        "packages/cloud/scripts/admin/daemons/provisioning-worker-env-reconcile.test.ts"
+      ]
+    },
+    {
+      "title": "fix(cloud): keep staging magic links on the cloud app origin",
+      "prNumber": 29897,
+      "type": "bugfix",
+      "body": "Fixes #29893\n\n## What changed\n\n- reconcile the staging Steward tenant callback immediately before Worker publication\n- patch only the callback origin and callback path, preserving provider credentials and templates\n- read the live tenant co",
+      "files": [
+        ".github/workflows/cloud-cf-release.yml",
+        "package.json",
+        "packages/cloud/scripts/__tests__/reconcile-steward-email-callback-config.test.ts",
+        "packages/cloud/scripts/reconcile-steward-email-callback-config.mjs",
+        "packages/scripts/__tests__/cloud-cf-steward-email-callback-workflow.test.ts"
+      ]
+    },
+    {
+      "title": "fix(ui): complete hosted session logout",
+      "prNumber": 29890,
+      "type": "bugfix",
+      "body": "# Relates to\n\nCloses #29889.\n\n- [x] Targets `develop` and is based on current `origin/develop`.\n- [x] `bun install` and `bun run verify` passed after sync.\n- [x] Behavioral tests cover the hosted logout boundary.\n\n# Sync with develop\n\n- [x]",
+      "files": [
+        "packages/ui/src/cloud/join/JoinPage.sign-out-cleanup.test.tsx",
+        "packages/ui/src/cloud/join/JoinPage.tsx",
+        "packages/ui/src/cloud/shell/StewardProviderShared.test.ts",
+        "packages/ui/src/cloud/shell/StewardProviderShared.ts",
+        "packages/ui/src/cloud/sso-bridge/sso-bridge.test.ts",
+        "packages/ui/src/cloud/sso-bridge/sso-bridge.ts",
+        "packages/ui/src/i18n/locales/en.json"
+      ]
+    },
+    {
+      "title": "fix(core): ignore ungrounded document list zero limit",
+      "prNumber": 29837,
+      "type": "bugfix",
+      "body": "## Summary\n\n- treat a strict-decoder `limit: 0` as an omitted list-only parameter when the user did not ask for zero\n- preserve the positive-safe-integer fail-closed rule when the user explicitly requests a zero limit\n- add regression cover",
+      "files": [
+        "packages/core/src/features/documents/__tests__/actions-routing.test.ts",
+        "packages/core/src/features/documents/actions.ts"
+      ]
+    }
+  ],
+  "topContributors": [
+    {
+      "username": "ss251",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/32437884?u=6d30f4348b224c13c51c13dc2b7b136f3cdbe62b&v=4",
+      "totalScore": 623.9273878187124,
+      "prScore": 23.72738781871234,
+      "issueScore": 0,
+      "reviewScore": 600,
+      "commentScore": 0.2,
+      "summary": "ss251: Focused on enhancing system stability and security by opening two bugfix PRs in elizaos/eliza (#29960, #29975) and conducting 118 code reviews to ensure high-quality contributions across the repository. Their work centered exclusively on bugfix efforts, involving 173 additions and 7 deletions across code and test files."
+    },
+    {
+      "username": "attentionhead",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/30051356?v=4",
+      "totalScore": 277.938,
+      "prScore": 0,
+      "issueScore": 0,
+      "reviewScore": 277.5,
+      "commentScore": 0.43799999999999994,
+      "summary": "attentionhead: Focused on maintaining code quality and project standards through extensive peer review, completing 59 reviews including 19 approvals and 5 change requests. This effort provided critical oversight across the codebase, ensuring consistent standards through 19 PR comments."
+    },
+    {
+      "username": "wtfsayo",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/82053242?u=98209a1f10456f42d4d2fa71db4d5bf4a672cbc3&v=4",
+      "totalScore": 272.3460533021981,
+      "prScore": 272.1460533021981,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0.2,
+      "summary": "wtfsayo: Focused on stabilizing cloud infrastructure and UI session management, successfully merging five critical bug fixes in elizaos/eliza, including a significant +355 line update to staging magic links (#29897) and comprehensive logout authority improvements (#29910, #29890). Their work centered exclusively on bugfix efforts, with a primary focus on testing, core code, and configuration adjustments."
+    },
+    {
+      "username": "standujar",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/16385918?u=718bdcd1585be8447bdfffb8c11ce249baa7532d&v=4",
+      "totalScore": 267.7805348292121,
+      "prScore": 248.84253482921213,
+      "issueScore": 0,
+      "reviewScore": 18.5,
+      "commentScore": 0.43799999999999994,
+      "summary": "standujar: Drove significant progress on the elizaos/eliza cloud infrastructure by opening 15 PRs focused on implementing exact restore capabilities, including secure filesystem handling (#20726) and hardened secret transport (#29925). Their work involved 29 commits across 200 files, balancing a primary focus on feature development with critical bug fixes and testing to ensure system stability."
+    },
+    {
+      "username": "hermesagent270-commits",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/283605144?v=4",
+      "totalScore": 264.14889648067606,
+      "prScore": 104.71089648067607,
+      "issueScore": 0,
+      "reviewScore": 159,
+      "commentScore": 0.43799999999999994,
+      "summary": "hermesagent270-commits: Focused on maintaining system stability and cross-platform compatibility for the elizaos/eliza repository by opening five pull requests addressing paging, logging, and module resolution (#29896, #29880, #29879, #29878, #29877). Their efforts were primarily directed toward rigorous quality assurance, evidenced by completing 27 code reviews with a strong emphasis on providing feedback through 24 change requests."
+    },
+    {
+      "username": "agent-cortex",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/258599823?v=4",
+      "totalScore": 195.18421648968376,
+      "prScore": 173.74621648968377,
+      "issueScore": 0,
+      "reviewScore": 21,
+      "commentScore": 0.43799999999999994,
+      "summary": "agent-cortex: Focused on enhancing system stability and reliability through 7 open PRs in elizaos/eliza that address critical concurrency, token management, and state handling issues (e.g., #29955, #29942, #29900). Their efforts involved 23 commits across 45 files and 4 code reviews, demonstrating a primary commitment to bugfix work and testing."
+    },
+    {
+      "username": "lalalune",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/18633264?u=e2e906c3712c2506ebfa98df01c2cfdc50050b30&v=4",
+      "totalScore": 177.62231918913972,
+      "prScore": 177.62231918913972,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "lalalune: Focused on stabilizing the elizaos/eliza cloud and UI infrastructure by merging four critical fixes, most notably resolving complex cloud standing checks and async inference issues in PR #29977 (+2010/-409 lines). Their work centered on improving system reliability through UI polling restoration, test fixture management, and dependency alignment across cloud and plugin modules."
+    },
+    {
+      "username": "NubsCarson",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/192162056?u=d2be9082dbee60fcbad21d32bf6e662ab1af3674&v=4",
+      "totalScore": 165.6298822995404,
+      "prScore": 165.19188229954042,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0.43799999999999994,
+      "summary": "NubsCarson: Focused on enhancing system stability and reliability within the elizaos/eliza repository, successfully merging three critical fixes including PR #29837 to resolve ungrounded document list errors and PRs #29953 and #29945 to address authentication and billing polling issues. Their work was characterized by a high volume of code changes across 479 files, with a primary focus on bug fixes (63%) and testing (24%) to ensure robust core and UI performance."
+    },
+    {
+      "username": "sarah-pump-ai",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/261815794?u=21b476f19d7fcce0a831284b19d97abfd6faa6c6&v=4",
+      "totalScore": 117,
+      "prScore": 0,
+      "issueScore": 0,
+      "reviewScore": 117,
+      "commentScore": 0,
+      "summary": "sarah-pump-ai: No activity today."
+    },
+    {
+      "username": "nothingxnowhere",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/140473048?v=4",
+      "totalScore": 93.25415215275949,
+      "prScore": 87.05415215275949,
+      "issueScore": 0,
+      "reviewScore": 6,
+      "commentScore": 0.2,
+      "summary": "nothingxnowhere: Focused on enhancing system stability and reliability through four open bugfix PRs in elizaos/eliza (#29884, #29882, #29868, #29866) that addressed container execution, escalation logic, routing, and UI sorting. Their work involved 457 additions and 35 deletions across 9 files, with a primary focus on bugfix work (80%) and testing (57%)."
+    },
+    {
+      "username": "deepanshu-yd",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/93039894?u=832a8c6ab9c983e76ae22b96ed4ae3aa509fa8ea&v=4",
+      "totalScore": 90,
+      "prScore": 0,
+      "issueScore": 0,
+      "reviewScore": 90,
+      "commentScore": 0,
+      "summary": "deepanshu-yd: No activity today."
+    },
+    {
+      "username": "HomunculusLabs",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/104694001?u=63a9d881c242421527fa8a30b5011ea4879f3375&v=4",
+      "totalScore": 66.9695350240243,
+      "prScore": 28.03153502402429,
+      "issueScore": 0,
+      "reviewScore": 38.5,
+      "commentScore": 0.43799999999999994,
+      "summary": "HomunculusLabs: Focused on maintaining project stability and code quality through rigorous peer review, providing 7 reviews and 24 comments across the codebase. They also advanced ongoing development in elizaos/eliza by opening two pull requests (#29901, #29966) centered on plugin distribution and runtime management."
+    },
+    {
+      "username": "Svector-anu",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/161027709?u=331029443bcbe1c9a61a9e3d937f4ffc6c755082&v=4",
+      "totalScore": 30.484906649788,
+      "prScore": 30.484906649788,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "Svector-anu: Focused on strengthening test coverage and reliability within the elizaos/eliza repository, opening two pull requests (#29914, #29912) to anchor deployment checks and assert Gmail limit rejections. This work involved 6 commits across 9 files, with a primary emphasis on bugfix and testing efforts."
+    },
+    {
+      "username": "leiws0822-stack",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/310840023?v=4",
+      "totalScore": 24.031347882229145,
+      "prScore": 23.691347882229145,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0.33999999999999997,
+      "summary": "leiws0822-stack: Focused on improving system reliability by addressing a stale ID-path bug in the cloud-apps plugin via PR #29917, contributing 132 additions and 26 deletions across code and test files. This work reflects a dedicated effort toward bug mitigation and ensuring robust plugin functionality."
+    },
+    {
+      "username": "halfaipg",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/14795932?u=559941a086832305d57f2d464b13688aad401f97&v=4",
+      "totalScore": 18.158883083359672,
+      "prScore": 18.158883083359672,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "halfaipg: Focused on expanding ecosystem capabilities by opening PR #29964 in elizaos/eliza to introduce the AI Power Grid plugin. This contribution involved 63 lines of configuration changes, marking a dedicated effort toward feature development."
+    },
+    {
+      "username": "OutstandingRetard",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/202385977?v=4",
+      "totalScore": 10,
+      "prScore": 0,
+      "issueScore": 0,
+      "reviewScore": 10,
+      "commentScore": 0,
+      "summary": "OutstandingRetard: No activity today."
+    },
+    {
+      "username": "odilitime",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/16395496?u=c9bac48e632aae594a0d85aaf9e9c9c69b674d8b&v=4",
+      "totalScore": 8.524918433002165,
+      "prScore": 8.524918433002165,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "odilitime: Focused on improving cross-platform test reliability in elizaos/eliza, where they opened PR #29873 to ensure the plugin manager path tests are platform-aware. This work involved a single commit modifying 26 lines of code, centering entirely on test infrastructure improvements."
+    },
+    {
+      "username": "Synaptics-Lab",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/281879515?u=4cfaa20b236be616329e6070accf570b5a1f8962&v=4",
+      "totalScore": 6.786053252298631,
+      "prScore": 6.786053252298631,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "Synaptics-Lab: Focused on expanding autonomous agent capabilities by opening PR #29891 in elizaos/eliza to implement the SynapticChain 2048-lane agent feature. This work involved 68 lines of code changes dedicated entirely to bugfix efforts."
+    },
+    {
+      "username": "kenjohnscreates",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/144142574?u=c390be2e863f5d8704e0d596e116ddebb1629dd6&v=4",
+      "totalScore": 6.34,
+      "prScore": 0,
+      "issueScore": 0,
+      "reviewScore": 6,
+      "commentScore": 0.33999999999999997,
+      "summary": "kenjohnscreates: Focused on maintaining code quality through peer review, providing one change request and two pull request comments."
+    },
+    {
+      "username": "tokenmaxxor",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/315720830?u=dc3ca7d2521993f8cfe859f7a3b06a6274d68935&v=4",
+      "totalScore": 6,
+      "prScore": 0,
+      "issueScore": 0,
+      "reviewScore": 6,
+      "commentScore": 0,
+      "summary": "tokenmaxxor: No activity today."
+    },
+    {
+      "username": "raynord22",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/129102237?v=4",
+      "totalScore": 0.2,
+      "prScore": 0,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0.2,
+      "summary": "raynord22: Focused on bugfix work, contributing a single commit that modified 2 files with 41 additions and 12 deletions. They also provided 1 pull request comment to support ongoing development efforts."
+    },
+    {
+      "username": "mtcow",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/171548037?v=4",
+      "totalScore": 0.2,
+      "prScore": 0,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0.2,
+      "summary": "mtcow: Focused on codebase maintenance and stability, contributing 4 commits across 8 files (+212/-38 lines) with a primary emphasis on bugfix work. Their activity included providing a PR comment to support ongoing development efforts."
+    }
+  ],
+  "newPRs": 70,
+  "mergedPRs": 18,
+  "newIssues": 0,
+  "closedIssues": 0,
+  "activeContributors": 30
+}

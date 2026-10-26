@@ -1,0 +1,1494 @@
+1:"$Sreact.fragment"
+2:I[4817319,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"IntervalSelector"]
+3:I[6998365,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"LlmCopyButton"]
+18:I[3642796,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],""]
+19:I[3238488,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"StatCardsDisplay"]
+27:I[4261541,["/eliza-leaderboard/_next/static/chunks/b33bcbdcb3f88354.js","/eliza-leaderboard/_next/static/chunks/8ba59154b6704904.js"],"OutletBoundary"]
+28:"$Sreact.suspense"
+4:T1b35,# Multi-Repository Support Implementation Tasks
+
+This document breaks down the implementation tasks for adding multi-repository support to the Eliza Leaderboard, based on the phases outlined in `plan/multi-repo.md`.
+
+## Phase 1: Foundational Multi-Repo Support
+
+**Goal:** Enable the pipeline to ingest, process, and store data from multiple configured repositories, with basic per-repository output.
+
+-   [x] **Task 1.1: Modify `pipeline.config.ts` Structure**
+    -   [x] Update the `repositories` array in `config/pipeline.config.ts` to accept objects containing `owner`, `name`, and `repoId` (e.g., `{ owner: "elizaos", name: "eliza", repoId: "elizaos/eliza" }`).
+    -   [x] Ensure existing configuration loading logic correctly parses the new structure.
+    -   [x] Update type definitions for `PipelineConfig` to reflect this change.
+-   [ ] **Task 1.2: Update Core Pipeline Scripts for Iteration**
+    -   [ ] Modify the `ingest` pipeline in `cli/analyze-pipeline.ts` (and its underlying modules in `src/lib/pipelines/ingest/`) to iterate over each configured repository.
+        -   [ ] Pass the correct `repoId` (and owner/name if needed) to GitHub API calls and data processing functions.
+    -   [ ] Modify the `process` pipeline in `cli/analyze-pipeline.ts` (and `src/lib/pipelines/process/`) to operate on data from all configured repositories, ensuring `repoId` is used for correct association.
+    -   [ ] Modify the `export` pipeline in `cli/analyze-pipeline.ts` (and `src/lib/pipelines/export/`) to generate outputs for each repository, likely maintaining the `data/<owner_repo>/` structure.
+-   [ ] **Task 1.3: Ensure Data Segregation**
+    -   [ ] **Database:** Confirm that all database interactions (inserts, updates, queries) in Drizzle ORM correctly use the `repoId` (or equivalent `repository` field) to associate data with the correct repository (ref: `src/lib/data/schema.ts`).
+        -   [ ] Verify `repositories` table is populated correctly for each new repo.
+        -   [ ] Verify raw data tables (`rawPullRequests`, `rawIssues`, etc.) correctly link to `repositories.repoId`.
+    -   [ ] **File System:** Confirm that file-based outputs (JSON summaries, logs if any) are correctly placed in per-repository directories (e.g., `data/elizaos_eliza/`, `data/elizaos-plugins_myplugin/`).
+-   [ ] **Task 1.4: Verify Commit Deduplication**
+    -   [ ] Test the ingestion process with repositories that have shared commit history (if identifiable examples exist).
+    -   [ ] Confirm that commits with identical hashes are stored only once in `rawCommits` or are handled appropriately to avoid duplicate processing and scoring.
+        -   Investigate if `rawCommits.oid` (primary key) handles this naturally.
+-   [ ] **Task 1.5: Basic Per-Repository Reporting/Summarization**
+    -   [ ] Ensure the `summarize` pipeline (project summaries) can run for each configured repository and outputs to the correct `data/<owner_repo>/summaries/` directory.
+    -   [ ] Initial verification that existing website/UI components can (at a minimum) display data if pointed to a specific repository's output, or that per-repo pages can be generated. (Focus on data backend first).
+-   [ ] **Task 1.6: Update CLI Commands**
+    -   [ ] Review and update CLI command options in `cli/analyze-pipeline.ts` if necessary. For example, `--repository` flags might need to accept multiple values, or a new `--all-repos` flag might be introduced. Or, it might default to all repos in the config unless specified.
+    -   [ ] Update help messages and `README.md` for CLI changes.
+
+## Phase 2: Enhanced Scoring and Aggregation
+
+**Goal:** Develop strategies for viewing aggregated data (e.g., org-level) and explore more flexible scoring for a multi-repo context.
+
+-   [ ] **Task 2.1: Develop Aggregated View Strategies (Org-Level)**
+    -   [ ] Design how organization-level summaries or metrics could be calculated (e.g., total contributions to `elizaos` org).
+    -   [ ] Determine if new database tables or views are needed for storing/querying aggregated data.
+    -   [ ] Implement proof-of-concept for generating basic org-level statistics.
+-   [ ] **Task 2.2: Explore Flexible/Subjective Scoring Mechanisms**
+    -   [ ] Research and document potential approaches for allowing user-defined scoring weights (e.g., funders specifying weights for issue types, PR sizes, specific tags across selected repos).
+    -   [ ] Consider how `config/pipeline.config.ts` might be extended or if a new configuration mechanism/UI is needed for this.
+    -   [ ] Assess impact on `userTagScores` and `userDailyScores` if scores become more dynamic.
+-   [ ] **Task 2.3: Refine AI Summary Generation for Multi-Repo/Org Contexts**
+    -   [ ] Evaluate if the `projectContext` in `config/pipeline.config.ts` for AI summaries needs to be dynamic (e.g., different context per org, or a broader context for org-level summaries).
+    -   [ ] Test AI summary quality when summarizing activities across multiple repositories within an organization.
+    -   [ ] Adapt summarization prompts or logic in `src/lib/pipelines/summarize/` as needed.
+
+## Phase 3: Advanced Funder UX and LLM Integration
+
+**Goal:** Improve the user experience for stakeholders (funders) by providing better tools for data exploration and leveraging LLMs for insights.
+
+-   [ ] **Task 3.1: Design and Implement Enhanced Funder UX**
+    -   [ ] Brainstorm and mock up UI features that allow funders to:
+        -   [ ] Easily switch between per-repo, per-org, and global views.
+        -   [ ] Filter and sort contributors/contributions based on various criteria (tags, activity types, date ranges across multiple repos).
+        -   [ ] Apply their subjective scoring/weighting (if implemented in Phase 2).
+    -   [ ] Implement frontend changes in `src/app/` and related components.
+-   [ ] **Task 3.2: Integrate LLMs for Advanced Data Querying/Interpretation**
+    -   [ ] Explore feasibility of using LLMs to answer natural language questions about the contribution data (e.g., "Show me top TypeScript contributors to elizaos-plugins this month").
+    -   [ ] Design and prototype a system for this, considering data context provision to the LLM.
+
+## Cross-Cutting Concerns / To-Do Throughout
+
+-   [ ] **Testing:** Add unit and integration tests for multi-repo functionality.
+-   [ ] **Documentation:** Update `README.md`, `plan/multi-repo.md`, and any other relevant documentation.
+-   [ ] **Error Handling:** Ensure robust error handling for scenarios like invalid repo configurations, API errors for specific repos, etc.
+-   [ ] **Performance:** Monitor and optimize performance, especially during ingestion and processing of many repositories. Consider implications for `sqlite-diffable` and data sync.
+-   [ ] **GitHub Issue Creation:** Create corresponding GitHub issues for these tasks.
+-   [ ] **Branch Management:** Regularly merge changes from `main` to `multi-repo` and vice-versa as appropriate. 5:T64c,![Screenshot 2025-05-28 at 12 00 19 AM](https://github.com/user-attachments/assets/ad13cbd8-5a66-4dcc-bb97-1fd8fdcfdf76)
+![Screenshot 2025-05-28 at 12 00 37 AM](https://github.com/user-attachments/assets/0c050d97-e724-4d58-ab48-673bc8f6d91b)
+![Screenshot 2025-05-28 at 12 00 47 AM](https://github.com/user-attachments/assets/41c9c5e8-f3f5-44a2-8c71-a0ced4805fd4)
+![Screenshot 2025-05-28 at 12 00 56 AM](https://github.com/user-attachments/assets/fd37c9ec-893b-49df-a747-0b056782145a)
+![Screenshot 2025-05-28 at 12 01 08 AM](https://github.com/user-attachments/assets/2c9cf4bd-2e8b-43cb-be88-c156fdb1c416)
+![Screenshot 2025-05-28 at 12 01 18 AM](https://github.com/user-attachments/assets/08f19833-6955-491c-9504-eecf56610d07)
+![Screenshot 2025-05-28 at 12 12 19 AM](https://github.com/user-attachments/assets/ba0f7cb5-df2f-4f7d-a396-71190fd2f8b9)
+![Screenshot 2025-05-27 at 11 59 52 PM](https://github.com/user-attachments/assets/f21c735f-328a-4476-9772-285f07fa1d60)
+![Screenshot 2025-05-28 at 12 34 20 AM](https://github.com/user-attachments/assets/e568329c-9c77-4969-9e57-0deafcb09ea4)
+![Screenshot 2025-05-28 at 12 34 32 AM](https://github.com/user-attachments/assets/0e9a414e-b07d-4f35-9669-68707feebf8d)
+![Screenshot 2025-05-28 at 12 36 48 AM](https://github.com/user-attachments/assets/1335d706-5d3c-4bea-ab23-43ea443d85f9)
+![Screenshot 2025-05-28 at 12 36 55 AM](https://github.com/user-attachments/assets/904294f3-ddce-4911-9515-5baabcffab80)
+![Screenshot 2025-05-28 at 12 44 41 AM](https://github.com/user-attachments/assets/bde02a89-2be0-4808-bc52-774453979468)
+6:Teb9,<!-- Use this template by filling in information and copying and pasting relevant items out of the HTML comments. -->
+
+# Relates to
+Adds TEE Project Starter Template for a quickstart to launch in TEE Cloud provider. For the time being, Phala Cloud is the current available option for a customizable ElizaOS deployment.
+<!-- LINK TO ISSUE OR TICKET -->
+
+<!-- This risks section must be filled out before the final review and merge. -->
+
+# Risks
+Low
+<!--
+Low, medium, large. List what kind of risks and what could be affected.
+-->
+
+# Background
+
+## What does this PR do?
+Creates a quick start to generate a TEE Agent project.
+## What kind of change is this?
+Feature
+<!--
+Bug fixes (non-breaking change which fixes an issue)
+Improvements (misc. changes to existing features)
+Features (non-breaking change which adds functionality)
+Updates (new versions of included code)
+-->
+
+<!-- This "Why" section is most relevant if there are no linked issues explaining why. If there is a related issue, it might make sense to skip this why section. -->
+<!--
+## Why are we doing this? Any context or related work?
+-->
+
+# Documentation changes needed?
+
+<!--
+My changes do not require a change to the project documentation.
+My changes require a change to the project documentation.
+If documentation change is needed: I have updated the documentation accordingly.
+-->
+
+<!-- Please show how you tested the PR. This will really help if the PR needs to be retested and probably help the PR get merged quicker. -->
+
+# Testing
+
+## Where should a reviewer start?
+A reviewer should start with getting a Phala Cloud Account to test the CVM deployment. Get an API Key and Install the Phala Cloud CLI for deployment. Check Docs [here]()
+### Detailed testing steps
+First clone the repo (I have not added the CLI command, yet. This could be easier with elizaos CLI.)
+```bash
+# Make sure you are in the `project-tee-starter` folder
+npm install -g phala
+# Set TEE_MODE=PRODUCTION
+# Ensure you are also running docker
+
+# Step0: Set your API Key from Phala Cloud Dashboard
+phala auth login
+
+# Step1: Build Docker Image
+phala docker build
+
+# Step2: Publish Docker Image to DockerHub
+phala docker push
+
+# Step3: Update docker-compose.yaml file with your published Docker image and deploy CVM
+phala cvms create -c docker-compose.yaml -e .env
+
+# (Optional) Step4: Check attestation
+phala cvms attestation
+
+# (Optional) Step5: Upgrade CVM if updated changes
+phala cvms upgrade -c docker-compose.yaml
+```
+<!--
+None: Automated tests are acceptable.
+-->
+
+<!--
+- As [anon/admin], go to [link]
+  - [do action]
+  - verify [result]
+-->
+
+<!-- If there is a UI change, please include before and after screenshots or videos. This will speed up PRs being merged. It is extra nice to annotate screenshots with arrows or boxes pointing out the differences. -->
+
+## Screenshots
+Test deployment: https://94068a91ffa0d8f97f2fb38941ee0139f533daab-3000.dstack-prod6.phala.network/chat/f1b8ef45-dab5-095e-90a8-87a35b16966e
+
+![image](https://github.com/user-attachments/assets/f0f09aa4-14f4-4523-b013-0d7af096dd99)
+
+![image](https://github.com/user-attachments/assets/0e0e8b5d-3e4a-4cb0-a06f-bfd932c3c746)
+
+
+<!-- If there is anything about the deployment, please make a note. -->
+<!--
+# Deploy Notes
+-->
+
+<!--  Copy and paste command line output. -->
+<!--
+## Database changes
+-->
+
+<!--  Please specify deploy instructions if there is something more than the automated steps. -->
+<!--
+## Deployment instructions
+-->
+
+<!-- If you are on Discord, please join https://discord.gg/elizaOS and state your Discord username here for the contributor role and join us in #development-feed -->
+<!--
+## Discord username
+
+-->
+7:Tb17,
+![image](https://github.com/user-attachments/assets/00cfa68c-24b9-4fca-a89f-9ac8ce228a22)
+
+1. **Configuration Updates**:
+   - Modified `config/pipeline.config.ts` to support multiple repositories with a new structure that includes `owner`, `name`, and `defaultBranch` for each repository
+
+2. **Pipeline System Enhancements**:
+   - Updated the pipeline system to handle multiple repositories through the `getSelectedRepositories` step
+   - Modified core pipeline components (ingest, process, export, summarize) to iterate over configured repositories
+   - Added repository-specific data segregation in storage paths (e.g., `data/<owner_repo>/`)
+
+3. **Documentation and Planning**:
+   - Created `plan/multi-repo.md` outlining the multi-repository support strategy
+   - Added `plan/tasks.md` with detailed implementation tasks for the multi-repo feature
+
+4. **Pipeline Configuration Types**:
+   - Updated `src/lib/pipelines/pipelineConfig.ts` with new schema definitions for repository configuration
+   - Added validation and transformation logic for repository configurations
+
+---
+
+Reasons
+
+1. **Scalability**: The system needed to expand beyond a single repository to support both the main `elizaos` organization and its plugins ecosystem, requiring a more flexible configuration structure.
+
+2. **Data Organization**: Each repository's data needs to be properly segregated to maintain clear boundaries and prevent cross-contamination, while still allowing for organization-wide analytics.
+
+3. **Future-Proofing**: The changes establish a foundation for adding more repositories and organizations in the future, with proper configuration validation and data handling patterns in place.
+
+These changes follow the system's existing patterns (as seen in the pipeline rules) while extending its capabilities to handle multiple repositories in a maintainable way.
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+- **New Features**
+  - Added support for tracking and displaying multiple repositories, including new metadata fields for repository owner and name.
+  - Enhanced configuration to specify repositories using separate owner and name fields.
+
+- **Database**
+  - Updated the database schema to include owner and name columns for repositories.
+  - Added a new migration and schema snapshot reflecting the expanded repository metadata.
+
+- **Bug Fixes**
+  - Improved robustness of database migrations and worktree management during data synchronization.
+
+- **Documentation**
+  - Introduced planning and task documents outlining multi-repository support and implementation phases.
+
+- **Chores**
+  - Added environment variable to limit the number of users generated in certain workflows.
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->8:T1c11,# 🚀 ElizaOS CLI Publish Command Overhaul
+
+## Overview
+
+This PR introduces comprehensive improvements to the ElizaOS CLI publish command, transforming it from a GitHub-only publishing tool into a complete publishing solution that handles npm, GitHub, and registry publishing in a single command.
+
+## Problem Statement
+
+The current `elizaos publish` command had several critical limitations:
+
+### 1. **Incomplete Publishing Workflow**
+- Only published to GitHub, requiring manual npm publishing
+- Users had to run separate commands for complete package distribution
+- No unified workflow for plugin developers
+
+### 2. **Registry Infrastructure Issues**
+- Hardcoded registry URLs throughout codebase (`elizaos/registry` → `elizaos-plugins/registry`)
+- Registry publishing created massive diffs by reordering entire index.json
+- Incorrect package naming with `@elizaos-plugins/` prefix instead of actual npm names
+- Environment loading issues preventing GitHub token access
+
+### 3. **Poor Developer Experience**
+- Fragmented publishing process
+- Inconsistent documentation across templates and docs
+- No guidance on continuous development workflows
+- Recursion issues when npm scripts triggered ElizaOS commands
+
+## Solution
+
+This PR implements a complete publishing solution through 5 focused improvements:
+
+### 🔧 **1. Code Cleanup** 
+- Remove unnecessary parenthesis for better code readability
+- Minor syntax improvements
+
+### 🏗️ **2. Registry Infrastructure Consolidation**
+- **Centralized constants**: Created `packages/cli/src/utils/registry/constants.ts`
+- **Updated registry URL**: Changed from `elizaos/registry` to `elizaos-plugins/registry`
+- **Single source of truth**: All registry references now use centralized `REGISTRY_URL`
+
+**Files affected:**
+- `packages/cli/src/utils/registry/constants.ts` (new)
+- `packages/cli/src/commands/publish.ts`
+- `packages/cli/src/utils/parse-registry.ts`
+- `packages/client/src/hooks/use-plugins.ts`
+- `.github/workflows/plugin-publish.yml`
+
+### 🛠️ **3. Registry Publishing Logic Fixes**
+- **Correct package naming**: Use actual npm package name instead of `@elizaos-plugins/` prefix
+- **Minimal diffs**: Line-by-line insertion instead of full file reordering
+- **Alphabetical positioning**: Clean registry updates with proper sorting
+- **Consistent indentation**: Standardized to 4 spaces
+- **Conflict detection**: Added registry conflict detection and handling
+
+### 🚀 **4. Complete npm Integration**
+- **Default behavior**: `elizaos publish` now publishes to npm + GitHub + registry
+- **Recursion prevention**: Uses `--ignore-scripts` to prevent infinite loops
+- **Flag restructure**: `--npm` now means "npm only" (skip GitHub and registry)
+- **Environment fixes**: Added dotenv support to `parse-registry.ts` for GitHub token access
+- **Authentication flow**: Integrated npm login requirements into publish workflow
+
+**BREAKING CHANGE**: `elizaos publish` now publishes to npm by default
+
+### 📚 **5. Comprehensive Documentation Updates**
+- **Updated CLI README**: Reflects new npm + GitHub + registry default behavior
+- **Enhanced publish.md**: Added continuous development workflows and testing guidance
+- **Plugin starter templates**: Updated with complete publishing and development workflows
+- **Success messaging**: Added guidance for future updates using standard npm/git workflows
+- **Testing integration**: Emphasized testing throughout development lifecycle
+
+## Key Features
+
+### 🎯 **Unified Publishing Command**
+```bash
+# One command does everything (recommended)
+elizaos publish
+
+# npm only (for private packages)
+elizaos publish --npm
+
+# Skip registry submission
+elizaos publish --skip-registry
+```
+
+### 🔄 **Proper Continuous Development**
+After initial publish, developers use standard workflows:
+```bash
+npm version patch|minor|major  # Update version
+npm publish                    # Publish to npm
+git push origin main           # Update GitHub
+git push --tags               # Push version tags
+```
+
+### 🧪 **Enhanced Testing Integration**
+```bash
+elizaos test                   # Run all tests
+elizaos publish --test         # Test publish process
+elizaos publish --dry-run      # Generate registry files locally
+```
+
+## Technical Implementation
+
+### Registry URL Migration
+- **Before**: `elizaos/registry` (hardcoded in multiple files)
+- **After**: `elizaos-plugins/registry` (centralized constant)
+
+### Publishing Flow
+1. **Authentication**: npm login + GitHub token validation
+2. **Building**: `npm run build`
+3. **npm Publishing**: `npm publish --ignore-scripts` (prevents recursion)
+4. **GitHub Publishing**: Repository creation/update + registry PR submission
+5. **Success Guidance**: Instructions for future updates
+
+### Environment Loading
+- Added dotenv support to registry parsing
+- Proper GitHub token access from `.env` files
+- Improved error handling for authentication failures
+
+## Testing
+
+- ✅ All existing tests pass
+- ✅ New publish workflow tested with `--test` flag
+- ✅ Registry publishing logic validated with `--dry-run`
+- ✅ Documentation examples verified
+- ✅ Recursion prevention confirmed
+
+## Migration Guide
+
+### For Plugin Developers
+- **No action required** for existing plugins
+- New plugins get improved workflow automatically
+- Future updates should use standard npm/git commands
+
+### For CLI Users
+- `elizaos publish` now does complete publishing (npm + GitHub + registry)
+- Use `elizaos publish --npm` for npm-only publishing
+- Follow new continuous development workflows in documentation
+
+## Files Changed
+
+<details>
+<summary>Core CLI Changes (5 files)</summary>
+
+- `packages/cli/src/commands/publish.ts` - Main publish command logic
+- `packages/cli/src/utils/registry/constants.ts` - New centralized constants
+- `packages/cli/src/utils/registry/index.ts` - Registry utilities
+- `packages/cli/src/utils/parse-registry.ts` - Environment loading fixes
+- `packages/cli/README.md` - Updated CLI documentation
+</details>
+
+<details>
+<summary>Documentation Updates (3 files)</summary>
+
+- `packages/docs/docs/cli/publish.md` - Complete workflow documentation
+- `packages/cli/templates/plugin-starter/README.md` - Template updates
+- `packages/plugin-starter/README.md` - Standalone starter updates
+</details>
+
+<details>
+<summary>Infrastructure Updates (3 files)</summary>
+
+- `packages/client/src/hooks/use-plugins.ts` - Registry URL updates
+- `packages/docs/scripts/update-registry.js` - Registry script updates
+- `.github/workflows/plugin-publish.yml` - Workflow updates
+</details>
+
+## Related Issues
+
+- Fixes fragmented publishing workflow
+- Resolves registry URL inconsistencies  
+- Addresses npm publishing recursion issues
+- Improves developer experience for plugin publishing
+- Standardizes continuous development workflows
+
+## Breaking Changes
+
+- **`elizaos publish`** now publishes to npm by default (previously GitHub only)
+- **`--npm` flag** now means "npm only" instead of "include npm"
+- **Registry URL** changed from `elizaos/registry` to `elizaos-plugins/registry`9:T54b,## Description
+
+This PR fixes the issue where the API endpoint `/api/agents/:agentId/rooms` was returning an empty list despite agents being actively participating in rooms.
+
+## Problem
+
+The root cause was that when rooms were created, the `agentId` was not being properly associated with the room record in the database. This meant that while agents could successfully:
+- Create rooms (logs showed "Room [UUID] created successfully")
+- Connect to rooms (logs showed "Successfully connected entity [agentId] in room [roomId]")  
+- Send and receive messages in rooms
+
+The `getRoomsForParticipant(agentId)` function could not retrieve rooms for a specific agent because the agent-room association was missing from the database.
+
+## Solution
+
+Added the missing `agentId` field to the room creation process to ensure proper agent-room associations are stored in the database.
+
+## Changes
+
+- Fixed room creation to include `agentId` in the room record
+- This enables the `/api/agents/:agentId/rooms` endpoint to correctly return all rooms where an agent is a participant
+
+## Fixes
+
+Closes #4779
+
+## Testing
+
+- Verify that `/api/agents/:agentId/rooms` now returns the expected list of rooms for active agents
+- Confirm that agents can still create, join, and participate in rooms normally
+- Check that room-agent associations are properly stored in the databasea:T40b,# Risks
+
+Low, something might use ActionResponse or someone might not like the logging changes
+
+# Background
+
+## What does this PR do?
+
+- improve logging (I find it hard to dev on spartan without these changes)
+- removes duplicate `registerContextProvider` infavor for `registerProvider` (which also existed)
+- makes ServiceBuilder more friendly for the plugin-specification wrapper
+- remove twitter type `ActionResponse` in utils (doesn't belong here)
+- don't export `upgradeDoubleToTriple` & `composeRandomUser` (they aren't used elsewhere, only internally in utils) to reduce plugin-specification wrapper foot print
+- bump lockfile
+
+## What kind of change is this?
+
+Updates (new versions of included code)
+
+## Why are we doing this? Any context or related work?
+
+# Documentation changes needed?
+
+My changes do not require a change to the project documentation.
+
+<!-- Please show how you tested the PR. This will really help if the PR needs to be retested and probably help the PR get merged quicker. -->
+
+b:Tec4,This pull request introduces significant updates to the handling of participants in rooms, memory retrieval by server ID, and related data structures and APIs. These changes aim to improve the flexibility of the system by supporting multiple participants per room and enabling memory queries scoped by server and world. Below is a categorized summary of the most important changes:
+
+### Room Participant Management
+* Replaced the single `agentId` field in the `Room` type with a `participants` array, allowing each room to track multiple agents and their associated characters. (`packages/core/src/types.ts`, [packages/core/src/types.tsL577-R586](diffhunk://#diff-4c2458380e50c967c70d7afe819dc7412180f9f817043f27441de3498e4d0479L577-R586))
+* Updated the `getRoomAgentIds` function and `AppSidebar` component logic to handle the new `participants` structure, ensuring proper extraction and display of agent IDs and names. (`packages/client/src/components/app-sidebar.tsx`, [[1]](diffhunk://#diff-033854ee14ba4ed376c007175c16b3eecd687c496616f024611bd5dec6967b01L44-R61) [[2]](diffhunk://#diff-033854ee14ba4ed376c007175c16b3eecd687c496616f024611bd5dec6967b01L300-R331)
+* Enhanced the `RoomListSection` component to display unique participant counts and names, reflecting the new room structure. (`packages/client/src/components/app-sidebar.tsx`, [[1]](diffhunk://#diff-033854ee14ba4ed376c007175c16b3eecd687c496616f024611bd5dec6967b01L166-R194) [[2]](diffhunk://#diff-033854ee14ba4ed376c007175c16b3eecd687c496616f024611bd5dec6967b01L185-R203)
+
+### Memory Retrieval by Server ID
+* Added a new `getMemoriesByServerId` method to the `IDatabaseAdapter` interface and implemented it in the `BaseDrizzleAdapter` class. This method retrieves memories for a specific server within a world. (`packages/core/src/types.ts`, [[1]](diffhunk://#diff-4c2458380e50c967c70d7afe819dc7412180f9f817043f27441de3498e4d0479R1082-R1088); `packages/plugin-sql/src/base.ts`, [[2]](diffhunk://#diff-c0212488c0446f46225384f931dd7dfe141e77896ddeaf45373b859f8121d129R2766-R2800)
+* Introduced a new API endpoint to fetch memories by server ID, enabling external clients to query this data. (`packages/cli/src/server/api/world.ts`, [packages/cli/src/server/api/world.tsR95-R128](diffhunk://#diff-f0039e9c4c3da8b55f87e38277f5ec21fb212f1df9cf2d575090a577d6330e8aR95-R128))
+
+### Database and Runtime Adjustments
+* Updated database logic to include `worldId` in memory records, ensuring proper scoping for queries involving worlds and servers. (`packages/plugin-sql/src/base.ts`, [[1]](diffhunk://#diff-c0212488c0446f46225384f931dd7dfe141e77896ddeaf45373b859f8121d129R1126) [[2]](diffhunk://#diff-c0212488c0446f46225384f931dd7dfe141e77896ddeaf45373b859f8121d129R1143) [[3]](diffhunk://#diff-c0212488c0446f46225384f931dd7dfe141e77896ddeaf45373b859f8121d129R1180) [[4]](diffhunk://#diff-c0212488c0446f46225384f931dd7dfe141e77896ddeaf45373b859f8121d129R1225)
+* Added a `getMemoriesByServerId` method to the `AgentRuntime` class, delegating calls to the database adapter. (`packages/core/src/runtime.ts`, [packages/core/src/runtime.tsR2146-R2154](diffhunk://#diff-731eeb09ecd79fd1c3157ce640aa046c8c798d2fdf133837b696e4e1bfa8c0c4R2146-R2154))
+
+### Removal of Legacy Fields
+* Removed the `agentId` field from the `Room` type and related logic, as it is now replaced by the `participants` array. (`packages/core/src/types.ts`, [[1]](diffhunk://#diff-4c2458380e50c967c70d7afe819dc7412180f9f817043f27441de3498e4d0479L577-R586); `packages/core/src/runtime.ts`, [[2]](diffhunk://#diff-731eeb09ecd79fd1c3157ce640aa046c8c798d2fdf133837b696e4e1bfa8c0c4L1185)
+
+These updates collectively enhance the system's scalability and flexibility by supporting multi-participant rooms and enabling more granular memory queries.c:T48c,Problem: 
+
+The elizaos publish command only published to GitHub, requiring users to manually publish to npm separately. 
+Ideally, elizaos publish does three things:
+
+- publishes the github repo
+- forks the registry, adds the line for the plugin, and submits a pr to elizaos-plugins/registry
+- publishes to NPM
+
+Additionally, parse-registry.ts couldn't access GITHUB_TOKEN from .env files, causing authentication failures.
+
+Solution:
+* Updated elizaos publish to publish to npm + GitHub + registry by default
+* Added --ignore-scripts flag to prevent recursion when npm triggers the publish script
+* Changed --npm flag to mean "npm only" (skip GitHub and registry)
+* Added environment loading to parse-registry.ts with dotenv support
+* Added success message with guidance for future updates using standard workflows
+
+Details:
+* BREAKING CHANGE: elizaos publish now publishes to npm by default
+* Fixes recursion issue where npm publish would trigger elizaos publish again
+* Provides complete publishing workflow in a single command
+* THERE ISNT ANY SUPPORT FOR UPDATING / CONTINUOUS DEV -- THIS IS JUST FOR INITIAL PUBLISHd:T59e,# Relates to
+
+Fixes CI test failures due to missing OpenAI API key configuration.
+
+# Risks
+
+**Low** - This change only affects test configuration and does not modify core application logic.
+
+# Background
+
+## What does this PR do?
+
+This PR adds the OpenAI API key configuration to CLI tests to ensure they can pass on the CI runner. The tests were failing on the CI runner because it couldn't authenticate with OpenAI services, while tests pass locally where the API key is available.
+
+## What kind of change is this?
+
+Bug fixes (non-breaking change which fixes an issue)
+
+## Why are we doing this?
+
+The CLI tests pass locally but fail on the CI runner due to missing OpenAI API key configuration. The CI environment wasn't configured with the necessary API key, causing test failures. This change ensures the tests can authenticate and run successfully in the CI pipeline.
+
+# Documentation changes needed?
+
+My changes do not require a change to the project documentation.
+
+# Testing
+
+## Where should a reviewer start?
+
+Review the test configuration changes that add OpenAI API key support for CLI tests on the CI runner.
+
+## Detailed testing steps
+
+- Verify CLI CI tests now pass on the runner (previously failing due to missing OpenAI API key)
+- Confirm tests continue to pass locally as before
+- Confirm no regression in existing functionality
+
+The automated tests should now pass with proper OpenAI API authentication on the CI runner.e:T8fc,<!-- Use this template by filling in information and copying and pasting relevant items out of the HTML comments. -->
+
+# Relates to
+
+<!-- LINK TO ISSUE OR TICKET -->
+
+<!-- This risks section must be filled out before the final review and merge. -->
+
+# Risks
+
+<!--
+Low, medium, large. List what kind of risks and what could be affected.
+-->
+
+# Background
+
+## What does this PR do?
+
+## What kind of change is this?
+
+<!--
+Bug fixes (non-breaking change which fixes an issue)
+Improvements (misc. changes to existing features)
+Features (non-breaking change which adds functionality)
+Updates (new versions of included code)
+-->
+
+<!-- This "Why" section is most relevant if there are no linked issues explaining why. If there is a related issue, it might make sense to skip this why section. -->
+<!--
+## Why are we doing this? Any context or related work?
+-->
+
+# Documentation changes needed?
+
+<!--
+My changes do not require a change to the project documentation.
+My changes require a change to the project documentation.
+If documentation change is needed: I have updated the documentation accordingly.
+-->
+
+<!-- Please show how you tested the PR. This will really help if the PR needs to be retested and probably help the PR get merged quicker. -->
+
+# Testing
+
+## Where should a reviewer start?
+
+## Detailed testing steps
+
+<!--
+None: Automated tests are acceptable.
+-->
+
+<!--
+- As [anon/admin], go to [link]
+  - [do action]
+  - verify [result]
+-->
+
+<!-- If there is a UI change, please include before and after screenshots or videos. This will speed up PRs being merged. It is extra nice to annotate screenshots with arrows or boxes pointing out the differences. -->
+<!--
+## Screenshots
+### Before
+### After
+-->
+
+<!-- If there is anything about the deployment, please make a note. -->
+<!--
+# Deploy Notes
+-->
+
+<!--  Copy and paste command line output. -->
+<!--
+## Database changes
+-->
+
+<!--  Please specify deploy instructions if there is something more than the automated steps. -->
+<!--
+## Deployment instructions
+-->
+
+<!-- If you are on Discord, please join https://discord.gg/elizaOS and state your Discord username here for the contributor role and join us in #development-feed -->
+<!--
+## Discord username
+
+-->
+f:T8fc,<!-- Use this template by filling in information and copying and pasting relevant items out of the HTML comments. -->
+
+# Relates to
+
+<!-- LINK TO ISSUE OR TICKET -->
+
+<!-- This risks section must be filled out before the final review and merge. -->
+
+# Risks
+
+<!--
+Low, medium, large. List what kind of risks and what could be affected.
+-->
+
+# Background
+
+## What does this PR do?
+
+## What kind of change is this?
+
+<!--
+Bug fixes (non-breaking change which fixes an issue)
+Improvements (misc. changes to existing features)
+Features (non-breaking change which adds functionality)
+Updates (new versions of included code)
+-->
+
+<!-- This "Why" section is most relevant if there are no linked issues explaining why. If there is a related issue, it might make sense to skip this why section. -->
+<!--
+## Why are we doing this? Any context or related work?
+-->
+
+# Documentation changes needed?
+
+<!--
+My changes do not require a change to the project documentation.
+My changes require a change to the project documentation.
+If documentation change is needed: I have updated the documentation accordingly.
+-->
+
+<!-- Please show how you tested the PR. This will really help if the PR needs to be retested and probably help the PR get merged quicker. -->
+
+# Testing
+
+## Where should a reviewer start?
+
+## Detailed testing steps
+
+<!--
+None: Automated tests are acceptable.
+-->
+
+<!--
+- As [anon/admin], go to [link]
+  - [do action]
+  - verify [result]
+-->
+
+<!-- If there is a UI change, please include before and after screenshots or videos. This will speed up PRs being merged. It is extra nice to annotate screenshots with arrows or boxes pointing out the differences. -->
+<!--
+## Screenshots
+### Before
+### After
+-->
+
+<!-- If there is anything about the deployment, please make a note. -->
+<!--
+# Deploy Notes
+-->
+
+<!--  Copy and paste command line output. -->
+<!--
+## Database changes
+-->
+
+<!--  Please specify deploy instructions if there is something more than the automated steps. -->
+<!--
+## Deployment instructions
+-->
+
+<!-- If you are on Discord, please join https://discord.gg/elizaOS and state your Discord username here for the contributor role and join us in #development-feed -->
+<!--
+## Discord username
+
+-->
+10:T707,On May 27, 2025, ElizaOS saw significant progress with the introduction of a Project TEE Starter Template, improvements to logging, and an overhaul of the CLI publish command to support npm integration. Several bug fixes were also implemented, enhancing the framework's functionality and maintainability.
+
+## ✅ Completed Work
+### Feature Enhancements & CLI Improvements
+- Added a Project TEE Starter Template for quick deployment in TEE Cloud ([elizaos/eliza#4774](https://github.com/elizaos/eliza/pull/4774)).
+- Improved logging functionality to aid development, addressing issues with the Spartan environment ([elizaos/eliza#4784](https://github.com/elizaos/eliza/pull/4784)).
+- Overhauled the ElizaOS CLI publish command to support npm integration, enhancing the publishing workflow ([elizaos/eliza#4795](https://github.com/elizaos/eliza/pull/4795), [elizaos/eliza#4793](https://github.com/elizaos/eliza/pull/4793)).
+
+### Bug Fixes & Code Cleanup
+- Resolved an issue with the API endpoint returning empty lists for active agents in rooms by adding the missing `agentId` ([elizaos/eliza#4796](https://github.com/elizaos/eliza/pull/4796)).
+- Cleaned up the `package.json` in the monorepo to remove unnecessary bloat ([elizaos/eliza#4733](https://github.com/elizaos/eliza/pull/4733)).
+- Fixed registry publishing logic to prevent unnecessary file creation and massive diffs ([elizaos/eliza#4792](https://github.com/elizaos/eliza/pull/4792)).
+
+### Documentation & CI/CD Updates
+- Updated documentation to reflect new npm integration in the publish workflow, providing clearer guidance for users ([elizaos/eliza#4794](https://github.com/elizaos/eliza/pull/4794)).
+- Fixed CI test failures by adding the OpenAI API key configuration ([elizaos/eliza#4786](https://github.com/elizaos/eliza/pull/4786)).0:{"buildId":"US8XLB_zHXYj_PVAECGcd","rsc":["$","$1","c",{"children":[["$","div",null,{"className":"container mx-auto px-6 py-8 md:px-8","children":["$","div",null,{"className":"mx-auto max-w-4xl","children":[["$","div",null,{"className":"mb-4 flex flex-col justify-between sm:flex-row","children":[["$","$L2",null,{"currentInterval":"day","currentDate":"2025-05-27"}],["$","$L3",null,{"metrics":{"date":"2025-05-27","interval":{"intervalStart":"$D2025-05-27T00:00:00.000Z","intervalEnd":"$D2025-05-28T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":18,"merged":17,"total":23},"issues":{"new":1,"closed":0,"total":1},"activeContributors":12,"codeChanges":{"additions":10896,"deletions":2438,"files":96,"commitCount":81},"topContributors":[{"username":"yungalgo","avatarUrl":"https://avatars.githubusercontent.com/u/113615973?u=92e0f29f7e2fbb8ce46ed13c51f692ca803de02d&v=4","totalScore":218.476286093218,"prScore":218.476286093218,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"yungalgo: Merged 6 PRs, including a significant feature update in PR #4795 (+17093/-2385 lines), while modifying 105 files with a total of +9515/-1767 lines across 18 commits. The work was primarily focused on feature development (28%) and other tasks (33%), demonstrating consistent daily activity."},{"username":"0xbbjoker","avatarUrl":"https://avatars.githubusercontent.com/u/54844437?u=90fe1762420de6ad493a1c1582f1f70c0d87d8e2&v=4","totalScore":115.91438854208717,"prScore":110.47638854208716,"issueScore":0,"reviewScore":5,"commentScore":0.43799999999999994,"summary":"0xbbjoker: Merged 2 PRs (#4796 and #4786) with significant code changes (+536/-13 lines and +59/-215 lines respectively), while also opening a new PR (#4799) focused on integration tests. Active today with 8 commits, modifying 39 files (+1917/-586 lines), primarily concentrating on feature work (63%) and bug fixes (25%)."},{"username":"wtfsayo","avatarUrl":"https://avatars.githubusercontent.com/u/82053242?u=98209a1f10456f42d4d2fa71db4d5bf4a672cbc3&v=4","totalScore":77.6663177825133,"prScore":52.4663177825133,"issueScore":0,"reviewScore":25,"commentScore":0.2,"summary":"wtfsayo: Merged 1 PR (#4797) with significant changes (+177/-27 lines) and modified 217 files overall (+21196/-1692 lines) across 14 commits, primarily focusing on other work (71%) and bugfixes (21%). Actively engaged with 5 PR reviews, providing 5 approvals and 1 comment, demonstrating consistent daily contributions."},{"username":"odilitime","avatarUrl":"https://avatars.githubusercontent.com/u/16395496?u=c9bac48e632aae594a0d85aaf9e9c9c69b674d8b&v=4","totalScore":70.80966038422864,"prScore":65.80966038422864,"issueScore":0,"reviewScore":5,"commentScore":0,"summary":"odilitime: Merged 1 PR (#4787 \"feat: improving typing\") with a net change of +8/-5 lines and currently has 1 open PR (#4802 \"feat: convert plugin-sql over to core-plugin-v2\"). Made significant code changes across 119 files, contributing a total of +9311/-1224 lines with a focus on other work (59%) and bugfixes (19%)."},{"username":"ChristopherTrimboli","avatarUrl":"https://avatars.githubusercontent.com/u/27584221?u=de148a498b5af814e037c2975112fadd09df743f&v=4","totalScore":66.34022691813125,"prScore":56.34022691813125,"issueScore":0,"reviewScore":10,"commentScore":0,"summary":"ChristopherTrimboli: Merged 1 PR (#4788) with minor changes (+2/-2 lines) and is currently working on another open PR (#4798). Made significant code modifications across 38 files (+204/-81 lines) with a focus on other work (60%) and bugfixes (20%)."},{"username":"madjin","avatarUrl":"https://avatars.githubusercontent.com/u/32600939?u=cdcf89f44c7a50906c7a80d889efa85023af2049&v=4","totalScore":62.5007738965761,"prScore":58.060773896576094,"issueScore":4.1,"reviewScore":0,"commentScore":0.33999999999999997,"summary":null},{"username":"HarshModi2005","avatarUrl":"https://avatars.githubusercontent.com/u/142230924?u=64e337bbdb6b3aded5943b7e297759e7a3cfc0f0&v=4","totalScore":54.301773896576094,"prScore":54.301773896576094,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"HarshModi2005: Merged 1 significant pull request (#4801) with a total of +11659/-1592 lines, focusing entirely on feature work. Modified 27 files with a total of +4718/-62 lines, demonstrating consistent daily activity."},{"username":"lalalune","avatarUrl":"https://avatars.githubusercontent.com/u/18633264?u=e2e906c3712c2506ebfa98df01c2cfdc50050b30&v=4","totalScore":50.1527738965761,"prScore":50.1527738965761,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"lalalune: Merged 1 significant PR (#4789) with a total of +9695/-4229 lines, focusing on feature work, refactoring, and testing across 66 modified files. Maintained a consistent activity pattern with 4 commits today, demonstrating balanced contributions across various aspects of the codebase."},{"username":"imholders","avatarUrl":"https://avatars.githubusercontent.com/u/202005793?v=4","totalScore":28.455747107964573,"prScore":28.455747107964573,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"imholders: Merged 1 PR (#4800) with significant documentation updates (+20/-2 lines) and maintained a consistent activity pattern, being active every day. Focused entirely on documentation work today, modifying 1 file."},{"username":"monilpat","avatarUrl":"https://avatars.githubusercontent.com/u/15067321?v=4","totalScore":6,"prScore":0,"issueScore":0,"reviewScore":6,"commentScore":0,"summary":"monilpat: Reviewed 1 pull request, issuing 1 change request, but did not approve any. Activity remains sporadic, with no other contributions today."}],"focusAreas":[{"area":"cli","count":39},{"area":"project-tee-starter","count":28},{"area":"core","count":16},{"area":".github/workflows","count":6},{"area":"client","count":4},{"area":"docs","count":4},{"area":"plugin-bootstrap","count":2},{"area":"plugin-starter","count":2},{"area":"i18n/readme","count":1},{"area":"plugin-sql","count":1}],"topIssues":[{"id":"I_kwDONNAI9864e7hZ","title":"feat: Multi-repo support","author":"madjin","number":108,"repository":"elizaos/elizaos.github.io","body":"$4","createdAt":"2025-05-27T20:25:14Z","closedAt":"2025-10-17T23:41:25Z","state":"CLOSED","commentCount":1}],"topPullRequests":[{"id":"PR_kwDOMT5cIs6X1xwp","title":"feat: Complete Polygon zkEVM plugin implementation and test cleanup -…","author":"HarshModi2005","number":4801,"body":"$5","repository":"elizaos/eliza","createdAt":"2025-05-27T19:44:43Z","mergedAt":"2025-05-29T18:15:36Z","additions":10176,"deletions":109},{"id":"PR_kwDOMT5cIs6Xjeuj","title":"feat: Add Project TEE Starter Template","author":"HashWarlock","number":4774,"body":"$6","repository":"elizaos/eliza","createdAt":"2025-05-25T21:42:34Z","mergedAt":"2025-05-27T07:53:37Z","additions":4168,"deletions":0},{"id":"PR_kwDOMT5cIs6Xurmd","title":"feat: Add CLI tests, add plugin dependencies, overhaul plugin registration","author":"lalalune","number":4789,"body":"This PR changes CLI so that plugins can have dependencies, for example the trader plugin can depend on the solana plugin, which ensures that it is installed when running tests\r\n\r\nSome CLI tests are added","repository":"elizaos/eliza","createdAt":"2025-05-27T07:31:40Z","mergedAt":"2025-05-27T08:16:28Z","additions":3403,"deletions":585},{"id":"PR_kwDONNAI986X2Uzc","title":"feat: update repoconfig","author":"madjin","number":109,"body":"$7","repository":"elizaos/elizaos.github.io","createdAt":"2025-05-27T20:45:56Z","mergedAt":"2025-06-19T21:57:43Z","additions":3027,"deletions":86},{"id":"PR_kwDOMT5cIs6XvMio","title":"feat(update): Eliza290/cli-publish-command","author":"yungalgo","number":4795,"body":"$8","repository":"elizaos/eliza","createdAt":"2025-05-27T08:21:09Z","mergedAt":"2025-05-27T11:49:01Z","additions":1003,"deletions":416},{"id":"PR_kwDOMT5cIs6XVqXN","title":"fix: cleanup package.json monorepo","author":"ChristopherTrimboli","number":4733,"body":"cleans up bloat hanging around in monorepo root package.json","repository":"elizaos/eliza","createdAt":"2025-05-23T07:18:11Z","mergedAt":"2025-05-27T08:16:30Z","additions":976,"deletions":478},{"id":"PR_kwDOMT5cIs6Xzqoa","title":"fix: integration tests for tee starter","author":"0xbbjoker","number":4799,"body":"","repository":"elizaos/eliza","createdAt":"2025-05-27T15:42:59Z","mergedAt":null,"additions":694,"deletions":156},{"id":"PR_kwDOMT5cIs6XygOB","title":"fix: add missing agentId to create room","author":"0xbbjoker","number":4796,"body":"$9","repository":"elizaos/eliza","createdAt":"2025-05-27T13:57:31Z","mergedAt":"2025-05-27T14:37:32Z","additions":376,"deletions":3},{"id":"PR_kwDOMT5cIs6XvGL0","title":"docs: update publish workflow documentation for npm integration","author":"yungalgo","number":4794,"body":"Problem: \r\n\r\nDocumentation didn't reflect the new publish behavior where elizaos publish handles npm + GitHub + registry, and lacked guidance on continuous development workflows.\r\n\r\nSolution:\r\n\r\n* Updated CLI README and publish.md docs to reflect npm + GitHub + registry default behavior\r\n* Added comprehensive continuous development section emphasizing standard npm/git workflows\r\n* Updated plugin starter templates with detailed publishing guidance\r\n* Clarified that elizaos publish is for initial publishing, while npm/git commands handle updates\r\n* Enhanced testing workflow documentation throughout development lifecycle\r\n\r\nDetails:\r\n\r\n* Emphasizes testing as part of proper development workflow\r\n* Provides clear guidance on when to use elizaos publish vs standard npm/git commands\r\n* Includes troubleshooting section for recursion prevention\r\n* Updates success messages to guide users toward standard workflows for updates","repository":"elizaos/eliza","createdAt":"2025-05-27T08:10:27Z","mergedAt":"2025-05-27T08:22:52Z","additions":286,"deletions":71},{"id":"PR_kwDOMT5cIs6X3BfC","title":"feat: convert plugin-sql over to core-plugin-v2","author":"odilitime","number":4802,"body":"# Risks\r\n\r\nLow\r\n\r\n# Background\r\n\r\n## What does this PR do?\r\n\r\nmakes plugin-sql use core-plugin-v2\r\n\r\n## What kind of change is this?\r\n\r\nUpdates (new versions of included code)\r\n\r\n## Why are we doing this? Any context or related work?\r\n\r\nreally just a test to ensure core-plugin-v2 is working, this might be one plugin we don't need to follow the spec closely.\r\n\r\n# Documentation changes needed?\r\n\r\nMy changes do not require a change to the project documentation.","repository":"elizaos/eliza","createdAt":"2025-05-27T22:14:43Z","mergedAt":null,"additions":282,"deletions":121},{"id":"PR_kwDOMT5cIs6XsDQw","title":"feat: improve logging","author":"odilitime","number":4784,"body":"$a","repository":"elizaos/eliza","createdAt":"2025-05-26T22:30:32Z","mergedAt":"2025-05-27T01:03:10Z","additions":269,"deletions":328},{"id":"PR_kwDOMT5cIs6Xynyk","title":"feat: prod test cli with cron workflows","author":"wtfsayo","number":4797,"body":"adds cron workflows to test and released cli package\n\n<!-- This is an auto-generated comment: release notes by coderabbit.ai -->\n\n## Summary by CodeRabbit\n\n- **Chores**\n  - Introduced a new scheduled and manually-triggered production validation workflow for the CLI, ensuring regular automated checks and improved reliability.\n  - Centralized and standardized test script setup by moving command initialization logic into shared utility functions, enhancing maintainability and consistency across CLI test scripts.\n\n<!-- end of auto-generated comment: release notes by coderabbit.ai -->","repository":"elizaos/eliza","createdAt":"2025-05-27T14:08:32Z","mergedAt":"2025-05-27T14:36:47Z","additions":160,"deletions":10},{"id":"PR_kwDOMT5cIs6XznEp","title":"fix: Refactor agents in rooms API to participants, fix missing world/serverId GET API.","author":"ChristopherTrimboli","number":4798,"body":"$b","repository":"elizaos/eliza","createdAt":"2025-05-27T15:37:34Z","mergedAt":null,"additions":144,"deletions":17},{"id":"PR_kwDOMT5cIs6XvCd2","title":"feat: add npm publishing to default elizaos publish workflow","author":"yungalgo","number":4793,"body":"$c","repository":"elizaos/eliza","createdAt":"2025-05-27T08:05:51Z","mergedAt":"2025-05-27T08:22:36Z","additions":78,"deletions":37},{"id":"PR_kwDOMT5cIs6Xu8_t","title":"fix: update and improve registry publishing logic and package naming","author":"yungalgo","number":4792,"body":"Problem: \r\n\r\n- registry publishing logic was creating a package.json file for some reason in addition to updating the registry index.json\r\n- Registry publishing was creating massive diffs by reordering the entire index.json file, used incorrect package name format with @elizaos-plugins/ prefix, and had indentation inconsistencies.\r\n\r\nIn general the logic was not in line with what the registry publishing should do which is basically just add an alphabetically-ordered mapping of the npm package org/package name to the github org / repo name.\r\n\r\nSolution:\r\n* Fixed package naming to use actual npm package name instead of @elizaos-plugins/ prefix\r\n* Implemented line-by-line insertion to avoid massive diffs\r\n* Added alphabetical positioning logic for clean registry updates\r\n* Standardized indentation to 4 spaces\r\n* Added registry conflict detection","repository":"elizaos/eliza","createdAt":"2025-05-27T07:59:53Z","mergedAt":"2025-05-27T08:22:06Z","additions":68,"deletions":235},{"id":"PR_kwDOMT5cIs6XsmwG","title":"fix: CLI tests add openai api-key","author":"0xbbjoker","number":4786,"body":"$d","repository":"elizaos/eliza","createdAt":"2025-05-27T01:35:49Z","mergedAt":"2025-05-27T02:13:54Z","additions":59,"deletions":215},{"id":"PR_kwDOMT5cIs6XV441","title":"fix: Windows build in CI workflows","author":"lalalune","number":4738,"body":"## Summary\n- install NSIS on Windows runners so Tauri bundling works\n- use Node.js 20 in workflows to avoid unavailable versions\n- document new workflow requirement in README\n- standardize Node 20 across repo and docs\n\n## Testing\n- `bun run lint`\n\n<!-- This is an auto-generated comment: release notes by coderabbit.ai -->\n\n## Summary by CodeRabbit\n\n- **Chores**\n  - Updated the minimum required Node.js version from 23+ to 20+ across all documentation, configuration files, and build environments.\n  - Adjusted CI/CD workflows and Docker setup to use Node.js 20 instead of 23.\n  - Added installation of the NSIS tool in Windows build steps to support installer creation.\n\n- **Documentation**\n  - Revised all guides, FAQs, quickstart, and prerequisites to reflect the new Node.js 20+ requirement.\n\n<!-- end of auto-generated comment: release notes by coderabbit.ai -->","repository":"elizaos/eliza","createdAt":"2025-05-23T07:43:40Z","mergedAt":null,"additions":49,"deletions":45},{"id":"PR_kwDOMT5cIs6XsCKy","title":"fix: loading default character for testing","author":"0xbbjoker","number":4783,"body":"try fix integration tests","repository":"elizaos/eliza","createdAt":"2025-05-26T22:24:24Z","mergedAt":null,"additions":32,"deletions":290},{"id":"PR_kwDOMT5cIs6Xu4Uu","title":"Eliza290/consolidate and update registry urls to elizaos plugins","author":"yungalgo","number":4791,"body":"Problem: \r\n\r\n- Need to update elizaos/registry => elizaos-plugins/registry\r\n- Registry URLs were hardcoded throughout the codebase using the old elizaos/registry format, making maintenance difficult and causing issues with the new registry location.\r\n- \r\nSolution:\r\nCreated centralized constants in packages/cli/src/utils/registry/constants.ts\r\nUpdated all references to use the new elizaos-plugins/registry URL\r\nConsolidated registry URL management to a single source of truth\r\n\r\nDetails: This ensures all registry operations point to the correct location and makes future URL changes easier to manage.","repository":"elizaos/eliza","createdAt":"2025-05-27T07:52:29Z","mergedAt":"2025-05-27T08:21:30Z","additions":30,"deletions":20},{"id":"PR_kwDOMT5cIs6X031O","title":"Update README_MY.md","author":"imholders","number":4800,"body":"$e","repository":"elizaos/eliza","createdAt":"2025-05-27T18:03:54Z","mergedAt":"2025-05-30T03:09:47Z","additions":20,"deletions":2},{"id":"PR_kwDOMT5cIs6Xsn1D","title":"feat: improving typing","author":"odilitime","number":4787,"body":"# Risks\r\n\r\nLow\r\n\r\n# Background\r\n\r\n## What does this PR do?\r\n\r\n- make strict typing pass\r\n- don't export BM25 outside npm (we only use it in runtime)\r\n\r\n## What kind of change is this?\r\n\r\nUpdates (new versions of included code)\r\n\r\n## Why are we doing this? Any context or related work?\r\n\r\nimprove what we have to lock down in specification and give core as much freedom as possible.\r\n\r\n# Documentation changes needed?\r\n\r\nMy changes do not require a change to the project documentation.\r\n","repository":"elizaos/eliza","createdAt":"2025-05-27T01:40:43Z","mergedAt":"2025-05-27T01:46:03Z","additions":8,"deletions":5},{"id":"PR_kwDOMT5cIs6Xryxa","title":"chore: remove unused method from db adapter","author":"0xbbjoker","number":4781,"body":"## Summary\n\nThis PR removes unused methods from the database adapter to improve code maintainability and reduce the codebase size.\n\n## Changes\n\n- **Removed**: Unused method(s) from the database adapter\n- **Impact**: Reduces codebase by ~250 lines (280 deletions, 30 additions)\n- **Type**: Code cleanup/maintenance\n\n## Motivation\n\nRemoving dead code helps:\n- Reduce maintenance burden\n- Improve code readability\n- Decrease bundle size\n- Eliminate potential confusion for developers\n\n## Testing\n\n- [ ] Verified that removed methods are not referenced elsewhere in the codebase\n- [ ] Existing tests continue to pass\n- [ ] No breaking changes to the public API\n\n## Checklist\n\n- [x] Code follows the project's coding standards\n- [x] Changes are focused and atomic\n- [x] No breaking changes introduced\n- [x] Commit message follows conventional commit format\n\n---\n\n**Note**: This is a maintenance/cleanup PR that removes unused code without affecting functionality.","repository":"elizaos/eliza","createdAt":"2025-05-26T21:12:25Z","mergedAt":"2025-05-27T07:42:47Z","additions":5,"deletions":29},{"id":"PR_kwDOMT5cIs6XtMcl","title":"fix: bootstrap plugin default","author":"ChristopherTrimboli","number":4788,"body":"Defaults plugin-bootstrap always activated in default: \"create agent\" flows in the client UI. Since without, messages do not process and confusing to users.","repository":"elizaos/eliza","createdAt":"2025-05-27T03:58:17Z","mergedAt":"2025-05-27T07:35:51Z","additions":2,"deletions":2},{"id":"PR_kwDOMT5cIs6XrdeO","title":"Update README_IND.md","author":"imholders","number":4780,"body":"$f","repository":"elizaos/eliza","createdAt":"2025-05-26T19:51:58Z","mergedAt":"2025-05-27T08:17:52Z","additions":1,"deletions":1},{"id":"PR_kwDOMT5cIs6Xuu6x","title":"fix: remove unneeded parenthesis in CLI publish command","author":"yungalgo","number":4790,"body":"Problem: Unnecessary parenthesis in the CLI publish command code affecting readability.\r\n\r\nSolution: Removed the unneeded parenthesis to clean up the code.\r\n\r\nDetails: Minor code cleanup with no functional changes.","repository":"elizaos/eliza","createdAt":"2025-05-27T07:37:09Z","mergedAt":"2025-05-27T07:41:46Z","additions":1,"deletions":1}],"detailedContributorSummaries":{"0xbbjoker":"0xbbjoker: Merged 2 PRs (#4796 and #4786) with significant code changes (+536/-13 lines and +59/-215 lines respectively), while also opening a new PR (#4799) focused on integration tests. Active today with 8 commits, modifying 39 files (+1917/-586 lines), primarily concentrating on feature work (63%) and bug fixes (25%).","ChristopherTrimboli":"ChristopherTrimboli: Merged 1 PR (#4788) with minor changes (+2/-2 lines) and is currently working on another open PR (#4798). Made significant code modifications across 38 files (+204/-81 lines) with a focus on other work (60%) and bugfixes (20%).","HarshModi2005":"HarshModi2005: Merged 1 significant pull request (#4801) with a total of +11659/-1592 lines, focusing entirely on feature work. Modified 27 files with a total of +4718/-62 lines, demonstrating consistent daily activity.","imholders":"imholders: Merged 1 PR (#4800) with significant documentation updates (+20/-2 lines) and maintained a consistent activity pattern, being active every day. Focused entirely on documentation work today, modifying 1 file.","lalalune":"lalalune: Merged 1 significant PR (#4789) with a total of +9695/-4229 lines, focusing on feature work, refactoring, and testing across 66 modified files. Maintained a consistent activity pattern with 4 commits today, demonstrating balanced contributions across various aspects of the codebase.","monilpat":"monilpat: Reviewed 1 pull request, issuing 1 change request, but did not approve any. Activity remains sporadic, with no other contributions today.","odilitime":"odilitime: Merged 1 PR (#4787 \"feat: improving typing\") with a net change of +8/-5 lines and currently has 1 open PR (#4802 \"feat: convert plugin-sql over to core-plugin-v2\"). Made significant code changes across 119 files, contributing a total of +9311/-1224 lines with a focus on other work (59%) and bugfixes (19%).","wtfsayo":"wtfsayo: Merged 1 PR (#4797) with significant changes (+177/-27 lines) and modified 217 files overall (+21196/-1692 lines) across 14 commits, primarily focusing on other work (71%) and bugfixes (21%). Actively engaged with 5 PR reviews, providing 5 approvals and 1 comment, demonstrating consistent daily contributions.","yungalgo":"yungalgo: Merged 6 PRs, including a significant feature update in PR #4795 (+17093/-2385 lines), while modifying 105 files with a total of +9515/-1767 lines across 18 commits. The work was primarily focused on feature development (28%) and other tasks (33%), demonstrating consistent daily activity."}},"summaryContent":"$10","className":"self-end sm:self-start"}]]}],"$L11","$L12","$L13"]}]}],["$L14","$L15","$L16"],"$L17"]}],"loading":null,"isPartial":false}
+11:["$","div",null,{"className":"mb-6","children":["$","div",null,{"className":"flex items-center justify-between","children":[[["$","$L18",null,{"href":"/summary/day/2025-05-26","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left mr-2 h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"children":"Previous"}],false],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$L18",null,{"href":"/summary/day/2025-05-26","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Previous"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]],["$","div",null,{"className":"flex flex-col items-center","children":[["$","div",null,{"className":"text-sm font-medium text-gray-500","children":["Daily"," Summary"]}],["$","time",null,{"dateTime":"2025-05-27","className":"text-md font-bold","children":"May 27, 2025"}]]}],[["$","$L18",null,{"href":"/summary/day/2025-05-28","children":[false,["$","span",null,{"children":"Next"}],["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right ml-2 h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}]],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$L18",null,{"href":"/summary/day/2025-05-28","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Next"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]]]}]}]
+1a:T1b35,# Multi-Repository Support Implementation Tasks
+
+This document breaks down the implementation tasks for adding multi-repository support to the Eliza Leaderboard, based on the phases outlined in `plan/multi-repo.md`.
+
+## Phase 1: Foundational Multi-Repo Support
+
+**Goal:** Enable the pipeline to ingest, process, and store data from multiple configured repositories, with basic per-repository output.
+
+-   [x] **Task 1.1: Modify `pipeline.config.ts` Structure**
+    -   [x] Update the `repositories` array in `config/pipeline.config.ts` to accept objects containing `owner`, `name`, and `repoId` (e.g., `{ owner: "elizaos", name: "eliza", repoId: "elizaos/eliza" }`).
+    -   [x] Ensure existing configuration loading logic correctly parses the new structure.
+    -   [x] Update type definitions for `PipelineConfig` to reflect this change.
+-   [ ] **Task 1.2: Update Core Pipeline Scripts for Iteration**
+    -   [ ] Modify the `ingest` pipeline in `cli/analyze-pipeline.ts` (and its underlying modules in `src/lib/pipelines/ingest/`) to iterate over each configured repository.
+        -   [ ] Pass the correct `repoId` (and owner/name if needed) to GitHub API calls and data processing functions.
+    -   [ ] Modify the `process` pipeline in `cli/analyze-pipeline.ts` (and `src/lib/pipelines/process/`) to operate on data from all configured repositories, ensuring `repoId` is used for correct association.
+    -   [ ] Modify the `export` pipeline in `cli/analyze-pipeline.ts` (and `src/lib/pipelines/export/`) to generate outputs for each repository, likely maintaining the `data/<owner_repo>/` structure.
+-   [ ] **Task 1.3: Ensure Data Segregation**
+    -   [ ] **Database:** Confirm that all database interactions (inserts, updates, queries) in Drizzle ORM correctly use the `repoId` (or equivalent `repository` field) to associate data with the correct repository (ref: `src/lib/data/schema.ts`).
+        -   [ ] Verify `repositories` table is populated correctly for each new repo.
+        -   [ ] Verify raw data tables (`rawPullRequests`, `rawIssues`, etc.) correctly link to `repositories.repoId`.
+    -   [ ] **File System:** Confirm that file-based outputs (JSON summaries, logs if any) are correctly placed in per-repository directories (e.g., `data/elizaos_eliza/`, `data/elizaos-plugins_myplugin/`).
+-   [ ] **Task 1.4: Verify Commit Deduplication**
+    -   [ ] Test the ingestion process with repositories that have shared commit history (if identifiable examples exist).
+    -   [ ] Confirm that commits with identical hashes are stored only once in `rawCommits` or are handled appropriately to avoid duplicate processing and scoring.
+        -   Investigate if `rawCommits.oid` (primary key) handles this naturally.
+-   [ ] **Task 1.5: Basic Per-Repository Reporting/Summarization**
+    -   [ ] Ensure the `summarize` pipeline (project summaries) can run for each configured repository and outputs to the correct `data/<owner_repo>/summaries/` directory.
+    -   [ ] Initial verification that existing website/UI components can (at a minimum) display data if pointed to a specific repository's output, or that per-repo pages can be generated. (Focus on data backend first).
+-   [ ] **Task 1.6: Update CLI Commands**
+    -   [ ] Review and update CLI command options in `cli/analyze-pipeline.ts` if necessary. For example, `--repository` flags might need to accept multiple values, or a new `--all-repos` flag might be introduced. Or, it might default to all repos in the config unless specified.
+    -   [ ] Update help messages and `README.md` for CLI changes.
+
+## Phase 2: Enhanced Scoring and Aggregation
+
+**Goal:** Develop strategies for viewing aggregated data (e.g., org-level) and explore more flexible scoring for a multi-repo context.
+
+-   [ ] **Task 2.1: Develop Aggregated View Strategies (Org-Level)**
+    -   [ ] Design how organization-level summaries or metrics could be calculated (e.g., total contributions to `elizaos` org).
+    -   [ ] Determine if new database tables or views are needed for storing/querying aggregated data.
+    -   [ ] Implement proof-of-concept for generating basic org-level statistics.
+-   [ ] **Task 2.2: Explore Flexible/Subjective Scoring Mechanisms**
+    -   [ ] Research and document potential approaches for allowing user-defined scoring weights (e.g., funders specifying weights for issue types, PR sizes, specific tags across selected repos).
+    -   [ ] Consider how `config/pipeline.config.ts` might be extended or if a new configuration mechanism/UI is needed for this.
+    -   [ ] Assess impact on `userTagScores` and `userDailyScores` if scores become more dynamic.
+-   [ ] **Task 2.3: Refine AI Summary Generation for Multi-Repo/Org Contexts**
+    -   [ ] Evaluate if the `projectContext` in `config/pipeline.config.ts` for AI summaries needs to be dynamic (e.g., different context per org, or a broader context for org-level summaries).
+    -   [ ] Test AI summary quality when summarizing activities across multiple repositories within an organization.
+    -   [ ] Adapt summarization prompts or logic in `src/lib/pipelines/summarize/` as needed.
+
+## Phase 3: Advanced Funder UX and LLM Integration
+
+**Goal:** Improve the user experience for stakeholders (funders) by providing better tools for data exploration and leveraging LLMs for insights.
+
+-   [ ] **Task 3.1: Design and Implement Enhanced Funder UX**
+    -   [ ] Brainstorm and mock up UI features that allow funders to:
+        -   [ ] Easily switch between per-repo, per-org, and global views.
+        -   [ ] Filter and sort contributors/contributions based on various criteria (tags, activity types, date ranges across multiple repos).
+        -   [ ] Apply their subjective scoring/weighting (if implemented in Phase 2).
+    -   [ ] Implement frontend changes in `src/app/` and related components.
+-   [ ] **Task 3.2: Integrate LLMs for Advanced Data Querying/Interpretation**
+    -   [ ] Explore feasibility of using LLMs to answer natural language questions about the contribution data (e.g., "Show me top TypeScript contributors to elizaos-plugins this month").
+    -   [ ] Design and prototype a system for this, considering data context provision to the LLM.
+
+## Cross-Cutting Concerns / To-Do Throughout
+
+-   [ ] **Testing:** Add unit and integration tests for multi-repo functionality.
+-   [ ] **Documentation:** Update `README.md`, `plan/multi-repo.md`, and any other relevant documentation.
+-   [ ] **Error Handling:** Ensure robust error handling for scenarios like invalid repo configurations, API errors for specific repos, etc.
+-   [ ] **Performance:** Monitor and optimize performance, especially during ingestion and processing of many repositories. Consider implications for `sqlite-diffable` and data sync.
+-   [ ] **GitHub Issue Creation:** Create corresponding GitHub issues for these tasks.
+-   [ ] **Branch Management:** Regularly merge changes from `main` to `multi-repo` and vice-versa as appropriate. 1b:T64c,![Screenshot 2025-05-28 at 12 00 19 AM](https://github.com/user-attachments/assets/ad13cbd8-5a66-4dcc-bb97-1fd8fdcfdf76)
+![Screenshot 2025-05-28 at 12 00 37 AM](https://github.com/user-attachments/assets/0c050d97-e724-4d58-ab48-673bc8f6d91b)
+![Screenshot 2025-05-28 at 12 00 47 AM](https://github.com/user-attachments/assets/41c9c5e8-f3f5-44a2-8c71-a0ced4805fd4)
+![Screenshot 2025-05-28 at 12 00 56 AM](https://github.com/user-attachments/assets/fd37c9ec-893b-49df-a747-0b056782145a)
+![Screenshot 2025-05-28 at 12 01 08 AM](https://github.com/user-attachments/assets/2c9cf4bd-2e8b-43cb-be88-c156fdb1c416)
+![Screenshot 2025-05-28 at 12 01 18 AM](https://github.com/user-attachments/assets/08f19833-6955-491c-9504-eecf56610d07)
+![Screenshot 2025-05-28 at 12 12 19 AM](https://github.com/user-attachments/assets/ba0f7cb5-df2f-4f7d-a396-71190fd2f8b9)
+![Screenshot 2025-05-27 at 11 59 52 PM](https://github.com/user-attachments/assets/f21c735f-328a-4476-9772-285f07fa1d60)
+![Screenshot 2025-05-28 at 12 34 20 AM](https://github.com/user-attachments/assets/e568329c-9c77-4969-9e57-0deafcb09ea4)
+![Screenshot 2025-05-28 at 12 34 32 AM](https://github.com/user-attachments/assets/0e9a414e-b07d-4f35-9669-68707feebf8d)
+![Screenshot 2025-05-28 at 12 36 48 AM](https://github.com/user-attachments/assets/1335d706-5d3c-4bea-ab23-43ea443d85f9)
+![Screenshot 2025-05-28 at 12 36 55 AM](https://github.com/user-attachments/assets/904294f3-ddce-4911-9515-5baabcffab80)
+![Screenshot 2025-05-28 at 12 44 41 AM](https://github.com/user-attachments/assets/bde02a89-2be0-4808-bc52-774453979468)
+1c:Teb9,<!-- Use this template by filling in information and copying and pasting relevant items out of the HTML comments. -->
+
+# Relates to
+Adds TEE Project Starter Template for a quickstart to launch in TEE Cloud provider. For the time being, Phala Cloud is the current available option for a customizable ElizaOS deployment.
+<!-- LINK TO ISSUE OR TICKET -->
+
+<!-- This risks section must be filled out before the final review and merge. -->
+
+# Risks
+Low
+<!--
+Low, medium, large. List what kind of risks and what could be affected.
+-->
+
+# Background
+
+## What does this PR do?
+Creates a quick start to generate a TEE Agent project.
+## What kind of change is this?
+Feature
+<!--
+Bug fixes (non-breaking change which fixes an issue)
+Improvements (misc. changes to existing features)
+Features (non-breaking change which adds functionality)
+Updates (new versions of included code)
+-->
+
+<!-- This "Why" section is most relevant if there are no linked issues explaining why. If there is a related issue, it might make sense to skip this why section. -->
+<!--
+## Why are we doing this? Any context or related work?
+-->
+
+# Documentation changes needed?
+
+<!--
+My changes do not require a change to the project documentation.
+My changes require a change to the project documentation.
+If documentation change is needed: I have updated the documentation accordingly.
+-->
+
+<!-- Please show how you tested the PR. This will really help if the PR needs to be retested and probably help the PR get merged quicker. -->
+
+# Testing
+
+## Where should a reviewer start?
+A reviewer should start with getting a Phala Cloud Account to test the CVM deployment. Get an API Key and Install the Phala Cloud CLI for deployment. Check Docs [here]()
+### Detailed testing steps
+First clone the repo (I have not added the CLI command, yet. This could be easier with elizaos CLI.)
+```bash
+# Make sure you are in the `project-tee-starter` folder
+npm install -g phala
+# Set TEE_MODE=PRODUCTION
+# Ensure you are also running docker
+
+# Step0: Set your API Key from Phala Cloud Dashboard
+phala auth login
+
+# Step1: Build Docker Image
+phala docker build
+
+# Step2: Publish Docker Image to DockerHub
+phala docker push
+
+# Step3: Update docker-compose.yaml file with your published Docker image and deploy CVM
+phala cvms create -c docker-compose.yaml -e .env
+
+# (Optional) Step4: Check attestation
+phala cvms attestation
+
+# (Optional) Step5: Upgrade CVM if updated changes
+phala cvms upgrade -c docker-compose.yaml
+```
+<!--
+None: Automated tests are acceptable.
+-->
+
+<!--
+- As [anon/admin], go to [link]
+  - [do action]
+  - verify [result]
+-->
+
+<!-- If there is a UI change, please include before and after screenshots or videos. This will speed up PRs being merged. It is extra nice to annotate screenshots with arrows or boxes pointing out the differences. -->
+
+## Screenshots
+Test deployment: https://94068a91ffa0d8f97f2fb38941ee0139f533daab-3000.dstack-prod6.phala.network/chat/f1b8ef45-dab5-095e-90a8-87a35b16966e
+
+![image](https://github.com/user-attachments/assets/f0f09aa4-14f4-4523-b013-0d7af096dd99)
+
+![image](https://github.com/user-attachments/assets/0e0e8b5d-3e4a-4cb0-a06f-bfd932c3c746)
+
+
+<!-- If there is anything about the deployment, please make a note. -->
+<!--
+# Deploy Notes
+-->
+
+<!--  Copy and paste command line output. -->
+<!--
+## Database changes
+-->
+
+<!--  Please specify deploy instructions if there is something more than the automated steps. -->
+<!--
+## Deployment instructions
+-->
+
+<!-- If you are on Discord, please join https://discord.gg/elizaOS and state your Discord username here for the contributor role and join us in #development-feed -->
+<!--
+## Discord username
+
+-->
+1d:Tb17,
+![image](https://github.com/user-attachments/assets/00cfa68c-24b9-4fca-a89f-9ac8ce228a22)
+
+1. **Configuration Updates**:
+   - Modified `config/pipeline.config.ts` to support multiple repositories with a new structure that includes `owner`, `name`, and `defaultBranch` for each repository
+
+2. **Pipeline System Enhancements**:
+   - Updated the pipeline system to handle multiple repositories through the `getSelectedRepositories` step
+   - Modified core pipeline components (ingest, process, export, summarize) to iterate over configured repositories
+   - Added repository-specific data segregation in storage paths (e.g., `data/<owner_repo>/`)
+
+3. **Documentation and Planning**:
+   - Created `plan/multi-repo.md` outlining the multi-repository support strategy
+   - Added `plan/tasks.md` with detailed implementation tasks for the multi-repo feature
+
+4. **Pipeline Configuration Types**:
+   - Updated `src/lib/pipelines/pipelineConfig.ts` with new schema definitions for repository configuration
+   - Added validation and transformation logic for repository configurations
+
+---
+
+Reasons
+
+1. **Scalability**: The system needed to expand beyond a single repository to support both the main `elizaos` organization and its plugins ecosystem, requiring a more flexible configuration structure.
+
+2. **Data Organization**: Each repository's data needs to be properly segregated to maintain clear boundaries and prevent cross-contamination, while still allowing for organization-wide analytics.
+
+3. **Future-Proofing**: The changes establish a foundation for adding more repositories and organizations in the future, with proper configuration validation and data handling patterns in place.
+
+These changes follow the system's existing patterns (as seen in the pipeline rules) while extending its capabilities to handle multiple repositories in a maintainable way.
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+- **New Features**
+  - Added support for tracking and displaying multiple repositories, including new metadata fields for repository owner and name.
+  - Enhanced configuration to specify repositories using separate owner and name fields.
+
+- **Database**
+  - Updated the database schema to include owner and name columns for repositories.
+  - Added a new migration and schema snapshot reflecting the expanded repository metadata.
+
+- **Bug Fixes**
+  - Improved robustness of database migrations and worktree management during data synchronization.
+
+- **Documentation**
+  - Introduced planning and task documents outlining multi-repository support and implementation phases.
+
+- **Chores**
+  - Added environment variable to limit the number of users generated in certain workflows.
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->1e:T1c11,# 🚀 ElizaOS CLI Publish Command Overhaul
+
+## Overview
+
+This PR introduces comprehensive improvements to the ElizaOS CLI publish command, transforming it from a GitHub-only publishing tool into a complete publishing solution that handles npm, GitHub, and registry publishing in a single command.
+
+## Problem Statement
+
+The current `elizaos publish` command had several critical limitations:
+
+### 1. **Incomplete Publishing Workflow**
+- Only published to GitHub, requiring manual npm publishing
+- Users had to run separate commands for complete package distribution
+- No unified workflow for plugin developers
+
+### 2. **Registry Infrastructure Issues**
+- Hardcoded registry URLs throughout codebase (`elizaos/registry` → `elizaos-plugins/registry`)
+- Registry publishing created massive diffs by reordering entire index.json
+- Incorrect package naming with `@elizaos-plugins/` prefix instead of actual npm names
+- Environment loading issues preventing GitHub token access
+
+### 3. **Poor Developer Experience**
+- Fragmented publishing process
+- Inconsistent documentation across templates and docs
+- No guidance on continuous development workflows
+- Recursion issues when npm scripts triggered ElizaOS commands
+
+## Solution
+
+This PR implements a complete publishing solution through 5 focused improvements:
+
+### 🔧 **1. Code Cleanup** 
+- Remove unnecessary parenthesis for better code readability
+- Minor syntax improvements
+
+### 🏗️ **2. Registry Infrastructure Consolidation**
+- **Centralized constants**: Created `packages/cli/src/utils/registry/constants.ts`
+- **Updated registry URL**: Changed from `elizaos/registry` to `elizaos-plugins/registry`
+- **Single source of truth**: All registry references now use centralized `REGISTRY_URL`
+
+**Files affected:**
+- `packages/cli/src/utils/registry/constants.ts` (new)
+- `packages/cli/src/commands/publish.ts`
+- `packages/cli/src/utils/parse-registry.ts`
+- `packages/client/src/hooks/use-plugins.ts`
+- `.github/workflows/plugin-publish.yml`
+
+### 🛠️ **3. Registry Publishing Logic Fixes**
+- **Correct package naming**: Use actual npm package name instead of `@elizaos-plugins/` prefix
+- **Minimal diffs**: Line-by-line insertion instead of full file reordering
+- **Alphabetical positioning**: Clean registry updates with proper sorting
+- **Consistent indentation**: Standardized to 4 spaces
+- **Conflict detection**: Added registry conflict detection and handling
+
+### 🚀 **4. Complete npm Integration**
+- **Default behavior**: `elizaos publish` now publishes to npm + GitHub + registry
+- **Recursion prevention**: Uses `--ignore-scripts` to prevent infinite loops
+- **Flag restructure**: `--npm` now means "npm only" (skip GitHub and registry)
+- **Environment fixes**: Added dotenv support to `parse-registry.ts` for GitHub token access
+- **Authentication flow**: Integrated npm login requirements into publish workflow
+
+**BREAKING CHANGE**: `elizaos publish` now publishes to npm by default
+
+### 📚 **5. Comprehensive Documentation Updates**
+- **Updated CLI README**: Reflects new npm + GitHub + registry default behavior
+- **Enhanced publish.md**: Added continuous development workflows and testing guidance
+- **Plugin starter templates**: Updated with complete publishing and development workflows
+- **Success messaging**: Added guidance for future updates using standard npm/git workflows
+- **Testing integration**: Emphasized testing throughout development lifecycle
+
+## Key Features
+
+### 🎯 **Unified Publishing Command**
+```bash
+# One command does everything (recommended)
+elizaos publish
+
+# npm only (for private packages)
+elizaos publish --npm
+
+# Skip registry submission
+elizaos publish --skip-registry
+```
+
+### 🔄 **Proper Continuous Development**
+After initial publish, developers use standard workflows:
+```bash
+npm version patch|minor|major  # Update version
+npm publish                    # Publish to npm
+git push origin main           # Update GitHub
+git push --tags               # Push version tags
+```
+
+### 🧪 **Enhanced Testing Integration**
+```bash
+elizaos test                   # Run all tests
+elizaos publish --test         # Test publish process
+elizaos publish --dry-run      # Generate registry files locally
+```
+
+## Technical Implementation
+
+### Registry URL Migration
+- **Before**: `elizaos/registry` (hardcoded in multiple files)
+- **After**: `elizaos-plugins/registry` (centralized constant)
+
+### Publishing Flow
+1. **Authentication**: npm login + GitHub token validation
+2. **Building**: `npm run build`
+3. **npm Publishing**: `npm publish --ignore-scripts` (prevents recursion)
+4. **GitHub Publishing**: Repository creation/update + registry PR submission
+5. **Success Guidance**: Instructions for future updates
+
+### Environment Loading
+- Added dotenv support to registry parsing
+- Proper GitHub token access from `.env` files
+- Improved error handling for authentication failures
+
+## Testing
+
+- ✅ All existing tests pass
+- ✅ New publish workflow tested with `--test` flag
+- ✅ Registry publishing logic validated with `--dry-run`
+- ✅ Documentation examples verified
+- ✅ Recursion prevention confirmed
+
+## Migration Guide
+
+### For Plugin Developers
+- **No action required** for existing plugins
+- New plugins get improved workflow automatically
+- Future updates should use standard npm/git commands
+
+### For CLI Users
+- `elizaos publish` now does complete publishing (npm + GitHub + registry)
+- Use `elizaos publish --npm` for npm-only publishing
+- Follow new continuous development workflows in documentation
+
+## Files Changed
+
+<details>
+<summary>Core CLI Changes (5 files)</summary>
+
+- `packages/cli/src/commands/publish.ts` - Main publish command logic
+- `packages/cli/src/utils/registry/constants.ts` - New centralized constants
+- `packages/cli/src/utils/registry/index.ts` - Registry utilities
+- `packages/cli/src/utils/parse-registry.ts` - Environment loading fixes
+- `packages/cli/README.md` - Updated CLI documentation
+</details>
+
+<details>
+<summary>Documentation Updates (3 files)</summary>
+
+- `packages/docs/docs/cli/publish.md` - Complete workflow documentation
+- `packages/cli/templates/plugin-starter/README.md` - Template updates
+- `packages/plugin-starter/README.md` - Standalone starter updates
+</details>
+
+<details>
+<summary>Infrastructure Updates (3 files)</summary>
+
+- `packages/client/src/hooks/use-plugins.ts` - Registry URL updates
+- `packages/docs/scripts/update-registry.js` - Registry script updates
+- `.github/workflows/plugin-publish.yml` - Workflow updates
+</details>
+
+## Related Issues
+
+- Fixes fragmented publishing workflow
+- Resolves registry URL inconsistencies  
+- Addresses npm publishing recursion issues
+- Improves developer experience for plugin publishing
+- Standardizes continuous development workflows
+
+## Breaking Changes
+
+- **`elizaos publish`** now publishes to npm by default (previously GitHub only)
+- **`--npm` flag** now means "npm only" instead of "include npm"
+- **Registry URL** changed from `elizaos/registry` to `elizaos-plugins/registry`1f:T54b,## Description
+
+This PR fixes the issue where the API endpoint `/api/agents/:agentId/rooms` was returning an empty list despite agents being actively participating in rooms.
+
+## Problem
+
+The root cause was that when rooms were created, the `agentId` was not being properly associated with the room record in the database. This meant that while agents could successfully:
+- Create rooms (logs showed "Room [UUID] created successfully")
+- Connect to rooms (logs showed "Successfully connected entity [agentId] in room [roomId]")  
+- Send and receive messages in rooms
+
+The `getRoomsForParticipant(agentId)` function could not retrieve rooms for a specific agent because the agent-room association was missing from the database.
+
+## Solution
+
+Added the missing `agentId` field to the room creation process to ensure proper agent-room associations are stored in the database.
+
+## Changes
+
+- Fixed room creation to include `agentId` in the room record
+- This enables the `/api/agents/:agentId/rooms` endpoint to correctly return all rooms where an agent is a participant
+
+## Fixes
+
+Closes #4779
+
+## Testing
+
+- Verify that `/api/agents/:agentId/rooms` now returns the expected list of rooms for active agents
+- Confirm that agents can still create, join, and participate in rooms normally
+- Check that room-agent associations are properly stored in the database20:T40b,# Risks
+
+Low, something might use ActionResponse or someone might not like the logging changes
+
+# Background
+
+## What does this PR do?
+
+- improve logging (I find it hard to dev on spartan without these changes)
+- removes duplicate `registerContextProvider` infavor for `registerProvider` (which also existed)
+- makes ServiceBuilder more friendly for the plugin-specification wrapper
+- remove twitter type `ActionResponse` in utils (doesn't belong here)
+- don't export `upgradeDoubleToTriple` & `composeRandomUser` (they aren't used elsewhere, only internally in utils) to reduce plugin-specification wrapper foot print
+- bump lockfile
+
+## What kind of change is this?
+
+Updates (new versions of included code)
+
+## Why are we doing this? Any context or related work?
+
+# Documentation changes needed?
+
+My changes do not require a change to the project documentation.
+
+<!-- Please show how you tested the PR. This will really help if the PR needs to be retested and probably help the PR get merged quicker. -->
+
+21:Tec4,This pull request introduces significant updates to the handling of participants in rooms, memory retrieval by server ID, and related data structures and APIs. These changes aim to improve the flexibility of the system by supporting multiple participants per room and enabling memory queries scoped by server and world. Below is a categorized summary of the most important changes:
+
+### Room Participant Management
+* Replaced the single `agentId` field in the `Room` type with a `participants` array, allowing each room to track multiple agents and their associated characters. (`packages/core/src/types.ts`, [packages/core/src/types.tsL577-R586](diffhunk://#diff-4c2458380e50c967c70d7afe819dc7412180f9f817043f27441de3498e4d0479L577-R586))
+* Updated the `getRoomAgentIds` function and `AppSidebar` component logic to handle the new `participants` structure, ensuring proper extraction and display of agent IDs and names. (`packages/client/src/components/app-sidebar.tsx`, [[1]](diffhunk://#diff-033854ee14ba4ed376c007175c16b3eecd687c496616f024611bd5dec6967b01L44-R61) [[2]](diffhunk://#diff-033854ee14ba4ed376c007175c16b3eecd687c496616f024611bd5dec6967b01L300-R331)
+* Enhanced the `RoomListSection` component to display unique participant counts and names, reflecting the new room structure. (`packages/client/src/components/app-sidebar.tsx`, [[1]](diffhunk://#diff-033854ee14ba4ed376c007175c16b3eecd687c496616f024611bd5dec6967b01L166-R194) [[2]](diffhunk://#diff-033854ee14ba4ed376c007175c16b3eecd687c496616f024611bd5dec6967b01L185-R203)
+
+### Memory Retrieval by Server ID
+* Added a new `getMemoriesByServerId` method to the `IDatabaseAdapter` interface and implemented it in the `BaseDrizzleAdapter` class. This method retrieves memories for a specific server within a world. (`packages/core/src/types.ts`, [[1]](diffhunk://#diff-4c2458380e50c967c70d7afe819dc7412180f9f817043f27441de3498e4d0479R1082-R1088); `packages/plugin-sql/src/base.ts`, [[2]](diffhunk://#diff-c0212488c0446f46225384f931dd7dfe141e77896ddeaf45373b859f8121d129R2766-R2800)
+* Introduced a new API endpoint to fetch memories by server ID, enabling external clients to query this data. (`packages/cli/src/server/api/world.ts`, [packages/cli/src/server/api/world.tsR95-R128](diffhunk://#diff-f0039e9c4c3da8b55f87e38277f5ec21fb212f1df9cf2d575090a577d6330e8aR95-R128))
+
+### Database and Runtime Adjustments
+* Updated database logic to include `worldId` in memory records, ensuring proper scoping for queries involving worlds and servers. (`packages/plugin-sql/src/base.ts`, [[1]](diffhunk://#diff-c0212488c0446f46225384f931dd7dfe141e77896ddeaf45373b859f8121d129R1126) [[2]](diffhunk://#diff-c0212488c0446f46225384f931dd7dfe141e77896ddeaf45373b859f8121d129R1143) [[3]](diffhunk://#diff-c0212488c0446f46225384f931dd7dfe141e77896ddeaf45373b859f8121d129R1180) [[4]](diffhunk://#diff-c0212488c0446f46225384f931dd7dfe141e77896ddeaf45373b859f8121d129R1225)
+* Added a `getMemoriesByServerId` method to the `AgentRuntime` class, delegating calls to the database adapter. (`packages/core/src/runtime.ts`, [packages/core/src/runtime.tsR2146-R2154](diffhunk://#diff-731eeb09ecd79fd1c3157ce640aa046c8c798d2fdf133837b696e4e1bfa8c0c4R2146-R2154))
+
+### Removal of Legacy Fields
+* Removed the `agentId` field from the `Room` type and related logic, as it is now replaced by the `participants` array. (`packages/core/src/types.ts`, [[1]](diffhunk://#diff-4c2458380e50c967c70d7afe819dc7412180f9f817043f27441de3498e4d0479L577-R586); `packages/core/src/runtime.ts`, [[2]](diffhunk://#diff-731eeb09ecd79fd1c3157ce640aa046c8c798d2fdf133837b696e4e1bfa8c0c4L1185)
+
+These updates collectively enhance the system's scalability and flexibility by supporting multi-participant rooms and enabling more granular memory queries.22:T48c,Problem: 
+
+The elizaos publish command only published to GitHub, requiring users to manually publish to npm separately. 
+Ideally, elizaos publish does three things:
+
+- publishes the github repo
+- forks the registry, adds the line for the plugin, and submits a pr to elizaos-plugins/registry
+- publishes to NPM
+
+Additionally, parse-registry.ts couldn't access GITHUB_TOKEN from .env files, causing authentication failures.
+
+Solution:
+* Updated elizaos publish to publish to npm + GitHub + registry by default
+* Added --ignore-scripts flag to prevent recursion when npm triggers the publish script
+* Changed --npm flag to mean "npm only" (skip GitHub and registry)
+* Added environment loading to parse-registry.ts with dotenv support
+* Added success message with guidance for future updates using standard workflows
+
+Details:
+* BREAKING CHANGE: elizaos publish now publishes to npm by default
+* Fixes recursion issue where npm publish would trigger elizaos publish again
+* Provides complete publishing workflow in a single command
+* THERE ISNT ANY SUPPORT FOR UPDATING / CONTINUOUS DEV -- THIS IS JUST FOR INITIAL PUBLISH23:T59e,# Relates to
+
+Fixes CI test failures due to missing OpenAI API key configuration.
+
+# Risks
+
+**Low** - This change only affects test configuration and does not modify core application logic.
+
+# Background
+
+## What does this PR do?
+
+This PR adds the OpenAI API key configuration to CLI tests to ensure they can pass on the CI runner. The tests were failing on the CI runner because it couldn't authenticate with OpenAI services, while tests pass locally where the API key is available.
+
+## What kind of change is this?
+
+Bug fixes (non-breaking change which fixes an issue)
+
+## Why are we doing this?
+
+The CLI tests pass locally but fail on the CI runner due to missing OpenAI API key configuration. The CI environment wasn't configured with the necessary API key, causing test failures. This change ensures the tests can authenticate and run successfully in the CI pipeline.
+
+# Documentation changes needed?
+
+My changes do not require a change to the project documentation.
+
+# Testing
+
+## Where should a reviewer start?
+
+Review the test configuration changes that add OpenAI API key support for CLI tests on the CI runner.
+
+## Detailed testing steps
+
+- Verify CLI CI tests now pass on the runner (previously failing due to missing OpenAI API key)
+- Confirm tests continue to pass locally as before
+- Confirm no regression in existing functionality
+
+The automated tests should now pass with proper OpenAI API authentication on the CI runner.24:T8fc,<!-- Use this template by filling in information and copying and pasting relevant items out of the HTML comments. -->
+
+# Relates to
+
+<!-- LINK TO ISSUE OR TICKET -->
+
+<!-- This risks section must be filled out before the final review and merge. -->
+
+# Risks
+
+<!--
+Low, medium, large. List what kind of risks and what could be affected.
+-->
+
+# Background
+
+## What does this PR do?
+
+## What kind of change is this?
+
+<!--
+Bug fixes (non-breaking change which fixes an issue)
+Improvements (misc. changes to existing features)
+Features (non-breaking change which adds functionality)
+Updates (new versions of included code)
+-->
+
+<!-- This "Why" section is most relevant if there are no linked issues explaining why. If there is a related issue, it might make sense to skip this why section. -->
+<!--
+## Why are we doing this? Any context or related work?
+-->
+
+# Documentation changes needed?
+
+<!--
+My changes do not require a change to the project documentation.
+My changes require a change to the project documentation.
+If documentation change is needed: I have updated the documentation accordingly.
+-->
+
+<!-- Please show how you tested the PR. This will really help if the PR needs to be retested and probably help the PR get merged quicker. -->
+
+# Testing
+
+## Where should a reviewer start?
+
+## Detailed testing steps
+
+<!--
+None: Automated tests are acceptable.
+-->
+
+<!--
+- As [anon/admin], go to [link]
+  - [do action]
+  - verify [result]
+-->
+
+<!-- If there is a UI change, please include before and after screenshots or videos. This will speed up PRs being merged. It is extra nice to annotate screenshots with arrows or boxes pointing out the differences. -->
+<!--
+## Screenshots
+### Before
+### After
+-->
+
+<!-- If there is anything about the deployment, please make a note. -->
+<!--
+# Deploy Notes
+-->
+
+<!--  Copy and paste command line output. -->
+<!--
+## Database changes
+-->
+
+<!--  Please specify deploy instructions if there is something more than the automated steps. -->
+<!--
+## Deployment instructions
+-->
+
+<!-- If you are on Discord, please join https://discord.gg/elizaOS and state your Discord username here for the contributor role and join us in #development-feed -->
+<!--
+## Discord username
+
+-->
+25:T8fc,<!-- Use this template by filling in information and copying and pasting relevant items out of the HTML comments. -->
+
+# Relates to
+
+<!-- LINK TO ISSUE OR TICKET -->
+
+<!-- This risks section must be filled out before the final review and merge. -->
+
+# Risks
+
+<!--
+Low, medium, large. List what kind of risks and what could be affected.
+-->
+
+# Background
+
+## What does this PR do?
+
+## What kind of change is this?
+
+<!--
+Bug fixes (non-breaking change which fixes an issue)
+Improvements (misc. changes to existing features)
+Features (non-breaking change which adds functionality)
+Updates (new versions of included code)
+-->
+
+<!-- This "Why" section is most relevant if there are no linked issues explaining why. If there is a related issue, it might make sense to skip this why section. -->
+<!--
+## Why are we doing this? Any context or related work?
+-->
+
+# Documentation changes needed?
+
+<!--
+My changes do not require a change to the project documentation.
+My changes require a change to the project documentation.
+If documentation change is needed: I have updated the documentation accordingly.
+-->
+
+<!-- Please show how you tested the PR. This will really help if the PR needs to be retested and probably help the PR get merged quicker. -->
+
+# Testing
+
+## Where should a reviewer start?
+
+## Detailed testing steps
+
+<!--
+None: Automated tests are acceptable.
+-->
+
+<!--
+- As [anon/admin], go to [link]
+  - [do action]
+  - verify [result]
+-->
+
+<!-- If there is a UI change, please include before and after screenshots or videos. This will speed up PRs being merged. It is extra nice to annotate screenshots with arrows or boxes pointing out the differences. -->
+<!--
+## Screenshots
+### Before
+### After
+-->
+
+<!-- If there is anything about the deployment, please make a note. -->
+<!--
+# Deploy Notes
+-->
+
+<!--  Copy and paste command line output. -->
+<!--
+## Database changes
+-->
+
+<!--  Please specify deploy instructions if there is something more than the automated steps. -->
+<!--
+## Deployment instructions
+-->
+
+<!-- If you are on Discord, please join https://discord.gg/elizaOS and state your Discord username here for the contributor role and join us in #development-feed -->
+<!--
+## Discord username
+
+-->
+12:["$","div",null,{"className":"mb-8 space-y-6","children":[["$","$L19",null,{"metrics":{"date":"2025-05-27","interval":{"intervalStart":"$D2025-05-27T00:00:00.000Z","intervalEnd":"$D2025-05-28T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":18,"merged":17,"total":23},"issues":{"new":1,"closed":0,"total":1},"activeContributors":12,"codeChanges":{"additions":10896,"deletions":2438,"files":96,"commitCount":81},"topContributors":[{"username":"yungalgo","avatarUrl":"https://avatars.githubusercontent.com/u/113615973?u=92e0f29f7e2fbb8ce46ed13c51f692ca803de02d&v=4","totalScore":218.476286093218,"prScore":218.476286093218,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"yungalgo: Merged 6 PRs, including a significant feature update in PR #4795 (+17093/-2385 lines), while modifying 105 files with a total of +9515/-1767 lines across 18 commits. The work was primarily focused on feature development (28%) and other tasks (33%), demonstrating consistent daily activity."},{"username":"0xbbjoker","avatarUrl":"https://avatars.githubusercontent.com/u/54844437?u=90fe1762420de6ad493a1c1582f1f70c0d87d8e2&v=4","totalScore":115.91438854208717,"prScore":110.47638854208716,"issueScore":0,"reviewScore":5,"commentScore":0.43799999999999994,"summary":"0xbbjoker: Merged 2 PRs (#4796 and #4786) with significant code changes (+536/-13 lines and +59/-215 lines respectively), while also opening a new PR (#4799) focused on integration tests. Active today with 8 commits, modifying 39 files (+1917/-586 lines), primarily concentrating on feature work (63%) and bug fixes (25%)."},{"username":"wtfsayo","avatarUrl":"https://avatars.githubusercontent.com/u/82053242?u=98209a1f10456f42d4d2fa71db4d5bf4a672cbc3&v=4","totalScore":77.6663177825133,"prScore":52.4663177825133,"issueScore":0,"reviewScore":25,"commentScore":0.2,"summary":"wtfsayo: Merged 1 PR (#4797) with significant changes (+177/-27 lines) and modified 217 files overall (+21196/-1692 lines) across 14 commits, primarily focusing on other work (71%) and bugfixes (21%). Actively engaged with 5 PR reviews, providing 5 approvals and 1 comment, demonstrating consistent daily contributions."},{"username":"odilitime","avatarUrl":"https://avatars.githubusercontent.com/u/16395496?u=c9bac48e632aae594a0d85aaf9e9c9c69b674d8b&v=4","totalScore":70.80966038422864,"prScore":65.80966038422864,"issueScore":0,"reviewScore":5,"commentScore":0,"summary":"odilitime: Merged 1 PR (#4787 \"feat: improving typing\") with a net change of +8/-5 lines and currently has 1 open PR (#4802 \"feat: convert plugin-sql over to core-plugin-v2\"). Made significant code changes across 119 files, contributing a total of +9311/-1224 lines with a focus on other work (59%) and bugfixes (19%)."},{"username":"ChristopherTrimboli","avatarUrl":"https://avatars.githubusercontent.com/u/27584221?u=de148a498b5af814e037c2975112fadd09df743f&v=4","totalScore":66.34022691813125,"prScore":56.34022691813125,"issueScore":0,"reviewScore":10,"commentScore":0,"summary":"ChristopherTrimboli: Merged 1 PR (#4788) with minor changes (+2/-2 lines) and is currently working on another open PR (#4798). Made significant code modifications across 38 files (+204/-81 lines) with a focus on other work (60%) and bugfixes (20%)."},{"username":"madjin","avatarUrl":"https://avatars.githubusercontent.com/u/32600939?u=cdcf89f44c7a50906c7a80d889efa85023af2049&v=4","totalScore":62.5007738965761,"prScore":58.060773896576094,"issueScore":4.1,"reviewScore":0,"commentScore":0.33999999999999997,"summary":null},{"username":"HarshModi2005","avatarUrl":"https://avatars.githubusercontent.com/u/142230924?u=64e337bbdb6b3aded5943b7e297759e7a3cfc0f0&v=4","totalScore":54.301773896576094,"prScore":54.301773896576094,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"HarshModi2005: Merged 1 significant pull request (#4801) with a total of +11659/-1592 lines, focusing entirely on feature work. Modified 27 files with a total of +4718/-62 lines, demonstrating consistent daily activity."},{"username":"lalalune","avatarUrl":"https://avatars.githubusercontent.com/u/18633264?u=e2e906c3712c2506ebfa98df01c2cfdc50050b30&v=4","totalScore":50.1527738965761,"prScore":50.1527738965761,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"lalalune: Merged 1 significant PR (#4789) with a total of +9695/-4229 lines, focusing on feature work, refactoring, and testing across 66 modified files. Maintained a consistent activity pattern with 4 commits today, demonstrating balanced contributions across various aspects of the codebase."},{"username":"imholders","avatarUrl":"https://avatars.githubusercontent.com/u/202005793?v=4","totalScore":28.455747107964573,"prScore":28.455747107964573,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"imholders: Merged 1 PR (#4800) with significant documentation updates (+20/-2 lines) and maintained a consistent activity pattern, being active every day. Focused entirely on documentation work today, modifying 1 file."},{"username":"monilpat","avatarUrl":"https://avatars.githubusercontent.com/u/15067321?v=4","totalScore":6,"prScore":0,"issueScore":0,"reviewScore":6,"commentScore":0,"summary":"monilpat: Reviewed 1 pull request, issuing 1 change request, but did not approve any. Activity remains sporadic, with no other contributions today."}],"focusAreas":[{"area":"cli","count":39},{"area":"project-tee-starter","count":28},{"area":"core","count":16},{"area":".github/workflows","count":6},{"area":"client","count":4},{"area":"docs","count":4},{"area":"plugin-bootstrap","count":2},{"area":"plugin-starter","count":2},{"area":"i18n/readme","count":1},{"area":"plugin-sql","count":1}],"topIssues":[{"id":"I_kwDONNAI9864e7hZ","title":"feat: Multi-repo support","author":"madjin","number":108,"repository":"elizaos/elizaos.github.io","body":"$1a","createdAt":"2025-05-27T20:25:14Z","closedAt":"2025-10-17T23:41:25Z","state":"CLOSED","commentCount":1}],"topPullRequests":[{"id":"PR_kwDOMT5cIs6X1xwp","title":"feat: Complete Polygon zkEVM plugin implementation and test cleanup -…","author":"HarshModi2005","number":4801,"body":"$1b","repository":"elizaos/eliza","createdAt":"2025-05-27T19:44:43Z","mergedAt":"2025-05-29T18:15:36Z","additions":10176,"deletions":109},{"id":"PR_kwDOMT5cIs6Xjeuj","title":"feat: Add Project TEE Starter Template","author":"HashWarlock","number":4774,"body":"$1c","repository":"elizaos/eliza","createdAt":"2025-05-25T21:42:34Z","mergedAt":"2025-05-27T07:53:37Z","additions":4168,"deletions":0},{"id":"PR_kwDOMT5cIs6Xurmd","title":"feat: Add CLI tests, add plugin dependencies, overhaul plugin registration","author":"lalalune","number":4789,"body":"This PR changes CLI so that plugins can have dependencies, for example the trader plugin can depend on the solana plugin, which ensures that it is installed when running tests\r\n\r\nSome CLI tests are added","repository":"elizaos/eliza","createdAt":"2025-05-27T07:31:40Z","mergedAt":"2025-05-27T08:16:28Z","additions":3403,"deletions":585},{"id":"PR_kwDONNAI986X2Uzc","title":"feat: update repoconfig","author":"madjin","number":109,"body":"$1d","repository":"elizaos/elizaos.github.io","createdAt":"2025-05-27T20:45:56Z","mergedAt":"2025-06-19T21:57:43Z","additions":3027,"deletions":86},{"id":"PR_kwDOMT5cIs6XvMio","title":"feat(update): Eliza290/cli-publish-command","author":"yungalgo","number":4795,"body":"$1e","repository":"elizaos/eliza","createdAt":"2025-05-27T08:21:09Z","mergedAt":"2025-05-27T11:49:01Z","additions":1003,"deletions":416},{"id":"PR_kwDOMT5cIs6XVqXN","title":"fix: cleanup package.json monorepo","author":"ChristopherTrimboli","number":4733,"body":"cleans up bloat hanging around in monorepo root package.json","repository":"elizaos/eliza","createdAt":"2025-05-23T07:18:11Z","mergedAt":"2025-05-27T08:16:30Z","additions":976,"deletions":478},{"id":"PR_kwDOMT5cIs6Xzqoa","title":"fix: integration tests for tee starter","author":"0xbbjoker","number":4799,"body":"","repository":"elizaos/eliza","createdAt":"2025-05-27T15:42:59Z","mergedAt":null,"additions":694,"deletions":156},{"id":"PR_kwDOMT5cIs6XygOB","title":"fix: add missing agentId to create room","author":"0xbbjoker","number":4796,"body":"$1f","repository":"elizaos/eliza","createdAt":"2025-05-27T13:57:31Z","mergedAt":"2025-05-27T14:37:32Z","additions":376,"deletions":3},{"id":"PR_kwDOMT5cIs6XvGL0","title":"docs: update publish workflow documentation for npm integration","author":"yungalgo","number":4794,"body":"Problem: \r\n\r\nDocumentation didn't reflect the new publish behavior where elizaos publish handles npm + GitHub + registry, and lacked guidance on continuous development workflows.\r\n\r\nSolution:\r\n\r\n* Updated CLI README and publish.md docs to reflect npm + GitHub + registry default behavior\r\n* Added comprehensive continuous development section emphasizing standard npm/git workflows\r\n* Updated plugin starter templates with detailed publishing guidance\r\n* Clarified that elizaos publish is for initial publishing, while npm/git commands handle updates\r\n* Enhanced testing workflow documentation throughout development lifecycle\r\n\r\nDetails:\r\n\r\n* Emphasizes testing as part of proper development workflow\r\n* Provides clear guidance on when to use elizaos publish vs standard npm/git commands\r\n* Includes troubleshooting section for recursion prevention\r\n* Updates success messages to guide users toward standard workflows for updates","repository":"elizaos/eliza","createdAt":"2025-05-27T08:10:27Z","mergedAt":"2025-05-27T08:22:52Z","additions":286,"deletions":71},{"id":"PR_kwDOMT5cIs6X3BfC","title":"feat: convert plugin-sql over to core-plugin-v2","author":"odilitime","number":4802,"body":"# Risks\r\n\r\nLow\r\n\r\n# Background\r\n\r\n## What does this PR do?\r\n\r\nmakes plugin-sql use core-plugin-v2\r\n\r\n## What kind of change is this?\r\n\r\nUpdates (new versions of included code)\r\n\r\n## Why are we doing this? Any context or related work?\r\n\r\nreally just a test to ensure core-plugin-v2 is working, this might be one plugin we don't need to follow the spec closely.\r\n\r\n# Documentation changes needed?\r\n\r\nMy changes do not require a change to the project documentation.","repository":"elizaos/eliza","createdAt":"2025-05-27T22:14:43Z","mergedAt":null,"additions":282,"deletions":121},{"id":"PR_kwDOMT5cIs6XsDQw","title":"feat: improve logging","author":"odilitime","number":4784,"body":"$20","repository":"elizaos/eliza","createdAt":"2025-05-26T22:30:32Z","mergedAt":"2025-05-27T01:03:10Z","additions":269,"deletions":328},{"id":"PR_kwDOMT5cIs6Xynyk","title":"feat: prod test cli with cron workflows","author":"wtfsayo","number":4797,"body":"adds cron workflows to test and released cli package\n\n<!-- This is an auto-generated comment: release notes by coderabbit.ai -->\n\n## Summary by CodeRabbit\n\n- **Chores**\n  - Introduced a new scheduled and manually-triggered production validation workflow for the CLI, ensuring regular automated checks and improved reliability.\n  - Centralized and standardized test script setup by moving command initialization logic into shared utility functions, enhancing maintainability and consistency across CLI test scripts.\n\n<!-- end of auto-generated comment: release notes by coderabbit.ai -->","repository":"elizaos/eliza","createdAt":"2025-05-27T14:08:32Z","mergedAt":"2025-05-27T14:36:47Z","additions":160,"deletions":10},{"id":"PR_kwDOMT5cIs6XznEp","title":"fix: Refactor agents in rooms API to participants, fix missing world/serverId GET API.","author":"ChristopherTrimboli","number":4798,"body":"$21","repository":"elizaos/eliza","createdAt":"2025-05-27T15:37:34Z","mergedAt":null,"additions":144,"deletions":17},{"id":"PR_kwDOMT5cIs6XvCd2","title":"feat: add npm publishing to default elizaos publish workflow","author":"yungalgo","number":4793,"body":"$22","repository":"elizaos/eliza","createdAt":"2025-05-27T08:05:51Z","mergedAt":"2025-05-27T08:22:36Z","additions":78,"deletions":37},{"id":"PR_kwDOMT5cIs6Xu8_t","title":"fix: update and improve registry publishing logic and package naming","author":"yungalgo","number":4792,"body":"Problem: \r\n\r\n- registry publishing logic was creating a package.json file for some reason in addition to updating the registry index.json\r\n- Registry publishing was creating massive diffs by reordering the entire index.json file, used incorrect package name format with @elizaos-plugins/ prefix, and had indentation inconsistencies.\r\n\r\nIn general the logic was not in line with what the registry publishing should do which is basically just add an alphabetically-ordered mapping of the npm package org/package name to the github org / repo name.\r\n\r\nSolution:\r\n* Fixed package naming to use actual npm package name instead of @elizaos-plugins/ prefix\r\n* Implemented line-by-line insertion to avoid massive diffs\r\n* Added alphabetical positioning logic for clean registry updates\r\n* Standardized indentation to 4 spaces\r\n* Added registry conflict detection","repository":"elizaos/eliza","createdAt":"2025-05-27T07:59:53Z","mergedAt":"2025-05-27T08:22:06Z","additions":68,"deletions":235},{"id":"PR_kwDOMT5cIs6XsmwG","title":"fix: CLI tests add openai api-key","author":"0xbbjoker","number":4786,"body":"$23","repository":"elizaos/eliza","createdAt":"2025-05-27T01:35:49Z","mergedAt":"2025-05-27T02:13:54Z","additions":59,"deletions":215},{"id":"PR_kwDOMT5cIs6XV441","title":"fix: Windows build in CI workflows","author":"lalalune","number":4738,"body":"## Summary\n- install NSIS on Windows runners so Tauri bundling works\n- use Node.js 20 in workflows to avoid unavailable versions\n- document new workflow requirement in README\n- standardize Node 20 across repo and docs\n\n## Testing\n- `bun run lint`\n\n<!-- This is an auto-generated comment: release notes by coderabbit.ai -->\n\n## Summary by CodeRabbit\n\n- **Chores**\n  - Updated the minimum required Node.js version from 23+ to 20+ across all documentation, configuration files, and build environments.\n  - Adjusted CI/CD workflows and Docker setup to use Node.js 20 instead of 23.\n  - Added installation of the NSIS tool in Windows build steps to support installer creation.\n\n- **Documentation**\n  - Revised all guides, FAQs, quickstart, and prerequisites to reflect the new Node.js 20+ requirement.\n\n<!-- end of auto-generated comment: release notes by coderabbit.ai -->","repository":"elizaos/eliza","createdAt":"2025-05-23T07:43:40Z","mergedAt":null,"additions":49,"deletions":45},{"id":"PR_kwDOMT5cIs6XsCKy","title":"fix: loading default character for testing","author":"0xbbjoker","number":4783,"body":"try fix integration tests","repository":"elizaos/eliza","createdAt":"2025-05-26T22:24:24Z","mergedAt":null,"additions":32,"deletions":290},{"id":"PR_kwDOMT5cIs6Xu4Uu","title":"Eliza290/consolidate and update registry urls to elizaos plugins","author":"yungalgo","number":4791,"body":"Problem: \r\n\r\n- Need to update elizaos/registry => elizaos-plugins/registry\r\n- Registry URLs were hardcoded throughout the codebase using the old elizaos/registry format, making maintenance difficult and causing issues with the new registry location.\r\n- \r\nSolution:\r\nCreated centralized constants in packages/cli/src/utils/registry/constants.ts\r\nUpdated all references to use the new elizaos-plugins/registry URL\r\nConsolidated registry URL management to a single source of truth\r\n\r\nDetails: This ensures all registry operations point to the correct location and makes future URL changes easier to manage.","repository":"elizaos/eliza","createdAt":"2025-05-27T07:52:29Z","mergedAt":"2025-05-27T08:21:30Z","additions":30,"deletions":20},{"id":"PR_kwDOMT5cIs6X031O","title":"Update README_MY.md","author":"imholders","number":4800,"body":"$24","repository":"elizaos/eliza","createdAt":"2025-05-27T18:03:54Z","mergedAt":"2025-05-30T03:09:47Z","additions":20,"deletions":2},{"id":"PR_kwDOMT5cIs6Xsn1D","title":"feat: improving typing","author":"odilitime","number":4787,"body":"# Risks\r\n\r\nLow\r\n\r\n# Background\r\n\r\n## What does this PR do?\r\n\r\n- make strict typing pass\r\n- don't export BM25 outside npm (we only use it in runtime)\r\n\r\n## What kind of change is this?\r\n\r\nUpdates (new versions of included code)\r\n\r\n## Why are we doing this? Any context or related work?\r\n\r\nimprove what we have to lock down in specification and give core as much freedom as possible.\r\n\r\n# Documentation changes needed?\r\n\r\nMy changes do not require a change to the project documentation.\r\n","repository":"elizaos/eliza","createdAt":"2025-05-27T01:40:43Z","mergedAt":"2025-05-27T01:46:03Z","additions":8,"deletions":5},{"id":"PR_kwDOMT5cIs6Xryxa","title":"chore: remove unused method from db adapter","author":"0xbbjoker","number":4781,"body":"## Summary\n\nThis PR removes unused methods from the database adapter to improve code maintainability and reduce the codebase size.\n\n## Changes\n\n- **Removed**: Unused method(s) from the database adapter\n- **Impact**: Reduces codebase by ~250 lines (280 deletions, 30 additions)\n- **Type**: Code cleanup/maintenance\n\n## Motivation\n\nRemoving dead code helps:\n- Reduce maintenance burden\n- Improve code readability\n- Decrease bundle size\n- Eliminate potential confusion for developers\n\n## Testing\n\n- [ ] Verified that removed methods are not referenced elsewhere in the codebase\n- [ ] Existing tests continue to pass\n- [ ] No breaking changes to the public API\n\n## Checklist\n\n- [x] Code follows the project's coding standards\n- [x] Changes are focused and atomic\n- [x] No breaking changes introduced\n- [x] Commit message follows conventional commit format\n\n---\n\n**Note**: This is a maintenance/cleanup PR that removes unused code without affecting functionality.","repository":"elizaos/eliza","createdAt":"2025-05-26T21:12:25Z","mergedAt":"2025-05-27T07:42:47Z","additions":5,"deletions":29},{"id":"PR_kwDOMT5cIs6XtMcl","title":"fix: bootstrap plugin default","author":"ChristopherTrimboli","number":4788,"body":"Defaults plugin-bootstrap always activated in default: \"create agent\" flows in the client UI. Since without, messages do not process and confusing to users.","repository":"elizaos/eliza","createdAt":"2025-05-27T03:58:17Z","mergedAt":"2025-05-27T07:35:51Z","additions":2,"deletions":2},{"id":"PR_kwDOMT5cIs6XrdeO","title":"Update README_IND.md","author":"imholders","number":4780,"body":"$25","repository":"elizaos/eliza","createdAt":"2025-05-26T19:51:58Z","mergedAt":"2025-05-27T08:17:52Z","additions":1,"deletions":1},{"id":"PR_kwDOMT5cIs6Xuu6x","title":"fix: remove unneeded parenthesis in CLI publish command","author":"yungalgo","number":4790,"body":"Problem: Unnecessary parenthesis in the CLI publish command code affecting readability.\r\n\r\nSolution: Removed the unneeded parenthesis to clean up the code.\r\n\r\nDetails: Minor code cleanup with no functional changes.","repository":"elizaos/eliza","createdAt":"2025-05-27T07:37:09Z","mergedAt":"2025-05-27T07:41:46Z","additions":1,"deletions":1}],"detailedContributorSummaries":{"0xbbjoker":"0xbbjoker: Merged 2 PRs (#4796 and #4786) with significant code changes (+536/-13 lines and +59/-215 lines respectively), while also opening a new PR (#4799) focused on integration tests. Active today with 8 commits, modifying 39 files (+1917/-586 lines), primarily concentrating on feature work (63%) and bug fixes (25%).","ChristopherTrimboli":"ChristopherTrimboli: Merged 1 PR (#4788) with minor changes (+2/-2 lines) and is currently working on another open PR (#4798). Made significant code modifications across 38 files (+204/-81 lines) with a focus on other work (60%) and bugfixes (20%).","HarshModi2005":"HarshModi2005: Merged 1 significant pull request (#4801) with a total of +11659/-1592 lines, focusing entirely on feature work. Modified 27 files with a total of +4718/-62 lines, demonstrating consistent daily activity.","imholders":"imholders: Merged 1 PR (#4800) with significant documentation updates (+20/-2 lines) and maintained a consistent activity pattern, being active every day. Focused entirely on documentation work today, modifying 1 file.","lalalune":"lalalune: Merged 1 significant PR (#4789) with a total of +9695/-4229 lines, focusing on feature work, refactoring, and testing across 66 modified files. Maintained a consistent activity pattern with 4 commits today, demonstrating balanced contributions across various aspects of the codebase.","monilpat":"monilpat: Reviewed 1 pull request, issuing 1 change request, but did not approve any. Activity remains sporadic, with no other contributions today.","odilitime":"odilitime: Merged 1 PR (#4787 \"feat: improving typing\") with a net change of +8/-5 lines and currently has 1 open PR (#4802 \"feat: convert plugin-sql over to core-plugin-v2\"). Made significant code changes across 119 files, contributing a total of +9311/-1224 lines with a focus on other work (59%) and bugfixes (19%).","wtfsayo":"wtfsayo: Merged 1 PR (#4797) with significant changes (+177/-27 lines) and modified 217 files overall (+21196/-1692 lines) across 14 commits, primarily focusing on other work (71%) and bugfixes (21%). Actively engaged with 5 PR reviews, providing 5 approvals and 1 comment, demonstrating consistent daily contributions.","yungalgo":"yungalgo: Merged 6 PRs, including a significant feature update in PR #4795 (+17093/-2385 lines), while modifying 105 files with a total of +9515/-1767 lines across 18 commits. The work was primarily focused on feature development (28%) and other tasks (33%), demonstrating consistent daily activity."}}}],"$L26"]}]
+13:["$","div",null,{"className":"prose prose-sm mx-auto mt-8 dark:prose-invert sm:prose lg:prose-lg xl:prose-xl","children":[["$","p","p-0",{"children":"On May 27, 2025, ElizaOS saw significant progress with the introduction of a Project TEE Starter Template, improvements to logging, and an overhaul of the CLI publish command to support npm integration. Several bug fixes were also implemented, enhancing the framework's functionality and maintainability."}],"\n",["$","h2","h2-0",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"✅ Completed Work","position":{"start":{"line":3,"column":4,"offset":309},"end":{"line":3,"column":20,"offset":325}}}],"position":{"start":{"line":3,"column":1,"offset":306},"end":{"line":3,"column":20,"offset":325}}},"children":"✅ Completed Work"}],"\n",["$","h3","h3-0",{"children":"Feature Enhancements & CLI Improvements"}],"\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["Added a Project TEE Starter Template for quick deployment in TEE Cloud (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/4774","children":"elizaos/eliza#4774"}],")."]}],"\n",["$","li","li-1",{"children":["Improved logging functionality to aid development, addressing issues with the Spartan environment (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/4784","children":"elizaos/eliza#4784"}],")."]}],"\n",["$","li","li-2",{"children":["Overhauled the ElizaOS CLI publish command to support npm integration, enhancing the publishing workflow (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/4795","children":"elizaos/eliza#4795"}],", ",["$","a","a-1",{"href":"https://github.com/elizaos/eliza/pull/4793","children":"elizaos/eliza#4793"}],")."]}],"\n"]}],"\n",["$","h3","h3-1",{"children":"Bug Fixes & Code Cleanup"}],"\n",["$","ul","ul-1",{"children":["\n",["$","li","li-0",{"children":["Resolved an issue with the API endpoint returning empty lists for active agents in rooms by adding the missing ",["$","code","code-0",{"children":"agentId"}]," (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/4796","children":"elizaos/eliza#4796"}],")."]}],"\n",["$","li","li-1",{"children":["Cleaned up the ",["$","code","code-0",{"children":"package.json"}]," in the monorepo to remove unnecessary bloat (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/4733","children":"elizaos/eliza#4733"}],")."]}],"\n",["$","li","li-2",{"children":["Fixed registry publishing logic to prevent unnecessary file creation and massive diffs (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/4792","children":"elizaos/eliza#4792"}],")."]}],"\n"]}],"\n",["$","h3","h3-2",{"children":"Documentation & CI/CD Updates"}],"\n",["$","ul","ul-2",{"children":["\n",["$","li","li-0",{"children":["Updated documentation to reflect new npm integration in the publish workflow, providing clearer guidance for users (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/4794","children":"elizaos/eliza#4794"}],")."]}],"\n",["$","li","li-1",{"children":["Fixed CI test failures by adding the OpenAI API key configuration (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/4786","children":"elizaos/eliza#4786"}],")."]}],"\n"]}]]}]
+14:["$","script","script-0",{"src":"/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","async":true}]
+15:["$","script","script-1",{"src":"/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","async":true}]
+16:["$","script","script-2",{"src":"/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js","async":true}]
+17:["$","$L27",null,{"children":["$","$28",null,{"name":"Next.MetadataOutlet","children":"$@29"}]}]
+26:["$","div",null,{"className":"rounded-lg border bg-card text-card-foreground shadow-sm","children":[["$","div",null,{"className":"flex flex-col space-y-1.5 p-6 py-4","children":["$","div",null,{"className":"tracking-tight text-sm font-medium","children":["$undefined","Code Changes"]}]}],["$","div",null,{"className":"p-6 pt-0","children":["$","div",null,{"className":"grid grid-cols-2 gap-4 md:grid-cols-4","children":[["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-git-commit-vertical h-5 w-5","aria-hidden":"true","children":[["$","path","1holv5",{"d":"M12 3v6"}],["$","circle","1v7zrd",{"cx":"12","cy":"12","r":"3"}],["$","path","a9ows0",{"d":"M12 15v6"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":81}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Commits"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-file-code h-5 w-5","aria-hidden":"true","children":[["$","path","1oefj6",{"d":"M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"}],["$","path","wfsgrz",{"d":"M14 2v5a1 1 0 0 0 1 1h5"}],["$","path","1tg20x",{"d":"M10 12.5 8 15l2 2.5"}],["$","path","yinavb",{"d":"m14 12.5 2 2.5-2 2.5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":96}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Files Changed"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-green-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-up h-5 w-5 text-green-500","aria-hidden":"true","children":[["$","path","hav0vg",{"d":"m5 12 7-7 7 7"}],["$","path","x0mq9r",{"d":"M12 19V5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-green-500","children":"+10,896"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Added"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-red-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-down h-5 w-5 text-red-500","aria-hidden":"true","children":[["$","path","s699le",{"d":"M12 5v14"}],["$","path","1idqje",{"d":"m19 12-7 7-7-7"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-red-500","children":"-2,438"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Deleted"}]]}]]}]]}]}]]}]
+29:null

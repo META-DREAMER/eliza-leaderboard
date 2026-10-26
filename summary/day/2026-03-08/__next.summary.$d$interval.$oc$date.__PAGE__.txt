@@ -1,0 +1,925 @@
+1:"$Sreact.fragment"
+2:I[4817319,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"IntervalSelector"]
+3:I[6998365,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"LlmCopyButton"]
+11:I[3642796,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],""]
+12:I[3238488,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"StatCardsDisplay"]
+1a:I[4261541,["/eliza-leaderboard/_next/static/chunks/b33bcbdcb3f88354.js","/eliza-leaderboard/_next/static/chunks/8ba59154b6704904.js"],"OutletBoundary"]
+1b:"$Sreact.suspense"
+4:T588,builds on #328 
+
+<!-- CURSOR_SUMMARY -->
+---
+
+> [!NOTE]
+> **Medium Risk**
+> Medium risk because it adds multiple new publicly callable proxy routes (affecting billing/load) and introduces admin endpoints that can change service pricing with cache invalidation; behavior depends on correct auth/validation and repository logic.
+> 
+> **Overview**
+> **Adds admin APIs to manage per-service method pricing.** New `/api/v1/admin/service-pricing` supports listing pricing by `service_id` and `PUT` upserts with double cache invalidation, plus a new `/audit` endpoint to page through pricing change history.
+> 
+> **Refactors `admin/moderation` to rely on shared auth and consistent error responses.** The route now uses `requireAdmin` from `lib/auth`, wraps `GET`/`POST` in `try/catch`, and maps auth failures to `401/403` while logging unexpected errors.
+> 
+> **Introduces new resell/proxy endpoints for chain, market, and RPC data.** Adds REST-style routes under `/api/v1/chain/*`, `/api/v1/market/*`, `/api/v1/rpc/*`, and `/api/v1/solana/*` that set CORS/`OPTIONS`, validate chain/address inputs, and then forward via `executeWithBody`/`createHandler`.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit 319986aa098ef5c7bc47ecbaf8fca1ae50fadaae. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->5:T87f,<!-- CURSOR_SUMMARY -->
+> [!NOTE]
+> **High Risk**
+> High risk because it introduces new public Solana proxy/asset endpoints and new database-backed service pricing/audit tables that impact billing behavior, plus admin moderation/auth flow changes.
+> 
+> **Overview**
+> Adds a **service pricing framework**: new `service_pricing`/`service_pricing_audit` tables (with seed data + indexes) and new admin routes for listing, upserting, and auditing pricing; the upsert path validates payloads, performs *double cache invalidation* around the write, and logs post-write invalidation failures.
+> 
+> Expands the **public Solana API surface** with a `POST` Solana RPC proxy and new `GET` endpoints (assets, token accounts, transactions, methods) that validate Solana addresses and consistently apply CORS headers.
+> 
+> Hardens several existing APIs by standardizing auth/error responses (notably `admin/moderation` and app-builder `files`/`logs`/`terminal`), and tightens terminal `cwd` handling to reduce command/path injection risk; adds Vitest coverage for the new admin service-pricing routes (including auth, upsert, and cache-invalidation scenarios).
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit 7b92f5ae83d0d6ccfcb2e8c01e9fffd77558ff07. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+## Summary by CodeRabbit
+
+* **New Features**
+  * Public Solana endpoints (assets, token accounts, transactions, methods) and a new admin API/UI to manage service pricing with audit history and upsert.
+
+* **Bug Fixes**
+  * Stronger authentication/authorization handling, clearer error responses, stricter input validation, and consistent CORS headers.
+  * More resilient cache invalidation with graceful failure handling.
+
+* **Documentation**
+  * New API security and Solana method management guides.
+
+* **Chores**
+  * DB migrations and numeric-precision updates; added tests and proxy/configuration improvements.
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->6:T3058,- banner, init hook, reply optimization, roles warnedUnnamedEntities, runtime (embedding cache, callerInfo, safeReplacer, onlyInclude, logPrompt/logResponse gating), logger file output
+- DISABLE_MEMORY_CREATION/ALLOW_MEMORY_SOURCE_IDS in message service; JSON5, parseBooleanFromText try/catch, formatPosts; add DISABLE_MEMORY_CREATION guard to runtime.evaluate() (was missed)
+- keepExistingResponses/BOOTSTRAP_KEEP_RESP, ANXIETY provider, null service guard, provider timeout, HandlerCallback actionName, hasRequestedInState in reply
+- Docs: CHANGELOG, ROADMAP, docs/DESIGN.md, README env/design section, WHY comments; fix ALLOW_MEMORY_SOURCE_IDS comment in message.ts
+- New: bootstrap banner (preview script), anxiety provider
+
+Made-with: Cursor
+
+<!-- Use this template by filling in information and copying and pasting relevant items out of the HTML comments. -->
+
+# Relates to
+
+<!-- LINK TO ISSUE OR TICKET -->
+
+<!-- This risks section must be filled out before the final review and merge. -->
+
+# Risks
+
+<!--
+Low, medium, large. List what kind of risks and what could be affected.
+-->
+
+# Background
+
+## What does this PR do?
+
+## What kind of change is this?
+
+<!--
+Bug fixes (non-breaking change which fixes an issue)
+Improvements (misc. changes to existing features)
+Features (non-breaking change which adds functionality)
+Updates (new versions of included code)
+-->
+
+<!-- This "Why" section is most relevant if there are no linked issues explaining why. If there is a related issue, it might make sense to skip this why section. -->
+<!--
+## Why are we doing this? Any context or related work?
+-->
+
+# Documentation changes needed?
+
+<!--
+My changes do not require a change to the project documentation.
+My changes require a change to the project documentation.
+If documentation change is needed: I have updated the documentation accordingly.
+-->
+
+<!-- Please show how you tested the PR. This will really help if the PR needs to be retested and probably help the PR get merged quicker. -->
+
+# Testing
+
+## Where should a reviewer start?
+
+## Detailed testing steps
+
+<!--
+None: Automated tests are acceptable.
+-->
+
+<!--
+- As [anon/admin], go to [link]
+  - [do action]
+  - verify [result]
+-->
+
+<!-- If there is a UI change, please include before and after screenshots or videos. This will speed up PRs being merged. It is extra nice to annotate screenshots with arrows or boxes pointing out the differences. -->
+<!--
+## Screenshots
+### Before
+### After
+-->
+
+<!-- If there is anything about the deployment, please make a note. -->
+<!--
+# Deploy Notes
+-->
+
+<!--  Copy and paste command line output. -->
+<!--
+## Database changes
+-->
+
+<!--  Please specify deploy instructions if there is something more than the automated steps. -->
+<!--
+## Deployment instructions
+-->
+
+<!-- If you are on Discord, please join https://discord.gg/ai16z and state your Discord username here for the contributor role and join us in #development-feed -->
+<!--
+## Discord username
+
+-->
+
+
+<!-- CURSOR_SUMMARY -->
+---
+
+> [!NOTE]
+> **Medium Risk**
+> Touches core runtime/message pipeline behavior (provider timeouts, action-chain state recomposition, memory persistence gating, callback signature) and adds new logging side effects, so regressions could impact response latency, persistence, or integrations.
+> 
+> **Overview**
+> **Core runtime hardening & observability.** `composeState` now enforces a per-provider 30s timeout (continuing with empty results on failure) and profiles provider timings; action chains recompose state using `onlyInclude` to refresh just `RECENT_MESSAGES`/`ACTION_STATE` while preserving other cached provider data; action-result caching uses `safeReplacer()`.
+> 
+> **Logging & callbacks.** Adds opt-in file logging via `LOG_FILE` to write `output.log`, `prompts.log`, and `chat.log` (with ANSI stripping and prompt/response correlation), and extends `HandlerCallback` to accept an optional `actionName` (runtime and bootstrap `reply` now pass it).
+> 
+> **Memory/pipeline controls & bootstrap behavior.** Implements `DISABLE_MEMORY_CREATION` with `ALLOW_MEMORY_SOURCE_IDS` allowlisting and updates race handling to use resolved `keepExistingResponses`; skips memory-dependent evaluators when memory creation is disabled. Adds a bootstrap startup banner (plugin `init` hook + preview script), a new `ANXIETY` provider (registered by default), budget-based truncation of action history/results via shared `sliceToFitBudget`, and reduces roles-provider warning spam with per-runtime bounded tracking. Documentation and examples are updated accordingly (README/CHANGELOG/ROADMAP/DESIGN, Telegram model selection, JSON5 dependency).
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit d4e24be84caf81f419a4a5dd4b50652daf168a0e. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+## Summary by CodeRabbit
+
+* **New Features**
+  * Memory persistence controls (DISABLE_MEMORY_CREATION, ALLOW_MEMORY_SOURCE_IDS), shared config helpers, new anxiety provider, startup banner, and prompt/response file logging.
+
+* **Improvements**
+  * Per-provider timeouts and a 30s provider limit, first-action reply optimization, budgeted truncation of action/history context, safer JSON parsing from text, and handler callbacks include action names.
+
+* **Bug Fixes**
+  * Explicit timer cleanup on provider completion and hardened plugin registration.
+
+* **Tests & Docs**
+  * Expanded tests and new design/roadmap/README documentation.
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->
+
+<!-- greptile_comment -->
+
+<h3>Greptile Summary</h3>
+
+This PR is a broad hardening and observability pass on the core `@elizaos/typescript` runtime. Key changes include: per-provider 30 s timeouts in `composeState`, `onlyInclude` optimization for action-chain state recomposition, `DISABLE_MEMORY_CREATION` / `ALLOW_MEMORY_SOURCE_IDS` controls in both the message service and `evaluate()`, optional file logging (`LOG_FILE` → `output.log` / `prompts.log` / `chat.log`), an `ANXIETY` verbosity-guidance provider registered by default, a bootstrap ANSI banner on plugin init, JSON5-tolerant LLM output parsing, and `HandlerCallback` extended with an optional `actionName` parameter.
+
+- **Bug — IGNORE response persistence bypassed by `ALLOW_MEMORY_SOURCE_IDS`** (`message.ts:948–952`): the ignore path checks `allowedSources.includes("agent_response")` — a hardcoded string users will never configure — so all IGNORE decisions are silently dropped when any source allowlist is active. The regular response path (line ~773) correctly skips this check; the ignore path should match that behavior.
+- **Bug — zero-vector fallback corrupts semantic memory** (`runtime.ts:4861`): on embedding failure the memory is persisted with a zero vector, making it unretrievable by cosine-similarity search while appearing normally stored. Silent data loss.
+- **`PROVIDERS_TOTAL_TIMEOUT_MS` default raised from 1 000 ms → 5 000 ms** (`message.ts:~2019`): existing deployments relying on the 1 s default will now allow providers up to 5 s before bailing, which may noticeably increase P99 response latency.
+- **Variable shadowing in ignore block** (`message.ts:949`): `allowedSources` is re-resolved inside `if (!disableMemoryCreation)`, shadowing the binding already computed on line 461 and adding a redundant runtime call.
+- **Dead `catch` block in `parseBooleanFromText`** (`utils.ts:941–950`): `String(value).trim().toUpperCase()` cannot throw after the early-return guards; the `logger.warn` is unreachable.
+
+<h3>Confidence Score: 3/5</h3>
+
+- Not safe to merge without addressing the IGNORE memory persistence bug and zero-vector embedding fallback.
+- Two confirmed logic bugs affect correctness in production: IGNORE responses are silently dropped from memory when ALLOW_MEMORY_SOURCE_IDS is set (contradicts stated design and the regular response path), and failed embeddings produce unretrievable zero-vector memories. The PROVIDERS_TOTAL_TIMEOUT_MS default change is a silent breaking change for latency-sensitive deployments. The rest of the PR is well-structured, well-commented, and tested.
+- packages/typescript/src/services/message.ts (IGNORE persistence logic at lines 948–974) and packages/typescript/src/runtime.ts (zero-vector embedding fallback at lines 4858–4865)
+
+<h3>Important Files Changed</h3>
+
+| Filename | Overview |
+|----------|----------|
+| packages/typescript/src/services/message.ts | Core message processing pipeline — adds DISABLE_MEMORY_CREATION / ALLOW_MEMORY_SOURCE_IDS filtering and keepExistingResponses race-check; the IGNORE path incorrectly applies the source allowlist to agent-generated responses, causing all IGNORE memories to be silently dropped when ALLOW_MEMORY_SOURCE_IDS is configured (contradicts stated design). Also contains variable shadowing and redundant comments. |
+| packages/typescript/src/runtime.ts | Major runtime hardening: per-provider 30s timeouts, onlyInclude optimization for action-chain state recomposition, DISABLE_MEMORY_CREATION guard for evaluate(), file-based prompt/response logging, caller-info stack traces. Zero-vector embedding fallback silently corrupts memory search for affected records. |
+| packages/typescript/src/logger.ts | Adds optional file logging (output.log, prompts.log, chat.log) gated by LOG_FILE env-var; prompt/response correlation now uses the same slug passed through metadata; all log files are placed in the same directory as LOG_FILE. Implementation is sound. |
+| packages/typescript/src/bootstrap/providers/anxiety.ts | New ANXIETY provider returning channel-specific verbosity guidance via random selection of 3 examples per turn; uses Math.random()-0.5 sort (biased shuffle) but non-critical for this use case. |
+| packages/typescript/src/bootstrap/providers/roles.ts | Switches from a module-level Set to a WeakMap<IAgentRuntime, Set<string>> for per-runtime warn-once tracking of unnamed entities; correctly addressed from previous review. |
+| packages/typescript/src/utils/json-llm.ts | New JSON5-based tolerant extraction helper for LLM output; handles code-fenced blocks and single-quote / trailing-comma JSON; throws on failure so callers (parseJSONObjectFromText) can catch and return null. |
+| packages/typescript/src/utils.ts | parseBooleanFromText accepts broader types, formatPosts adds metadata fallbacks and text delimiters, parseJSONObjectFromText delegates to JSON5-based json-llm helper. The try-catch in parseBooleanFromText is dead code but harmless. |
+| packages/typescript/src/types/components.ts | HandlerCallback extended with optional actionName parameter (backward compatible); allows callers to attribute responses to the producing action without content parsing. |
+
+</details>
+
+<h3>Flowchart</h3>
+
+```mermaid
+%%{init: {'theme': 'neutral'}}%%
+flowchart TD
+    A[Incoming Message] --> B{DISABLE_MEMORY_CREATION?}
+    B -- No --> C{ALLOW_MEMORY_SOURCE_IDS set?}
+    C -- No allowlist --> D[Persist message memory + queue embedding]
+    C -- Allowlist set --> E{sourceId in allowlist?}
+    E -- Yes --> D
+    E -- No --> F[Skip persistence, assign UUID]
+    B -- Yes --> F
+
+    D --> G[shouldRespond check]
+    F --> G
+
+    G -- IGNORE --> H[callback ignoreContent]
+    H --> I{DISABLE_MEMORY_CREATION?}
+    I -- No --> J{allowedSources includes 'agent_response'?}
+    J -- Yes --> K[Persist IGNORE memory]
+    J -- No → bug --> L["❌ IGNORE memory silently dropped"]
+    I -- Yes --> L2[Skip IGNORE memory]
+
+    G -- Respond --> M[runSingleShotCore / LLM]
+    M --> N{canPersistMemory = !disableMemory}
+    N -- true --> O[Persist response memories]
+    N -- false --> P[Skip response memories]
+
+    O --> Q[run evaluators]
+    P --> Q
+    Q --> R{DISABLE_MEMORY_CREATION?}
+    R -- Yes --> S[Skip evaluators entirely]
+    R -- No --> T[Run evaluators with timeout]
+
+    style L fill:#ff4444,color:#fff
+    style L2 fill:#aaa,color:#fff
+```
+
+<sub>Last reviewed commit: ["docs: add review dis..."](https://github.com/elizaos/eliza/commit/d7d1ad5199b8fe12b302326d321ce50fede6912a)</sub>
+
+> Greptile also left **2 inline comments** on this PR.
+
+<!-- /greptile_comment -->7:Tc10,This pull request introduces improvements to the Telegram webhook message formatting and updates the tool visibility configuration for Twitter-related tools. The main focus is on ensuring URLs remain clickable in Telegram messages and aligning Twitter tool keys with the correct API methods.
+
+**Telegram message formatting:**
+
+* Added a `cleanUrlMarkdown` function in `app/api/eliza-app/webhook/telegram/route.ts` to strip bold/italic markdown from URLs, ensuring they remain clickable in Telegram messages. The `sendTelegramMessage` function now uses this cleaning step before sending messages.
+
+**Tool visibility configuration:**
+
+* Updated the Twitter tool keys in `lib/eliza/plugin-mcp/tool-visibility.ts`: replaced `twitter_get_me` and `twitter_get_user_tweets` with `twitter_get_my_tweets` and `twitter_get_mentions` to reflect the correct API endpoints.
+
+
+<!-- CURSOR_SUMMARY -->
+---
+
+> [!NOTE]
+> **Medium Risk**
+> Moderate risk because it refactors Twitter MCP tool behavior/response shapes and adds multiple new API-backed actions with pagination and stricter OAuth token requirements, which could impact existing workflows if assumptions change.
+> 
+> **Overview**
+> **Telegram webhook:** adds `cleanUrlMarkdown` and applies it in `sendTelegramMessage` so Markdown bold/italic wrappers don’t break URL clickability.
+> 
+> **Twitter MCP:** hardens OAuth handling (explicitly requires `accessTokenSecret`), refactors repeated mapping/field selection, enhances existing tools with pagination/date filters, and adds new tools including `twitter_get_my_tweets`, `twitter_get_mentions`, likes/bookmarks retrieval, thread creation with partial-failure reporting, tweet-URL resolution, and relationship checks; updates crucial-tool visibility to surface the new Twitter tools and adds comprehensive unit tests.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit 533ce47739538f9a01d72c404a8286ee1a9c1665. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->
+
+
+
+<img width="1545" height="975" alt="Screenshot 2026-02-20 at 3 32 53 PM" src="https://github.com/user-attachments/assets/745ac604-16b8-46fe-86b9-3c82dbaeaafb" />
+<img width="1545" height="975" alt="Screenshot 2026-02-20 at 3 33 05 PM" src="https://github.com/user-attachments/assets/c9083a44-a044-4beb-b8e3-a5ea5da016a1" />
+<img width="1545" height="975" alt="Screenshot 2026-02-20 at 3 33 12 PM" src="https://github.com/user-attachments/assets/877f79c7-10dc-43a3-836c-348bf6a5037c" />
+
+<img width="1545" height="975" alt="Screenshot 2026-02-20 at 3 33 22 PM" src="https://github.com/user-attachments/assets/c8d52ff3-3a90-41f9-b8b8-0df367ba792b" />
+<img width="1545" height="975" alt="Screenshot 2026-02-20 at 3 33 30 PM" src="https://github.com/user-attachments/assets/d23c0ca7-2395-4ac3-b062-9fb563be53eb" />
+<img width="1545" height="975" alt="Screenshot 2026-02-20 at 3 33 38 PM" src="https://github.com/user-attachments/assets/5c62301a-a398-4273-b4a4-64529209023f" />
+8:Te20,## Summary
+
+Implements field-level encryption for sensitive database credentials (`user_database_uri`) using AES-256-GCM with per-organization Data Encryption Keys (DEKs).
+
+- **Per-organization encryption keys** for tenant isolation
+- **Encoded format** (`enc:v1:...`) requires zero schema changes
+- **Backward compatible**: handles both encrypted and legacy plaintext URIs
+- **Migration script** for encrypting existing data
+
+## Architecture
+
+```
+Master Key (SECRETS_MASTER_KEY env var)
+    └── wraps →
+Organization DEKs (stored encrypted in DB)
+    └── encrypts →
+Sensitive fields (user_database_uri, future: API keys, etc.)
+```
+
+**Encrypted format**: `enc:v1:<org_key_id>:<nonce>:<auth_tag>:<ciphertext>`
+
+## Files Changed
+
+| File | Description |
+|------|-------------|
+| `lib/services/field-encryption.ts` | Core encryption service (AES-256-GCM) |
+| `db/schemas/organization-encryption-keys.ts` | Drizzle schema for org encryption keys |
+| `db/repositories/organization-encryption-keys.ts` | Repository for CRUD operations |
+| `db/migrations/0017_add_organization_encryption_keys.sql` | Schema migration |
+| `lib/services/user-database.ts` | Encrypt URI on store, add decrypt helper |
+| `lib/services/sandbox/tool-executor.ts` | Decrypt URI before injecting as DATABASE_URL |
+| `scripts/migrate-encrypt-user-database-uris.ts` | Migration script for existing data |
+| `example.env.local` | Documentation for new env vars |
+
+## Deployment Checklist
+
+- [ ] Run migration `0017_add_organization_encryption_keys.sql`
+- [ ] **Add `SECRETS_MASTER_KEY` to Vercel Environment Variables**
+  - Generate with: `openssl rand -hex 32`
+  - Must be 64 hex characters (32 bytes)
+  - ⚠️ Back up securely - losing this key means losing access to encrypted data
+- [ ] Deploy code changes
+- [ ] Run migration script: `npx tsx scripts/migrate-encrypt-user-database-uris.ts`
+- [ ] Verify no plaintext URIs remain
+
+## Test Plan
+
+- [ ] Verify new database provisioning encrypts the URI
+- [ ] Verify sandbox tool executor correctly decrypts and injects DATABASE_URL
+- [ ] Verify migration script encrypts existing plaintext URIs
+- [ ] Verify backward compatibility with any remaining plaintext URIs (logs warning)
+
+Closes #241
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+<!-- CURSOR_SUMMARY -->
+---
+
+> [!NOTE]
+> **High Risk**
+> High risk because it changes how `user_database_uri` is persisted and retrieved (now encrypted), introducing a new required `SECRETS_MASTER_KEY` and new key-storage table; misconfiguration or bugs could break database provisioning/commands or make stored URIs unreadable.
+> 
+> **Overview**
+> **Encrypts app database connection URIs at rest.** New `FieldEncryptionService` encrypts/decrypts values using per-organization DEKs wrapped by a master key (`SECRETS_MASTER_KEY`) and stored in the new `organization_encryption_keys` table.
+> 
+> `user-database` now encrypts the Neon connection URI before persisting it and decrypts on read/status responses, while the sandbox `tool-executor` decrypts before injecting `DATABASE_URL` for drizzle commands (backward compatible with legacy plaintext).
+> 
+> Adds a one-off script to encrypt existing plaintext `user_database_uri` rows, updates schema exports/relations, documents new env vars, and includes unit tests for encryption behavior and race handling.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit 36c36893839784efb9cfa72d0015024543dbcced. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->9:T188e,## @elizaos/plugin-abu-solana
+
+Abu is an autonomous AI agent running 24/7 on Solana mainnet. This plugin exposes Abu's capabilities as standard ElizaOS Actions.
+
+### Structure
+
+- packages/plugin-abu-solana/src/index.ts  TypeScript implementation
+- packages/plugin-abu-solana/package.json  Package config with @elizaos/core peer dep
+- packages/plugin-abu-solana/tsconfig.build.json  TypeScript build config
+- packages/plugin-abu-solana/README.md  Documentation
+
+### Actions
+
+| Action | Description |
+|---|---|
+| ABU_ARB_SCAN | Real-time DEX arbitrage scanning across 25+ Solana token pairs via Jupiter |
+| ABU_MARKET_DATA | Multi-source market data (CoinGecko, DeFiLlama, Birdeye) |
+| ABU_REPUTATION | On-chain reputation score (5 dimensions) |
+| ABU_SIGNALS | Trading signal stream |
+
+### Provider
+
+- ABU_SOLANA_PROVIDER  Real-time Solana DeFi data
+
+### Links
+
+- Dashboard: https://www.aiabu.club
+- Plugin Manifest: https://www.aiabu.club/api/public/eliza-plugin
+- Wallet: CzzxCjWVE4HgFssHHMkBo8MMV2JRaVTQfAEeanZnKF6d
+- Communities: https://www.aiabu.club/communities
+
+### Changes from previous PR #6560
+
+- Fixed: Files now contain actual implementation (not empty)
+- Fixed: Moved from plugins/ to packages/ directory
+- Fixed: Converted from JavaScript to TypeScript
+- Added: tsconfig.build.json for proper build
+- Added: Typed interfaces for all API responses
+- Added: @elizaos/core as peerDependency
+
+<!-- greptile_comment -->
+
+<h3>Greptile Summary</h3>
+
+This PR adds `@elizaos/plugin-abu-solana`, a new plugin that wraps a third-party autonomous DeFi agent's public REST API (`aiabu.club`) and exposes it as four ElizaOS Actions (`ABU_ARB_SCAN`, `ABU_MARKET_DATA`, `ABU_REPUTATION`, `ABU_SIGNALS`) and one Provider (`ABU_SOLANA_PROVIDER`). While the concept is straightforward and the code is readable, the implementation has several critical interface mismatches that will prevent it from working correctly within the ElizaOS runtime.
+
+**Key issues:**
+- **Critical — wrong `Action` interface signatures**: All four action `validate` and `handler` functions take no arguments and return `Promise<string>`, but the ElizaOS `Action` interface requires `(runtime, message, state)` for `validate` and `(runtime, message, state, options, callback?, responses?)` returning `Promise<ActionResult>` for `handler`. The missing `callback` invocation means results will never be surfaced back to conversations.
+- **Critical — wrong `Provider` interface**: The provider `get` function takes no arguments and returns `Promise<string>`, but must accept `(runtime, message, state)` and return `Promise<ProviderResult>`.
+- **Critical — no `@elizaos/core` type imports**: `Action`, `Plugin`, `Provider`, `IAgentRuntime`, `Memory`, `State`, `HandlerCallback`, `ActionResult`, and `ProviderResult` are never imported, so TypeScript cannot validate the plugin's shape at compile time.
+- **Logic bug — signals empty guard**: `if (data.count === 0)` should guard on `data.signals?.length` to handle undefined/null counts and API inconsistencies.
+- **Style — no error handling in action handlers**: Only the provider has a try/catch; all four action handlers will propagate uncaught exceptions on API failure.
+- **Style — version mismatch**: `"version": "1.0.0"` is out of step with the monorepo's synchronized pre-release versioning scheme.
+
+<h3>Confidence Score: 1/5</h3>
+
+- Not safe to merge — the plugin will not function correctly within ElizaOS due to critical interface mismatches in all action handlers and the provider.
+- Every action handler and the provider violate their respective ElizaOS interface contracts (wrong signatures, wrong return types, no callback invocation). No `@elizaos/core` types are imported, so these errors are invisible at compile time but will cause silent failures at runtime. There are also no tests. The issues require non-trivial rewrites before the plugin can work as intended.
+- `packages/plugin-abu-solana/src/index.ts` requires substantial changes to conform to the `Action`, `Provider`, and `Plugin` interfaces from `@elizaos/core`.
+
+<h3>Important Files Changed</h3>
+
+| Filename | Overview |
+|----------|----------|
+| packages/plugin-abu-solana/src/index.ts | Core plugin implementation; has critical interface mismatches — action `validate`/`handler` signatures, provider `get` signature, and return types all deviate from the ElizaOS `Action`/`Provider` interfaces. No `@elizaos/core` types are imported. Action handlers lack error handling. Signals count guard checks the wrong field. |
+| packages/plugin-abu-solana/package.json | Package configuration is mostly correct. Version `1.0.0` is out of step with the monorepo versioning scheme. Missing `packageType` and `agentConfig` metadata fields used by other ElizaOS plugins. Build scripts are minimal but functional. |
+| packages/plugin-abu-solana/tsconfig.build.json | Standard TypeScript build configuration; targets ES2022, strict mode enabled, correct output paths. No issues found. |
+| packages/plugin-abu-solana/README.md | Documentation is clear and covers installation, usage, actions, provider, and endpoints. Acceptable for an initial plugin submission. |
+
+</details>
+
+<h3>Sequence Diagram</h3>
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant ElizaOS Runtime
+    participant abuPlugin
+    participant Abu API (aiabu.club)
+
+    User->>ElizaOS Runtime: Send message (e.g. "check arbitrage")
+    ElizaOS Runtime->>abuPlugin: validate(runtime, message, state)
+    abuPlugin-->>ElizaOS Runtime: true
+    ElizaOS Runtime->>abuPlugin: handler(runtime, message, state, options, callback)
+    abuPlugin->>Abu API (aiabu.club): GET /api/public/arb
+    Abu API (aiabu.club)-->>abuPlugin: { arb_scans, count }
+    abuPlugin-->>ElizaOS Runtime: ActionResult (text, success)
+    ElizaOS Runtime->>User: Response via callback
+
+    Note over ElizaOS Runtime,abuPlugin: Current implementation: validate() and handler() take<br/>no args and return string — callback never invoked,<br/>response never reaches the user.
+```
+
+<sub>Last reviewed commit: af6db24</sub>
+
+> Greptile also left **6 inline comments** on this PR.
+
+<sub>(4/5) You can add custom instructions or style guidelines for the agent [here](https://app.greptile.com/review/github)!</sub>
+
+<!-- /greptile_comment -->0:{"buildId":"US8XLB_zHXYj_PVAECGcd","rsc":["$","$1","c",{"children":[["$","div",null,{"className":"container mx-auto px-6 py-8 md:px-8","children":["$","div",null,{"className":"mx-auto max-w-4xl","children":[["$","div",null,{"className":"mb-4 flex flex-col justify-between sm:flex-row","children":[["$","$L2",null,{"currentInterval":"day","currentDate":"2026-03-08"}],["$","$L3",null,{"metrics":{"date":"2026-03-08","interval":{"intervalStart":"$D2026-03-08T00:00:00.000Z","intervalEnd":"$D2026-03-09T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":2,"merged":7,"total":9},"issues":{"new":0,"closed":0,"total":0},"activeContributors":3,"codeChanges":{"additions":229430,"deletions":1454,"files":167,"commitCount":7},"topContributors":[{"username":"odilitime","avatarUrl":"https://avatars.githubusercontent.com/u/16395496?u=c9bac48e632aae594a0d85aaf9e9c9c69b674d8b&v=4","totalScore":43.5437738965761,"prScore":43.5437738965761,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":null},{"username":"Abu1982","avatarUrl":"https://avatars.githubusercontent.com/u/188986874?u=ce71b5e321980892387d6f6c6535cad81de123cd&v=4","totalScore":31.182619764155397,"prScore":31.182619764155397,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":null},{"username":"greptile-apps","avatarUrl":"https://avatars.githubusercontent.com/in/867647?v=4","totalScore":9,"prScore":0,"issueScore":0,"reviewScore":9,"commentScore":0,"summary":null}],"focusAreas":[{"area":"app/api","count":77},{"area":"db/migrations","count":27},{"area":"lib/services","count":22},{"area":"db/schemas","count":15},{"area":"db/repositories","count":8},{"area":"tests/unit","count":6},{"area":"app/dashboard","count":5},{"area":"docs","count":4},{"area":"app/auth","count":3},{"area":"components/chat","count":3}],"topIssues":[],"topPullRequests":[{"id":"PR_kwDOP6BTDM7Comrl","title":"feat: add birdeye/alchemy resell","author":"odilitime","number":329,"body":"$4","repository":"elizaos/cloud","createdAt":"2026-02-10T04:06:09Z","mergedAt":"2026-03-08T00:01:14Z","additions":172123,"deletions":288},{"id":"PR_kwDOP6BTDM7HwrCT","title":"Fix unit test suite for affiliates and core","author":"lalalune","number":373,"body":"Resolves all failing unit tests, including SQLite to Postgres UUID format issues, OAuth adapters and generic routes, discord service slugs.\n\n<!-- This is an auto-generated comment: release notes by coderabbit.ai -->\n## Summary by CodeRabbit\n\n* **New Features**\n  * Affiliate program: create/share affiliate codes, set markup, link users, and view affiliate dashboard.\n  * Wallet-based auth: SIWE onboarding and per-request wallet signature support.\n  * Fixed-amount credit top-ups ($10, $50, $100) and improved checkout metadata.\n  * Server wallet provisioning and RPC execution for delegated wallets.\n  * Signup code redemption for one-time org bonuses.\n  * Multi-tier revenue splits for referrals and affiliates.\n\n* **Documentation**\n  * New Wallet API, referrals/affiliates, and signup-codes guides and changelog entries.\n<!-- end of auto-generated comment: release notes by coderabbit.ai -->","repository":"elizaos/cloud","createdAt":"2026-03-04T02:30:56Z","mergedAt":"2026-03-08T00:01:14Z","additions":53541,"deletions":973},{"id":"PR_kwDOP6BTDM7CnbgX","title":"feat: resell helius endpoints & create framework for more 3rd party resale","author":"odilitime","number":328,"body":"$5","repository":"elizaos/cloud","createdAt":"2026-02-10T01:26:02Z","mergedAt":"2026-03-08T00:01:14Z","additions":53186,"deletions":549},{"id":"PR_kwDOMT5cIs7I6dg2","title":"feat: Bring Odi logging, Memory lock down, banner, other core enh","author":"odilitime","number":6562,"body":"$6","repository":"elizaos/eliza","createdAt":"2026-03-08T23:50:03Z","mergedAt":"2026-04-08T23:27:47Z","additions":5218,"deletions":259},{"id":"PR_kwDOP6BTDM7CQg7a","title":"feat: x402 facilitator deployment + cloud integration tests","author":"lalalune","number":318,"body":"## Summary\n\n- Docker deployment config for x402 facilitator service (port 8090)\n- 31 tests: 25 unit (payload validation, encoding, edge cases) + 6 integration (plugin ↔ cloud verification)\n- Integration tests use real viem crypto to verify the complete signer → header → verify flow\n\n## Test plan\n\n- [x] `SKIP_SERVER_CHECK=true bun test tests/unit/x402/` — 31/31 pass\n\n\nMade with [Cursor](https://cursor.com)","repository":"elizaos/cloud","createdAt":"2026-02-08T04:09:50Z","mergedAt":"2026-03-08T00:01:14Z","additions":2338,"deletions":269},{"id":"PR_kwDOP6BTDM7FHeE6","title":"Fix: twitter mcp","author":"samarth30","number":363,"body":"$7","repository":"elizaos/cloud","createdAt":"2026-02-20T09:51:40Z","mergedAt":"2026-03-08T21:58:21Z","additions":1369,"deletions":141},{"id":"PR_kwDOP6BTDM6-x023","title":"feat(security): Encrypt user database credentials at rest","author":"0xbbjoker","number":246,"body":"$8","repository":"elizaos/cloud","createdAt":"2026-01-22T19:47:49Z","mergedAt":"2026-03-08T00:01:14Z","additions":986,"deletions":22},{"id":"PR_kwDOMT5cIs7Izy1K","title":"feat: Add @elizaos/plugin-abu-solana - Autonomous Solana DeFi Agent","author":"Abu1982","number":6561,"body":"$9","repository":"elizaos/eliza","createdAt":"2026-03-08T03:10:19Z","mergedAt":null,"additions":441,"deletions":0},{"id":"PR_kwDOP6BTDM6_LZa-","title":"feat(api): add API key support to ElevenLabs TTS/STT routes","author":"standujar","number":249,"body":"Enable access to ElevenLabs audio endpoints via ElizaOS Cloud API keys.","repository":"elizaos/cloud","createdAt":"2026-01-24T21:43:13Z","mergedAt":"2026-03-08T00:01:14Z","additions":29,"deletions":26}],"detailedContributorSummaries":{}},"summaryContent":null,"className":"self-end sm:self-start"}]]}],"$La","$Lb","$Lc"]}]}],["$Ld","$Le","$Lf"],"$L10"]}],"loading":null,"isPartial":false}
+a:["$","div",null,{"className":"mb-6","children":["$","div",null,{"className":"flex items-center justify-between","children":[[["$","$L11",null,{"href":"/summary/day/2026-03-07","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left mr-2 h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"children":"Previous"}],false],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$L11",null,{"href":"/summary/day/2026-03-07","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Previous"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]],["$","div",null,{"className":"flex flex-col items-center","children":[["$","div",null,{"className":"text-sm font-medium text-gray-500","children":["Daily"," Summary"]}],["$","time",null,{"dateTime":"2026-03-08","className":"text-md font-bold","children":"Mar 8, 2026"}]]}],[["$","$L11",null,{"href":"/summary/day/2026-03-09","children":[false,["$","span",null,{"children":"Next"}],["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right ml-2 h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}]],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$L11",null,{"href":"/summary/day/2026-03-09","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Next"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]]]}]}]
+13:T588,builds on #328 
+
+<!-- CURSOR_SUMMARY -->
+---
+
+> [!NOTE]
+> **Medium Risk**
+> Medium risk because it adds multiple new publicly callable proxy routes (affecting billing/load) and introduces admin endpoints that can change service pricing with cache invalidation; behavior depends on correct auth/validation and repository logic.
+> 
+> **Overview**
+> **Adds admin APIs to manage per-service method pricing.** New `/api/v1/admin/service-pricing` supports listing pricing by `service_id` and `PUT` upserts with double cache invalidation, plus a new `/audit` endpoint to page through pricing change history.
+> 
+> **Refactors `admin/moderation` to rely on shared auth and consistent error responses.** The route now uses `requireAdmin` from `lib/auth`, wraps `GET`/`POST` in `try/catch`, and maps auth failures to `401/403` while logging unexpected errors.
+> 
+> **Introduces new resell/proxy endpoints for chain, market, and RPC data.** Adds REST-style routes under `/api/v1/chain/*`, `/api/v1/market/*`, `/api/v1/rpc/*`, and `/api/v1/solana/*` that set CORS/`OPTIONS`, validate chain/address inputs, and then forward via `executeWithBody`/`createHandler`.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit 319986aa098ef5c7bc47ecbaf8fca1ae50fadaae. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->14:T87f,<!-- CURSOR_SUMMARY -->
+> [!NOTE]
+> **High Risk**
+> High risk because it introduces new public Solana proxy/asset endpoints and new database-backed service pricing/audit tables that impact billing behavior, plus admin moderation/auth flow changes.
+> 
+> **Overview**
+> Adds a **service pricing framework**: new `service_pricing`/`service_pricing_audit` tables (with seed data + indexes) and new admin routes for listing, upserting, and auditing pricing; the upsert path validates payloads, performs *double cache invalidation* around the write, and logs post-write invalidation failures.
+> 
+> Expands the **public Solana API surface** with a `POST` Solana RPC proxy and new `GET` endpoints (assets, token accounts, transactions, methods) that validate Solana addresses and consistently apply CORS headers.
+> 
+> Hardens several existing APIs by standardizing auth/error responses (notably `admin/moderation` and app-builder `files`/`logs`/`terminal`), and tightens terminal `cwd` handling to reduce command/path injection risk; adds Vitest coverage for the new admin service-pricing routes (including auth, upsert, and cache-invalidation scenarios).
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit 7b92f5ae83d0d6ccfcb2e8c01e9fffd77558ff07. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+## Summary by CodeRabbit
+
+* **New Features**
+  * Public Solana endpoints (assets, token accounts, transactions, methods) and a new admin API/UI to manage service pricing with audit history and upsert.
+
+* **Bug Fixes**
+  * Stronger authentication/authorization handling, clearer error responses, stricter input validation, and consistent CORS headers.
+  * More resilient cache invalidation with graceful failure handling.
+
+* **Documentation**
+  * New API security and Solana method management guides.
+
+* **Chores**
+  * DB migrations and numeric-precision updates; added tests and proxy/configuration improvements.
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->15:T3058,- banner, init hook, reply optimization, roles warnedUnnamedEntities, runtime (embedding cache, callerInfo, safeReplacer, onlyInclude, logPrompt/logResponse gating), logger file output
+- DISABLE_MEMORY_CREATION/ALLOW_MEMORY_SOURCE_IDS in message service; JSON5, parseBooleanFromText try/catch, formatPosts; add DISABLE_MEMORY_CREATION guard to runtime.evaluate() (was missed)
+- keepExistingResponses/BOOTSTRAP_KEEP_RESP, ANXIETY provider, null service guard, provider timeout, HandlerCallback actionName, hasRequestedInState in reply
+- Docs: CHANGELOG, ROADMAP, docs/DESIGN.md, README env/design section, WHY comments; fix ALLOW_MEMORY_SOURCE_IDS comment in message.ts
+- New: bootstrap banner (preview script), anxiety provider
+
+Made-with: Cursor
+
+<!-- Use this template by filling in information and copying and pasting relevant items out of the HTML comments. -->
+
+# Relates to
+
+<!-- LINK TO ISSUE OR TICKET -->
+
+<!-- This risks section must be filled out before the final review and merge. -->
+
+# Risks
+
+<!--
+Low, medium, large. List what kind of risks and what could be affected.
+-->
+
+# Background
+
+## What does this PR do?
+
+## What kind of change is this?
+
+<!--
+Bug fixes (non-breaking change which fixes an issue)
+Improvements (misc. changes to existing features)
+Features (non-breaking change which adds functionality)
+Updates (new versions of included code)
+-->
+
+<!-- This "Why" section is most relevant if there are no linked issues explaining why. If there is a related issue, it might make sense to skip this why section. -->
+<!--
+## Why are we doing this? Any context or related work?
+-->
+
+# Documentation changes needed?
+
+<!--
+My changes do not require a change to the project documentation.
+My changes require a change to the project documentation.
+If documentation change is needed: I have updated the documentation accordingly.
+-->
+
+<!-- Please show how you tested the PR. This will really help if the PR needs to be retested and probably help the PR get merged quicker. -->
+
+# Testing
+
+## Where should a reviewer start?
+
+## Detailed testing steps
+
+<!--
+None: Automated tests are acceptable.
+-->
+
+<!--
+- As [anon/admin], go to [link]
+  - [do action]
+  - verify [result]
+-->
+
+<!-- If there is a UI change, please include before and after screenshots or videos. This will speed up PRs being merged. It is extra nice to annotate screenshots with arrows or boxes pointing out the differences. -->
+<!--
+## Screenshots
+### Before
+### After
+-->
+
+<!-- If there is anything about the deployment, please make a note. -->
+<!--
+# Deploy Notes
+-->
+
+<!--  Copy and paste command line output. -->
+<!--
+## Database changes
+-->
+
+<!--  Please specify deploy instructions if there is something more than the automated steps. -->
+<!--
+## Deployment instructions
+-->
+
+<!-- If you are on Discord, please join https://discord.gg/ai16z and state your Discord username here for the contributor role and join us in #development-feed -->
+<!--
+## Discord username
+
+-->
+
+
+<!-- CURSOR_SUMMARY -->
+---
+
+> [!NOTE]
+> **Medium Risk**
+> Touches core runtime/message pipeline behavior (provider timeouts, action-chain state recomposition, memory persistence gating, callback signature) and adds new logging side effects, so regressions could impact response latency, persistence, or integrations.
+> 
+> **Overview**
+> **Core runtime hardening & observability.** `composeState` now enforces a per-provider 30s timeout (continuing with empty results on failure) and profiles provider timings; action chains recompose state using `onlyInclude` to refresh just `RECENT_MESSAGES`/`ACTION_STATE` while preserving other cached provider data; action-result caching uses `safeReplacer()`.
+> 
+> **Logging & callbacks.** Adds opt-in file logging via `LOG_FILE` to write `output.log`, `prompts.log`, and `chat.log` (with ANSI stripping and prompt/response correlation), and extends `HandlerCallback` to accept an optional `actionName` (runtime and bootstrap `reply` now pass it).
+> 
+> **Memory/pipeline controls & bootstrap behavior.** Implements `DISABLE_MEMORY_CREATION` with `ALLOW_MEMORY_SOURCE_IDS` allowlisting and updates race handling to use resolved `keepExistingResponses`; skips memory-dependent evaluators when memory creation is disabled. Adds a bootstrap startup banner (plugin `init` hook + preview script), a new `ANXIETY` provider (registered by default), budget-based truncation of action history/results via shared `sliceToFitBudget`, and reduces roles-provider warning spam with per-runtime bounded tracking. Documentation and examples are updated accordingly (README/CHANGELOG/ROADMAP/DESIGN, Telegram model selection, JSON5 dependency).
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit d4e24be84caf81f419a4a5dd4b50652daf168a0e. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+## Summary by CodeRabbit
+
+* **New Features**
+  * Memory persistence controls (DISABLE_MEMORY_CREATION, ALLOW_MEMORY_SOURCE_IDS), shared config helpers, new anxiety provider, startup banner, and prompt/response file logging.
+
+* **Improvements**
+  * Per-provider timeouts and a 30s provider limit, first-action reply optimization, budgeted truncation of action/history context, safer JSON parsing from text, and handler callbacks include action names.
+
+* **Bug Fixes**
+  * Explicit timer cleanup on provider completion and hardened plugin registration.
+
+* **Tests & Docs**
+  * Expanded tests and new design/roadmap/README documentation.
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->
+
+<!-- greptile_comment -->
+
+<h3>Greptile Summary</h3>
+
+This PR is a broad hardening and observability pass on the core `@elizaos/typescript` runtime. Key changes include: per-provider 30 s timeouts in `composeState`, `onlyInclude` optimization for action-chain state recomposition, `DISABLE_MEMORY_CREATION` / `ALLOW_MEMORY_SOURCE_IDS` controls in both the message service and `evaluate()`, optional file logging (`LOG_FILE` → `output.log` / `prompts.log` / `chat.log`), an `ANXIETY` verbosity-guidance provider registered by default, a bootstrap ANSI banner on plugin init, JSON5-tolerant LLM output parsing, and `HandlerCallback` extended with an optional `actionName` parameter.
+
+- **Bug — IGNORE response persistence bypassed by `ALLOW_MEMORY_SOURCE_IDS`** (`message.ts:948–952`): the ignore path checks `allowedSources.includes("agent_response")` — a hardcoded string users will never configure — so all IGNORE decisions are silently dropped when any source allowlist is active. The regular response path (line ~773) correctly skips this check; the ignore path should match that behavior.
+- **Bug — zero-vector fallback corrupts semantic memory** (`runtime.ts:4861`): on embedding failure the memory is persisted with a zero vector, making it unretrievable by cosine-similarity search while appearing normally stored. Silent data loss.
+- **`PROVIDERS_TOTAL_TIMEOUT_MS` default raised from 1 000 ms → 5 000 ms** (`message.ts:~2019`): existing deployments relying on the 1 s default will now allow providers up to 5 s before bailing, which may noticeably increase P99 response latency.
+- **Variable shadowing in ignore block** (`message.ts:949`): `allowedSources` is re-resolved inside `if (!disableMemoryCreation)`, shadowing the binding already computed on line 461 and adding a redundant runtime call.
+- **Dead `catch` block in `parseBooleanFromText`** (`utils.ts:941–950`): `String(value).trim().toUpperCase()` cannot throw after the early-return guards; the `logger.warn` is unreachable.
+
+<h3>Confidence Score: 3/5</h3>
+
+- Not safe to merge without addressing the IGNORE memory persistence bug and zero-vector embedding fallback.
+- Two confirmed logic bugs affect correctness in production: IGNORE responses are silently dropped from memory when ALLOW_MEMORY_SOURCE_IDS is set (contradicts stated design and the regular response path), and failed embeddings produce unretrievable zero-vector memories. The PROVIDERS_TOTAL_TIMEOUT_MS default change is a silent breaking change for latency-sensitive deployments. The rest of the PR is well-structured, well-commented, and tested.
+- packages/typescript/src/services/message.ts (IGNORE persistence logic at lines 948–974) and packages/typescript/src/runtime.ts (zero-vector embedding fallback at lines 4858–4865)
+
+<h3>Important Files Changed</h3>
+
+| Filename | Overview |
+|----------|----------|
+| packages/typescript/src/services/message.ts | Core message processing pipeline — adds DISABLE_MEMORY_CREATION / ALLOW_MEMORY_SOURCE_IDS filtering and keepExistingResponses race-check; the IGNORE path incorrectly applies the source allowlist to agent-generated responses, causing all IGNORE memories to be silently dropped when ALLOW_MEMORY_SOURCE_IDS is configured (contradicts stated design). Also contains variable shadowing and redundant comments. |
+| packages/typescript/src/runtime.ts | Major runtime hardening: per-provider 30s timeouts, onlyInclude optimization for action-chain state recomposition, DISABLE_MEMORY_CREATION guard for evaluate(), file-based prompt/response logging, caller-info stack traces. Zero-vector embedding fallback silently corrupts memory search for affected records. |
+| packages/typescript/src/logger.ts | Adds optional file logging (output.log, prompts.log, chat.log) gated by LOG_FILE env-var; prompt/response correlation now uses the same slug passed through metadata; all log files are placed in the same directory as LOG_FILE. Implementation is sound. |
+| packages/typescript/src/bootstrap/providers/anxiety.ts | New ANXIETY provider returning channel-specific verbosity guidance via random selection of 3 examples per turn; uses Math.random()-0.5 sort (biased shuffle) but non-critical for this use case. |
+| packages/typescript/src/bootstrap/providers/roles.ts | Switches from a module-level Set to a WeakMap<IAgentRuntime, Set<string>> for per-runtime warn-once tracking of unnamed entities; correctly addressed from previous review. |
+| packages/typescript/src/utils/json-llm.ts | New JSON5-based tolerant extraction helper for LLM output; handles code-fenced blocks and single-quote / trailing-comma JSON; throws on failure so callers (parseJSONObjectFromText) can catch and return null. |
+| packages/typescript/src/utils.ts | parseBooleanFromText accepts broader types, formatPosts adds metadata fallbacks and text delimiters, parseJSONObjectFromText delegates to JSON5-based json-llm helper. The try-catch in parseBooleanFromText is dead code but harmless. |
+| packages/typescript/src/types/components.ts | HandlerCallback extended with optional actionName parameter (backward compatible); allows callers to attribute responses to the producing action without content parsing. |
+
+</details>
+
+<h3>Flowchart</h3>
+
+```mermaid
+%%{init: {'theme': 'neutral'}}%%
+flowchart TD
+    A[Incoming Message] --> B{DISABLE_MEMORY_CREATION?}
+    B -- No --> C{ALLOW_MEMORY_SOURCE_IDS set?}
+    C -- No allowlist --> D[Persist message memory + queue embedding]
+    C -- Allowlist set --> E{sourceId in allowlist?}
+    E -- Yes --> D
+    E -- No --> F[Skip persistence, assign UUID]
+    B -- Yes --> F
+
+    D --> G[shouldRespond check]
+    F --> G
+
+    G -- IGNORE --> H[callback ignoreContent]
+    H --> I{DISABLE_MEMORY_CREATION?}
+    I -- No --> J{allowedSources includes 'agent_response'?}
+    J -- Yes --> K[Persist IGNORE memory]
+    J -- No → bug --> L["❌ IGNORE memory silently dropped"]
+    I -- Yes --> L2[Skip IGNORE memory]
+
+    G -- Respond --> M[runSingleShotCore / LLM]
+    M --> N{canPersistMemory = !disableMemory}
+    N -- true --> O[Persist response memories]
+    N -- false --> P[Skip response memories]
+
+    O --> Q[run evaluators]
+    P --> Q
+    Q --> R{DISABLE_MEMORY_CREATION?}
+    R -- Yes --> S[Skip evaluators entirely]
+    R -- No --> T[Run evaluators with timeout]
+
+    style L fill:#ff4444,color:#fff
+    style L2 fill:#aaa,color:#fff
+```
+
+<sub>Last reviewed commit: ["docs: add review dis..."](https://github.com/elizaos/eliza/commit/d7d1ad5199b8fe12b302326d321ce50fede6912a)</sub>
+
+> Greptile also left **2 inline comments** on this PR.
+
+<!-- /greptile_comment -->16:Tc10,This pull request introduces improvements to the Telegram webhook message formatting and updates the tool visibility configuration for Twitter-related tools. The main focus is on ensuring URLs remain clickable in Telegram messages and aligning Twitter tool keys with the correct API methods.
+
+**Telegram message formatting:**
+
+* Added a `cleanUrlMarkdown` function in `app/api/eliza-app/webhook/telegram/route.ts` to strip bold/italic markdown from URLs, ensuring they remain clickable in Telegram messages. The `sendTelegramMessage` function now uses this cleaning step before sending messages.
+
+**Tool visibility configuration:**
+
+* Updated the Twitter tool keys in `lib/eliza/plugin-mcp/tool-visibility.ts`: replaced `twitter_get_me` and `twitter_get_user_tweets` with `twitter_get_my_tweets` and `twitter_get_mentions` to reflect the correct API endpoints.
+
+
+<!-- CURSOR_SUMMARY -->
+---
+
+> [!NOTE]
+> **Medium Risk**
+> Moderate risk because it refactors Twitter MCP tool behavior/response shapes and adds multiple new API-backed actions with pagination and stricter OAuth token requirements, which could impact existing workflows if assumptions change.
+> 
+> **Overview**
+> **Telegram webhook:** adds `cleanUrlMarkdown` and applies it in `sendTelegramMessage` so Markdown bold/italic wrappers don’t break URL clickability.
+> 
+> **Twitter MCP:** hardens OAuth handling (explicitly requires `accessTokenSecret`), refactors repeated mapping/field selection, enhances existing tools with pagination/date filters, and adds new tools including `twitter_get_my_tweets`, `twitter_get_mentions`, likes/bookmarks retrieval, thread creation with partial-failure reporting, tweet-URL resolution, and relationship checks; updates crucial-tool visibility to surface the new Twitter tools and adds comprehensive unit tests.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit 533ce47739538f9a01d72c404a8286ee1a9c1665. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->
+
+
+
+<img width="1545" height="975" alt="Screenshot 2026-02-20 at 3 32 53 PM" src="https://github.com/user-attachments/assets/745ac604-16b8-46fe-86b9-3c82dbaeaafb" />
+<img width="1545" height="975" alt="Screenshot 2026-02-20 at 3 33 05 PM" src="https://github.com/user-attachments/assets/c9083a44-a044-4beb-b8e3-a5ea5da016a1" />
+<img width="1545" height="975" alt="Screenshot 2026-02-20 at 3 33 12 PM" src="https://github.com/user-attachments/assets/877f79c7-10dc-43a3-836c-348bf6a5037c" />
+
+<img width="1545" height="975" alt="Screenshot 2026-02-20 at 3 33 22 PM" src="https://github.com/user-attachments/assets/c8d52ff3-3a90-41f9-b8b8-0df367ba792b" />
+<img width="1545" height="975" alt="Screenshot 2026-02-20 at 3 33 30 PM" src="https://github.com/user-attachments/assets/d23c0ca7-2395-4ac3-b062-9fb563be53eb" />
+<img width="1545" height="975" alt="Screenshot 2026-02-20 at 3 33 38 PM" src="https://github.com/user-attachments/assets/5c62301a-a398-4273-b4a4-64529209023f" />
+17:Te20,## Summary
+
+Implements field-level encryption for sensitive database credentials (`user_database_uri`) using AES-256-GCM with per-organization Data Encryption Keys (DEKs).
+
+- **Per-organization encryption keys** for tenant isolation
+- **Encoded format** (`enc:v1:...`) requires zero schema changes
+- **Backward compatible**: handles both encrypted and legacy plaintext URIs
+- **Migration script** for encrypting existing data
+
+## Architecture
+
+```
+Master Key (SECRETS_MASTER_KEY env var)
+    └── wraps →
+Organization DEKs (stored encrypted in DB)
+    └── encrypts →
+Sensitive fields (user_database_uri, future: API keys, etc.)
+```
+
+**Encrypted format**: `enc:v1:<org_key_id>:<nonce>:<auth_tag>:<ciphertext>`
+
+## Files Changed
+
+| File | Description |
+|------|-------------|
+| `lib/services/field-encryption.ts` | Core encryption service (AES-256-GCM) |
+| `db/schemas/organization-encryption-keys.ts` | Drizzle schema for org encryption keys |
+| `db/repositories/organization-encryption-keys.ts` | Repository for CRUD operations |
+| `db/migrations/0017_add_organization_encryption_keys.sql` | Schema migration |
+| `lib/services/user-database.ts` | Encrypt URI on store, add decrypt helper |
+| `lib/services/sandbox/tool-executor.ts` | Decrypt URI before injecting as DATABASE_URL |
+| `scripts/migrate-encrypt-user-database-uris.ts` | Migration script for existing data |
+| `example.env.local` | Documentation for new env vars |
+
+## Deployment Checklist
+
+- [ ] Run migration `0017_add_organization_encryption_keys.sql`
+- [ ] **Add `SECRETS_MASTER_KEY` to Vercel Environment Variables**
+  - Generate with: `openssl rand -hex 32`
+  - Must be 64 hex characters (32 bytes)
+  - ⚠️ Back up securely - losing this key means losing access to encrypted data
+- [ ] Deploy code changes
+- [ ] Run migration script: `npx tsx scripts/migrate-encrypt-user-database-uris.ts`
+- [ ] Verify no plaintext URIs remain
+
+## Test Plan
+
+- [ ] Verify new database provisioning encrypts the URI
+- [ ] Verify sandbox tool executor correctly decrypts and injects DATABASE_URL
+- [ ] Verify migration script encrypts existing plaintext URIs
+- [ ] Verify backward compatibility with any remaining plaintext URIs (logs warning)
+
+Closes #241
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+<!-- CURSOR_SUMMARY -->
+---
+
+> [!NOTE]
+> **High Risk**
+> High risk because it changes how `user_database_uri` is persisted and retrieved (now encrypted), introducing a new required `SECRETS_MASTER_KEY` and new key-storage table; misconfiguration or bugs could break database provisioning/commands or make stored URIs unreadable.
+> 
+> **Overview**
+> **Encrypts app database connection URIs at rest.** New `FieldEncryptionService` encrypts/decrypts values using per-organization DEKs wrapped by a master key (`SECRETS_MASTER_KEY`) and stored in the new `organization_encryption_keys` table.
+> 
+> `user-database` now encrypts the Neon connection URI before persisting it and decrypts on read/status responses, while the sandbox `tool-executor` decrypts before injecting `DATABASE_URL` for drizzle commands (backward compatible with legacy plaintext).
+> 
+> Adds a one-off script to encrypt existing plaintext `user_database_uri` rows, updates schema exports/relations, documents new env vars, and includes unit tests for encryption behavior and race handling.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit 36c36893839784efb9cfa72d0015024543dbcced. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->18:T188e,## @elizaos/plugin-abu-solana
+
+Abu is an autonomous AI agent running 24/7 on Solana mainnet. This plugin exposes Abu's capabilities as standard ElizaOS Actions.
+
+### Structure
+
+- packages/plugin-abu-solana/src/index.ts  TypeScript implementation
+- packages/plugin-abu-solana/package.json  Package config with @elizaos/core peer dep
+- packages/plugin-abu-solana/tsconfig.build.json  TypeScript build config
+- packages/plugin-abu-solana/README.md  Documentation
+
+### Actions
+
+| Action | Description |
+|---|---|
+| ABU_ARB_SCAN | Real-time DEX arbitrage scanning across 25+ Solana token pairs via Jupiter |
+| ABU_MARKET_DATA | Multi-source market data (CoinGecko, DeFiLlama, Birdeye) |
+| ABU_REPUTATION | On-chain reputation score (5 dimensions) |
+| ABU_SIGNALS | Trading signal stream |
+
+### Provider
+
+- ABU_SOLANA_PROVIDER  Real-time Solana DeFi data
+
+### Links
+
+- Dashboard: https://www.aiabu.club
+- Plugin Manifest: https://www.aiabu.club/api/public/eliza-plugin
+- Wallet: CzzxCjWVE4HgFssHHMkBo8MMV2JRaVTQfAEeanZnKF6d
+- Communities: https://www.aiabu.club/communities
+
+### Changes from previous PR #6560
+
+- Fixed: Files now contain actual implementation (not empty)
+- Fixed: Moved from plugins/ to packages/ directory
+- Fixed: Converted from JavaScript to TypeScript
+- Added: tsconfig.build.json for proper build
+- Added: Typed interfaces for all API responses
+- Added: @elizaos/core as peerDependency
+
+<!-- greptile_comment -->
+
+<h3>Greptile Summary</h3>
+
+This PR adds `@elizaos/plugin-abu-solana`, a new plugin that wraps a third-party autonomous DeFi agent's public REST API (`aiabu.club`) and exposes it as four ElizaOS Actions (`ABU_ARB_SCAN`, `ABU_MARKET_DATA`, `ABU_REPUTATION`, `ABU_SIGNALS`) and one Provider (`ABU_SOLANA_PROVIDER`). While the concept is straightforward and the code is readable, the implementation has several critical interface mismatches that will prevent it from working correctly within the ElizaOS runtime.
+
+**Key issues:**
+- **Critical — wrong `Action` interface signatures**: All four action `validate` and `handler` functions take no arguments and return `Promise<string>`, but the ElizaOS `Action` interface requires `(runtime, message, state)` for `validate` and `(runtime, message, state, options, callback?, responses?)` returning `Promise<ActionResult>` for `handler`. The missing `callback` invocation means results will never be surfaced back to conversations.
+- **Critical — wrong `Provider` interface**: The provider `get` function takes no arguments and returns `Promise<string>`, but must accept `(runtime, message, state)` and return `Promise<ProviderResult>`.
+- **Critical — no `@elizaos/core` type imports**: `Action`, `Plugin`, `Provider`, `IAgentRuntime`, `Memory`, `State`, `HandlerCallback`, `ActionResult`, and `ProviderResult` are never imported, so TypeScript cannot validate the plugin's shape at compile time.
+- **Logic bug — signals empty guard**: `if (data.count === 0)` should guard on `data.signals?.length` to handle undefined/null counts and API inconsistencies.
+- **Style — no error handling in action handlers**: Only the provider has a try/catch; all four action handlers will propagate uncaught exceptions on API failure.
+- **Style — version mismatch**: `"version": "1.0.0"` is out of step with the monorepo's synchronized pre-release versioning scheme.
+
+<h3>Confidence Score: 1/5</h3>
+
+- Not safe to merge — the plugin will not function correctly within ElizaOS due to critical interface mismatches in all action handlers and the provider.
+- Every action handler and the provider violate their respective ElizaOS interface contracts (wrong signatures, wrong return types, no callback invocation). No `@elizaos/core` types are imported, so these errors are invisible at compile time but will cause silent failures at runtime. There are also no tests. The issues require non-trivial rewrites before the plugin can work as intended.
+- `packages/plugin-abu-solana/src/index.ts` requires substantial changes to conform to the `Action`, `Provider`, and `Plugin` interfaces from `@elizaos/core`.
+
+<h3>Important Files Changed</h3>
+
+| Filename | Overview |
+|----------|----------|
+| packages/plugin-abu-solana/src/index.ts | Core plugin implementation; has critical interface mismatches — action `validate`/`handler` signatures, provider `get` signature, and return types all deviate from the ElizaOS `Action`/`Provider` interfaces. No `@elizaos/core` types are imported. Action handlers lack error handling. Signals count guard checks the wrong field. |
+| packages/plugin-abu-solana/package.json | Package configuration is mostly correct. Version `1.0.0` is out of step with the monorepo versioning scheme. Missing `packageType` and `agentConfig` metadata fields used by other ElizaOS plugins. Build scripts are minimal but functional. |
+| packages/plugin-abu-solana/tsconfig.build.json | Standard TypeScript build configuration; targets ES2022, strict mode enabled, correct output paths. No issues found. |
+| packages/plugin-abu-solana/README.md | Documentation is clear and covers installation, usage, actions, provider, and endpoints. Acceptable for an initial plugin submission. |
+
+</details>
+
+<h3>Sequence Diagram</h3>
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant ElizaOS Runtime
+    participant abuPlugin
+    participant Abu API (aiabu.club)
+
+    User->>ElizaOS Runtime: Send message (e.g. "check arbitrage")
+    ElizaOS Runtime->>abuPlugin: validate(runtime, message, state)
+    abuPlugin-->>ElizaOS Runtime: true
+    ElizaOS Runtime->>abuPlugin: handler(runtime, message, state, options, callback)
+    abuPlugin->>Abu API (aiabu.club): GET /api/public/arb
+    Abu API (aiabu.club)-->>abuPlugin: { arb_scans, count }
+    abuPlugin-->>ElizaOS Runtime: ActionResult (text, success)
+    ElizaOS Runtime->>User: Response via callback
+
+    Note over ElizaOS Runtime,abuPlugin: Current implementation: validate() and handler() take<br/>no args and return string — callback never invoked,<br/>response never reaches the user.
+```
+
+<sub>Last reviewed commit: af6db24</sub>
+
+> Greptile also left **6 inline comments** on this PR.
+
+<sub>(4/5) You can add custom instructions or style guidelines for the agent [here](https://app.greptile.com/review/github)!</sub>
+
+<!-- /greptile_comment -->b:["$","div",null,{"className":"mb-8 space-y-6","children":[["$","$L12",null,{"metrics":{"date":"2026-03-08","interval":{"intervalStart":"$D2026-03-08T00:00:00.000Z","intervalEnd":"$D2026-03-09T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":2,"merged":7,"total":9},"issues":{"new":0,"closed":0,"total":0},"activeContributors":3,"codeChanges":{"additions":229430,"deletions":1454,"files":167,"commitCount":7},"topContributors":[{"username":"odilitime","avatarUrl":"https://avatars.githubusercontent.com/u/16395496?u=c9bac48e632aae594a0d85aaf9e9c9c69b674d8b&v=4","totalScore":43.5437738965761,"prScore":43.5437738965761,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":null},{"username":"Abu1982","avatarUrl":"https://avatars.githubusercontent.com/u/188986874?u=ce71b5e321980892387d6f6c6535cad81de123cd&v=4","totalScore":31.182619764155397,"prScore":31.182619764155397,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":null},{"username":"greptile-apps","avatarUrl":"https://avatars.githubusercontent.com/in/867647?v=4","totalScore":9,"prScore":0,"issueScore":0,"reviewScore":9,"commentScore":0,"summary":null}],"focusAreas":[{"area":"app/api","count":77},{"area":"db/migrations","count":27},{"area":"lib/services","count":22},{"area":"db/schemas","count":15},{"area":"db/repositories","count":8},{"area":"tests/unit","count":6},{"area":"app/dashboard","count":5},{"area":"docs","count":4},{"area":"app/auth","count":3},{"area":"components/chat","count":3}],"topIssues":[],"topPullRequests":[{"id":"PR_kwDOP6BTDM7Comrl","title":"feat: add birdeye/alchemy resell","author":"odilitime","number":329,"body":"$13","repository":"elizaos/cloud","createdAt":"2026-02-10T04:06:09Z","mergedAt":"2026-03-08T00:01:14Z","additions":172123,"deletions":288},{"id":"PR_kwDOP6BTDM7HwrCT","title":"Fix unit test suite for affiliates and core","author":"lalalune","number":373,"body":"Resolves all failing unit tests, including SQLite to Postgres UUID format issues, OAuth adapters and generic routes, discord service slugs.\n\n<!-- This is an auto-generated comment: release notes by coderabbit.ai -->\n## Summary by CodeRabbit\n\n* **New Features**\n  * Affiliate program: create/share affiliate codes, set markup, link users, and view affiliate dashboard.\n  * Wallet-based auth: SIWE onboarding and per-request wallet signature support.\n  * Fixed-amount credit top-ups ($10, $50, $100) and improved checkout metadata.\n  * Server wallet provisioning and RPC execution for delegated wallets.\n  * Signup code redemption for one-time org bonuses.\n  * Multi-tier revenue splits for referrals and affiliates.\n\n* **Documentation**\n  * New Wallet API, referrals/affiliates, and signup-codes guides and changelog entries.\n<!-- end of auto-generated comment: release notes by coderabbit.ai -->","repository":"elizaos/cloud","createdAt":"2026-03-04T02:30:56Z","mergedAt":"2026-03-08T00:01:14Z","additions":53541,"deletions":973},{"id":"PR_kwDOP6BTDM7CnbgX","title":"feat: resell helius endpoints & create framework for more 3rd party resale","author":"odilitime","number":328,"body":"$14","repository":"elizaos/cloud","createdAt":"2026-02-10T01:26:02Z","mergedAt":"2026-03-08T00:01:14Z","additions":53186,"deletions":549},{"id":"PR_kwDOMT5cIs7I6dg2","title":"feat: Bring Odi logging, Memory lock down, banner, other core enh","author":"odilitime","number":6562,"body":"$15","repository":"elizaos/eliza","createdAt":"2026-03-08T23:50:03Z","mergedAt":"2026-04-08T23:27:47Z","additions":5218,"deletions":259},{"id":"PR_kwDOP6BTDM7CQg7a","title":"feat: x402 facilitator deployment + cloud integration tests","author":"lalalune","number":318,"body":"## Summary\n\n- Docker deployment config for x402 facilitator service (port 8090)\n- 31 tests: 25 unit (payload validation, encoding, edge cases) + 6 integration (plugin ↔ cloud verification)\n- Integration tests use real viem crypto to verify the complete signer → header → verify flow\n\n## Test plan\n\n- [x] `SKIP_SERVER_CHECK=true bun test tests/unit/x402/` — 31/31 pass\n\n\nMade with [Cursor](https://cursor.com)","repository":"elizaos/cloud","createdAt":"2026-02-08T04:09:50Z","mergedAt":"2026-03-08T00:01:14Z","additions":2338,"deletions":269},{"id":"PR_kwDOP6BTDM7FHeE6","title":"Fix: twitter mcp","author":"samarth30","number":363,"body":"$16","repository":"elizaos/cloud","createdAt":"2026-02-20T09:51:40Z","mergedAt":"2026-03-08T21:58:21Z","additions":1369,"deletions":141},{"id":"PR_kwDOP6BTDM6-x023","title":"feat(security): Encrypt user database credentials at rest","author":"0xbbjoker","number":246,"body":"$17","repository":"elizaos/cloud","createdAt":"2026-01-22T19:47:49Z","mergedAt":"2026-03-08T00:01:14Z","additions":986,"deletions":22},{"id":"PR_kwDOMT5cIs7Izy1K","title":"feat: Add @elizaos/plugin-abu-solana - Autonomous Solana DeFi Agent","author":"Abu1982","number":6561,"body":"$18","repository":"elizaos/eliza","createdAt":"2026-03-08T03:10:19Z","mergedAt":null,"additions":441,"deletions":0},{"id":"PR_kwDOP6BTDM6_LZa-","title":"feat(api): add API key support to ElevenLabs TTS/STT routes","author":"standujar","number":249,"body":"Enable access to ElevenLabs audio endpoints via ElizaOS Cloud API keys.","repository":"elizaos/cloud","createdAt":"2026-01-24T21:43:13Z","mergedAt":"2026-03-08T00:01:14Z","additions":29,"deletions":26}],"detailedContributorSummaries":{}}}],"$L19"]}]
+c:null
+d:["$","script","script-0",{"src":"/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","async":true}]
+e:["$","script","script-1",{"src":"/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","async":true}]
+f:["$","script","script-2",{"src":"/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js","async":true}]
+10:["$","$L1a",null,{"children":["$","$1b",null,{"name":"Next.MetadataOutlet","children":"$@1c"}]}]
+19:["$","div",null,{"className":"rounded-lg border bg-card text-card-foreground shadow-sm","children":[["$","div",null,{"className":"flex flex-col space-y-1.5 p-6 py-4","children":["$","div",null,{"className":"tracking-tight text-sm font-medium","children":["$undefined","Code Changes"]}]}],["$","div",null,{"className":"p-6 pt-0","children":["$","div",null,{"className":"grid grid-cols-2 gap-4 md:grid-cols-4","children":[["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-git-commit-vertical h-5 w-5","aria-hidden":"true","children":[["$","path","1holv5",{"d":"M12 3v6"}],["$","circle","1v7zrd",{"cx":"12","cy":"12","r":"3"}],["$","path","a9ows0",{"d":"M12 15v6"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":7}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Commits"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-file-code h-5 w-5","aria-hidden":"true","children":[["$","path","1oefj6",{"d":"M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"}],["$","path","wfsgrz",{"d":"M14 2v5a1 1 0 0 0 1 1h5"}],["$","path","1tg20x",{"d":"M10 12.5 8 15l2 2.5"}],["$","path","yinavb",{"d":"m14 12.5 2 2.5-2 2.5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":167}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Files Changed"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-green-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-up h-5 w-5 text-green-500","aria-hidden":"true","children":[["$","path","hav0vg",{"d":"m5 12 7-7 7 7"}],["$","path","x0mq9r",{"d":"M12 19V5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-green-500","children":"+229,430"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Added"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-red-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-down h-5 w-5 text-red-500","aria-hidden":"true","children":[["$","path","s699le",{"d":"M12 5v14"}],["$","path","1idqje",{"d":"m19 12-7 7-7-7"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-red-500","children":"-1,454"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Deleted"}]]}]]}]]}]}]]}]
+1c:null

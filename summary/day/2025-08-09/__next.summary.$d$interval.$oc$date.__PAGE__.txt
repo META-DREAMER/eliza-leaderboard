@@ -1,0 +1,199 @@
+1:"$Sreact.fragment"
+2:I[4817319,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"IntervalSelector"]
+3:I[6998365,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"LlmCopyButton"]
+e:I[3642796,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],""]
+f:I[3238488,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"StatCardsDisplay"]
+16:I[4261541,["/eliza-leaderboard/_next/static/chunks/b33bcbdcb3f88354.js","/eliza-leaderboard/_next/static/chunks/8ba59154b6704904.js"],"OutletBoundary"]
+17:"$Sreact.suspense"
+4:T6d8,## Description
+
+This PR fixes failing component tests in the project-starter template by replacing `mock.module` with `spyOn` for logger mocking.
+
+## Problem
+
+The project-starter template had 3 test files using `mock.module('@elizaos/core')` which completely replaced the logger module, breaking Pino's structured logging behavior. This caused tests to fail when expecting structured log calls like:
+
+```typescript
+logger.info({ keys: Object.keys(params) }, 'MESSAGE_RECEIVED param keys');
+```
+
+## Solution
+
+Replace `mock.module` with `spyOn` in the following files:
+- `src/__tests__/events.test.ts`
+- `src/__tests__/error-handling.test.ts`
+- `src/__tests__/config.test.ts`
+
+This aligns with the testing approach used in all other starter templates and preserves the original logger behavior while still allowing test assertions.
+
+## Testing
+
+- ✅ All component tests now pass (`elizaos test --type component`)
+- ✅ Verified consistency across all starter templates
+- ✅ No behavior changes to the actual plugin code
+
+## Impact
+
+This is a test-only fix with no impact on runtime behavior. It ensures developers creating new projects with `elizaos create` will have all tests passing out of the box (as a follow-up to PR #5705 )
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+* **Tests**
+  * Updated test setup to use spies on logger methods instead of full module mocks, simplifying logger interception during testing.
+  * Enhanced event handler tests to verify structured logging calls with specific object formats.
+  * Improved clarity and maintainability of logger-related test assertions.
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->5:T4fc,# Risks
+
+- Low: Allows iframes from self if web ui is enabled in production.
+
+# Background
+
+Currently in production, any panels exposed by plugins are blocked. This is because plugin panels are exposed using an iframe. with frame-src = 'none' these panels do not work. 
+
+If the Web UI is enabled, the admin needs iframes to expose panels provided by plugins. using frame-src = 'self' allows iframes only from the same domain. 
+
+## What does this PR do?
+
+- This PR checks if the web ui is enabled in production, and if it is, allow iframes to come from self to unblock plugin panels.
+
+## Why are we doing this? Any context or related work?
+- Obviously if a user has explicitly enabled the web ui using `ELIZA_UI_ENABLE` they want the web ui exposed and if they want the ui exposed, they will also implicitly want all their plugins to work as well. 
+
+# Documentation changes needed?
+
+- no documentation changes required
+
+# Testing
+
+## Where should a reviewer start?
+
+## Detailed testing steps
+
+1) in your `.env` file, set the following:
+NODE_ENV=production
+ELIZA_UI_ENABLE=true
+
+2) install any plugin that exposes a panel in the admin such as `@elizaos/plugin-knowledge`
+3) Observe that the panel is accessible
+
+
+## Discord username
+wookosh
+6:T824,On Aug 9, 2025, the ElizaOS project focused on a critical security enhancement in the `eliza` repository, enabling iframes for the web UI in production to support plugin panels, alongside improvements to logger testing consistency. An ongoing issue regarding model download failures received a new comment, indicating a potential access problem with the hosted model file.
+
+## 🚨 Needs Attention
+- **Urgent Discussions**:
+    - [elizaos/eliza#2623](https://github.com/elizaos/eliza/issues/2623): The "Cannot start, stuck downloading fast-bge-small-en-v1.5 model" issue received a new comment suggesting a 403 error with the model's Google Cloud storage link, requiring investigation into the hosted file's accessibility.
+
+## ✅ Completed Work
+- **Web UI Security & Plugin Support**:
+    - Enabled iframes for the web UI in production to support plugin panels, addressing a blocking issue. [elizaos/eliza#5735](https://github.com/elizaos/eliza/pull/5735)
+- **Documentation & Issue Resolution**:
+    - Closed the issue concerning the addition of documentation for the MCP plugin. [elizaos/eliza#5654](https://github.com/elizaos/eliza/issues/5654)
+
+## 🏗️ Work in Progress
+- **New Pull Requests**:
+    - **elizaos/eliza**:
+        - [elizaos/eliza#5748](https://github.com/elizaos/eliza/pull/5748): Fixes an issue in the project-starter by replacing `mock.module` with `spyOn` for more consistent logger testing.
+- **Active Discussions**:
+    - [elizaos/eliza#2623](https://github.com/elizaos/eliza/issues/2623): Ongoing discussion about model download failures, with recent comments pointing to potential Google Cloud storage access issues.
+
+## 🐞 Issue Triage
+- **elizaos/eliza**:
+    - **Closed Issues**:
+        - [elizaos/eliza#5654](https://github.com/elizaos/eliza/issues/5654): Documentation for MCP Plugin.
+
+## ✨ Contributor Spotlight
+- **fortran01**: Provided a crucial update on [elizaos/eliza#2623](https://github.com/elizaos/eliza/issues/2623), identifying a potential 403 error with the model's Google Cloud storage link, shifting the focus of the investigation.0:{"buildId":"US8XLB_zHXYj_PVAECGcd","rsc":["$","$1","c",{"children":[["$","div",null,{"className":"container mx-auto px-6 py-8 md:px-8","children":["$","div",null,{"className":"mx-auto max-w-4xl","children":[["$","div",null,{"className":"mb-4 flex flex-col justify-between sm:flex-row","children":[["$","$L2",null,{"currentInterval":"day","currentDate":"2025-08-09"}],["$","$L3",null,{"metrics":{"date":"2025-08-09","interval":{"intervalStart":"$D2025-08-09T00:00:00.000Z","intervalEnd":"$D2025-08-10T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":1,"merged":1,"total":2},"issues":{"new":0,"closed":1,"total":1},"activeContributors":5,"codeChanges":{"additions":1,"deletions":1,"files":1,"commitCount":9},"topContributors":[{"username":"yungalgo","avatarUrl":"https://avatars.githubusercontent.com/u/113615973?u=92e0f29f7e2fbb8ce46ed13c51f692ca803de02d&v=4","totalScore":32.424522287201754,"prScore":32.08452228720175,"issueScore":0,"reviewScore":0,"commentScore":0.33999999999999997,"summary":"yungalgo: Focused on refactoring and bug fixes, specifically addressing a test-related issue in elizaos/eliza via PR #5748, which involved modifying 5 test files."},{"username":"ChristopherTrimboli","avatarUrl":"https://avatars.githubusercontent.com/u/27584221?u=de148a498b5af814e037c2975112fadd09df743f&v=4","totalScore":5,"prScore":0,"issueScore":0,"reviewScore":5,"commentScore":0,"summary":"ChristopherTrimboli: Focused on bugfix work, contributing 1 commit that modified 1 file with minimal changes (+1/-1 lines), and provided 1 approval review."}],"focusAreas":[{"area":"server","count":1}],"topIssues":[{"id":"I_kwDOMT5cIs7BtcsO","title":"Add MCP plugin docs","author":"linear","number":5654,"repository":"elizaos/eliza","body":"","createdAt":"2025-07-21T20:17:24Z","closedAt":"2025-08-09T16:22:04Z","state":"CLOSED","commentCount":0}],"topPullRequests":[{"id":"PR_kwDOMT5cIs6i54EL","title":"fix: (project-starter) replace mock.module with spyOn for consistent logger testing","author":"yungalgo","number":5748,"body":"$4","repository":"elizaos/eliza","createdAt":"2025-08-09T22:43:19Z","mergedAt":"2025-08-11T03:28:45Z","additions":38,"deletions":57},{"id":"PR_kwDOMT5cIs6io9Oe","title":"allow iframes when web ui is enabled in production","author":"wookosh","number":5735,"body":"$5","repository":"elizaos/eliza","createdAt":"2025-08-07T18:24:37Z","mergedAt":"2025-08-09T02:07:49Z","additions":1,"deletions":1}],"detailedContributorSummaries":{"ChristopherTrimboli":"ChristopherTrimboli: Focused on bugfix work, contributing 1 commit that modified 1 file with minimal changes (+1/-1 lines), and provided 1 approval review.","yungalgo":"yungalgo: Focused on refactoring and bug fixes, specifically addressing a test-related issue in elizaos/eliza via PR #5748, which involved modifying 5 test files."}},"summaryContent":"$6","className":"self-end sm:self-start"}]]}],"$L7","$L8","$L9"]}]}],["$La","$Lb","$Lc"],"$Ld"]}],"loading":null,"isPartial":false}
+7:["$","div",null,{"className":"mb-6","children":["$","div",null,{"className":"flex items-center justify-between","children":[[["$","$Le",null,{"href":"/summary/day/2025-08-08","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left mr-2 h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"children":"Previous"}],false],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$Le",null,{"href":"/summary/day/2025-08-08","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Previous"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]],["$","div",null,{"className":"flex flex-col items-center","children":[["$","div",null,{"className":"text-sm font-medium text-gray-500","children":["Daily"," Summary"]}],["$","time",null,{"dateTime":"2025-08-09","className":"text-md font-bold","children":"Aug 9, 2025"}]]}],[["$","$Le",null,{"href":"/summary/day/2025-08-10","children":[false,["$","span",null,{"children":"Next"}],["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right ml-2 h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}]],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$Le",null,{"href":"/summary/day/2025-08-10","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Next"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]]]}]}]
+10:T6d8,## Description
+
+This PR fixes failing component tests in the project-starter template by replacing `mock.module` with `spyOn` for logger mocking.
+
+## Problem
+
+The project-starter template had 3 test files using `mock.module('@elizaos/core')` which completely replaced the logger module, breaking Pino's structured logging behavior. This caused tests to fail when expecting structured log calls like:
+
+```typescript
+logger.info({ keys: Object.keys(params) }, 'MESSAGE_RECEIVED param keys');
+```
+
+## Solution
+
+Replace `mock.module` with `spyOn` in the following files:
+- `src/__tests__/events.test.ts`
+- `src/__tests__/error-handling.test.ts`
+- `src/__tests__/config.test.ts`
+
+This aligns with the testing approach used in all other starter templates and preserves the original logger behavior while still allowing test assertions.
+
+## Testing
+
+- ✅ All component tests now pass (`elizaos test --type component`)
+- ✅ Verified consistency across all starter templates
+- ✅ No behavior changes to the actual plugin code
+
+## Impact
+
+This is a test-only fix with no impact on runtime behavior. It ensures developers creating new projects with `elizaos create` will have all tests passing out of the box (as a follow-up to PR #5705 )
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+* **Tests**
+  * Updated test setup to use spies on logger methods instead of full module mocks, simplifying logger interception during testing.
+  * Enhanced event handler tests to verify structured logging calls with specific object formats.
+  * Improved clarity and maintainability of logger-related test assertions.
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->11:T4fc,# Risks
+
+- Low: Allows iframes from self if web ui is enabled in production.
+
+# Background
+
+Currently in production, any panels exposed by plugins are blocked. This is because plugin panels are exposed using an iframe. with frame-src = 'none' these panels do not work. 
+
+If the Web UI is enabled, the admin needs iframes to expose panels provided by plugins. using frame-src = 'self' allows iframes only from the same domain. 
+
+## What does this PR do?
+
+- This PR checks if the web ui is enabled in production, and if it is, allow iframes to come from self to unblock plugin panels.
+
+## Why are we doing this? Any context or related work?
+- Obviously if a user has explicitly enabled the web ui using `ELIZA_UI_ENABLE` they want the web ui exposed and if they want the ui exposed, they will also implicitly want all their plugins to work as well. 
+
+# Documentation changes needed?
+
+- no documentation changes required
+
+# Testing
+
+## Where should a reviewer start?
+
+## Detailed testing steps
+
+1) in your `.env` file, set the following:
+NODE_ENV=production
+ELIZA_UI_ENABLE=true
+
+2) install any plugin that exposes a panel in the admin such as `@elizaos/plugin-knowledge`
+3) Observe that the panel is accessible
+
+
+## Discord username
+wookosh
+8:["$","div",null,{"className":"mb-8 space-y-6","children":[["$","$Lf",null,{"metrics":{"date":"2025-08-09","interval":{"intervalStart":"$D2025-08-09T00:00:00.000Z","intervalEnd":"$D2025-08-10T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":1,"merged":1,"total":2},"issues":{"new":0,"closed":1,"total":1},"activeContributors":5,"codeChanges":{"additions":1,"deletions":1,"files":1,"commitCount":9},"topContributors":[{"username":"yungalgo","avatarUrl":"https://avatars.githubusercontent.com/u/113615973?u=92e0f29f7e2fbb8ce46ed13c51f692ca803de02d&v=4","totalScore":32.424522287201754,"prScore":32.08452228720175,"issueScore":0,"reviewScore":0,"commentScore":0.33999999999999997,"summary":"yungalgo: Focused on refactoring and bug fixes, specifically addressing a test-related issue in elizaos/eliza via PR #5748, which involved modifying 5 test files."},{"username":"ChristopherTrimboli","avatarUrl":"https://avatars.githubusercontent.com/u/27584221?u=de148a498b5af814e037c2975112fadd09df743f&v=4","totalScore":5,"prScore":0,"issueScore":0,"reviewScore":5,"commentScore":0,"summary":"ChristopherTrimboli: Focused on bugfix work, contributing 1 commit that modified 1 file with minimal changes (+1/-1 lines), and provided 1 approval review."}],"focusAreas":[{"area":"server","count":1}],"topIssues":[{"id":"I_kwDOMT5cIs7BtcsO","title":"Add MCP plugin docs","author":"linear","number":5654,"repository":"elizaos/eliza","body":"","createdAt":"2025-07-21T20:17:24Z","closedAt":"2025-08-09T16:22:04Z","state":"CLOSED","commentCount":0}],"topPullRequests":[{"id":"PR_kwDOMT5cIs6i54EL","title":"fix: (project-starter) replace mock.module with spyOn for consistent logger testing","author":"yungalgo","number":5748,"body":"$10","repository":"elizaos/eliza","createdAt":"2025-08-09T22:43:19Z","mergedAt":"2025-08-11T03:28:45Z","additions":38,"deletions":57},{"id":"PR_kwDOMT5cIs6io9Oe","title":"allow iframes when web ui is enabled in production","author":"wookosh","number":5735,"body":"$11","repository":"elizaos/eliza","createdAt":"2025-08-07T18:24:37Z","mergedAt":"2025-08-09T02:07:49Z","additions":1,"deletions":1}],"detailedContributorSummaries":{"ChristopherTrimboli":"ChristopherTrimboli: Focused on bugfix work, contributing 1 commit that modified 1 file with minimal changes (+1/-1 lines), and provided 1 approval review.","yungalgo":"yungalgo: Focused on refactoring and bug fixes, specifically addressing a test-related issue in elizaos/eliza via PR #5748, which involved modifying 5 test files."}}}],"$L12"]}]
+9:["$","div",null,{"className":"prose prose-sm mx-auto mt-8 dark:prose-invert sm:prose lg:prose-lg xl:prose-xl","children":[["$","p","p-0",{"children":["On Aug 9, 2025, the ElizaOS project focused on a critical security enhancement in the ",["$","code","code-0",{"children":"eliza"}]," repository, enabling iframes for the web UI in production to support plugin panels, alongside improvements to logger testing consistency. An ongoing issue regarding model download failures received a new comment, indicating a potential access problem with the hosted model file."]}],"\n",["$","h2","h2-0",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"🚨 Needs Attention","position":{"start":{"line":3,"column":4,"offset":377},"end":{"line":3,"column":22,"offset":395}}}],"position":{"start":{"line":3,"column":1,"offset":374},"end":{"line":3,"column":22,"offset":395}}},"children":"🚨 Needs Attention"}],"\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"Urgent Discussions"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/2623","children":"elizaos/eliza#2623"}],": The \"Cannot start, stuck downloading fast-bge-small-en-v1.5 model\" issue received a new comment suggesting a 403 error with the model's Google Cloud storage link, requiring investigation into the hosted file's accessibility."]}],"\n"]}],"\n"]}],"\n"]}],"\n",["$","h2","h2-1",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"✅ Completed Work","position":{"start":{"line":7,"column":4,"offset":725},"end":{"line":7,"column":20,"offset":741}}}],"position":{"start":{"line":7,"column":1,"offset":722},"end":{"line":7,"column":20,"offset":741}}},"children":"✅ Completed Work"}],"\n",["$","ul","ul-1",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"Web UI Security & Plugin Support"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["Enabled iframes for the web UI in production to support plugin panels, addressing a blocking issue. ",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5735","children":"elizaos/eliza#5735"}]]}],"\n"]}],"\n"]}],"\n",["$","li","li-1",{"children":[["$","strong","strong-0",{"children":"Documentation & Issue Resolution"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["Closed the issue concerning the addition of documentation for the MCP plugin. ",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/5654","children":"elizaos/eliza#5654"}]]}],"\n"]}],"\n"]}],"\n"]}],"\n",["$","h2","h2-2",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"🏗️ Work in Progress","position":{"start":{"line":13,"column":4,"offset":1148},"end":{"line":13,"column":24,"offset":1168}}}],"position":{"start":{"line":13,"column":1,"offset":1145},"end":{"line":13,"column":24,"offset":1168}}},"children":"🏗️ Work in Progress"}],"\n",["$","ul","ul-2",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"New Pull Requests"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"elizaos/eliza"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5748","children":"elizaos/eliza#5748"}],": Fixes an issue in the project-starter by replacing ",["$","code","code-0",{"children":"mock.module"}]," with ",["$","code","code-1",{"children":"spyOn"}]," for more consistent logger testing."]}],"\n"]}],"\n"]}],"\n"]}],"\n"]}],"\n",["$","li","li-1",{"children":[["$","strong","strong-0",{"children":"Active Discussions"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/2623","children":"elizaos/eliza#2623"}],": Ongoing discussion about model download failures, with recent comments pointing to potential Google Cloud storage access issues."]}],"\n"]}],"\n"]}],"\n"]}],"\n",["$","h2","h2-3",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"🐞 Issue Triage","position":{"start":{"line":20,"column":4,"offset":1642},"end":{"line":20,"column":19,"offset":1657}}}],"position":{"start":{"line":20,"column":1,"offset":1639},"end":{"line":20,"column":19,"offset":1657}}},"children":"🐞 Issue Triage"}],"\n","$L13","\n","$L14","\n","$L15"]}]
+a:["$","script","script-0",{"src":"/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","async":true}]
+b:["$","script","script-1",{"src":"/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","async":true}]
+c:["$","script","script-2",{"src":"/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js","async":true}]
+d:["$","$L16",null,{"children":["$","$17",null,{"name":"Next.MetadataOutlet","children":"$@18"}]}]
+12:["$","div",null,{"className":"rounded-lg border bg-card text-card-foreground shadow-sm","children":[["$","div",null,{"className":"flex flex-col space-y-1.5 p-6 py-4","children":["$","div",null,{"className":"tracking-tight text-sm font-medium","children":["$undefined","Code Changes"]}]}],["$","div",null,{"className":"p-6 pt-0","children":["$","div",null,{"className":"grid grid-cols-2 gap-4 md:grid-cols-4","children":[["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-git-commit-vertical h-5 w-5","aria-hidden":"true","children":[["$","path","1holv5",{"d":"M12 3v6"}],["$","circle","1v7zrd",{"cx":"12","cy":"12","r":"3"}],["$","path","a9ows0",{"d":"M12 15v6"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":9}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Commits"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-file-code h-5 w-5","aria-hidden":"true","children":[["$","path","1oefj6",{"d":"M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"}],["$","path","wfsgrz",{"d":"M14 2v5a1 1 0 0 0 1 1h5"}],["$","path","1tg20x",{"d":"M10 12.5 8 15l2 2.5"}],["$","path","yinavb",{"d":"m14 12.5 2 2.5-2 2.5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":1}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Files Changed"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-green-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-up h-5 w-5 text-green-500","aria-hidden":"true","children":[["$","path","hav0vg",{"d":"m5 12 7-7 7 7"}],["$","path","x0mq9r",{"d":"M12 19V5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-green-500","children":"+1"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Added"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-red-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-down h-5 w-5 text-red-500","aria-hidden":"true","children":[["$","path","s699le",{"d":"M12 5v14"}],["$","path","1idqje",{"d":"m19 12-7 7-7-7"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-red-500","children":"-1"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Deleted"}]]}]]}]]}]}]]}]
+13:["$","ul","ul-3",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"elizaos/eliza"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"Closed Issues"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/5654","children":"elizaos/eliza#5654"}],": Documentation for MCP Plugin."]}],"\n"]}],"\n"]}],"\n"]}],"\n"]}],"\n"]}]
+14:["$","h2","h2-4",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"✨ Contributor Spotlight","position":{"start":{"line":25,"column":4,"offset":1816},"end":{"line":25,"column":27,"offset":1839}}}],"position":{"start":{"line":25,"column":1,"offset":1813},"end":{"line":25,"column":27,"offset":1839}}},"children":"✨ Contributor Spotlight"}]
+15:["$","ul","ul-4",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"fortran01"}],": Provided a crucial update on ",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/2623","children":"elizaos/eliza#2623"}],", identifying a potential 403 error with the model's Google Cloud storage link, shifting the focus of the investigation."]}],"\n"]}]
+18:null

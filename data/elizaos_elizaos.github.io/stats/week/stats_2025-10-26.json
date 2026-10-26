@@ -1,0 +1,210 @@
+{
+  "interval": {
+    "intervalStart": "2025-10-26T00:00:00.000Z",
+    "intervalEnd": "2025-11-02T00:00:00.000Z",
+    "intervalType": "week"
+  },
+  "repository": "elizaos/elizaos.github.io",
+  "overview": "From 2025-10-26 to 2025-11-02, elizaos/elizaos.github.io had 0 new PRs (2 merged), 1 new issues, and 5 active contributors.",
+  "topIssues": [
+    {
+      "id": "I_kwDONNAI987U7VpQ",
+      "title": "Weekly Summary on profiles displaying incorrect week + date",
+      "author": "Vianvolaeus",
+      "number": 168,
+      "repository": "elizaos/elizaos.github.io",
+      "body": "Looks like most Weekly Summaries on the leaderboard at stuck on week dated 13th-19th July 2025, though there are [some exceptions](https://elizaos.github.io/profile/madjin), where the date is different. Either way, appears to be incorrect range / date. ",
+      "createdAt": "2025-10-30T20:05:59Z",
+      "closedAt": null,
+      "state": "OPEN",
+      "commentCount": 1
+    }
+  ],
+  "topPRs": [
+    {
+      "id": "PR_kwDONNAI986u8BEF",
+      "title": "feat: Implement MVP Badge System for Contributor Achievements",
+      "author": "madjin",
+      "number": 161,
+      "body": "## Overview\n\nImplements a minimal, efficient badge/achievement system with **5 badge types** across **3 tier levels** (beginner/elite/legend). Designed with DRY and YAGNI principles to minimize code overhead (~370 lines vs 2000+ for alternative approaches).\n\n## Badge Types\n\n- **Level Milestones**: Beginner (10), Elite (30), Legend (50)\n- **Activity Streaks**: 7, 30, 60 consecutive days\n- **PR Master**: 5, 25, 100 merged PRs\n- **Bug Hunter**: 3, 15, 50 bug fixes\n- **Review Champion**: 10, 50, 200 code reviews\n\n## Implementation Approach\n\n### ✅ Chosen: Ultra-Minimal Strategy (~370 LOC)\n\n**Key Decisions:**\n- **On-demand calculation** - No progress storage, reuses existing queries\n- **TypeScript constants** - Badge definitions in code (no DB table needed)\n- **Component reuse** - Extended `SkillCard` with badge mode prop\n- **Highest tier only** - UNIQUE DB constraint prevents duplicates\n- **Parallel to tags** - Separate concept but follows similar patterns\n\n**Benefits:**\n- ✅ Minimal maintenance surface area\n- ✅ Zero storage overhead for progress tracking\n- ✅ Maximum reuse of existing infrastructure\n- ✅ Fast to implement and validate\n\n### 🔄 Alternative Strategies Considered\n\n**1. Moderate Approach (~600 LOC)**\n- Badge definitions stored in database\n- Separate evaluator functions per badge type\n- Progress calculation helper functions\n- Badge detail modal component\n\n*Trade-off:* More extensible but violates YAGNI since badge requirements unlikely to change frequently.\n\n**2. Config-Driven Approach (~800 LOC)**\n- Badge requirements in `pipeline.config.ts` like scoring rules\n- Generic rule engine evaluates any badge from config\n- Admin API to modify requirements without code changes\n\n*Trade-off:* Maximum flexibility but significant complexity increase. Only needed if requirements change often (they won't).\n\n## Technical Details\n\n### Database\n- New `user_badges` table with 7 columns\n- UNIQUE constraint on `(username, badgeType)` enforces highest tier only\n- Foreign key to users with CASCADE delete\n- Migration: `drizzle/0013_add_user_badges.sql`\n\n### Core Logic (3 files, 550 lines)\n- `src/lib/badges/types.ts` - Badge definitions with emoji icons & colors\n- `src/lib/badges/checker.ts` - Eligibility checking (reuses 5 existing query functions)\n- `src/lib/badges/award.ts` - Award/upgrade logic with automatic deduplication\n\n### Pipeline Integration\n- New `processContributorBadges` step in contributor pipeline\n- Runs after tag and score calculation\n- Parallel processing for all contributors\n- ~20 lines added to existing pipeline\n\n### Frontend\n- Extended `SkillCard` component with `mode=\"badge\"` prop\n- New \"Achievements\" section in user profile pages\n- Trophy icon and badge count display\n- Tooltip shows earned date and description\n\n## Trust & Anti-Gaming\n\n- ✅ Only tracks **whitelisted repositories** (24 repos)\n- ✅ Merged PRs require **maintainer approval**\n- ✅ Bug labels set by **maintainers**\n- ✅ Streak requires **sustained effort** (no backdating possible)\n- ✅ All thresholds based on **actual contributor distribution**\n\n## Testing\n\n✅ TypeScript compilation passes  \n✅ ESLint passes (no new warnings)  \n✅ Database schema validated  \n✅ Pipeline integration tested  \n✅ UI components render correctly\n\n## Usage\n\nAfter merging:\n1. Run migration: `bun run db:migrate`\n2. Process contributors: `bun run pipeline process`\n3. Build site: `bun run build`\n4. Badges appear on user profile pages\n\n## Files Changed\n\n**Created (4 files):**\n- `drizzle/0013_add_user_badges.sql`\n- `src/lib/badges/types.ts`\n- `src/lib/badges/checker.ts`\n- `src/lib/badges/award.ts`\n\n**Modified (6 files):**\n- `src/lib/data/schema.ts` - Added userBadges table\n- `src/lib/pipelines/contributors/index.ts` - Badge processing step\n- `src/app/profile/[username]/queries.ts` - Badge fetching query\n- `src/app/profile/[username]/page.tsx` - Pass badges to component\n- `src/app/profile/[username]/components/UserProfile.tsx` - Achievements section\n- `src/components/skill-card.tsx` - Badge display mode\n\n---\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)",
+      "repository": "elizaos/elizaos.github.io",
+      "createdAt": "2025-10-21T22:06:16Z",
+      "mergedAt": "2025-10-27T19:04:12Z",
+      "additions": 3911,
+      "deletions": 10
+    },
+    {
+      "id": "PR_kwDONNAI986ue32W",
+      "title": "feat: Add adaptive rate limiting with low-volume optimization",
+      "author": "madjin",
+      "number": 160,
+      "body": "## Summary\n\nThis PR implements **adaptive rate limiting with low-volume optimization** for GitHub API operations, providing significant performance improvements for high-volume repositories while maintaining zero overhead for typical workloads.\n\n### Key Features\n\n1. **Adaptive Concurrency Manager** - Dynamically adjusts concurrent operations (3-8) based on rate limit health\n2. **Enhanced Rate Limit Detection** - Distinguishes primary vs secondary rate limits for better error handling\n3. **Low-Volume Optimization** - Batch threshold (default 50 items) prevents overhead on small batches\n4. **Production-Tested** - Validated with 14 Optimism repos (283 items/week)\n\n### Performance Impact\n\n**High-volume repos (Optimism - 283 items/week)**:\n- Actual results: **8 minutes** (vs projected 20 minutes with static concurrency)\n- Performance improvement: **60% faster**\n\n**Low-volume repos (ElizaOS - 63 items/week)**:\n- No change: **4-5 minutes** (batch threshold prevents overhead)\n- Performance impact: **Zero overhead**\n\n### Code Changes\n\n- **Net change**: +195 lines (407 additions, 212 deletions)\n- **Files modified**: 5\n  - `src/lib/data/github.ts`: Core adaptive system (+134 net)\n  - `src/lib/pipelines/types.ts`: Batch threshold integration (+49 net)\n  - `src/lib/pipelines/ingest/index.ts`: Enable adaptive (+3 net)\n  - `config/pipeline.config.ts`: Testing config (+10 net)\n  - `cli/analyze-pipeline.ts`: Simplified ingestion (-1 net)\n\n### Design Decisions\n\n**Removed YAGNI features** (33% reduction from initial implementation):\n- API cost estimation (~80 lines) - Token bucket already prevents rate limit issues\n- Graceful shutdown (~26 lines) - Database writes are transactional, re-runs skip processed items\n- Unused tracking code (~10 lines) - Dead code cleanup\n\n**Retained core features**:\n- AdaptiveConcurrencyManager class (~48 lines) - Proven 60% improvement\n- Rate limit type detection (~50 lines) - Better error handling\n- Batch threshold logic (~6 lines) - Zero overhead for low volumes\n- Pipeline integration (~58 lines) - Seamless opt-in activation\n\n### Why This Matters\n\nThis PR is **future-proof architecture**:\n- Current ElizaOS workload sees zero overhead (batch threshold optimization)\n- As repo activity grows, adaptive concurrency kicks in automatically\n- No configuration changes needed - works out of the box\n- Opt-in via `adaptiveConcurrency: true` in pipeline config\n\n### Testing\n\nAll checks pass:\n- ✅ TypeScript compilation (`bunx tsc --noEmit`)\n- ✅ ESLint checks (no new warnings)\n- ✅ Production validated (14 repos, 283 items/week, 60% faster)\n\n### Related\n\n- Resolves issue #159 (Adaptive Concurrency for High-Volume Repos)\n- Builds on PR #157 (Token Bucket Rate Limiting)\n- Builds on PR #158 (Enhance Data Ingestion)\n\n---\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>",
+      "repository": "elizaos/elizaos.github.io",
+      "createdAt": "2025-10-19T04:01:48Z",
+      "mergedAt": "2025-10-27T19:03:44Z",
+      "additions": 397,
+      "deletions": 212
+    }
+  ],
+  "codeChanges": {
+    "additions": 4308,
+    "deletions": 222,
+    "files": 20,
+    "commitCount": 2
+  },
+  "completedItems": [
+    {
+      "title": "feat: Add adaptive rate limiting with low-volume optimization",
+      "prNumber": 160,
+      "type": "feature",
+      "body": "## Summary\n\nThis PR implements **adaptive rate limiting with low-volume optimization** for GitHub API operations, providing significant performance improvements for high-volume repositories while maintaining zero overhead for typical worklo",
+      "files": [
+        "cli/analyze-pipeline.ts",
+        "config/pipeline.config.ts",
+        "src/lib/data/github.ts",
+        "src/lib/pipelines/ingest/index.ts",
+        "src/lib/pipelines/types.ts"
+      ]
+    },
+    {
+      "title": "feat: Implement MVP Badge System for Contributor Achievements",
+      "prNumber": 161,
+      "type": "feature",
+      "body": "## Overview\n\nImplements a minimal, efficient badge/achievement system with **5 badge types** across **3 tier levels** (beginner/elite/legend). Designed with DRY and YAGNI principles to minimize code overhead (~370 lines vs 2000+ for alterna",
+      "files": [
+        "drizzle/0013_add_user_badges.sql",
+        "drizzle/meta/0013_snapshot.json",
+        "drizzle/meta/_journal.json",
+        "src/app/profile/[username]/components/UserProfile.tsx",
+        "src/app/profile/[username]/page.tsx",
+        "src/app/profile/[username]/queries.ts",
+        "src/components/skill-card.tsx",
+        "src/lib/badges/award.ts",
+        "src/lib/badges/checker.ts",
+        "src/lib/badges/types.ts",
+        "src/lib/data/schema.ts",
+        "src/lib/pipelines/contributors/index.ts",
+        "src/app/leaderboard/queries.ts",
+        "src/components/leaderboard-card.tsx",
+        "src/components/leaderboard.tsx"
+      ]
+    }
+  ],
+  "topContributors": [
+    {
+      "username": "standujar",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/16385918?u=718bdcd1585be8447bdfffb8c11ce249baa7532d&v=4",
+      "totalScore": 404.1071674113155,
+      "prScore": 403.3671674113155,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0.74,
+      "summary": "standujar: This week, standujar drove significant feature development, most notably implementing a unified messaging API (`eliza#6095`) and adding critical multi-tenancy support with PostgreSQL Row-Level Security in `eliza#6101`, a complex change with over 2700 lines added. They also shipped several important bug fixes for server stability and agent persistence (`eliza#6105`, `eliza#6106`) and enhanced the Solana plugin with wallet improvements (`plugin-solana#21`). Their work shows a primary focus on new feature implementation, complemented by refactoring and bug fixes across the codebase."
+    },
+    {
+      "username": "wtfsayo",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/82053242?u=98209a1f10456f42d4d2fa71db4d5bf4a672cbc3&v=4",
+      "totalScore": 186.46648763882092,
+      "prScore": 186.06648763882092,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0.4,
+      "summary": "wtfsayo: This week, wtfsayo focused on implementing a new Jobs API for one-off agent messaging in the `elizaos/eliza` repository, merging a significant feature PR (#6098) that added over 5,300 lines of code. They also updated dependencies in the `elizaos-plugins/plugin-mcp` repository (#18) and have two additional PRs open to extend the new Jobs API. Their work was primarily concentrated on feature development, bugfixes, and refactoring across code, tests, and documentation."
+    },
+    {
+      "username": "odilitime",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/16395496?u=c9bac48e632aae594a0d85aaf9e9c9c69b674d8b&v=4",
+      "totalScore": 159.2472026483995,
+      "prScore": 159.2472026483995,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "odilitime: Made substantial progress on new features and refactors across multiple plugins, opening 6 pull requests with a significant volume of changes (+5981/-1855 lines). This work includes major enhancements like adding a Discord slash command interface (elizaos-plugins/plugin-discord#23) and refactoring the transaction system in the Solana plugin (elizaos-plugins/plugin-solana#24). Their efforts were concentrated on feature development and code improvements for the Anthropic, Discord, EVM, and Solana plugins."
+    },
+    {
+      "username": "0xbbjoker",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/54844437?u=90fe1762420de6ad493a1c1582f1f70c0d87d8e2&v=4",
+      "totalScore": 133.9273318763598,
+      "prScore": 123.92733187635982,
+      "issueScore": 0,
+      "reviewScore": 10,
+      "commentScore": 0,
+      "summary": "0xbbjoker: Focused on expanding plugin capabilities this week, merging three PRs that delivered new features and a bug fix. They notably added text embedding model support in a significant PR for the OpenRouter plugin (plugin-openrouter#17) and implemented a static provider for listing documents in the knowledge plugin (plugin-knowledge#45). Their work, which also included two peer review approvals, was primarily centered on bug fixes and feature development, with a secondary focus on documentation."
+    },
+    {
+      "username": "ChristopherTrimboli",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/27584221?u=0d816ce1dcdea8f925aba18bb710153d4a87a719&v=4",
+      "totalScore": 69.5437738965761,
+      "prScore": 59.5437738965761,
+      "issueScore": 0,
+      "reviewScore": 10,
+      "commentScore": 0,
+      "summary": "ChristopherTrimboli: Focused on expanding command-line interface capabilities by implementing a new login command for elizaos. This significant feature was delivered in a single large pull request (elizaos/eliza#6100), which included over 1000 lines of new code and associated tests. In addition to this primary contribution, they also supported the team by reviewing and approving two other pull requests."
+    },
+    {
+      "username": "yungalgo",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/113615973?u=92e0f29f7e2fbb8ce46ed13c51f692ca803de02d&v=4",
+      "totalScore": 43.93167012830146,
+      "prScore": 43.93167012830146,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "yungalgo: Focused on enhancing project documentation this week, merging two pull requests in `elizaos/docs`. Their most notable contribution was adding a community call-to-action (elizaos/docs#78) to drive user engagement, with work primarily touching documentation and configuration files."
+    },
+    {
+      "username": "tcm390",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/60634884?u=c6c41679b8322eaa0c81f72e0b4ed95e80f0ac16&v=4",
+      "totalScore": 21.884147180559943,
+      "prScore": 21.884147180559943,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "tcm390: Made a targeted contribution to the elizaos/eliza repository this week, merging a pull request (elizaos/eliza#6104) to allow for custom options."
+    },
+    {
+      "username": "github-advanced-security",
+      "avatarUrl": "https://avatars.githubusercontent.com/in/57789?v=4",
+      "totalScore": 18,
+      "prScore": 0,
+      "issueScore": 0,
+      "reviewScore": 18,
+      "commentScore": 0,
+      "summary": "github-advanced-security: No activity this week."
+    },
+    {
+      "username": "ai16x402",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/241517257?u=db5e37fbc5cfc2fc78bd2de767f7235704dc2b0f&v=4",
+      "totalScore": 6.476947636399186,
+      "prScore": 6.476947636399186,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "ai16x402: Focused on expanding the plugin registry this week, opening a pull request to add the new 'kolscan' Solana trading plugin (elizaos-plugins/registry#237). This work consisted of an update to a configuration file."
+    },
+    {
+      "username": "linear",
+      "avatarUrl": "https://avatars.githubusercontent.com/in/20150?v=4",
+      "totalScore": 4.3,
+      "prScore": 0,
+      "issueScore": 4.1,
+      "reviewScore": 0,
+      "commentScore": 0.2,
+      "summary": "linear: Focused on project planning this week, creating two issues in elizaos/eliza to define a UI update for social links (#6089) and a new unified messaging API (#6096)."
+    },
+    {
+      "username": "Vianvolaeus",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/80061436?u=e8f6a2f503fa169946d1b92aefa5dedaafb388a9&v=4",
+      "totalScore": 2,
+      "prScore": 0,
+      "issueScore": 2,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "Vianvolaeus: This week, Vianvolaeus contributed by identifying a bug in the weekly summary display, opening issue elizaos/elizaos.github.io#168 to report that profiles were showing an incorrect week and date."
+    }
+  ],
+  "newPRs": 0,
+  "mergedPRs": 2,
+  "newIssues": 1,
+  "closedIssues": 0,
+  "activeContributors": 5
+}

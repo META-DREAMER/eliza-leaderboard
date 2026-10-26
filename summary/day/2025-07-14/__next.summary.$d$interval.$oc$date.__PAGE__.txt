@@ -1,0 +1,768 @@
+1:"$Sreact.fragment"
+2:I[4817319,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"IntervalSelector"]
+3:I[6998365,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"LlmCopyButton"]
+12:I[3642796,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],""]
+13:I[3238488,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"StatCardsDisplay"]
+25:I[4261541,["/eliza-leaderboard/_next/static/chunks/b33bcbdcb3f88354.js","/eliza-leaderboard/_next/static/chunks/8ba59154b6704904.js"],"OutletBoundary"]
+26:"$Sreact.suspense"
+4:T586,I’m working with two agents in Eliza:
+
+-   **Blockchain Agent** – handles blockchain transactions.
+-   **Support Agent** – a RAG-based agent for answering support queries.
+
+### 🧠 Use Case
+
+A user starts a conversation with the blockchain agent. At some point, they ask a question the blockchain agent can’t answer, but the support agent can.
+
+I want the blockchain agent to **pass the question internally to the support agent**, get the response, and send it back to the user — seamlessly.
+
+### 🧪 What I’ve Tried
+
+Previously, Eliza supported an endpoint where I could send a message to a specific agent via `agentId` and get a response. That endpoint seems to no longer exist.
+
+Here’s what I tried instead:
+
+1.  Created a server and added both agents to it.
+2.  Created a channel in that server and added both agents to the channel.
+3.  Used the endpoint:
+    `/api/messaging/central-channels/:channelId/messages`
+    to forward the message.
+
+### ⚠️ Issue
+
+-   The support agent takes time to respond.
+-   To check the response, I use:
+    `/api/messaging/central-channels/:channelId/messages`
+    But this requires polling, which isn’t reliable — sometimes the agent never responds or the polling misses it.
+
+### ❓ Question
+
+Is there a way to forward a message from one agent to another and **get a reliable response** without polling? Maybe a webhook, callback, or a newer approach?5:T8fa,## Summary
+
+This PR addresses all critical issues identified in the review of PR #5505 "Add new types".
+
+## Changes Made
+
+### 🧪 Test Coverage
+- Added comprehensive tests for `asUUID()` function (19 test cases)
+- Added tests for all planning types (15 test cases)
+- Added tests for all scenario types (18 test cases)
+- All tests passing with 100% coverage of new code
+
+### 🔒 Type Safety Improvements
+- Replaced 26 `any` types with specific TypeScript interfaces:
+  - 12 instances in `planning.ts`
+  - 14 instances in `scenario.ts`
+- Fixed mixed import patterns in `planning.ts` (dynamic imports → direct imports)
+- Renamed `ActionResult` → `PlanActionResult` and `ActionContext` → `PlanActionContext` to avoid conflicts
+
+### 🛡️ Security Enhancements
+- Added `scenario-validation.ts` with comprehensive input validation:
+  - Path traversal prevention
+  - Git URL validation
+  - API endpoint validation
+  - Command injection prevention
+  - Environment variable sanitization
+  - Command whitelisting
+  - Sandbox configuration
+
+### 🚨 Error Handling
+- Added custom error classes for better error handling:
+  - `PlanningError`, `PlanValidationError`, `PlanExecutionError`, etc.
+  - `ScenarioError`, `ScenarioValidationError`, `ScenarioExecutionError`, etc.
+  - Proper error codes and type guards
+
+### 📝 Documentation
+- Improved UUID validation with support for all UUID versions (v1-v5)
+- Added comprehensive JSDoc documentation
+- Added `isValidUUID()` helper function
+
+### 🐛 Bug Fixes
+- Fixed circular imports from `@elizaos/core` within the core package
+- Fixed TypeScript build errors with proper type definitions
+- Maintained backward compatibility with existing code
+
+## Testing
+
+```bash
+# All tests pass
+bun test src/types/__tests__/
+# ✓ 52 tests pass
+
+# Build succeeds
+bun run build:core
+# ✓ Build successful
+
+# Linting passes
+bun run lint
+# ✓ No issues
+```
+
+## Important Notes
+
+- **Original branch fails to build** due to ActionContext/ActionResult naming conflicts
+- **Original branch has NO tests** for any of the new types
+- The UUID types in `specs/v1` and `specs/v2` are intentionally separate for API versioning
+- No changes to `messaging.ts` as `[key: string]: unknown` is appropriate there
+- All changes are backward compatible
+
+Fixes issues raised in #55056:T4ba,**Summary**
+
+This PR fixes the CLI dependency loading issue for plugins by implementing comprehensive improvements to the dependency resolution system.
+
+**Changes Made:**
+
+1. **Recursive Dependency Collection**: Created `collectAllDependencies()` function that recursively loads all plugin dependencies, not just top-level ones
+2. **Proper Deduplication**: Dependencies are now deduplicated across all plugins using Sets instead of just inline extraction
+3. **Consistent Test Dependencies**: Test dependencies are now loaded consistently for all plugins in test mode, not just object-passed plugins
+4. **Better Error Handling**: Enhanced logging for missing dependencies with better tracking
+5. **Comprehensive Test Coverage**: Added extensive test suite covering all dependency scenarios
+
+**Technical Details:**
+- Fixed issue where dependencies were only extracted from object-passed plugins
+- Ensured recursive dependency loading (dependencies of dependencies)
+- Added proper deduplication using Sets to prevent duplicate plugin loading
+- Improved test dependency handling for consistent behavior across all plugin types
+
+Closes #4997
+
+Generated with [Claude Code](https://claude.ai/code)7:T8fa,<!-- Use this template by filling in information and copying and pasting relevant items out of the HTML comments. -->
+
+# Relates to
+
+<!-- LINK TO ISSUE OR TICKET -->
+
+<!-- This risks section must be filled out before the final review and merge. -->
+
+# Risks
+
+<!--
+Low, medium, large. List what kind of risks and what could be affected.
+-->
+
+# Background
+
+## What does this PR do?
+
+## What kind of change is this?
+
+<!--
+Bug fixes (non-breaking change which fixes an issue)
+Improvements (misc. changes to existing features)
+Features (non-breaking change which adds functionality)
+Updates (new versions of included code)
+-->
+
+<!-- This "Why" section is most relevant if there are no linked issues explaining why. If there is a related issue, it might make sense to skip this why section. -->
+<!--
+## Why are we doing this? Any context or related work?
+-->
+
+# Documentation changes needed?
+
+<!--
+My changes do not require a change to the project documentation.
+My changes require a change to the project documentation.
+If documentation change is needed: I have updated the documentation accordingly.
+-->
+
+<!-- Please show how you tested the PR. This will really help if the PR needs to be retested and probably help the PR get merged quicker. -->
+
+# Testing
+
+## Where should a reviewer start?
+
+## Detailed testing steps
+
+<!--
+None: Automated tests are acceptable.
+-->
+
+<!--
+- As [anon/admin], go to [link]
+  - [do action]
+  - verify [result]
+-->
+
+<!-- If there is a UI change, please include before and after screenshots or videos. This will speed up PRs being merged. It is extra nice to annotate screenshots with arrows or boxes pointing out the differences. -->
+<!--
+## Screenshots
+### Before
+### After
+-->
+
+<!-- If there is anything about the deployment, please make a note. -->
+<!--
+# Deploy Notes
+-->
+
+<!--  Copy and paste command line output. -->
+<!--
+## Database changes
+-->
+
+<!--  Please specify deploy instructions if there is something more than the automated steps. -->
+<!--
+## Deployment instructions
+-->
+
+<!-- If you are on Discord, please join https://discord.gg/ai16z and state your Discord username here for the contributor role and join us in #development-feed -->
+<!--
+## Discord username
+
+-->
+8:Tdbe,```
+<!-- Use this template by filling in information and copying and pasting relevant items out of the HTML comments. -->
+
+# Relates to
+
+<!-- LINK TO ISSUE OR TICKET -->
+N/A
+
+# Risks
+
+<!--
+Low, medium, large. List what kind of risks and what could be affected.
+-->
+Low. This PR only modifies test files, improving the accuracy and coverage of existing tests without affecting production code.
+
+# Background
+
+## What does this PR do?
+This PR fixes the auto-build functionality tests in `packages/cli/tests/commands/start.test.ts`. Previously, these tests incorrectly used the `--help` flag, which caused the `start` command to exit early without executing the main action logic where the auto-build occurs. This PR updates the tests to properly invoke the `start` command, mock the `buildProject` function, and assert on its calls (or lack thereof) under various conditions.
+
+## What kind of change is this?
+
+<!--
+Bug fixes (non-breaking change which fixes an issue)
+Improvements (misc. changes to existing features)
+Features (non-breaking change which adds functionality)
+Updates (new versions of included code)
+-->
+Bug fixes (non-breaking change which fixes an issue)
+
+## Why are we doing this? Any context or related work?
+The original auto-build tests were misleading. By using the `--help` flag, they only validated the help text output and never actually tested the core auto-build execution or its conditional skipping logic (e.g., when `ELIZA_TEST_MODE` is set or when within a monorepo). This fix ensures that the tests accurately reflect the intended behavior of the auto-build feature, providing proper coverage for build execution, conditional skipping, and error handling.
+
+# Documentation changes needed?
+
+<!--
+My changes do not require a change to the project documentation.
+My changes require a change to the project documentation.
+If documentation change is needed: I have updated the documentation accordingly.
+-->
+My changes do not require a change to the project documentation.
+
+# Testing
+
+## Where should a reviewer start?
+`packages/cli/tests/commands/start.test.ts` - specifically the `describe('Auto-build functionality', ...)` block (starting around line 361).
+
+## Detailed testing steps
+
+<!--
+None: Automated tests are acceptable.
+-->
+- Run the CLI tests: `bun test packages/cli/tests/commands/start.test.ts`
+- Verify all tests within the "Auto-build functionality" block pass.
+- Ensure the tests correctly assert:
+    - `buildProject` is called when auto-build should occur.
+    - `buildProject` is NOT called when `ELIZA_TEST_MODE` is set or when in a monorepo.
+    - The command continues execution even if `buildProject` throws an error.
+
+<!--
+- As [anon/admin], go to [link]
+  - [do action]
+  - verify [result]
+-->
+
+<!-- If there is a UI change, please include before and after screenshots or videos. This will speed up PRs being merged. It is extra nice to annotate screenshots with arrows or boxes pointing out the differences. -->
+<!--
+## Screenshots
+### Before
+### After
+-->
+
+<!-- If there is anything about the deployment, please make a note. -->
+<!--
+# Deploy Notes
+-->
+
+<!--  Copy and paste command line output. -->
+<!--
+## Database changes
+-->
+
+<!--  Please specify deploy instructions if there is something more than the automated steps. -->
+<!--
+## Deployment instructions
+-->
+
+<!-- If you are on Discord, please join https://discord.gg/ai16z and state your Discord username here for the contributor role and join us in #development-feed -->
+<!--
+## Discord username
+
+-->
+```9:T695,# Add Mattermost Plugin to Registry
+
+## Plugin Information
+- **Name**: plugin-mattermost
+- **Repository**: https://github.com/bealers/plugin-mattermost
+- **Package**: @elizaos-plugins/plugin-mattermost
+- **Category**: Client
+
+## Description
+Mattermost client plugin for elizaOS enabling AI agent integration with Mattermost chat platforms.
+
+Screenshot attached and [youtube here](https://youtu.be/k4DLMsru2IQ).
+
+## Features
+- Message handling in channels and DMs
+- Thread conversation support
+- File attachment support
+- Auto-channel joining
+- WebSocket real-time communication
+
+## Demo Evidence
+- ✅ Plugin builds successfully
+- ✅ Tests pass
+- ✅ Proper elizaOS integration
+- ✅ Branding assets included
+- ✅ Documentation complete
+
+## Registry Changes
+- Added `@elizaos-plugins/plugin-mattermost` pointing to `github:bealers/plugin-mattermost`
+- Positioned alphabetically in registry
+
+## Installation
+```json
+{
+  "plugins": ["@elizaos-plugins/plugin-mattermost"]
+}
+```
+
+## Checklist
+- [x] Plugin follows elizaOS architecture
+- [x] Includes required branding assets
+- [x] Documentation is complete
+- [x] Tests are passing
+- [x] Proper namespace used in registry
+<img width="1265" alt="Screenshot 2025-07-08 at 17 50 37" src="https://github.com/user-attachments/assets/c22e072a-bbd5-4fed-910e-328e84d2b493" />
+
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+## Summary by CodeRabbit
+
+* **New Features**
+  * Added support for the Mattermost plugin, enabling integration with the "@bealers/plugin-mattermost" from its GitHub repository.
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->a:T1465,On July 14, 2025, ElizaOS development focused on enhancing CLI stability and developer experience in the `eliza` repository with critical bug fixes and core type safety improvements, alongside expanding the plugin registry with the addition of the Mattermost plugin. Discussions continued on persistent issues related to custom plugin callback interference and Twitter client initialization errors across multiple repositories.
+
+## 🚨 Needs Attention 
+- **Urgent Discussions**:
+    - [elizaos/eliza#4947](https://github.com/elizaos/eliza/issues/4947) and [elizaos-plugins/registry#4947](https://github.com/elizaos-plugins/registry/issues/4947): The issue where a custom plugin's callback is replaced by the `ATTACHMENTS` provider requires further input to resolve the conflict and implement the proposed fix.
+    - [elizaos/eliza#31](https://github.com/elizaos/eliza/issues/31) and [elizaos-plugins/registry#31](https://github.com/elizaos-plugins/registry/issues/31): The ongoing Twitter Client Initialization Errors need continued investigation and a definitive solution, especially regarding the feasibility of autonomous Twitter agents and potential API limitations.
+
+## ✅ Completed Work
+- **CLI Stability and Developer Experience Enhancements**:
+    - The `elizaos start` command now automatically builds the project before starting the server, mirroring the `dev` command's behavior, improving the developer workflow ([elizaos/eliza#5504](https://github.com/elizaos/eliza/pull/5504)).
+    - Graceful shutdown for the `elizaos dev` server on `Cmd+C` (SIGINT/SIGTERM) was implemented, preventing orphaned processes and resolving a critical server shutdown issue ([elizaos/eliza#5562](https://github.com/elizaos/eliza/pull/5562), [elizaos/eliza#5559](https://github.com/elizaos/eliza/issues/5559)).
+    - A related fix addressed the usage of the auto-build test flag, contributing to overall CLI robustness ([elizaos/eliza#5581](https://github.com/elizaos/eliza/pull/5581)).
+- **Core Library Robustness and Integration**:
+    - Significant work was done to improve the robustness of the core library by addressing type safety and testing issues, including comprehensive tests for the `asUUID()` function and planning types, and refining error handling ([elizaos/eliza#5580](https://github.com/elizaos/eliza/pull/5580)).
+    - The `llama_local` provider in v1 was mapped to `@elizaos/plugin-ollama`, streamlining provider integration ([elizaos/eliza#5582](https://github.com/elizaos/eliza/pull/5582)).
+- **Plugin Ecosystem Expansion**:
+    - The `plugin-mattermost` was added to the registry, expanding the available plugins within the ElizaOS ecosystem ([elizaos-plugins/registry#188](https://github.com/elizaos-plugins/registry/pull/188)).
+
+## 🏗️ Work in Progress
+- **New Pull Requests**:
+    - **elizaos/eliza**:
+        - [elizaos/eliza#5585](https://github.com/elizaos/eliza/pull/5585) Sync develop into develop devel
+        - [elizaos/eliza#5583](https://github.com/elizaos/eliza/pull/5583) [DRAFT] Docker Infrastructure Enhancement Proposal
+- **Active Discussions**:
+    - **elizaos/eliza**:
+        - [elizaos/eliza#4947](https://github.com/elizaos/eliza/issues/4947) Custom Plugin Callback Interference: Discussion continues on the issue where a custom plugin's callback is getting replaced by the `ATTACHMENTS` provider.
+        - [elizaos/eliza#31](https://github.com/elizaos/eliza/issues/31) Twitter Client Initialization Errors: Users are still reporting issues with Twitter Client Initialization Errors when creating or starting agents using the Twitter plugin.
+    - **elizaos-plugins/registry**:
+        - [elizaos-plugins/registry#4947](https://github.com/elizaos-plugins/registry/issues/4947) Custom Plugin Callback Interference: Discussion continued on a bug where a custom plugin's action callback is being replaced by the `ATTACHMENTS` provider.
+        - [elizaos-plugins/registry#31](https://github.com/elizaos-plugins/registry/issues/31) Twitter Client Initialization Error: Continued reports of the Twitter client initialization error.
+
+## 🐞 Issue Triage
+- **New Issues**:
+    - **elizaos/eliza**:
+        - [elizaos/eliza#5584](https://github.com/elizaos/eliza/issues/5584) Agent-to-Agent Communication Challenges: A new issue was opened regarding forwarding messages between agents without polling, specifically for a Blockchain Agent and a Support Agent.
+- **Closed Issues**:
+    - **elizaos/eliza**:
+        - [elizaos/eliza#5559](https://github.com/elizaos/eliza/issues/5559) CLI Server Shutdown Fix: The issue where `Cmd + C` on the `elizaos dev` server did not kill the server process has been resolved.
+
+## ✨ Contributor Spotlight
+- **tcm390**: Provided a valuable suggestion for debugging the custom plugin callback interference issue in [elizaos/eliza#4947](https://github.com/elizaos/eliza/issues/4947) and [elizaos-plugins/registry#4947](https://github.com/elizaos-plugins/registry/issues/4947).
+- **claude**: Identified the root cause and proposed a fix for the custom plugin callback interference issue in [elizaos/eliza#4947](https://github.com/elizaos/eliza/issues/4947) and [elizaos-plugins/registry#4947](https://github.com/elizaos-plugins/registry/issues/4947).0:{"buildId":"US8XLB_zHXYj_PVAECGcd","rsc":["$","$1","c",{"children":[["$","div",null,{"className":"container mx-auto px-6 py-8 md:px-8","children":["$","div",null,{"className":"mx-auto max-w-4xl","children":[["$","div",null,{"className":"mb-4 flex flex-col justify-between sm:flex-row","children":[["$","$L2",null,{"currentInterval":"day","currentDate":"2025-07-14"}],["$","$L3",null,{"metrics":{"date":"2025-07-14","interval":{"intervalStart":"$D2025-07-14T00:00:00.000Z","intervalEnd":"$D2025-07-15T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":5,"merged":6,"total":8},"issues":{"new":1,"closed":1,"total":2},"activeContributors":8,"codeChanges":{"additions":2276,"deletions":128,"files":19,"commitCount":56},"topContributors":[{"username":"wtfsayo","avatarUrl":"https://avatars.githubusercontent.com/u/82053242?u=98209a1f10456f42d4d2fa71db4d5bf4a672cbc3&v=4","totalScore":96.41040300184847,"prScore":94.11040300184847,"issueScore":2.1,"reviewScore":0,"commentScore":0.2,"summary":null},{"username":"QuasiPlanets","avatarUrl":"https://avatars.githubusercontent.com/u/196568543?u=e9348d1ce7224da005aa0cfd8cbc407cdfbe82ed&v=4","totalScore":27.539891235220416,"prScore":27.539891235220416,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":null},{"username":"tcm390","avatarUrl":"https://avatars.githubusercontent.com/u/60634884?u=c6c41679b8322eaa0c81f72e0b4ed95e80f0ac16&v=4","totalScore":20.756573590279974,"prScore":20.556573590279974,"issueScore":0,"reviewScore":0,"commentScore":0.2,"summary":null},{"username":"bealers","avatarUrl":"https://avatars.githubusercontent.com/u/6403055?u=8c40778251e25b92cdee727056415b6c0d1bcdc5&v=4","totalScore":14.731747238406726,"prScore":14.531747238406727,"issueScore":0,"reviewScore":0,"commentScore":0.2,"summary":null},{"username":"ai16z-demirix","avatarUrl":"https://avatars.githubusercontent.com/u/188117230?u=424cd5b834584b3799da288712b3c4158c8032a1&v=4","totalScore":0.33999999999999997,"prScore":0,"issueScore":0,"reviewScore":0,"commentScore":0.33999999999999997,"summary":null}],"focusAreas":[{"area":"core","count":12},{"area":"cli","count":6},{"area":"client","count":1}],"topIssues":[{"id":"I_kwDOMT5cIs7ATigl","title":"Cmd + C on `eliazos dev` server doesnt kill server process","author":"linear","number":5559,"repository":"elizaos/eliza","body":"","createdAt":"2025-07-13T10:07:38Z","closedAt":"2025-07-14T06:50:47Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7AcXgZ","title":"[via-discord] Forwarding Messages Between Agents Without Polling — Need Help with Agent-to-Agent Communication","author":"wtfsayo","number":5584,"repository":"elizaos/eliza","body":"$4","createdAt":"2025-07-14T12:48:08Z","closedAt":null,"state":"OPEN","commentCount":0}],"topPullRequests":[{"id":"PR_kwDOMT5cIs6evMAO","title":"fix: address type safety and testing issues from PR #5505","author":"wtfsayo","number":5580,"body":"$5","repository":"elizaos/eliza","createdAt":"2025-07-14T06:32:00Z","mergedAt":"2025-07-14T06:33:19Z","additions":1366,"deletions":51},{"id":"PR_kwDOMT5cIs6esNT6","title":"fix: graceful shutdown for dev server on Cmd+C (SIGINT/SIGTERM)","author":"wtfsayo","number":5562,"body":"Fixes issue where Cmd+C on 'elizaos dev' doesn't kill server process\r\n\r\n## Changes\r\n- Added proper signal handling to stop dev server before process exit\r\n- Imported stopServer from server manager for cleanup\r\n- Replaced immediate process.exit with graceful shutdown function\r\n- Added logging for shutdown process and error handling\r\n\r\nCloses #5559\r\n\r\nGenerated with [Claude Code](https://claude.ai/code)","repository":"elizaos/eliza","createdAt":"2025-07-13T16:23:44Z","mergedAt":"2025-07-14T06:50:46Z","additions":439,"deletions":6},{"id":"PR_kwDOMT5cIs6esR3v","title":"fix(plugin-bootstrap): separate provider state from action callbacks to prevent ATTACHMENTS interference","author":"wtfsayo","number":5568,"body":"Fixes issue where custom plugin action callbacks were replaced by ATTACHMENTS provider content.\r\n\r\n## Problem\r\nWhen the LLM includes \"ATTACHMENTS\" in the providers list, the ATTACHMENTS provider runs and modifies the state with formatted text containing \"# Attachments\" header. This modified state is then passed to action callbacks, causing interference.\r\n\r\n## Solution\r\nSeparated provider state composition from action callback processing:\r\n- Created separate `providerState` variable for provider composition\r\n- Actions now use the original clean `state` instead of provider-modified state\r\n- Evaluators use `providerState` to access provider context when needed\r\n\r\nCloses #4947\r\n\r\nGenerated with [Claude Code](https://claude.ai/code)","repository":"elizaos/eliza","createdAt":"2025-07-13T16:51:55Z","mergedAt":null,"additions":362,"deletions":3},{"id":"PR_kwDOMT5cIs6esTYR","title":"fix(cli): improve plugin dependency loading and deduplication","author":"wtfsayo","number":5571,"body":"$6","repository":"elizaos/eliza","createdAt":"2025-07-13T17:03:26Z","mergedAt":null,"additions":303,"deletions":38},{"id":"PR_kwDOMT5cIs6eMR6C","title":"fix: auto-build project on 'elizaos start' command","author":"wtfsayo","number":5504,"body":"## Description\n\nThis PR adds automatic building to the `elizaos start` command, similar to how the `dev` command works.\n\n## Changes\n\n- Add automatic build step before starting the server\n- Skip build for monorepos (similar to dev command behavior)\n- Use clack tasks for better UI feedback with progress indication\n- Suppress build output logs for cleaner experience\n- Update command description to reflect new behavior\n\n## Motivation\n\nPreviously, users had to manually build their project before running `elizaos start`, which was an extra step that could be easily forgotten. This change makes the start command more user-friendly by automatically building the project first.\n\n## Testing\n\n- Tested in project directory: builds automatically before starting\n- Tested in monorepo root: skips build as expected\n- Tested with build failures: continues to start despite build errors\n\nFixes #5497","repository":"elizaos/eliza","createdAt":"2025-07-09T21:19:15Z","mergedAt":"2025-07-14T06:58:25Z","additions":287,"deletions":9},{"id":"PR_kwDOMT5cIs6e3qHv","title":"Sync develop into develop devel","author":"QuasiPlanets","number":5585,"body":"$7","repository":"elizaos/eliza","createdAt":"2025-07-14T20:54:10Z","mergedAt":null,"additions":268,"deletions":71},{"id":"PR_kwDOMT5cIs6evWmT","title":"Fix auto-build test flag usage","author":"wtfsayo","number":5581,"body":"$8","repository":"elizaos/eliza","createdAt":"2025-07-14T06:51:10Z","mergedAt":"2025-07-14T06:51:29Z","additions":182,"deletions":62},{"id":"PR_kwDOMT5cIs6eytdJ","title":"[DRAFT] Docker Infrastructure Enhancement Proposal","author":"bealers","number":5583,"body":"## Docker Infrastructure Enhancement Proposal\r\n\r\nThis PR proposes enhanced Docker infrastructure for elizaOS with optimised builds and streamlined deployment workflows.\r\n\r\n### Key Features\r\n- `elizaos deploy` command for unified deployment operations\r\n- Enhanced `--docker` flags for existing `elizaos dev` and `elizaos start` commands  \r\n- Multi-environment build targets (dev, test, prod, demo)\r\n- Build optimisation strategies and container testing framework\r\n- CI integration and registry deployment options\r\n\r\n### Justification\r\n\r\nAt minimum, there are several low-hanging fruit optimisations available, and we're keeping any new commands namespaced to avoid too much overlap. Once we have a stable and minimised container image, we can start to have fun building clusters for horizontal scaling tests, benchmarking and swarms like the-org.\r\n\r\n### Documentation\r\nSee `docs/docker-infrastructure.md` for complete specification.\r\n\r\n**This is a draft for team review and discussion.**","repository":"elizaos/eliza","createdAt":"2025-07-14T12:18:33Z","mergedAt":null,"additions":171,"deletions":0},{"id":"PR_kwDOMT5cIs6ewqad","title":"chore: provider mapping","author":"tcm390","number":5582,"body":"This PR maps the llama_local provider in v1 to @elizaos/plugin-ollama.","repository":"elizaos/eliza","createdAt":"2025-07-14T09:03:42Z","mergedAt":"2025-07-14T09:04:20Z","additions":1,"deletions":0},{"id":"PR_kwDONkg7v86d-4dW","title":"Add plugin-mattermost to registry","author":"bealers","number":188,"body":"$9","repository":"elizaos-plugins/registry","createdAt":"2025-07-08T17:01:59Z","mergedAt":"2025-07-14T07:20:03Z","additions":1,"deletions":0}],"detailedContributorSummaries":{}},"summaryContent":"$a","className":"self-end sm:self-start"}]]}],"$Lb","$Lc","$Ld"]}]}],["$Le","$Lf","$L10"],"$L11"]}],"loading":null,"isPartial":false}
+b:["$","div",null,{"className":"mb-6","children":["$","div",null,{"className":"flex items-center justify-between","children":[[["$","$L12",null,{"href":"/summary/day/2025-07-13","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left mr-2 h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"children":"Previous"}],false],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$L12",null,{"href":"/summary/day/2025-07-13","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Previous"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]],["$","div",null,{"className":"flex flex-col items-center","children":[["$","div",null,{"className":"text-sm font-medium text-gray-500","children":["Daily"," Summary"]}],["$","time",null,{"dateTime":"2025-07-14","className":"text-md font-bold","children":"Jul 14, 2025"}]]}],[["$","$L12",null,{"href":"/summary/day/2025-07-15","children":[false,["$","span",null,{"children":"Next"}],["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right ml-2 h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}]],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$L12",null,{"href":"/summary/day/2025-07-15","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Next"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]]]}]}]
+14:T586,I’m working with two agents in Eliza:
+
+-   **Blockchain Agent** – handles blockchain transactions.
+-   **Support Agent** – a RAG-based agent for answering support queries.
+
+### 🧠 Use Case
+
+A user starts a conversation with the blockchain agent. At some point, they ask a question the blockchain agent can’t answer, but the support agent can.
+
+I want the blockchain agent to **pass the question internally to the support agent**, get the response, and send it back to the user — seamlessly.
+
+### 🧪 What I’ve Tried
+
+Previously, Eliza supported an endpoint where I could send a message to a specific agent via `agentId` and get a response. That endpoint seems to no longer exist.
+
+Here’s what I tried instead:
+
+1.  Created a server and added both agents to it.
+2.  Created a channel in that server and added both agents to the channel.
+3.  Used the endpoint:
+    `/api/messaging/central-channels/:channelId/messages`
+    to forward the message.
+
+### ⚠️ Issue
+
+-   The support agent takes time to respond.
+-   To check the response, I use:
+    `/api/messaging/central-channels/:channelId/messages`
+    But this requires polling, which isn’t reliable — sometimes the agent never responds or the polling misses it.
+
+### ❓ Question
+
+Is there a way to forward a message from one agent to another and **get a reliable response** without polling? Maybe a webhook, callback, or a newer approach?15:T8fa,## Summary
+
+This PR addresses all critical issues identified in the review of PR #5505 "Add new types".
+
+## Changes Made
+
+### 🧪 Test Coverage
+- Added comprehensive tests for `asUUID()` function (19 test cases)
+- Added tests for all planning types (15 test cases)
+- Added tests for all scenario types (18 test cases)
+- All tests passing with 100% coverage of new code
+
+### 🔒 Type Safety Improvements
+- Replaced 26 `any` types with specific TypeScript interfaces:
+  - 12 instances in `planning.ts`
+  - 14 instances in `scenario.ts`
+- Fixed mixed import patterns in `planning.ts` (dynamic imports → direct imports)
+- Renamed `ActionResult` → `PlanActionResult` and `ActionContext` → `PlanActionContext` to avoid conflicts
+
+### 🛡️ Security Enhancements
+- Added `scenario-validation.ts` with comprehensive input validation:
+  - Path traversal prevention
+  - Git URL validation
+  - API endpoint validation
+  - Command injection prevention
+  - Environment variable sanitization
+  - Command whitelisting
+  - Sandbox configuration
+
+### 🚨 Error Handling
+- Added custom error classes for better error handling:
+  - `PlanningError`, `PlanValidationError`, `PlanExecutionError`, etc.
+  - `ScenarioError`, `ScenarioValidationError`, `ScenarioExecutionError`, etc.
+  - Proper error codes and type guards
+
+### 📝 Documentation
+- Improved UUID validation with support for all UUID versions (v1-v5)
+- Added comprehensive JSDoc documentation
+- Added `isValidUUID()` helper function
+
+### 🐛 Bug Fixes
+- Fixed circular imports from `@elizaos/core` within the core package
+- Fixed TypeScript build errors with proper type definitions
+- Maintained backward compatibility with existing code
+
+## Testing
+
+```bash
+# All tests pass
+bun test src/types/__tests__/
+# ✓ 52 tests pass
+
+# Build succeeds
+bun run build:core
+# ✓ Build successful
+
+# Linting passes
+bun run lint
+# ✓ No issues
+```
+
+## Important Notes
+
+- **Original branch fails to build** due to ActionContext/ActionResult naming conflicts
+- **Original branch has NO tests** for any of the new types
+- The UUID types in `specs/v1` and `specs/v2` are intentionally separate for API versioning
+- No changes to `messaging.ts` as `[key: string]: unknown` is appropriate there
+- All changes are backward compatible
+
+Fixes issues raised in #550516:T4ba,**Summary**
+
+This PR fixes the CLI dependency loading issue for plugins by implementing comprehensive improvements to the dependency resolution system.
+
+**Changes Made:**
+
+1. **Recursive Dependency Collection**: Created `collectAllDependencies()` function that recursively loads all plugin dependencies, not just top-level ones
+2. **Proper Deduplication**: Dependencies are now deduplicated across all plugins using Sets instead of just inline extraction
+3. **Consistent Test Dependencies**: Test dependencies are now loaded consistently for all plugins in test mode, not just object-passed plugins
+4. **Better Error Handling**: Enhanced logging for missing dependencies with better tracking
+5. **Comprehensive Test Coverage**: Added extensive test suite covering all dependency scenarios
+
+**Technical Details:**
+- Fixed issue where dependencies were only extracted from object-passed plugins
+- Ensured recursive dependency loading (dependencies of dependencies)
+- Added proper deduplication using Sets to prevent duplicate plugin loading
+- Improved test dependency handling for consistent behavior across all plugin types
+
+Closes #4997
+
+Generated with [Claude Code](https://claude.ai/code)17:T8fa,<!-- Use this template by filling in information and copying and pasting relevant items out of the HTML comments. -->
+
+# Relates to
+
+<!-- LINK TO ISSUE OR TICKET -->
+
+<!-- This risks section must be filled out before the final review and merge. -->
+
+# Risks
+
+<!--
+Low, medium, large. List what kind of risks and what could be affected.
+-->
+
+# Background
+
+## What does this PR do?
+
+## What kind of change is this?
+
+<!--
+Bug fixes (non-breaking change which fixes an issue)
+Improvements (misc. changes to existing features)
+Features (non-breaking change which adds functionality)
+Updates (new versions of included code)
+-->
+
+<!-- This "Why" section is most relevant if there are no linked issues explaining why. If there is a related issue, it might make sense to skip this why section. -->
+<!--
+## Why are we doing this? Any context or related work?
+-->
+
+# Documentation changes needed?
+
+<!--
+My changes do not require a change to the project documentation.
+My changes require a change to the project documentation.
+If documentation change is needed: I have updated the documentation accordingly.
+-->
+
+<!-- Please show how you tested the PR. This will really help if the PR needs to be retested and probably help the PR get merged quicker. -->
+
+# Testing
+
+## Where should a reviewer start?
+
+## Detailed testing steps
+
+<!--
+None: Automated tests are acceptable.
+-->
+
+<!--
+- As [anon/admin], go to [link]
+  - [do action]
+  - verify [result]
+-->
+
+<!-- If there is a UI change, please include before and after screenshots or videos. This will speed up PRs being merged. It is extra nice to annotate screenshots with arrows or boxes pointing out the differences. -->
+<!--
+## Screenshots
+### Before
+### After
+-->
+
+<!-- If there is anything about the deployment, please make a note. -->
+<!--
+# Deploy Notes
+-->
+
+<!--  Copy and paste command line output. -->
+<!--
+## Database changes
+-->
+
+<!--  Please specify deploy instructions if there is something more than the automated steps. -->
+<!--
+## Deployment instructions
+-->
+
+<!-- If you are on Discord, please join https://discord.gg/ai16z and state your Discord username here for the contributor role and join us in #development-feed -->
+<!--
+## Discord username
+
+-->
+18:Tdbe,```
+<!-- Use this template by filling in information and copying and pasting relevant items out of the HTML comments. -->
+
+# Relates to
+
+<!-- LINK TO ISSUE OR TICKET -->
+N/A
+
+# Risks
+
+<!--
+Low, medium, large. List what kind of risks and what could be affected.
+-->
+Low. This PR only modifies test files, improving the accuracy and coverage of existing tests without affecting production code.
+
+# Background
+
+## What does this PR do?
+This PR fixes the auto-build functionality tests in `packages/cli/tests/commands/start.test.ts`. Previously, these tests incorrectly used the `--help` flag, which caused the `start` command to exit early without executing the main action logic where the auto-build occurs. This PR updates the tests to properly invoke the `start` command, mock the `buildProject` function, and assert on its calls (or lack thereof) under various conditions.
+
+## What kind of change is this?
+
+<!--
+Bug fixes (non-breaking change which fixes an issue)
+Improvements (misc. changes to existing features)
+Features (non-breaking change which adds functionality)
+Updates (new versions of included code)
+-->
+Bug fixes (non-breaking change which fixes an issue)
+
+## Why are we doing this? Any context or related work?
+The original auto-build tests were misleading. By using the `--help` flag, they only validated the help text output and never actually tested the core auto-build execution or its conditional skipping logic (e.g., when `ELIZA_TEST_MODE` is set or when within a monorepo). This fix ensures that the tests accurately reflect the intended behavior of the auto-build feature, providing proper coverage for build execution, conditional skipping, and error handling.
+
+# Documentation changes needed?
+
+<!--
+My changes do not require a change to the project documentation.
+My changes require a change to the project documentation.
+If documentation change is needed: I have updated the documentation accordingly.
+-->
+My changes do not require a change to the project documentation.
+
+# Testing
+
+## Where should a reviewer start?
+`packages/cli/tests/commands/start.test.ts` - specifically the `describe('Auto-build functionality', ...)` block (starting around line 361).
+
+## Detailed testing steps
+
+<!--
+None: Automated tests are acceptable.
+-->
+- Run the CLI tests: `bun test packages/cli/tests/commands/start.test.ts`
+- Verify all tests within the "Auto-build functionality" block pass.
+- Ensure the tests correctly assert:
+    - `buildProject` is called when auto-build should occur.
+    - `buildProject` is NOT called when `ELIZA_TEST_MODE` is set or when in a monorepo.
+    - The command continues execution even if `buildProject` throws an error.
+
+<!--
+- As [anon/admin], go to [link]
+  - [do action]
+  - verify [result]
+-->
+
+<!-- If there is a UI change, please include before and after screenshots or videos. This will speed up PRs being merged. It is extra nice to annotate screenshots with arrows or boxes pointing out the differences. -->
+<!--
+## Screenshots
+### Before
+### After
+-->
+
+<!-- If there is anything about the deployment, please make a note. -->
+<!--
+# Deploy Notes
+-->
+
+<!--  Copy and paste command line output. -->
+<!--
+## Database changes
+-->
+
+<!--  Please specify deploy instructions if there is something more than the automated steps. -->
+<!--
+## Deployment instructions
+-->
+
+<!-- If you are on Discord, please join https://discord.gg/ai16z and state your Discord username here for the contributor role and join us in #development-feed -->
+<!--
+## Discord username
+
+-->
+```19:T695,# Add Mattermost Plugin to Registry
+
+## Plugin Information
+- **Name**: plugin-mattermost
+- **Repository**: https://github.com/bealers/plugin-mattermost
+- **Package**: @elizaos-plugins/plugin-mattermost
+- **Category**: Client
+
+## Description
+Mattermost client plugin for elizaOS enabling AI agent integration with Mattermost chat platforms.
+
+Screenshot attached and [youtube here](https://youtu.be/k4DLMsru2IQ).
+
+## Features
+- Message handling in channels and DMs
+- Thread conversation support
+- File attachment support
+- Auto-channel joining
+- WebSocket real-time communication
+
+## Demo Evidence
+- ✅ Plugin builds successfully
+- ✅ Tests pass
+- ✅ Proper elizaOS integration
+- ✅ Branding assets included
+- ✅ Documentation complete
+
+## Registry Changes
+- Added `@elizaos-plugins/plugin-mattermost` pointing to `github:bealers/plugin-mattermost`
+- Positioned alphabetically in registry
+
+## Installation
+```json
+{
+  "plugins": ["@elizaos-plugins/plugin-mattermost"]
+}
+```
+
+## Checklist
+- [x] Plugin follows elizaOS architecture
+- [x] Includes required branding assets
+- [x] Documentation is complete
+- [x] Tests are passing
+- [x] Proper namespace used in registry
+<img width="1265" alt="Screenshot 2025-07-08 at 17 50 37" src="https://github.com/user-attachments/assets/c22e072a-bbd5-4fed-910e-328e84d2b493" />
+
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+## Summary by CodeRabbit
+
+* **New Features**
+  * Added support for the Mattermost plugin, enabling integration with the "@bealers/plugin-mattermost" from its GitHub repository.
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->c:["$","div",null,{"className":"mb-8 space-y-6","children":[["$","$L13",null,{"metrics":{"date":"2025-07-14","interval":{"intervalStart":"$D2025-07-14T00:00:00.000Z","intervalEnd":"$D2025-07-15T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":5,"merged":6,"total":8},"issues":{"new":1,"closed":1,"total":2},"activeContributors":8,"codeChanges":{"additions":2276,"deletions":128,"files":19,"commitCount":56},"topContributors":[{"username":"wtfsayo","avatarUrl":"https://avatars.githubusercontent.com/u/82053242?u=98209a1f10456f42d4d2fa71db4d5bf4a672cbc3&v=4","totalScore":96.41040300184847,"prScore":94.11040300184847,"issueScore":2.1,"reviewScore":0,"commentScore":0.2,"summary":null},{"username":"QuasiPlanets","avatarUrl":"https://avatars.githubusercontent.com/u/196568543?u=e9348d1ce7224da005aa0cfd8cbc407cdfbe82ed&v=4","totalScore":27.539891235220416,"prScore":27.539891235220416,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":null},{"username":"tcm390","avatarUrl":"https://avatars.githubusercontent.com/u/60634884?u=c6c41679b8322eaa0c81f72e0b4ed95e80f0ac16&v=4","totalScore":20.756573590279974,"prScore":20.556573590279974,"issueScore":0,"reviewScore":0,"commentScore":0.2,"summary":null},{"username":"bealers","avatarUrl":"https://avatars.githubusercontent.com/u/6403055?u=8c40778251e25b92cdee727056415b6c0d1bcdc5&v=4","totalScore":14.731747238406726,"prScore":14.531747238406727,"issueScore":0,"reviewScore":0,"commentScore":0.2,"summary":null},{"username":"ai16z-demirix","avatarUrl":"https://avatars.githubusercontent.com/u/188117230?u=424cd5b834584b3799da288712b3c4158c8032a1&v=4","totalScore":0.33999999999999997,"prScore":0,"issueScore":0,"reviewScore":0,"commentScore":0.33999999999999997,"summary":null}],"focusAreas":[{"area":"core","count":12},{"area":"cli","count":6},{"area":"client","count":1}],"topIssues":[{"id":"I_kwDOMT5cIs7ATigl","title":"Cmd + C on `eliazos dev` server doesnt kill server process","author":"linear","number":5559,"repository":"elizaos/eliza","body":"","createdAt":"2025-07-13T10:07:38Z","closedAt":"2025-07-14T06:50:47Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7AcXgZ","title":"[via-discord] Forwarding Messages Between Agents Without Polling — Need Help with Agent-to-Agent Communication","author":"wtfsayo","number":5584,"repository":"elizaos/eliza","body":"$14","createdAt":"2025-07-14T12:48:08Z","closedAt":null,"state":"OPEN","commentCount":0}],"topPullRequests":[{"id":"PR_kwDOMT5cIs6evMAO","title":"fix: address type safety and testing issues from PR #5505","author":"wtfsayo","number":5580,"body":"$15","repository":"elizaos/eliza","createdAt":"2025-07-14T06:32:00Z","mergedAt":"2025-07-14T06:33:19Z","additions":1366,"deletions":51},{"id":"PR_kwDOMT5cIs6esNT6","title":"fix: graceful shutdown for dev server on Cmd+C (SIGINT/SIGTERM)","author":"wtfsayo","number":5562,"body":"Fixes issue where Cmd+C on 'elizaos dev' doesn't kill server process\r\n\r\n## Changes\r\n- Added proper signal handling to stop dev server before process exit\r\n- Imported stopServer from server manager for cleanup\r\n- Replaced immediate process.exit with graceful shutdown function\r\n- Added logging for shutdown process and error handling\r\n\r\nCloses #5559\r\n\r\nGenerated with [Claude Code](https://claude.ai/code)","repository":"elizaos/eliza","createdAt":"2025-07-13T16:23:44Z","mergedAt":"2025-07-14T06:50:46Z","additions":439,"deletions":6},{"id":"PR_kwDOMT5cIs6esR3v","title":"fix(plugin-bootstrap): separate provider state from action callbacks to prevent ATTACHMENTS interference","author":"wtfsayo","number":5568,"body":"Fixes issue where custom plugin action callbacks were replaced by ATTACHMENTS provider content.\r\n\r\n## Problem\r\nWhen the LLM includes \"ATTACHMENTS\" in the providers list, the ATTACHMENTS provider runs and modifies the state with formatted text containing \"# Attachments\" header. This modified state is then passed to action callbacks, causing interference.\r\n\r\n## Solution\r\nSeparated provider state composition from action callback processing:\r\n- Created separate `providerState` variable for provider composition\r\n- Actions now use the original clean `state` instead of provider-modified state\r\n- Evaluators use `providerState` to access provider context when needed\r\n\r\nCloses #4947\r\n\r\nGenerated with [Claude Code](https://claude.ai/code)","repository":"elizaos/eliza","createdAt":"2025-07-13T16:51:55Z","mergedAt":null,"additions":362,"deletions":3},{"id":"PR_kwDOMT5cIs6esTYR","title":"fix(cli): improve plugin dependency loading and deduplication","author":"wtfsayo","number":5571,"body":"$16","repository":"elizaos/eliza","createdAt":"2025-07-13T17:03:26Z","mergedAt":null,"additions":303,"deletions":38},{"id":"PR_kwDOMT5cIs6eMR6C","title":"fix: auto-build project on 'elizaos start' command","author":"wtfsayo","number":5504,"body":"## Description\n\nThis PR adds automatic building to the `elizaos start` command, similar to how the `dev` command works.\n\n## Changes\n\n- Add automatic build step before starting the server\n- Skip build for monorepos (similar to dev command behavior)\n- Use clack tasks for better UI feedback with progress indication\n- Suppress build output logs for cleaner experience\n- Update command description to reflect new behavior\n\n## Motivation\n\nPreviously, users had to manually build their project before running `elizaos start`, which was an extra step that could be easily forgotten. This change makes the start command more user-friendly by automatically building the project first.\n\n## Testing\n\n- Tested in project directory: builds automatically before starting\n- Tested in monorepo root: skips build as expected\n- Tested with build failures: continues to start despite build errors\n\nFixes #5497","repository":"elizaos/eliza","createdAt":"2025-07-09T21:19:15Z","mergedAt":"2025-07-14T06:58:25Z","additions":287,"deletions":9},{"id":"PR_kwDOMT5cIs6e3qHv","title":"Sync develop into develop devel","author":"QuasiPlanets","number":5585,"body":"$17","repository":"elizaos/eliza","createdAt":"2025-07-14T20:54:10Z","mergedAt":null,"additions":268,"deletions":71},{"id":"PR_kwDOMT5cIs6evWmT","title":"Fix auto-build test flag usage","author":"wtfsayo","number":5581,"body":"$18","repository":"elizaos/eliza","createdAt":"2025-07-14T06:51:10Z","mergedAt":"2025-07-14T06:51:29Z","additions":182,"deletions":62},{"id":"PR_kwDOMT5cIs6eytdJ","title":"[DRAFT] Docker Infrastructure Enhancement Proposal","author":"bealers","number":5583,"body":"## Docker Infrastructure Enhancement Proposal\r\n\r\nThis PR proposes enhanced Docker infrastructure for elizaOS with optimised builds and streamlined deployment workflows.\r\n\r\n### Key Features\r\n- `elizaos deploy` command for unified deployment operations\r\n- Enhanced `--docker` flags for existing `elizaos dev` and `elizaos start` commands  \r\n- Multi-environment build targets (dev, test, prod, demo)\r\n- Build optimisation strategies and container testing framework\r\n- CI integration and registry deployment options\r\n\r\n### Justification\r\n\r\nAt minimum, there are several low-hanging fruit optimisations available, and we're keeping any new commands namespaced to avoid too much overlap. Once we have a stable and minimised container image, we can start to have fun building clusters for horizontal scaling tests, benchmarking and swarms like the-org.\r\n\r\n### Documentation\r\nSee `docs/docker-infrastructure.md` for complete specification.\r\n\r\n**This is a draft for team review and discussion.**","repository":"elizaos/eliza","createdAt":"2025-07-14T12:18:33Z","mergedAt":null,"additions":171,"deletions":0},{"id":"PR_kwDOMT5cIs6ewqad","title":"chore: provider mapping","author":"tcm390","number":5582,"body":"This PR maps the llama_local provider in v1 to @elizaos/plugin-ollama.","repository":"elizaos/eliza","createdAt":"2025-07-14T09:03:42Z","mergedAt":"2025-07-14T09:04:20Z","additions":1,"deletions":0},{"id":"PR_kwDONkg7v86d-4dW","title":"Add plugin-mattermost to registry","author":"bealers","number":188,"body":"$19","repository":"elizaos-plugins/registry","createdAt":"2025-07-08T17:01:59Z","mergedAt":"2025-07-14T07:20:03Z","additions":1,"deletions":0}],"detailedContributorSummaries":{}}}],"$L1a"]}]
+d:["$","div",null,{"className":"prose prose-sm mx-auto mt-8 dark:prose-invert sm:prose lg:prose-lg xl:prose-xl","children":[["$","p","p-0",{"children":["On July 14, 2025, ElizaOS development focused on enhancing CLI stability and developer experience in the ",["$","code","code-0",{"children":"eliza"}]," repository with critical bug fixes and core type safety improvements, alongside expanding the plugin registry with the addition of the Mattermost plugin. Discussions continued on persistent issues related to custom plugin callback interference and Twitter client initialization errors across multiple repositories."]}],"\n",["$","h2","h2-0",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"🚨 Needs Attention","position":{"start":{"line":3,"column":4,"offset":432},"end":{"line":3,"column":22,"offset":450}}}],"position":{"start":{"line":3,"column":1,"offset":429},"end":{"line":3,"column":23,"offset":451}}},"children":"🚨 Needs Attention"}],"\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"Urgent Discussions"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/4947","children":"elizaos/eliza#4947"}]," and ",["$","a","a-1",{"href":"https://github.com/elizaos-plugins/registry/issues/4947","children":"elizaos-plugins/registry#4947"}],": The issue where a custom plugin's callback is replaced by the ",["$","code","code-0",{"children":"ATTACHMENTS"}]," provider requires further input to resolve the conflict and implement the proposed fix."]}],"\n",["$","li","li-1",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/31","children":"elizaos/eliza#31"}]," and ",["$","a","a-1",{"href":"https://github.com/elizaos-plugins/registry/issues/31","children":"elizaos-plugins/registry#31"}],": The ongoing Twitter Client Initialization Errors need continued investigation and a definitive solution, especially regarding the feasibility of autonomous Twitter agents and potential API limitations."]}],"\n"]}],"\n"]}],"\n"]}],"\n",["$","h2","h2-1",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"✅ Completed Work","position":{"start":{"line":8,"column":4,"offset":1174},"end":{"line":8,"column":20,"offset":1190}}}],"position":{"start":{"line":8,"column":1,"offset":1171},"end":{"line":8,"column":20,"offset":1190}}},"children":"✅ Completed Work"}],"\n",["$","ul","ul-1",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"CLI Stability and Developer Experience Enhancements"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["The ",["$","code","code-0",{"children":"elizaos start"}]," command now automatically builds the project before starting the server, mirroring the ",["$","code","code-1",{"children":"dev"}]," command's behavior, improving the developer workflow (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5504","children":"elizaos/eliza#5504"}],")."]}],"\n",["$","li","li-1",{"children":["Graceful shutdown for the ",["$","code","code-0",{"children":"elizaos dev"}]," server on ",["$","code","code-1",{"children":"Cmd+C"}]," (SIGINT/SIGTERM) was implemented, preventing orphaned processes and resolving a critical server shutdown issue (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5562","children":"elizaos/eliza#5562"}],", ",["$","a","a-1",{"href":"https://github.com/elizaos/eliza/issues/5559","children":"elizaos/eliza#5559"}],")."]}],"\n",["$","li","li-2",{"children":["A related fix addressed the usage of the auto-build test flag, contributing to overall CLI robustness (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5581","children":"elizaos/eliza#5581"}],")."]}],"\n"]}],"\n"]}],"\n",["$","li","li-1",{"children":[["$","strong","strong-0",{"children":"Core Library Robustness and Integration"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["Significant work was done to improve the robustness of the core library by addressing type safety and testing issues, including comprehensive tests for the ","$L1b"," function and planning types, and refining error handling (","$L1c",")."]}],"\n","$L1d","\n"]}],"\n"]}],"\n","$L1e","\n"]}],"\n","$L1f","\n","$L20","\n","$L21","\n","$L22","\n","$L23","\n","$L24"]}]
+e:["$","script","script-0",{"src":"/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","async":true}]
+f:["$","script","script-1",{"src":"/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","async":true}]
+10:["$","script","script-2",{"src":"/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js","async":true}]
+11:["$","$L25",null,{"children":["$","$26",null,{"name":"Next.MetadataOutlet","children":"$@27"}]}]
+1a:["$","div",null,{"className":"rounded-lg border bg-card text-card-foreground shadow-sm","children":[["$","div",null,{"className":"flex flex-col space-y-1.5 p-6 py-4","children":["$","div",null,{"className":"tracking-tight text-sm font-medium","children":["$undefined","Code Changes"]}]}],["$","div",null,{"className":"p-6 pt-0","children":["$","div",null,{"className":"grid grid-cols-2 gap-4 md:grid-cols-4","children":[["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-git-commit-vertical h-5 w-5","aria-hidden":"true","children":[["$","path","1holv5",{"d":"M12 3v6"}],["$","circle","1v7zrd",{"cx":"12","cy":"12","r":"3"}],["$","path","a9ows0",{"d":"M12 15v6"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":56}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Commits"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-file-code h-5 w-5","aria-hidden":"true","children":[["$","path","1oefj6",{"d":"M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"}],["$","path","wfsgrz",{"d":"M14 2v5a1 1 0 0 0 1 1h5"}],["$","path","1tg20x",{"d":"M10 12.5 8 15l2 2.5"}],["$","path","yinavb",{"d":"m14 12.5 2 2.5-2 2.5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":19}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Files Changed"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-green-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-up h-5 w-5 text-green-500","aria-hidden":"true","children":[["$","path","hav0vg",{"d":"m5 12 7-7 7 7"}],["$","path","x0mq9r",{"d":"M12 19V5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-green-500","children":"+2,276"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Added"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-red-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-down h-5 w-5 text-red-500","aria-hidden":"true","children":[["$","path","s699le",{"d":"M12 5v14"}],["$","path","1idqje",{"d":"m19 12-7 7-7-7"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-red-500","children":"-128"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Deleted"}]]}]]}]]}]}]]}]
+1b:["$","code","code-0",{"children":"asUUID()"}]
+1c:["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5580","children":"elizaos/eliza#5580"}]
+1d:["$","li","li-1",{"children":["The ",["$","code","code-0",{"children":"llama_local"}]," provider in v1 was mapped to ",["$","code","code-1",{"children":"@elizaos/plugin-ollama"}],", streamlining provider integration (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5582","children":"elizaos/eliza#5582"}],")."]}]
+1e:["$","li","li-2",{"children":[["$","strong","strong-0",{"children":"Plugin Ecosystem Expansion"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["The ",["$","code","code-0",{"children":"plugin-mattermost"}]," was added to the registry, expanding the available plugins within the ElizaOS ecosystem (",["$","a","a-0",{"href":"https://github.com/elizaos-plugins/registry/pull/188","children":"elizaos-plugins/registry#188"}],")."]}],"\n"]}],"\n"]}]
+1f:["$","h2","h2-2",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"🏗️ Work in Progress","position":{"start":{"line":19,"column":4,"offset":2747},"end":{"line":19,"column":24,"offset":2767}}}],"position":{"start":{"line":19,"column":1,"offset":2744},"end":{"line":19,"column":24,"offset":2767}}},"children":"🏗️ Work in Progress"}]
+20:["$","ul","ul-2",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"New Pull Requests"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"elizaos/eliza"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5585","children":"elizaos/eliza#5585"}]," Sync develop into develop devel"]}],"\n",["$","li","li-1",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5583","children":"elizaos/eliza#5583"}]," [DRAFT] Docker Infrastructure Enhancement Proposal"]}],"\n"]}],"\n"]}],"\n"]}],"\n"]}],"\n",["$","li","li-1",{"children":[["$","strong","strong-0",{"children":"Active Discussions"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"elizaos/eliza"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/4947","children":"elizaos/eliza#4947"}]," Custom Plugin Callback Interference: Discussion continues on the issue where a custom plugin's callback is getting replaced by the ",["$","code","code-0",{"children":"ATTACHMENTS"}]," provider."]}],"\n",["$","li","li-1",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/31","children":"elizaos/eliza#31"}]," Twitter Client Initialization Errors: Users are still reporting issues with Twitter Client Initialization Errors when creating or starting agents using the Twitter plugin."]}],"\n"]}],"\n"]}],"\n",["$","li","li-1",{"children":[["$","strong","strong-0",{"children":"elizaos-plugins/registry"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos-plugins/registry/issues/4947","children":"elizaos-plugins/registry#4947"}]," Custom Plugin Callback Interference: Discussion continued on a bug where a custom plugin's action callback is being replaced by the ",["$","code","code-0",{"children":"ATTACHMENTS"}]," provider."]}],"\n",["$","li","li-1",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos-plugins/registry/issues/31","children":"elizaos-plugins/registry#31"}]," Twitter Client Initialization Error: Continued reports of the Twitter client initialization error."]}],"\n"]}],"\n"]}],"\n"]}],"\n"]}],"\n"]}]
+21:["$","h2","h2-3",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"🐞 Issue Triage","position":{"start":{"line":32,"column":4,"offset":4068},"end":{"line":32,"column":19,"offset":4083}}}],"position":{"start":{"line":32,"column":1,"offset":4065},"end":{"line":32,"column":19,"offset":4083}}},"children":"🐞 Issue Triage"}]
+22:["$","ul","ul-3",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"New Issues"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"elizaos/eliza"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/5584","children":"elizaos/eliza#5584"}]," Agent-to-Agent Communication Challenges: A new issue was opened regarding forwarding messages between agents without polling, specifically for a Blockchain Agent and a Support Agent."]}],"\n"]}],"\n"]}],"\n"]}],"\n"]}],"\n",["$","li","li-1",{"children":[["$","strong","strong-0",{"children":"Closed Issues"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"elizaos/eliza"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/5559","children":"elizaos/eliza#5559"}]," CLI Server Shutdown Fix: The issue where ",["$","code","code-0",{"children":"Cmd + C"}]," on the ",["$","code","code-1",{"children":"elizaos dev"}]," server did not kill the server process has been resolved."]}],"\n"]}],"\n"]}],"\n"]}],"\n"]}],"\n"]}]
+23:["$","h2","h2-4",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"✨ Contributor Spotlight","position":{"start":{"line":40,"column":4,"offset":4644},"end":{"line":40,"column":27,"offset":4667}}}],"position":{"start":{"line":40,"column":1,"offset":4641},"end":{"line":40,"column":27,"offset":4667}}},"children":"✨ Contributor Spotlight"}]
+24:["$","ul","ul-4",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"tcm390"}],": Provided a valuable suggestion for debugging the custom plugin callback interference issue in ",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/4947","children":"elizaos/eliza#4947"}]," and ",["$","a","a-1",{"href":"https://github.com/elizaos-plugins/registry/issues/4947","children":"elizaos-plugins/registry#4947"}],"."]}],"\n",["$","li","li-1",{"children":[["$","strong","strong-0",{"children":"claude"}],": Identified the root cause and proposed a fix for the custom plugin callback interference issue in ",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/4947","children":"elizaos/eliza#4947"}]," and ",["$","a","a-1",{"href":"https://github.com/elizaos-plugins/registry/issues/4947","children":"elizaos-plugins/registry#4947"}],"."]}],"\n"]}]
+27:null

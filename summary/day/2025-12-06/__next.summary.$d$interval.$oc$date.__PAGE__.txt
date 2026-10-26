@@ -1,0 +1,264 @@
+1:"$Sreact.fragment"
+2:I[4817319,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"IntervalSelector"]
+3:I[6998365,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"LlmCopyButton"]
+e:I[3642796,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],""]
+f:I[3238488,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"StatCardsDisplay"]
+13:I[4261541,["/eliza-leaderboard/_next/static/chunks/b33bcbdcb3f88354.js","/eliza-leaderboard/_next/static/chunks/8ba59154b6704904.js"],"OutletBoundary"]
+14:"$Sreact.suspense"
+4:Tf8a,## Summary
+
+This PR implements parallel action execution within the `processActions()` method to improve performance for multi-action responses.
+
+## Changes
+
+### Core Runtime (`packages/core/src/runtime.ts`)
+- Execute actions within a single response batch **in parallel** using `Promise.allSettled()`
+- All actions in a batch receive the **same initial state snapshot**
+- State accumulates **sequentially between response batches**
+- Merge all `ActionResult.values` after parallel batch completes
+- Preserve fault tolerance: if one action fails, others still complete
+
+### Prompts (`packages/core/src/prompts.ts`)
+- Updated `messageHandlerTemplate` to reflect parallel execution model
+- Changed "IMPORTANT ACTION ORDERING RULES" to "IMPORTANT ACTION EXECUTION RULES"
+- Clarified that actions listed in a single response execute in parallel
+- Added guidance to use multi-step workflow for sequential dependencies
+
+### Action State Provider (`packages/plugin-bootstrap/src/providers/actionState.ts`)
+- Updated JSDoc and description to clarify "previous results" refers to prior response batches, not sibling parallel actions
+
+### Tests
+- Updated `runtime.test.ts` to match new state initialization behavior
+- Updated `prompts.test.ts` to match new prompt text
+
+## Key Data Flow
+
+```
+Response 1: [action1, action2, action3]
+  ├─> Execute ALL in parallel with initialState
+  ├─> Wait for all to complete
+  └─> Merge results → accumulatedState
+
+Response 2: [action4, action5]
+  ├─> Execute ALL in parallel with accumulatedState from Response 1
+  ├─> Wait for all to complete
+  └─> Merge results → new accumulatedState
+```
+
+## Testing
+
+- All existing runtime tests pass
+- All prompt tests pass
+- All multi-step workflow tests pass
+- Action chaining tests pass
+
+## Breaking Changes
+
+None - backward compatible. Actions that previously assumed sequential execution within a batch will now run in parallel, but since they all receive the same state snapshot, behavior should be equivalent for independent actions.
+
+<!-- CURSOR_SUMMARY -->
+---
+
+> [!NOTE]
+> Execute actions in a response batch in parallel with a shared state snapshot, accumulate results across batches, and introduce AsyncLocalStorage-based prompt tracking with prompt/provider/test updates.
+> 
+> - **Core (runtime.ts)**:
+>   - Parallelize `processActions` per response using `Promise.allSettled()`; each batch shares a composed state snapshot; accumulate `ActionResult.values` and plan state between batches.
+>   - Add robust action resolution (exact/fuzzy/similes), error paths for missing action/handler, and consistent action memory/logging.
+>   - Preserve legacy returns (void/boolean) as completed; treat `{ success:false }` (including minimal/error-only) as failed.
+>   - Merge working memory with size cap; cache `action_results`; update action plan immutably per step.
+>   - Introduce AsyncLocalStorage context: `ActionContextStore`, `getCurrentActionContext`, and browser fallback `createBrowserFallback` for prompt collection; include action context in `useModel` logs; skip collecting `TEXT_EMBEDDING` prompts.
+> - **Prompts (prompts.ts)**:
+>   - Update `messageHandlerTemplate` for parallel execution model and guidance on multi-step dependencies.
+> - **Provider (plugin-bootstrap/actionState.ts)**:
+>   - Clarify description/docs: "previous results" are from prior response batches; parallel actions share the same snapshot.
+> - **Tests**:
+>   - Expand `runtime.test.ts`: parallel execution behavior, action result status semantics, prompt collection/isolation via AsyncLocalStorage, browser fallback behavior, exact vs fuzzy action matching.
+>   - Update `prompts.test.ts` for new execution rules and wording.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit 55765fc289c965232d5d690c363f73c7ea1b81f6. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->5:T64f,## Add ElizaOS Cloud as Default AI Provider in CLI
+
+### Summary
+- Add **ElizaOS Cloud** as the first/recommended option in `elizaos create` AI model selection
+- Integrate browser-based login flow for seamless API key setup
+- Fix env variable naming to match plugin (`ELIZAOS_CLOUD_API_KEY`)
+
+### Changes
+
+**`packages/cli/src/commands/create/utils/selection.ts`**
+- Add ElizaOS Cloud as top option with "(Recommended)" label
+- Set `elizacloud` as default `initialValue`
+- Add `elizacloud` to `hasEmbeddingSupport()` list
+
+**`packages/cli/src/utils/get-config.ts`**
+- Add `storeElizaCloudKey()` and `promptAndStoreElizaCloudKey()` 
+- Support 3 auth flows: browser login, manual key entry, skip
+
+**`packages/cli/src/commands/create/actions/setup.ts`**
+- Add `elizacloud` case in `setupAIModelConfig()`
+- Map `elizacloud` → `@elizaos/plugin-elizacloud` in `resolveModelToPlugin()`
+- Skip Ollama fallback when using ElizaOS Cloud
+
+**`packages/cli/src/commands/login/actions/login.ts`**
+- Rename `ELIZA_CLOUD_API_KEY` → `ELIZAOS_CLOUD_API_KEY`
+
+### User Flow
+```
+◆  Which AI model would you like to use?
+│  ● ElizaOS Cloud (Recommended)
+│  ○ Local AI (Ollama)
+│  ○ OpenAI
+│  ...
+
+◆  How would you like to authenticate?
+│  ● Login with browser (recommended)
+│  ○ Enter API key manually
+│  ○ Skip for now
+```
+
+### Test Plan
+- [ ] Run `elizaos create test-project` and select ElizaOS Cloud
+- [ ] Verify browser login flow saves key correctly
+- [ ] Verify manual key entry works
+- [ ] Verify plugin installs as `@elizaos/plugin-elizacloud`
+- [ ] Verify skip option adds placeholder to `.env`6:T5ae,On December 6, 2025, ElizaOS significantly enhanced its CLI by integrating ElizaOS Cloud as the default AI provider, streamlining the setup process with a new browser-based login flow and improving configuration reliability. Additionally, a draft PR was opened to implement parallel action execution, indicating a focus on core framework performance improvements.
+
+## ✅ Completed Work
+### CLI and Cloud Integration Enhancements
+*   The CLI now defaults to ElizaOS Cloud as the primary AI provider, simplifying model selection for users ([elizaos/eliza#6208](https://github.com/elizaos/eliza/pull/6208)).
+*   A new browser-based login flow has been integrated to simplify API key setup for ElizaOS Cloud users ([elizaos/eliza#6208](https://github.com/elizaos/eliza/pull/6208)).
+*   Environment variable issues related to configuration have been resolved, improving system stability ([elizaos/eliza#6208](https://github.com/elizaos/eliza/pull/6208)).
+*   New unit tests were added to ensure the reliability of ElizaOS Cloud configuration and selection utilities ([elizaos/eliza#6208](https://github.com/elizaos/eliza/pull/6208)).
+
+## 🏗️ Work in Progress
+### New Pull Requests
+*   **elizaos/eliza**:
+    *   [#6209](https://github.com/elizaos/eliza/pull/6209) [DRAFT] feat(core): Implement parallel action execution in processActions
+    *   [#6207](https://github.com/elizaos/eliza/pull/6207) fix(cli): correct startAgents API signature in e2e-tests0:{"buildId":"US8XLB_zHXYj_PVAECGcd","rsc":["$","$1","c",{"children":[["$","div",null,{"className":"container mx-auto px-6 py-8 md:px-8","children":["$","div",null,{"className":"mx-auto max-w-4xl","children":[["$","div",null,{"className":"mb-4 flex flex-col justify-between sm:flex-row","children":[["$","$L2",null,{"currentInterval":"day","currentDate":"2025-12-06"}],["$","$L3",null,{"metrics":{"date":"2025-12-06","interval":{"intervalStart":"$D2025-12-06T00:00:00.000Z","intervalEnd":"$D2025-12-07T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":3,"merged":1,"total":3},"issues":{"new":0,"closed":0,"total":0},"activeContributors":4,"codeChanges":{"additions":491,"deletions":66,"files":10,"commitCount":19},"topContributors":[{"username":"ChristopherTrimboli","avatarUrl":"https://avatars.githubusercontent.com/u/27584221?u=de148a498b5af814e037c2975112fadd09df743f&v=4","totalScore":56.364794811906556,"prScore":56.364794811906556,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":null},{"username":"wtfsayo","avatarUrl":"https://avatars.githubusercontent.com/u/82053242?u=98209a1f10456f42d4d2fa71db4d5bf4a672cbc3&v=4","totalScore":26.47188694828805,"prScore":26.27188694828805,"issueScore":0,"reviewScore":0,"commentScore":0.2,"summary":null},{"username":"standujar","avatarUrl":"https://avatars.githubusercontent.com/u/16385918?u=718bdcd1585be8447bdfffb8c11ce249baa7532d&v=4","totalScore":24.639585092994047,"prScore":24.639585092994047,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":null}],"focusAreas":[{"area":"cli","count":8}],"topIssues":[],"topPullRequests":[{"id":"PR_kwDOMT5cIs63dqrL","title":"[DRAFT] feat(core): Implement parallel action execution in processActions","author":"wtfsayo","number":6209,"body":"$4","repository":"elizaos/eliza","createdAt":"2025-12-06T19:03:17Z","mergedAt":null,"additions":1467,"deletions":292},{"id":"PR_kwDOMT5cIs63ddxK","title":"feat: Add ElizaOS Cloud as Default AI Provider in CLI","author":"ChristopherTrimboli","number":6208,"body":"$5","repository":"elizaos/eliza","createdAt":"2025-12-06T18:21:51Z","mergedAt":"2025-12-06T19:51:44Z","additions":491,"deletions":66},{"id":"PR_kwDOMT5cIs63c65D","title":"fix(cli): correct startAgents API signature in e2e-tests","author":"standujar","number":6207,"body":"## Summary\r\n\r\n- Fixed `startAgents` API signature mismatch in CLI's e2e-tests.ts\r\n- Fixed unit test mock function name (`getElizaCharacter` → `getDefaultCharacter`)\r\n\r\n## Problem\r\n\r\nThe CLI's `elizaos test` command was failing with:\r\n```\r\nundefined is not an object (evaluating 'agent.character.id')\r\n```\r\n\r\nThis was caused by the e2e-tests calling `server.startAgents` with incorrect arguments:\r\n- **Before**: `startAgents([character], [plugins], options)` (3 separate args)\r\n- **After**: `startAgents([{ character, plugins }], options)` (proper format)\r\n\r\n## Test Plan\r\n\r\n- [x] Unit tests pass: `bun test packages/cli/tests/unit/commands/test/e2e-tests.test.ts`\r\n- [x] CLI builds successfully: `bun run build` in packages/cli\r\n- [x] `elizaos test` runs plugin tests correctly\r\n","repository":"elizaos/eliza","createdAt":"2025-12-06T16:03:56Z","mergedAt":"2025-12-15T13:27:41Z","additions":7,"deletions":2}],"detailedContributorSummaries":{}},"summaryContent":"$6","className":"self-end sm:self-start"}]]}],"$L7","$L8","$L9"]}]}],["$La","$Lb","$Lc"],"$Ld"]}],"loading":null,"isPartial":false}
+7:["$","div",null,{"className":"mb-6","children":["$","div",null,{"className":"flex items-center justify-between","children":[[["$","$Le",null,{"href":"/summary/day/2025-12-05","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left mr-2 h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"children":"Previous"}],false],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$Le",null,{"href":"/summary/day/2025-12-05","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Previous"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]],["$","div",null,{"className":"flex flex-col items-center","children":[["$","div",null,{"className":"text-sm font-medium text-gray-500","children":["Daily"," Summary"]}],["$","time",null,{"dateTime":"2025-12-06","className":"text-md font-bold","children":"Dec 6, 2025"}]]}],[["$","$Le",null,{"href":"/summary/day/2025-12-07","children":[false,["$","span",null,{"children":"Next"}],["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right ml-2 h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}]],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$Le",null,{"href":"/summary/day/2025-12-07","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Next"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]]]}]}]
+10:Tf8a,## Summary
+
+This PR implements parallel action execution within the `processActions()` method to improve performance for multi-action responses.
+
+## Changes
+
+### Core Runtime (`packages/core/src/runtime.ts`)
+- Execute actions within a single response batch **in parallel** using `Promise.allSettled()`
+- All actions in a batch receive the **same initial state snapshot**
+- State accumulates **sequentially between response batches**
+- Merge all `ActionResult.values` after parallel batch completes
+- Preserve fault tolerance: if one action fails, others still complete
+
+### Prompts (`packages/core/src/prompts.ts`)
+- Updated `messageHandlerTemplate` to reflect parallel execution model
+- Changed "IMPORTANT ACTION ORDERING RULES" to "IMPORTANT ACTION EXECUTION RULES"
+- Clarified that actions listed in a single response execute in parallel
+- Added guidance to use multi-step workflow for sequential dependencies
+
+### Action State Provider (`packages/plugin-bootstrap/src/providers/actionState.ts`)
+- Updated JSDoc and description to clarify "previous results" refers to prior response batches, not sibling parallel actions
+
+### Tests
+- Updated `runtime.test.ts` to match new state initialization behavior
+- Updated `prompts.test.ts` to match new prompt text
+
+## Key Data Flow
+
+```
+Response 1: [action1, action2, action3]
+  ├─> Execute ALL in parallel with initialState
+  ├─> Wait for all to complete
+  └─> Merge results → accumulatedState
+
+Response 2: [action4, action5]
+  ├─> Execute ALL in parallel with accumulatedState from Response 1
+  ├─> Wait for all to complete
+  └─> Merge results → new accumulatedState
+```
+
+## Testing
+
+- All existing runtime tests pass
+- All prompt tests pass
+- All multi-step workflow tests pass
+- Action chaining tests pass
+
+## Breaking Changes
+
+None - backward compatible. Actions that previously assumed sequential execution within a batch will now run in parallel, but since they all receive the same state snapshot, behavior should be equivalent for independent actions.
+
+<!-- CURSOR_SUMMARY -->
+---
+
+> [!NOTE]
+> Execute actions in a response batch in parallel with a shared state snapshot, accumulate results across batches, and introduce AsyncLocalStorage-based prompt tracking with prompt/provider/test updates.
+> 
+> - **Core (runtime.ts)**:
+>   - Parallelize `processActions` per response using `Promise.allSettled()`; each batch shares a composed state snapshot; accumulate `ActionResult.values` and plan state between batches.
+>   - Add robust action resolution (exact/fuzzy/similes), error paths for missing action/handler, and consistent action memory/logging.
+>   - Preserve legacy returns (void/boolean) as completed; treat `{ success:false }` (including minimal/error-only) as failed.
+>   - Merge working memory with size cap; cache `action_results`; update action plan immutably per step.
+>   - Introduce AsyncLocalStorage context: `ActionContextStore`, `getCurrentActionContext`, and browser fallback `createBrowserFallback` for prompt collection; include action context in `useModel` logs; skip collecting `TEXT_EMBEDDING` prompts.
+> - **Prompts (prompts.ts)**:
+>   - Update `messageHandlerTemplate` for parallel execution model and guidance on multi-step dependencies.
+> - **Provider (plugin-bootstrap/actionState.ts)**:
+>   - Clarify description/docs: "previous results" are from prior response batches; parallel actions share the same snapshot.
+> - **Tests**:
+>   - Expand `runtime.test.ts`: parallel execution behavior, action result status semantics, prompt collection/isolation via AsyncLocalStorage, browser fallback behavior, exact vs fuzzy action matching.
+>   - Update `prompts.test.ts` for new execution rules and wording.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit 55765fc289c965232d5d690c363f73c7ea1b81f6. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->11:T64f,## Add ElizaOS Cloud as Default AI Provider in CLI
+
+### Summary
+- Add **ElizaOS Cloud** as the first/recommended option in `elizaos create` AI model selection
+- Integrate browser-based login flow for seamless API key setup
+- Fix env variable naming to match plugin (`ELIZAOS_CLOUD_API_KEY`)
+
+### Changes
+
+**`packages/cli/src/commands/create/utils/selection.ts`**
+- Add ElizaOS Cloud as top option with "(Recommended)" label
+- Set `elizacloud` as default `initialValue`
+- Add `elizacloud` to `hasEmbeddingSupport()` list
+
+**`packages/cli/src/utils/get-config.ts`**
+- Add `storeElizaCloudKey()` and `promptAndStoreElizaCloudKey()` 
+- Support 3 auth flows: browser login, manual key entry, skip
+
+**`packages/cli/src/commands/create/actions/setup.ts`**
+- Add `elizacloud` case in `setupAIModelConfig()`
+- Map `elizacloud` → `@elizaos/plugin-elizacloud` in `resolveModelToPlugin()`
+- Skip Ollama fallback when using ElizaOS Cloud
+
+**`packages/cli/src/commands/login/actions/login.ts`**
+- Rename `ELIZA_CLOUD_API_KEY` → `ELIZAOS_CLOUD_API_KEY`
+
+### User Flow
+```
+◆  Which AI model would you like to use?
+│  ● ElizaOS Cloud (Recommended)
+│  ○ Local AI (Ollama)
+│  ○ OpenAI
+│  ...
+
+◆  How would you like to authenticate?
+│  ● Login with browser (recommended)
+│  ○ Enter API key manually
+│  ○ Skip for now
+```
+
+### Test Plan
+- [ ] Run `elizaos create test-project` and select ElizaOS Cloud
+- [ ] Verify browser login flow saves key correctly
+- [ ] Verify manual key entry works
+- [ ] Verify plugin installs as `@elizaos/plugin-elizacloud`
+- [ ] Verify skip option adds placeholder to `.env`8:["$","div",null,{"className":"mb-8 space-y-6","children":[["$","$Lf",null,{"metrics":{"date":"2025-12-06","interval":{"intervalStart":"$D2025-12-06T00:00:00.000Z","intervalEnd":"$D2025-12-07T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":3,"merged":1,"total":3},"issues":{"new":0,"closed":0,"total":0},"activeContributors":4,"codeChanges":{"additions":491,"deletions":66,"files":10,"commitCount":19},"topContributors":[{"username":"ChristopherTrimboli","avatarUrl":"https://avatars.githubusercontent.com/u/27584221?u=de148a498b5af814e037c2975112fadd09df743f&v=4","totalScore":56.364794811906556,"prScore":56.364794811906556,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":null},{"username":"wtfsayo","avatarUrl":"https://avatars.githubusercontent.com/u/82053242?u=98209a1f10456f42d4d2fa71db4d5bf4a672cbc3&v=4","totalScore":26.47188694828805,"prScore":26.27188694828805,"issueScore":0,"reviewScore":0,"commentScore":0.2,"summary":null},{"username":"standujar","avatarUrl":"https://avatars.githubusercontent.com/u/16385918?u=718bdcd1585be8447bdfffb8c11ce249baa7532d&v=4","totalScore":24.639585092994047,"prScore":24.639585092994047,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":null}],"focusAreas":[{"area":"cli","count":8}],"topIssues":[],"topPullRequests":[{"id":"PR_kwDOMT5cIs63dqrL","title":"[DRAFT] feat(core): Implement parallel action execution in processActions","author":"wtfsayo","number":6209,"body":"$10","repository":"elizaos/eliza","createdAt":"2025-12-06T19:03:17Z","mergedAt":null,"additions":1467,"deletions":292},{"id":"PR_kwDOMT5cIs63ddxK","title":"feat: Add ElizaOS Cloud as Default AI Provider in CLI","author":"ChristopherTrimboli","number":6208,"body":"$11","repository":"elizaos/eliza","createdAt":"2025-12-06T18:21:51Z","mergedAt":"2025-12-06T19:51:44Z","additions":491,"deletions":66},{"id":"PR_kwDOMT5cIs63c65D","title":"fix(cli): correct startAgents API signature in e2e-tests","author":"standujar","number":6207,"body":"## Summary\r\n\r\n- Fixed `startAgents` API signature mismatch in CLI's e2e-tests.ts\r\n- Fixed unit test mock function name (`getElizaCharacter` → `getDefaultCharacter`)\r\n\r\n## Problem\r\n\r\nThe CLI's `elizaos test` command was failing with:\r\n```\r\nundefined is not an object (evaluating 'agent.character.id')\r\n```\r\n\r\nThis was caused by the e2e-tests calling `server.startAgents` with incorrect arguments:\r\n- **Before**: `startAgents([character], [plugins], options)` (3 separate args)\r\n- **After**: `startAgents([{ character, plugins }], options)` (proper format)\r\n\r\n## Test Plan\r\n\r\n- [x] Unit tests pass: `bun test packages/cli/tests/unit/commands/test/e2e-tests.test.ts`\r\n- [x] CLI builds successfully: `bun run build` in packages/cli\r\n- [x] `elizaos test` runs plugin tests correctly\r\n","repository":"elizaos/eliza","createdAt":"2025-12-06T16:03:56Z","mergedAt":"2025-12-15T13:27:41Z","additions":7,"deletions":2}],"detailedContributorSummaries":{}}}],"$L12"]}]
+9:["$","div",null,{"className":"prose prose-sm mx-auto mt-8 dark:prose-invert sm:prose lg:prose-lg xl:prose-xl","children":[["$","p","p-0",{"children":"On December 6, 2025, ElizaOS significantly enhanced its CLI by integrating ElizaOS Cloud as the default AI provider, streamlining the setup process with a new browser-based login flow and improving configuration reliability. Additionally, a draft PR was opened to implement parallel action execution, indicating a focus on core framework performance improvements."}],"\n",["$","h2","h2-0",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"✅ Completed Work","position":{"start":{"line":3,"column":4,"offset":368},"end":{"line":3,"column":20,"offset":384}}}],"position":{"start":{"line":3,"column":1,"offset":365},"end":{"line":3,"column":20,"offset":384}}},"children":"✅ Completed Work"}],"\n",["$","h3","h3-0",{"children":"CLI and Cloud Integration Enhancements"}],"\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["The CLI now defaults to ElizaOS Cloud as the primary AI provider, simplifying model selection for users (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/6208","children":"elizaos/eliza#6208"}],")."]}],"\n",["$","li","li-1",{"children":["A new browser-based login flow has been integrated to simplify API key setup for ElizaOS Cloud users (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/6208","children":"elizaos/eliza#6208"}],")."]}],"\n",["$","li","li-2",{"children":["Environment variable issues related to configuration have been resolved, improving system stability (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/6208","children":"elizaos/eliza#6208"}],")."]}],"\n",["$","li","li-3",{"children":["New unit tests were added to ensure the reliability of ElizaOS Cloud configuration and selection utilities (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/6208","children":"elizaos/eliza#6208"}],")."]}],"\n"]}],"\n",["$","h2","h2-1",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"🏗️ Work in Progress","position":{"start":{"line":10,"column":4,"offset":1132},"end":{"line":10,"column":24,"offset":1152}}}],"position":{"start":{"line":10,"column":1,"offset":1129},"end":{"line":10,"column":24,"offset":1152}}},"children":"🏗️ Work in Progress"}],"\n",["$","h3","h3-1",{"children":"New Pull Requests"}],"\n",["$","ul","ul-1",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"elizaos/eliza"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/6209","children":"#6209"}]," [DRAFT] feat(core): Implement parallel action execution in processActions"]}],"\n",["$","li","li-1",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/6207","children":"#6207"}]," fix(cli): correct startAgents API signature in e2e-tests"]}],"\n"]}],"\n"]}],"\n"]}]]}]
+a:["$","script","script-0",{"src":"/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","async":true}]
+b:["$","script","script-1",{"src":"/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","async":true}]
+c:["$","script","script-2",{"src":"/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js","async":true}]
+d:["$","$L13",null,{"children":["$","$14",null,{"name":"Next.MetadataOutlet","children":"$@15"}]}]
+12:["$","div",null,{"className":"rounded-lg border bg-card text-card-foreground shadow-sm","children":[["$","div",null,{"className":"flex flex-col space-y-1.5 p-6 py-4","children":["$","div",null,{"className":"tracking-tight text-sm font-medium","children":["$undefined","Code Changes"]}]}],["$","div",null,{"className":"p-6 pt-0","children":["$","div",null,{"className":"grid grid-cols-2 gap-4 md:grid-cols-4","children":[["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-git-commit-vertical h-5 w-5","aria-hidden":"true","children":[["$","path","1holv5",{"d":"M12 3v6"}],["$","circle","1v7zrd",{"cx":"12","cy":"12","r":"3"}],["$","path","a9ows0",{"d":"M12 15v6"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":19}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Commits"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-file-code h-5 w-5","aria-hidden":"true","children":[["$","path","1oefj6",{"d":"M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"}],["$","path","wfsgrz",{"d":"M14 2v5a1 1 0 0 0 1 1h5"}],["$","path","1tg20x",{"d":"M10 12.5 8 15l2 2.5"}],["$","path","yinavb",{"d":"m14 12.5 2 2.5-2 2.5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":10}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Files Changed"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-green-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-up h-5 w-5 text-green-500","aria-hidden":"true","children":[["$","path","hav0vg",{"d":"m5 12 7-7 7 7"}],["$","path","x0mq9r",{"d":"M12 19V5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-green-500","children":"+491"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Added"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-red-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-down h-5 w-5 text-red-500","aria-hidden":"true","children":[["$","path","s699le",{"d":"M12 5v14"}],["$","path","1idqje",{"d":"m19 12-7 7-7-7"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-red-500","children":"-66"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Deleted"}]]}]]}]]}]}]]}]
+15:null

@@ -1,0 +1,1 @@
+self.__SSG_MANIFEST=new Set(["\u002Fprofile\u002F[username]","\u002Fsummary\u002F[interval]\u002F[[...date]]"]);self.__SSG_MANIFEST_CB&&self.__SSG_MANIFEST_CB()

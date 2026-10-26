@@ -1,0 +1,716 @@
+1:"$Sreact.fragment"
+2:I[4817319,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"IntervalSelector"]
+3:I[6998365,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"LlmCopyButton"]
+f:I[3642796,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],""]
+10:I[3238488,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"StatCardsDisplay"]
+15:I[4261541,["/eliza-leaderboard/_next/static/chunks/b33bcbdcb3f88354.js","/eliza-leaderboard/_next/static/chunks/8ba59154b6704904.js"],"OutletBoundary"]
+16:"$Sreact.suspense"
+4:T25a9,## Relates to
+
+Fixes the issue where `runtime.getSetting("ANY_VARIABLES")` returns `undefined` when environment variables are exported on the host (`export VAR=value`) instead of being defined in a `.env` file, causing agents to use incorrect configuration or fallback to defaults.
+
+## Risks
+
+**Low**
+
+## Background
+
+### What does this PR do?
+
+This PR fixes environment variable loading to work correctly with exported shell variables, not just `.env` files:
+
+1. **Changes `loadSecretsNodeImpl()`** to read directly from `process.env` instead of re-reading the `.env` file
+2. **Creates centralized `loadEnvFile()`** function in `core/utils/environment.ts` for consistent `.env` file loading
+3. **Updates CLI and Server** to use the centralized function
+4. **Updates all tests** to reflect the new behavior
+
+### What kind of change is this?
+
+- ✅ **Bug fixes** (non-breaking change which fixes an issue)
+- ✅ **Improvements** (misc. changes to existing features)
+
+### Why are we doing this?
+
+#### Problem Discovered
+
+When running agents in environments where variables are exported directly on the host system (e.g., `export POSTGRES_URL=postgresql://...`), the variables were not accessible via `runtime.getSetting()`, even though they were correctly set in the environment.
+
+**Testing confirmed the issue**:
+- ✅ With `.env` file: Works
+- ❌ With `export POSTGRES_URL=...`: **Doesn't work**
+- ❌ With system environment variables: **Doesn't work**
+
+This is problematic for:
+- Production deployments where secrets are managed via exported environment variables
+- Container orchestration systems (Docker, ECS, Kubernetes) that inject env vars
+- CI/CD pipelines that set variables programmatically
+- Development workflows that prefer `export` over `.env` files
+
+#### Root Cause
+
+The `loadSecretsNodeImpl()` function in `packages/core/src/secrets.ts` was:
+1. **Only** reading the `.env` FILE directly using `fs.readFileSync()`
+2. Parsing it with `dotenv.parse()`
+3. Merging those parsed values into `character.settings`
+
+This approach **completely ignored** `process.env`, which contains:
+- Variables loaded from `.env` by the CLI (via `dotenv.config()`)
+- **Exported shell variables** (`export FOO=bar`) ← **Main issue**
+- Container-injected environment variables
+- System environment variables
+
+**Why was this a problem?**
+
+When you run:
+```bash
+export POSTGRES_URL=postgresql://production:5432/eliza
+bunx elizaos start --character=./characters/sample.json
+```
+
+The variable is in `process.env`, but `loadSecretsNodeImpl()` was looking for a `.env` file instead. If no `.env` file existed, it would fail to load ANY environment variables, even though they were available in `process.env`.
+
+#### Solution
+
+The fix reads `process.env` directly instead of re-reading the `.env` file
+
+**Why this works:**
+
+1. **When using `.env` files**: The CLI calls `dotenv.config()` which loads `.env` → `process.env`
+2. **When using exported variables**: Shell already puts them in `process.env`
+3. **When using container env vars**: Runtime injects them into `process.env`
+4. **Result**: `loadSecretsNodeImpl()` now sees ALL variables, regardless of source
+
+## Documentation changes needed?
+
+- ✅ My changes do not require a change to the project documentation.
+
+The behavior is now more intuitive - environment variables work as expected from any source. No user-facing documentation changes needed.
+
+## Testing
+
+### Where should a reviewer start?
+
+1. Review the changes in [packages/core/src/secrets.ts](packages/core/src/secrets.ts:26-66) - the core fix
+2. Review [packages/core/src/utils/environment.ts](packages/core/src/utils/environment.ts:384-410) - centralized `loadEnvFile()`
+3. Check test updates in [packages/core/src/__tests__/secrets.test.ts](packages/core/src/__tests__/secrets.test.ts:76-190)
+4. Verify CLI integration in [packages/cli/src/commands/start/index.ts](packages/cli/src/commands/start/index.ts:38-46)
+5. Verify Server integration in [packages/server/src/index.ts](packages/server/src/index.ts:332)
+
+### Detailed testing steps
+
+#### Automated Tests
+
+```bash
+cd packages/core
+bun test
+
+# Results:
+# ✅ 675 pass
+# ❌ 0 fail
+# ⏭️ 4 skip
+```
+
+All tests pass, including:
+- `secrets.test.ts` - 8 tests verifying environment variable loading
+- `settings.test.ts` - 49 tests verifying character settings merge
+- `environment.test.ts` - 29 tests verifying environment abstraction
+
+#### Manual Testing
+
+**Test 1: .env file (already working, should still work)**
+```bash
+echo 'POSTGRES_URL=postgresql://localhost:5432/test' > .env
+bunx elizaos start --character=./characters/sample.json
+# ✅ Agent uses POSTGRES_URL from .env file
+```
+
+**Test 2: Exported environment variable (was broken, NOW FIXED)**
+```bash
+# Remove .env file to test pure exported variables
+rm -f .env
+
+export POSTGRES_URL=postgresql://localhost:5432/test
+export OPENAI_API_KEY=sk-test-key
+bunx elizaos start --character=./characters/sample.json
+
+# ✅ Agent now correctly reads exported variables (FIXED)
+# ✅ runtime.getSetting("POSTGRES_URL") returns the correct value
+```
+
+**Test 3: Mixed approach (both .env and exports)**
+```bash
+# .env has some vars
+echo 'POSTGRES_URL=postgresql://localhost:5432/test' > .env
+
+# Override with export (export should win because it's already in process.env)
+export POSTGRES_URL=postgresql://production:5432/eliza
+bunx elizaos start --character=./characters/sample.json
+
+# ✅ Uses the exported value (not the .env value)
+```
+
+**Test 4: Server standalone (without CLI)**
+```typescript
+import { AgentServer } from '@elizaos/server';
+
+// Set env var before importing
+process.env.POSTGRES_URL = 'postgresql://localhost:5432/test';
+
+const server = new AgentServer();
+await server.start({
+  port: 3000,
+  agents: [{ character: myCharacter }]
+});
+// ✅ Works because Server calls loadEnvFile() at initialization
+```
+
+## Environment Variable Loading Flow (After Fix)
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     Deployment Context                       │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+        ┌─────────────────────────────────────────────┐
+        │          Where do env vars come from?       │
+        └─────────────────────────────────────────────┘
+                              │
+           ┌──────────────────┼──────────────────┐
+           │                  │                  │
+           ▼                  ▼                  ▼
+    ┌──────────┐      ┌──────────┐      ┌──────────┐
+    │.env file │      │ export   │      │ System   │
+    │  (CLI)   │      │VAR=value │      │ env vars │
+    └──────────┘      └──────────┘      └──────────┘
+           │                  │                  │
+           │                  │                  │
+           └──────────────────┼──────────────────┘
+                              │
+                              ▼
+                       ┌─────────────┐
+                       │ process.env │ ← All sources merged here
+                       └─────────────┘
+                              │
+                              ▼
+                    ┌──────────────────┐
+                    │loadSecretsNodeImpl│ ← Reads process.env
+                    └──────────────────┘
+                              │
+                              ▼
+                  ┌────────────────────────┐
+                  │character.settings.secrets│
+                  └────────────────────────┘
+                              │
+                              ▼
+                      ┌──────────────┐
+                      │runtime.getSetting()│ ✅ Works!
+                      └──────────────┘
+```
+
+## Benefits
+
+1. ✅ **Exported variables work** - `export FOO=bar` is now accessible (main fix)
+2. ✅ **No `.env` file required** - Works in environments without `.env` files
+3. ✅ **Backward compatible** - `.env` files still work as before
+4. ✅ **Production-ready** - Secrets can be injected via environment, not files
+5. ✅ **Container-friendly** - Works with Docker, ECS, Kubernetes env injection
+6. ✅ **Simpler code** - No need to re-read `.env` file
+7. ✅ **Consistent behavior** - Works the same in all environments
+8. ✅ **Idempotent** - Safe to call `loadEnvFile()` multiple times5:Tf52,<!-- Use this template by filling in information and copying and pasting relevant items out of the HTML comments. -->
+
+# Relates to
+
+Relates to #6095 - Unified messaging API
+
+# Risks
+
+**Low risk**
+
+This change is non-breaking and fully backward compatible:
+- Adds optional `elizaOS?` property to runtime (existing code unaffected)
+- Only affects plugins that explicitly use `runtime.elizaOS`
+- Includes proper cleanup to prevent memory leaks
+- Well-tested with plugin-discord integration
+
+Potential areas affected:
+- Runtime lifecycle (addition of ElizaOS reference)
+- Memory management (cleanup in `stop()`)
+- Plugin development patterns (new unified API access)
+
+# Background
+
+## What does this PR do?
+
+This PR enables plugins to access the unified messaging API (`elizaOS.sendMessage()`) introduced in #6095 by adding an optional reference to the ElizaOS instance in the runtime.
+
+**Key changes:**
+- Created `IElizaOS` interface for clean abstraction
+- Added `elizaOS?: IElizaOS` property to `IAgentRuntime`
+- Added `hasElizaOS()` type guard helper
+- ElizaOS auto-assigns itself to runtimes during registration
+- Added cleanup in `runtime.stop()` to prevent memory leaks
+
+**Benefits:**
+- Plugins can now use `runtime.elizaOS.sendMessage()` for standardized messaging
+- Type-safe access with `hasElizaOS()` guard
+- Auto-filling, connection management, SYNC/ASYNC modes
+- Clean architecture with no circular dependencies
+
+## What kind of change is this?
+
+- [x] Features (non-breaking change which adds functionality)
+- [x] Improvements (misc. changes to existing features)
+
+## Why are we doing this?
+
+The unified messaging API (#6095) provides a standardized entry point for sending messages to agents, but plugins currently have no way to access it. They must use `messageService.handleMessage()` directly, which bypasses the benefits of the unified API (auto-filling, connection management, callbacks, etc.).
+
+This PR solves that by giving the runtime a reference to its parent ElizaOS instance, allowing plugins to call `runtime.elizaOS.sendMessage()` when available, while maintaining a fallback for standalone mode.
+
+# Documentation changes needed?
+
+- [x] My changes require a change to the project documentation.
+- [ ] If documentation change is needed: I have updated the documentation accordingly.
+
+**Documentation needed:**
+- Plugin development guide should mention `runtime.elizaOS.sendMessage()` API
+- Example usage in plugin templates
+- Migration guide for existing plugins (optional, recommended)
+
+# Testing
+
+## Where should a reviewer start?
+
+1. Review the architecture: `packages/core/src/types/elizaos.ts` - new interface
+2. Check runtime changes: `packages/core/src/types/runtime.ts` and `packages/core/src/runtime.ts`
+3. Verify ElizaOS auto-assignment: `packages/core/src/elizaos.ts` lines 158 and 203
+4. Look at cleanup: `packages/core/src/runtime.ts` line 384
+
+## Detailed testing steps
+
+**Automated:**
+- [x] TypeScript compilation passes
+- [x] No circular dependencies
+- [x] Type safety verified
+
+**Manual testing (with plugin-discord):**
+- [x] Runtime has `elizaOS` reference after initialization
+- [x] `hasElizaOS()` returns `true` when ElizaOS is present
+- [x] Plugins can call `runtime.elizaOS.sendMessage()` successfully
+- [x] Fallback to `messageService.handleMessage()` works when ElizaOS is undefined
+- [x] Memory cleanup on `runtime.stop()` works correctly
+
+**Test with plugin-discord:**
+```typescript
+// In plugin-discord/src/messages.ts
+if (this.runtime.hasElizaOS()) {
+  // Uses unified API - confirmed via logs
+  await this.runtime.elizaOS.sendMessage(agentId, message, options);
+} else {
+  // Fallback for standalone
+  await this.runtime.messageService.handleMessage(runtime, message, callback);
+}
+```
+
+Logs confirm unified API is used:
+```
+Info [Discord] Using unified messaging API
+```6:T7c2,<!-- CURSOR_SUMMARY -->
+> [!NOTE]
+> Moves to Bun-centric strict TypeScript with pre-build typechecking, adds config guard tests, improves SOL swap handling, and switches tests to bun.
+> 
+> - **TypeScript/Build**
+>   - Add `tsconfig.typecheck.json` with `skipLibCheck: false` and run pre-build typecheck in `build.ts`.
+>   - Tighten `tsconfig.json` (strict flags, Bun-only `types`, include `.d.ts`), and set `tsconfig.build.json` to use Bun types with `skipLibCheck: true` for dts emit.
+>   - Add `src/types.d.ts` to reconcile Bun and Node `ProcessEnv` typings (ensure `TZ?: string`).
+> - **Tests**
+>   - Migrate tests to Bun (`vitest` → `bun test`); update `__tests__/actions/swap.test.ts` import.
+>   - Add `__tests__/tsconfig.test.ts` to enforce type safety config (Bun types present, Node types absent, `skipLibCheck` rules, presence of `types.d.ts`).
+> - **Solana Swap Action** (`src/actions/swap.ts`)
+>   - Validate `SOL_ADDRESS` presence when swapping SOL; handle decimals safely; improve error messages and wallet token resolution defaults.
+> - **Routes** (`src/routes/index.ts`)
+>   - Build `ApiError` conditionally to omit `details` when undefined.
+> - **Package** (`package.json`)
+>   - Switch test script to `bun test`; remove `vitest` and `@types/node` dev deps.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit 72a3fb81d395723c2444fba7fd2cc0049c73dd53. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+* **Tests**
+  * Added TypeScript configuration validation test suite.
+
+* **Chores**
+  * Transitioned test framework to Bun runtime.
+  * Enhanced TypeScript compilation strictness for improved type safety.
+  * Integrated pre-build type checking to catch errors early.
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->7:T62b,On November 12, 2025, ElizaOS saw significant progress across documentation, core framework enhancements, and plugin development. Key achievements include the addition of comprehensive tokenomics documentation, a critical fix for environment variable loading in the `eliza` runtime, and substantial improvements to the `plugin-solana`'s testing infrastructure and type-checking. These updates collectively strengthen the project's foundational elements, improve developer experience, and enhance transparency.
+
+## ✅ Completed Work
+### Core Framework Stability & Enhancements
+*   An ElizaOS reference was added to the core runtime, improving foundational elements related to a unified messaging API. ([elizaos/eliza#6111](https://github.com/elizaos/eliza/pull/6111))
+*   A bug preventing correct loading of environment variables from `process.env` was resolved, ensuring `runtime.getSetting()` functions as expected. ([elizaos/eliza#6141](https://github.com/elizaos/eliza/pull/6141))
+
+### Documentation & Transparency
+*   A new tokenomics page was added to the documentation, detailing token information, contract addresses, and vesting, integrated into the sidebar navigation. ([elizaos/docs#80](https://github.com/elizaos/docs/pull/80))
+
+### Plugin Development & Quality
+*   The `plugin-solana` saw enhanced testing and type-checking, including enabling typechecks in the build, stricter TypeScript configurations, migration from Vitest to Bun test, and improved SOL swap handling. ([elizaos-plugins/plugin-solana#22](https://github.com/elizaos-plugins/plugin-solana/pull/22))0:{"buildId":"US8XLB_zHXYj_PVAECGcd","rsc":["$","$1","c",{"children":[["$","div",null,{"className":"container mx-auto px-6 py-8 md:px-8","children":["$","div",null,{"className":"mx-auto max-w-4xl","children":[["$","div",null,{"className":"mb-4 flex flex-col justify-between sm:flex-row","children":[["$","$L2",null,{"currentInterval":"day","currentDate":"2025-11-12"}],["$","$L3",null,{"metrics":{"date":"2025-11-12","interval":{"intervalStart":"$D2025-11-12T00:00:00.000Z","intervalEnd":"$D2025-11-13T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":0,"merged":4,"total":4},"issues":{"new":0,"closed":0,"total":0},"activeContributors":5,"codeChanges":{"additions":1003,"deletions":386,"files":34,"commitCount":20},"topContributors":[{"username":"standujar","avatarUrl":"https://avatars.githubusercontent.com/u/16385918?u=718bdcd1585be8447bdfffb8c11ce249baa7532d&v=4","totalScore":0.33999999999999997,"prScore":0,"issueScore":0,"reviewScore":0,"commentScore":0.33999999999999997,"summary":"standujar: Focused on bugfix work, modifying 50 files with 3 commits and contributing 2 PR comments, indicating engagement with ongoing development."},{"username":"odilitime","avatarUrl":"https://avatars.githubusercontent.com/u/16395496?u=c9bac48e632aae594a0d85aaf9e9c9c69b674d8b&v=4","totalScore":0.2,"prScore":0,"issueScore":0,"reviewScore":0,"commentScore":0.2,"summary":"odilitime: Focused on a mix of other work, bug fixes, and tests, making 4 commits that modified 14 files with a net addition of 205 lines of code, and provided one PR comment."}],"focusAreas":[{"area":"core","count":12},{"area":"plugin-sql","count":2},{"area":"server","count":2},{"area":"src","count":2},{"area":"project-starter","count":1},{"area":"project-tee-starter","count":1},{"area":"cli","count":1},{"area":"__tests__/actions","count":1},{"area":"__tests__","count":1},{"area":"src/actions","count":1}],"topIssues":[],"topPullRequests":[{"id":"PR_kwDOMT5cIs6yoPHs","title":"fix: load environment variables from process.env instead of .env file","author":"standujar","number":6141,"body":"$4","repository":"elizaos/eliza","createdAt":"2025-11-10T21:55:04Z","mergedAt":"2025-11-12T11:03:00Z","additions":363,"deletions":284},{"id":"PR_kwDOMT5cIs6xNLv_","title":"feat: add ElizaOS reference to runtime","author":"standujar","number":6111,"body":"$5","repository":"elizaos/eliza","createdAt":"2025-11-03T14:51:50Z","mergedAt":"2025-11-12T16:26:21Z","additions":312,"deletions":69},{"id":"PR_kwDONkwLhs6wu7Um","title":"Enable typechecks in build, stricter TypeScript (remove node types) + vitest => bun test","author":"odilitime","number":22,"body":"$6","repository":"elizaos-plugins/plugin-solana","createdAt":"2025-10-31T01:05:02Z","mergedAt":"2025-11-12T02:46:35Z","additions":235,"deletions":33},{"id":"PR_kwDOPKJxlM6y2gtl","title":"Add tokenomics page with contract addresses and vesting details","author":"wtfsayo","number":80,"body":"## Changes\n\nThis PR adds comprehensive tokenomics documentation to the ElizaOS docs.\n\n### What's Changed\n- ✨ Created new  page with detailed token information\n- 📑 Added tokenomics to sidebar navigation under Getting Started section\n- 🏷️ Added prominent banner card on home page linking to tokenomics page\n\n### Content Included\n- Contract addresses for SVM (Solana) and EVM (Ethereum, Base, BSC) chains\n- Token standards and cross-chain capabilities (CCIP enabled)\n- Total and circulating supply information\n- Detailed vesting schedules for all allocations (Ecosystem, Foundation, Team, SAFT, Liquidity)\n- Token release schedule and migration details from $ai16z to $elizaOS\n- Change log documenting key dates\n\n### Documentation Best Practices\n- Uses Mintlify components (Card, Steps, Info, Note, Warning) for better UX\n- Follows MDX formatting standards with proper frontmatter\n- Includes descriptive icon (coins) for visual consistency\n- Maintains consistent styling with existing documentation","repository":"elizaos/docs","createdAt":"2025-11-11T22:09:36Z","mergedAt":"2025-11-12T12:12:32Z","additions":93,"deletions":0}],"detailedContributorSummaries":{"odilitime":"odilitime: Focused on a mix of other work, bug fixes, and tests, making 4 commits that modified 14 files with a net addition of 205 lines of code, and provided one PR comment.","standujar":"standujar: Focused on bugfix work, modifying 50 files with 3 commits and contributing 2 PR comments, indicating engagement with ongoing development."}},"summaryContent":"$7","className":"self-end sm:self-start"}]]}],"$L8","$L9","$La"]}]}],["$Lb","$Lc","$Ld"],"$Le"]}],"loading":null,"isPartial":false}
+8:["$","div",null,{"className":"mb-6","children":["$","div",null,{"className":"flex items-center justify-between","children":[[["$","$Lf",null,{"href":"/summary/day/2025-11-11","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left mr-2 h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"children":"Previous"}],false],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$Lf",null,{"href":"/summary/day/2025-11-11","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Previous"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]],["$","div",null,{"className":"flex flex-col items-center","children":[["$","div",null,{"className":"text-sm font-medium text-gray-500","children":["Daily"," Summary"]}],["$","time",null,{"dateTime":"2025-11-12","className":"text-md font-bold","children":"Nov 12, 2025"}]]}],[["$","$Lf",null,{"href":"/summary/day/2025-11-13","children":[false,["$","span",null,{"children":"Next"}],["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right ml-2 h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}]],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$Lf",null,{"href":"/summary/day/2025-11-13","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Next"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]]]}]}]
+11:T25a9,## Relates to
+
+Fixes the issue where `runtime.getSetting("ANY_VARIABLES")` returns `undefined` when environment variables are exported on the host (`export VAR=value`) instead of being defined in a `.env` file, causing agents to use incorrect configuration or fallback to defaults.
+
+## Risks
+
+**Low**
+
+## Background
+
+### What does this PR do?
+
+This PR fixes environment variable loading to work correctly with exported shell variables, not just `.env` files:
+
+1. **Changes `loadSecretsNodeImpl()`** to read directly from `process.env` instead of re-reading the `.env` file
+2. **Creates centralized `loadEnvFile()`** function in `core/utils/environment.ts` for consistent `.env` file loading
+3. **Updates CLI and Server** to use the centralized function
+4. **Updates all tests** to reflect the new behavior
+
+### What kind of change is this?
+
+- ✅ **Bug fixes** (non-breaking change which fixes an issue)
+- ✅ **Improvements** (misc. changes to existing features)
+
+### Why are we doing this?
+
+#### Problem Discovered
+
+When running agents in environments where variables are exported directly on the host system (e.g., `export POSTGRES_URL=postgresql://...`), the variables were not accessible via `runtime.getSetting()`, even though they were correctly set in the environment.
+
+**Testing confirmed the issue**:
+- ✅ With `.env` file: Works
+- ❌ With `export POSTGRES_URL=...`: **Doesn't work**
+- ❌ With system environment variables: **Doesn't work**
+
+This is problematic for:
+- Production deployments where secrets are managed via exported environment variables
+- Container orchestration systems (Docker, ECS, Kubernetes) that inject env vars
+- CI/CD pipelines that set variables programmatically
+- Development workflows that prefer `export` over `.env` files
+
+#### Root Cause
+
+The `loadSecretsNodeImpl()` function in `packages/core/src/secrets.ts` was:
+1. **Only** reading the `.env` FILE directly using `fs.readFileSync()`
+2. Parsing it with `dotenv.parse()`
+3. Merging those parsed values into `character.settings`
+
+This approach **completely ignored** `process.env`, which contains:
+- Variables loaded from `.env` by the CLI (via `dotenv.config()`)
+- **Exported shell variables** (`export FOO=bar`) ← **Main issue**
+- Container-injected environment variables
+- System environment variables
+
+**Why was this a problem?**
+
+When you run:
+```bash
+export POSTGRES_URL=postgresql://production:5432/eliza
+bunx elizaos start --character=./characters/sample.json
+```
+
+The variable is in `process.env`, but `loadSecretsNodeImpl()` was looking for a `.env` file instead. If no `.env` file existed, it would fail to load ANY environment variables, even though they were available in `process.env`.
+
+#### Solution
+
+The fix reads `process.env` directly instead of re-reading the `.env` file
+
+**Why this works:**
+
+1. **When using `.env` files**: The CLI calls `dotenv.config()` which loads `.env` → `process.env`
+2. **When using exported variables**: Shell already puts them in `process.env`
+3. **When using container env vars**: Runtime injects them into `process.env`
+4. **Result**: `loadSecretsNodeImpl()` now sees ALL variables, regardless of source
+
+## Documentation changes needed?
+
+- ✅ My changes do not require a change to the project documentation.
+
+The behavior is now more intuitive - environment variables work as expected from any source. No user-facing documentation changes needed.
+
+## Testing
+
+### Where should a reviewer start?
+
+1. Review the changes in [packages/core/src/secrets.ts](packages/core/src/secrets.ts:26-66) - the core fix
+2. Review [packages/core/src/utils/environment.ts](packages/core/src/utils/environment.ts:384-410) - centralized `loadEnvFile()`
+3. Check test updates in [packages/core/src/__tests__/secrets.test.ts](packages/core/src/__tests__/secrets.test.ts:76-190)
+4. Verify CLI integration in [packages/cli/src/commands/start/index.ts](packages/cli/src/commands/start/index.ts:38-46)
+5. Verify Server integration in [packages/server/src/index.ts](packages/server/src/index.ts:332)
+
+### Detailed testing steps
+
+#### Automated Tests
+
+```bash
+cd packages/core
+bun test
+
+# Results:
+# ✅ 675 pass
+# ❌ 0 fail
+# ⏭️ 4 skip
+```
+
+All tests pass, including:
+- `secrets.test.ts` - 8 tests verifying environment variable loading
+- `settings.test.ts` - 49 tests verifying character settings merge
+- `environment.test.ts` - 29 tests verifying environment abstraction
+
+#### Manual Testing
+
+**Test 1: .env file (already working, should still work)**
+```bash
+echo 'POSTGRES_URL=postgresql://localhost:5432/test' > .env
+bunx elizaos start --character=./characters/sample.json
+# ✅ Agent uses POSTGRES_URL from .env file
+```
+
+**Test 2: Exported environment variable (was broken, NOW FIXED)**
+```bash
+# Remove .env file to test pure exported variables
+rm -f .env
+
+export POSTGRES_URL=postgresql://localhost:5432/test
+export OPENAI_API_KEY=sk-test-key
+bunx elizaos start --character=./characters/sample.json
+
+# ✅ Agent now correctly reads exported variables (FIXED)
+# ✅ runtime.getSetting("POSTGRES_URL") returns the correct value
+```
+
+**Test 3: Mixed approach (both .env and exports)**
+```bash
+# .env has some vars
+echo 'POSTGRES_URL=postgresql://localhost:5432/test' > .env
+
+# Override with export (export should win because it's already in process.env)
+export POSTGRES_URL=postgresql://production:5432/eliza
+bunx elizaos start --character=./characters/sample.json
+
+# ✅ Uses the exported value (not the .env value)
+```
+
+**Test 4: Server standalone (without CLI)**
+```typescript
+import { AgentServer } from '@elizaos/server';
+
+// Set env var before importing
+process.env.POSTGRES_URL = 'postgresql://localhost:5432/test';
+
+const server = new AgentServer();
+await server.start({
+  port: 3000,
+  agents: [{ character: myCharacter }]
+});
+// ✅ Works because Server calls loadEnvFile() at initialization
+```
+
+## Environment Variable Loading Flow (After Fix)
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     Deployment Context                       │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+        ┌─────────────────────────────────────────────┐
+        │          Where do env vars come from?       │
+        └─────────────────────────────────────────────┘
+                              │
+           ┌──────────────────┼──────────────────┐
+           │                  │                  │
+           ▼                  ▼                  ▼
+    ┌──────────┐      ┌──────────┐      ┌──────────┐
+    │.env file │      │ export   │      │ System   │
+    │  (CLI)   │      │VAR=value │      │ env vars │
+    └──────────┘      └──────────┘      └──────────┘
+           │                  │                  │
+           │                  │                  │
+           └──────────────────┼──────────────────┘
+                              │
+                              ▼
+                       ┌─────────────┐
+                       │ process.env │ ← All sources merged here
+                       └─────────────┘
+                              │
+                              ▼
+                    ┌──────────────────┐
+                    │loadSecretsNodeImpl│ ← Reads process.env
+                    └──────────────────┘
+                              │
+                              ▼
+                  ┌────────────────────────┐
+                  │character.settings.secrets│
+                  └────────────────────────┘
+                              │
+                              ▼
+                      ┌──────────────┐
+                      │runtime.getSetting()│ ✅ Works!
+                      └──────────────┘
+```
+
+## Benefits
+
+1. ✅ **Exported variables work** - `export FOO=bar` is now accessible (main fix)
+2. ✅ **No `.env` file required** - Works in environments without `.env` files
+3. ✅ **Backward compatible** - `.env` files still work as before
+4. ✅ **Production-ready** - Secrets can be injected via environment, not files
+5. ✅ **Container-friendly** - Works with Docker, ECS, Kubernetes env injection
+6. ✅ **Simpler code** - No need to re-read `.env` file
+7. ✅ **Consistent behavior** - Works the same in all environments
+8. ✅ **Idempotent** - Safe to call `loadEnvFile()` multiple times12:Tf52,<!-- Use this template by filling in information and copying and pasting relevant items out of the HTML comments. -->
+
+# Relates to
+
+Relates to #6095 - Unified messaging API
+
+# Risks
+
+**Low risk**
+
+This change is non-breaking and fully backward compatible:
+- Adds optional `elizaOS?` property to runtime (existing code unaffected)
+- Only affects plugins that explicitly use `runtime.elizaOS`
+- Includes proper cleanup to prevent memory leaks
+- Well-tested with plugin-discord integration
+
+Potential areas affected:
+- Runtime lifecycle (addition of ElizaOS reference)
+- Memory management (cleanup in `stop()`)
+- Plugin development patterns (new unified API access)
+
+# Background
+
+## What does this PR do?
+
+This PR enables plugins to access the unified messaging API (`elizaOS.sendMessage()`) introduced in #6095 by adding an optional reference to the ElizaOS instance in the runtime.
+
+**Key changes:**
+- Created `IElizaOS` interface for clean abstraction
+- Added `elizaOS?: IElizaOS` property to `IAgentRuntime`
+- Added `hasElizaOS()` type guard helper
+- ElizaOS auto-assigns itself to runtimes during registration
+- Added cleanup in `runtime.stop()` to prevent memory leaks
+
+**Benefits:**
+- Plugins can now use `runtime.elizaOS.sendMessage()` for standardized messaging
+- Type-safe access with `hasElizaOS()` guard
+- Auto-filling, connection management, SYNC/ASYNC modes
+- Clean architecture with no circular dependencies
+
+## What kind of change is this?
+
+- [x] Features (non-breaking change which adds functionality)
+- [x] Improvements (misc. changes to existing features)
+
+## Why are we doing this?
+
+The unified messaging API (#6095) provides a standardized entry point for sending messages to agents, but plugins currently have no way to access it. They must use `messageService.handleMessage()` directly, which bypasses the benefits of the unified API (auto-filling, connection management, callbacks, etc.).
+
+This PR solves that by giving the runtime a reference to its parent ElizaOS instance, allowing plugins to call `runtime.elizaOS.sendMessage()` when available, while maintaining a fallback for standalone mode.
+
+# Documentation changes needed?
+
+- [x] My changes require a change to the project documentation.
+- [ ] If documentation change is needed: I have updated the documentation accordingly.
+
+**Documentation needed:**
+- Plugin development guide should mention `runtime.elizaOS.sendMessage()` API
+- Example usage in plugin templates
+- Migration guide for existing plugins (optional, recommended)
+
+# Testing
+
+## Where should a reviewer start?
+
+1. Review the architecture: `packages/core/src/types/elizaos.ts` - new interface
+2. Check runtime changes: `packages/core/src/types/runtime.ts` and `packages/core/src/runtime.ts`
+3. Verify ElizaOS auto-assignment: `packages/core/src/elizaos.ts` lines 158 and 203
+4. Look at cleanup: `packages/core/src/runtime.ts` line 384
+
+## Detailed testing steps
+
+**Automated:**
+- [x] TypeScript compilation passes
+- [x] No circular dependencies
+- [x] Type safety verified
+
+**Manual testing (with plugin-discord):**
+- [x] Runtime has `elizaOS` reference after initialization
+- [x] `hasElizaOS()` returns `true` when ElizaOS is present
+- [x] Plugins can call `runtime.elizaOS.sendMessage()` successfully
+- [x] Fallback to `messageService.handleMessage()` works when ElizaOS is undefined
+- [x] Memory cleanup on `runtime.stop()` works correctly
+
+**Test with plugin-discord:**
+```typescript
+// In plugin-discord/src/messages.ts
+if (this.runtime.hasElizaOS()) {
+  // Uses unified API - confirmed via logs
+  await this.runtime.elizaOS.sendMessage(agentId, message, options);
+} else {
+  // Fallback for standalone
+  await this.runtime.messageService.handleMessage(runtime, message, callback);
+}
+```
+
+Logs confirm unified API is used:
+```
+Info [Discord] Using unified messaging API
+```13:T7c2,<!-- CURSOR_SUMMARY -->
+> [!NOTE]
+> Moves to Bun-centric strict TypeScript with pre-build typechecking, adds config guard tests, improves SOL swap handling, and switches tests to bun.
+> 
+> - **TypeScript/Build**
+>   - Add `tsconfig.typecheck.json` with `skipLibCheck: false` and run pre-build typecheck in `build.ts`.
+>   - Tighten `tsconfig.json` (strict flags, Bun-only `types`, include `.d.ts`), and set `tsconfig.build.json` to use Bun types with `skipLibCheck: true` for dts emit.
+>   - Add `src/types.d.ts` to reconcile Bun and Node `ProcessEnv` typings (ensure `TZ?: string`).
+> - **Tests**
+>   - Migrate tests to Bun (`vitest` → `bun test`); update `__tests__/actions/swap.test.ts` import.
+>   - Add `__tests__/tsconfig.test.ts` to enforce type safety config (Bun types present, Node types absent, `skipLibCheck` rules, presence of `types.d.ts`).
+> - **Solana Swap Action** (`src/actions/swap.ts`)
+>   - Validate `SOL_ADDRESS` presence when swapping SOL; handle decimals safely; improve error messages and wallet token resolution defaults.
+> - **Routes** (`src/routes/index.ts`)
+>   - Build `ApiError` conditionally to omit `details` when undefined.
+> - **Package** (`package.json`)
+>   - Switch test script to `bun test`; remove `vitest` and `@types/node` dev deps.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit 72a3fb81d395723c2444fba7fd2cc0049c73dd53. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+* **Tests**
+  * Added TypeScript configuration validation test suite.
+
+* **Chores**
+  * Transitioned test framework to Bun runtime.
+  * Enhanced TypeScript compilation strictness for improved type safety.
+  * Integrated pre-build type checking to catch errors early.
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->9:["$","div",null,{"className":"mb-8 space-y-6","children":[["$","$L10",null,{"metrics":{"date":"2025-11-12","interval":{"intervalStart":"$D2025-11-12T00:00:00.000Z","intervalEnd":"$D2025-11-13T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":0,"merged":4,"total":4},"issues":{"new":0,"closed":0,"total":0},"activeContributors":5,"codeChanges":{"additions":1003,"deletions":386,"files":34,"commitCount":20},"topContributors":[{"username":"standujar","avatarUrl":"https://avatars.githubusercontent.com/u/16385918?u=718bdcd1585be8447bdfffb8c11ce249baa7532d&v=4","totalScore":0.33999999999999997,"prScore":0,"issueScore":0,"reviewScore":0,"commentScore":0.33999999999999997,"summary":"standujar: Focused on bugfix work, modifying 50 files with 3 commits and contributing 2 PR comments, indicating engagement with ongoing development."},{"username":"odilitime","avatarUrl":"https://avatars.githubusercontent.com/u/16395496?u=c9bac48e632aae594a0d85aaf9e9c9c69b674d8b&v=4","totalScore":0.2,"prScore":0,"issueScore":0,"reviewScore":0,"commentScore":0.2,"summary":"odilitime: Focused on a mix of other work, bug fixes, and tests, making 4 commits that modified 14 files with a net addition of 205 lines of code, and provided one PR comment."}],"focusAreas":[{"area":"core","count":12},{"area":"plugin-sql","count":2},{"area":"server","count":2},{"area":"src","count":2},{"area":"project-starter","count":1},{"area":"project-tee-starter","count":1},{"area":"cli","count":1},{"area":"__tests__/actions","count":1},{"area":"__tests__","count":1},{"area":"src/actions","count":1}],"topIssues":[],"topPullRequests":[{"id":"PR_kwDOMT5cIs6yoPHs","title":"fix: load environment variables from process.env instead of .env file","author":"standujar","number":6141,"body":"$11","repository":"elizaos/eliza","createdAt":"2025-11-10T21:55:04Z","mergedAt":"2025-11-12T11:03:00Z","additions":363,"deletions":284},{"id":"PR_kwDOMT5cIs6xNLv_","title":"feat: add ElizaOS reference to runtime","author":"standujar","number":6111,"body":"$12","repository":"elizaos/eliza","createdAt":"2025-11-03T14:51:50Z","mergedAt":"2025-11-12T16:26:21Z","additions":312,"deletions":69},{"id":"PR_kwDONkwLhs6wu7Um","title":"Enable typechecks in build, stricter TypeScript (remove node types) + vitest => bun test","author":"odilitime","number":22,"body":"$13","repository":"elizaos-plugins/plugin-solana","createdAt":"2025-10-31T01:05:02Z","mergedAt":"2025-11-12T02:46:35Z","additions":235,"deletions":33},{"id":"PR_kwDOPKJxlM6y2gtl","title":"Add tokenomics page with contract addresses and vesting details","author":"wtfsayo","number":80,"body":"## Changes\n\nThis PR adds comprehensive tokenomics documentation to the ElizaOS docs.\n\n### What's Changed\n- ✨ Created new  page with detailed token information\n- 📑 Added tokenomics to sidebar navigation under Getting Started section\n- 🏷️ Added prominent banner card on home page linking to tokenomics page\n\n### Content Included\n- Contract addresses for SVM (Solana) and EVM (Ethereum, Base, BSC) chains\n- Token standards and cross-chain capabilities (CCIP enabled)\n- Total and circulating supply information\n- Detailed vesting schedules for all allocations (Ecosystem, Foundation, Team, SAFT, Liquidity)\n- Token release schedule and migration details from $ai16z to $elizaOS\n- Change log documenting key dates\n\n### Documentation Best Practices\n- Uses Mintlify components (Card, Steps, Info, Note, Warning) for better UX\n- Follows MDX formatting standards with proper frontmatter\n- Includes descriptive icon (coins) for visual consistency\n- Maintains consistent styling with existing documentation","repository":"elizaos/docs","createdAt":"2025-11-11T22:09:36Z","mergedAt":"2025-11-12T12:12:32Z","additions":93,"deletions":0}],"detailedContributorSummaries":{"odilitime":"odilitime: Focused on a mix of other work, bug fixes, and tests, making 4 commits that modified 14 files with a net addition of 205 lines of code, and provided one PR comment.","standujar":"standujar: Focused on bugfix work, modifying 50 files with 3 commits and contributing 2 PR comments, indicating engagement with ongoing development."}}}],"$L14"]}]
+a:["$","div",null,{"className":"prose prose-sm mx-auto mt-8 dark:prose-invert sm:prose lg:prose-lg xl:prose-xl","children":[["$","p","p-0",{"children":["On November 12, 2025, ElizaOS saw significant progress across documentation, core framework enhancements, and plugin development. Key achievements include the addition of comprehensive tokenomics documentation, a critical fix for environment variable loading in the ",["$","code","code-0",{"children":"eliza"}]," runtime, and substantial improvements to the ",["$","code","code-1",{"children":"plugin-solana"}],"'s testing infrastructure and type-checking. These updates collectively strengthen the project's foundational elements, improve developer experience, and enhance transparency."]}],"\n",["$","h2","h2-0",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"✅ Completed Work","position":{"start":{"line":3,"column":4,"offset":514},"end":{"line":3,"column":20,"offset":530}}}],"position":{"start":{"line":3,"column":1,"offset":511},"end":{"line":3,"column":20,"offset":530}}},"children":"✅ Completed Work"}],"\n",["$","h3","h3-0",{"children":"Core Framework Stability & Enhancements"}],"\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["An ElizaOS reference was added to the core runtime, improving foundational elements related to a unified messaging API. (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/6111","children":"elizaos/eliza#6111"}],")"]}],"\n",["$","li","li-1",{"children":["A bug preventing correct loading of environment variables from ",["$","code","code-0",{"children":"process.env"}]," was resolved, ensuring ",["$","code","code-1",{"children":"runtime.getSetting()"}]," functions as expected. (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/6141","children":"elizaos/eliza#6141"}],")"]}],"\n"]}],"\n",["$","h3","h3-1",{"children":"Documentation & Transparency"}],"\n",["$","ul","ul-1",{"children":["\n",["$","li","li-0",{"children":["A new tokenomics page was added to the documentation, detailing token information, contract addresses, and vesting, integrated into the sidebar navigation. (",["$","a","a-0",{"href":"https://github.com/elizaos/docs/pull/80","children":"elizaos/docs#80"}],")"]}],"\n"]}],"\n",["$","h3","h3-2",{"children":"Plugin Development & Quality"}],"\n",["$","ul","ul-2",{"children":["\n",["$","li","li-0",{"children":["The ",["$","code","code-0",{"children":"plugin-solana"}]," saw enhanced testing and type-checking, including enabling typechecks in the build, stricter TypeScript configurations, migration from Vitest to Bun test, and improved SOL swap handling. (",["$","a","a-0",{"href":"https://github.com/elizaos-plugins/plugin-solana/pull/22","children":"elizaos-plugins/plugin-solana#22"}],")"]}],"\n"]}]]}]
+b:["$","script","script-0",{"src":"/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","async":true}]
+c:["$","script","script-1",{"src":"/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","async":true}]
+d:["$","script","script-2",{"src":"/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js","async":true}]
+e:["$","$L15",null,{"children":["$","$16",null,{"name":"Next.MetadataOutlet","children":"$@17"}]}]
+14:["$","div",null,{"className":"rounded-lg border bg-card text-card-foreground shadow-sm","children":[["$","div",null,{"className":"flex flex-col space-y-1.5 p-6 py-4","children":["$","div",null,{"className":"tracking-tight text-sm font-medium","children":["$undefined","Code Changes"]}]}],["$","div",null,{"className":"p-6 pt-0","children":["$","div",null,{"className":"grid grid-cols-2 gap-4 md:grid-cols-4","children":[["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-git-commit-vertical h-5 w-5","aria-hidden":"true","children":[["$","path","1holv5",{"d":"M12 3v6"}],["$","circle","1v7zrd",{"cx":"12","cy":"12","r":"3"}],["$","path","a9ows0",{"d":"M12 15v6"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":20}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Commits"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-file-code h-5 w-5","aria-hidden":"true","children":[["$","path","1oefj6",{"d":"M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"}],["$","path","wfsgrz",{"d":"M14 2v5a1 1 0 0 0 1 1h5"}],["$","path","1tg20x",{"d":"M10 12.5 8 15l2 2.5"}],["$","path","yinavb",{"d":"m14 12.5 2 2.5-2 2.5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":34}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Files Changed"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-green-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-up h-5 w-5 text-green-500","aria-hidden":"true","children":[["$","path","hav0vg",{"d":"m5 12 7-7 7 7"}],["$","path","x0mq9r",{"d":"M12 19V5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-green-500","children":"+1,003"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Added"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-red-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-down h-5 w-5 text-red-500","aria-hidden":"true","children":[["$","path","s699le",{"d":"M12 5v14"}],["$","path","1idqje",{"d":"m19 12-7 7-7-7"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-red-500","children":"-386"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Deleted"}]]}]]}]]}]}]]}]
+17:null

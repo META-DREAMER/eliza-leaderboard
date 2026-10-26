@@ -1,0 +1,395 @@
+1:"$Sreact.fragment"
+2:I[4817319,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"IntervalSelector"]
+3:I[6998365,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"LlmCopyButton"]
+11:I[3642796,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],""]
+12:I[3238488,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"StatCardsDisplay"]
+19:I[4261541,["/eliza-leaderboard/_next/static/chunks/b33bcbdcb3f88354.js","/eliza-leaderboard/_next/static/chunks/8ba59154b6704904.js"],"OutletBoundary"]
+1a:"$Sreact.suspense"
+4:T60c,## Context
+Discord plugin v1.3.4 failed to publish, resulting in a version jump from v1.3.3 directly to v1.3.5.
+
+- **Source**: Discord discussion (2026-01-03)
+- **Priority**: P1 (from issue-triage assessment)
+- **Impact**: Medium-High (breaks predictable upgrades; may strand users on bad versions)
+
+## Evidence
+- Discord: "v1.3.4 failed to publish; version jumped from v1.3.3 to v1.3.5"
+- Reporter: YogaFlame
+- Related: Previous issue #9 (v1.0.x getWavHeader) is different and closed
+- Pattern: Indicates release pipeline fragility
+
+## Technical Details
+- **Component**: Plugin System / Publishing pipeline (npm, registry, CI workflows)
+- **Complexity**: 3/5 (requires pipeline audit and safeguards)
+- **Required Expertise**: npm publishing, CI release workflows, semver/tagging
+
+## Proposed Investigation
+1. Audit npm error logs + CI run for v1.3.4 publish attempt
+2. Check for tag creation issues, provenance problems, npm token scope
+3. Determine if v1.3.4 contained important fixes that users need
+4. Add automated guard: fail if version already exists / missing changelog
+
+## Proposed Prevention
+1. Add "release checklist" to CI workflow
+2. Implement dry-run publish in CI before actual release
+3. Add Slack/Discord notification on publish failure
+
+## Acceptance Criteria
+- [ ] Root cause of v1.3.4 failure documented
+- [ ] Release workflow improved to prevent recurrence
+- [ ] Process documented for handling skipped versions
+
+---
+Generated from [elizaOS intelligence pipeline](https://github.com/elizaOS/knowledge)
+Evidence date: 2026-01-065:Tac1,### **Issue Report for `elizaos-plugins/plugin-telegram`**
+
+**1. Describe the bug**
+The `@elizaos/plugin-telegram` crashes when a user uploads an image "as a photo" via the Telegram client (as opposed to sending it "as a file"). The internal `processImage` function within the plugin's `messageManager.ts` calls `runtime.useModel(ModelType.IMAGE_DESCRIPTION, ...)` with incorrect parameters. It passes a raw string (`imageUrl`) as the second argument, but the `useModel` function for `IMAGE_DESCRIPTION` expects an object (`ImageDescriptionParams`). This results in a `TypeError: paramsObj is not an Object.` which halts all further message processing.
+
+**2. To Reproduce**
+Steps to reproduce the behavior:
+1.  Set up an ElizaOS project with `@elizaos/plugin-telegram`.
+2.  Ensure a model provider that can handle `ModelType.IMAGE_DESCRIPTION` is configured (e.g., `@elizaos/plugin-google-genai` with `GOOGLE_IMAGE_MODEL` set).
+3.  Start the ElizaOS server (`elizaos dev`).
+4.  In a Telegram chat with the bot, send an image by selecting it as a "Photo" (using the compressed/gallery option), not as a "File".
+5.  Observe the server logs. The application will throw a `TypeError` and likely fail to respond to the message.
+
+**3. Expected behavior**
+The `processImage` function should not crash. It should successfully call `runtime.useModel` with the correct parameters, receive an image description, and create a valid `attachment` object that can be passed to the main message processing pipeline.
+
+**4. Logs**
+Here is the relevant stack trace from the crash:
+```
+❌ Error processing image: TypeError: paramsObj is not an Object. (evaluating '"prompt" in paramsObj')
+      at useModel (.../node_modules/@elizaos/core/dist/node/index.node.js:48866:53)
+      at processImage (.../node_modules/@elizaos/plugin-telegram/dist/index.js:207:59)
+      at async processMessage (.../node_modules/@elizaos/plugin-telegram/dist/index.js:431:36)
+      ...```
+
+**5. Suggested Fix**
+The call to `useModel` inside the `processImage` function in `plugin-telegram/src/messageManager.ts` needs to be updated to match the expected `ImageDescriptionParams` interface.
+
+The current implementation is:
+```typescript
+const { title, description } = await this.runtime.useModel(
+  ModelType.IMAGE_DESCRIPTION,
+  imageUrl
+);
+```
+This should be changed to pass an object, and it should also include the user's caption as the prompt for better contextual analysis:
+```typescript
+const { title, description } = await this.runtime.useModel(
+  ModelType.IMAGE_DESCRIPTION,
+  { 
+    imageUrl: imageUrl,
+    prompt: message.caption || "Describe this image." 
+  }
+);
+```
+
+This change aligns the function call with the core `@elizaos/core` type definitions and resolves the `TypeError`.6:T622,## Context
+Users struggle with agent memory/recall configuration. Need clearer guidance on "knowledge" and "lore" sections in agent JSON.
+
+- **Source**: Discord discussion (2026-01-03)
+- **Priority**: P2 (from issue-triage assessment)
+- **Impact**: High (recurring onboarding pain; "memory doesn't work" complaints)
+
+## Evidence
+- Discord: Users asking "How should knowledge and lore sections be added to JSON configurations?"
+- Open question in daily facts: "How should knowledge and lore sections be added to JSON configurations to improve agent memory/recall?"
+- Pattern: Configuration discoverability problems across multiple reports
+
+## Technical Details
+- **Component**: Docs + Agent configuration schema
+- **Complexity**: 2/5 (primarily documentation work)
+- **Required Expertise**: Agent config schema, technical writing, examples
+
+## Proposed Implementation
+1. Create docs page: "Configuring Agent Memory: Knowledge & Lore Guide"
+2. Include working JSON examples for both `knowledge` and `lore` sections
+3. Explain the difference between knowledge (factual) and lore (personality/backstory)
+4. Add schema validation guidance (what's required vs optional)
+5. Include troubleshooting section for common memory issues
+
+## Acceptance Criteria
+- [ ] Documentation page exists with clear examples
+- [ ] Both knowledge and lore sections covered
+- [ ] At least one working agent template with memory configured
+- [ ] FAQ/troubleshooting section included
+
+---
+Generated from [elizaOS intelligence pipeline](https://github.com/elizaOS/knowledge)
+Evidence date: 2026-01-067:T5ed,## Context
+Turbo build tool consuming excessive memory (21GB+), impacting developer experience and potentially CI stability.
+
+- **Source**: Discord discussion (2026-01-04)
+- **Priority**: P2 (from issue-triage assessment)
+- **Impact**: Medium (primarily contributors/devs; may block lower-RAM machines/CI)
+
+## Evidence
+- Discord: "Turbo builds were reported as using 21GB+ of memory"
+- Reporter: Omid Sa
+- Related: No existing GitHub issue found
+- Pattern: Operational reliability signal
+
+## Technical Details
+- **Component**: Tooling / Build system (Turbo)
+- **Complexity**: 4/5 (could be caching, watch mode, monorepo graph, misconfig)
+- **Required Expertise**: JS/TS build systems, Turbo config, monorepo patterns, CI tuning
+
+## Proposed Investigation
+1. Collect repro details: peak RSS, command, repo state, Turbo version, OS, node/bun version
+2. Attempt reproduction on CI runner + local machine; capture heap snapshots if possible
+3. Review Turbo pipeline for tasks that fan out too broadly
+4. Check if caching is effective or causing issues
+
+## Proposed Mitigations
+1. Document workarounds (limit concurrency, scope packages, disable sourcemaps in dev)
+2. Consider tuning Turbo config for memory-constrained environments
+3. Add CI monitoring for build memory usage
+
+## Acceptance Criteria
+- [ ] Memory usage reproduced and measured
+- [ ] Root cause identified
+- [ ] Workaround or fix documented
+
+---
+Generated from [elizaOS intelligence pipeline](https://github.com/elizaOS/knowledge)
+Evidence date: 2026-01-068:T58b,## Context
+Users report "Model not found" errors when using agent ID with API endpoints.
+
+- **Source**: Discord discussion (2026-01-03)
+- **Priority**: P1 (from issue-triage assessment)
+- **Impact**: High (blocks API-based agent usage)
+
+## Evidence
+- Discord: User reported "Model not found" error when using agent ID + API endpoints
+- Reporter: BAOVERSE
+- Related: No existing GitHub issue found
+- Frequency: Ongoing reports in #support channel
+
+## Technical Details
+- **Component**: API / Model Integration routing (agent ID → model/provider resolution)
+- **Complexity**: 4/5 (could be config, registry, auth scope, or routing mismatch)
+- **Required Expertise**: API layer, agent config resolution, provider/model registry, auth/tenancy
+
+## Proposed Investigation
+1. Create minimal repro template (endpoint, headers, agentId, provider, model name)
+2. Add diagnostic logging around model resolution (requested model, resolved provider, final model string)
+3. Confirm whether error originates from provider (OpenAI/Anthropic/etc.) vs internal registry
+4. Add API validation step returning clearer error (e.g., "provider configured but model missing")
+
+## Acceptance Criteria
+- [ ] Root cause identified and documented
+- [ ] Fix implemented with test coverage
+- [ ] Error message improved for debugging
+
+---
+Generated from [elizaOS intelligence pipeline](https://github.com/elizaOS/knowledge)
+Evidence date: 2026-01-069:T7d4,On Jan 6, 2026, the ElizaOS project saw significant activity in identifying critical bugs across several repositories, including a publishing failure in the Discord plugin, an image processing crash in the Telegram plugin, and "Model not found" errors in the core Eliza agent. Documentation efforts began for agent memory configuration, while a performance concern regarding excessive memory consumption by the Turbo build tool was also raised.
+
+## 🚨 Needs Attention
+- **Urgent Discussions**:
+    - [elizaos-plugins/plugin-discord#40](https://github.com/elizaos-plugins/plugin-discord/issues/40): Investigation into the critical publishing failure of the Discord plugin (v1.3.4 and v1.3.6) requires further analysis of TypeScript errors and `package.json` dependencies.
+
+## 🐞 Issue Triage
+- **New Issues**:
+    - **elizaos/docs**:
+        - [Documentation for Agent Memory Configuration #82](https://github.com/elizaos/docs/issues/82): A new guide is needed for configuring agent memory, specifically "knowledge" and "lore" sections, to address user difficulties.
+    - **elizaos-plugins/plugin-discord**:
+        - [Critical Publishing Failure Investigation #40](https://github.com/elizaos-plugins/plugin-discord/issues/40): Version v1.3.4 of the Discord plugin failed to publish, causing a direct jump to v1.3.5, with v1.3.6 also failing.
+    - **elizaos-plugins/plugin-telegram**:
+        - [Critical Bug Identified in Image Processing #23](https://github.com/elizaos-plugins/plugin-telegram/issues/23): The plugin crashes with a `TypeError` when processing images uploaded "as a photo" via Telegram.
+    - **elizaos/eliza**:
+        - [Critical Bug Reports #6331](https://github.com/elizaos/eliza/issues/6331): Users are encountering "Model not found" errors when using agent IDs with API endpoints.
+        - [Performance Concerns #6332](https://github.com/elizaos/eliza/issues/6332): The Turbo build tool is consuming excessive memory (21GB+), impacting developer experience and CI stability.0:{"buildId":"US8XLB_zHXYj_PVAECGcd","rsc":["$","$1","c",{"children":[["$","div",null,{"className":"container mx-auto px-6 py-8 md:px-8","children":["$","div",null,{"className":"mx-auto max-w-4xl","children":[["$","div",null,{"className":"mb-4 flex flex-col justify-between sm:flex-row","children":[["$","$L2",null,{"currentInterval":"day","currentDate":"2026-01-06"}],["$","$L3",null,{"metrics":{"date":"2026-01-06","interval":{"intervalStart":"$D2026-01-06T00:00:00.000Z","intervalEnd":"$D2026-01-07T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":0,"merged":0,"total":0},"issues":{"new":5,"closed":0,"total":5},"activeContributors":4,"codeChanges":{"additions":0,"deletions":0,"files":0,"commitCount":14},"topContributors":[{"username":"madjin","avatarUrl":"https://avatars.githubusercontent.com/u/32600939?u=cdcf89f44c7a50906c7a80d889efa85023af2049&v=4","totalScore":8,"prScore":0,"issueScore":8,"reviewScore":0,"commentScore":0,"summary":"madjin: Today, madjin focused on identifying and documenting several key issues across the ElizaOS ecosystem, creating four new issues including a critical performance concern regarding excessive memory consumption in elizaos/eliza (#6332) and a bug related to model not found errors in the same repository (#6331). They also highlighted a publishing failure for elizaos-plugins/plugin-discord (#40) and proposed documentation for configuring agent memory in elizaos/docs (#82)."},{"username":"GarrickBrown","avatarUrl":"https://avatars.githubusercontent.com/u/41980127?u=605528eb2347d8e0368ae5b08e6fdbdbfb5c293b&v=4","totalScore":2,"prScore":0,"issueScore":2,"reviewScore":0,"commentScore":0,"summary":"GarrickBrown: Today, GarrickBrown's primary contribution was identifying a critical bug, creating issue elizaos-plugins/plugin-telegram#23, which details a TypeError causing the plugin to crash during image processing."}],"focusAreas":[],"topIssues":[{"id":"I_kwDOOtXZkc7hiptm","title":"bug: Version v1.3.4 failed to publish (jumped from v1.3.3 to v1.3.5)","author":"madjin","number":40,"repository":"elizaos-plugins/plugin-discord","body":"$4","createdAt":"2026-01-06T06:40:56Z","closedAt":null,"state":"OPEN","commentCount":0},{"id":"I_kwDOOtl_Us7hhTta","title":"Bug: Plugin crashes with TypeError in processImage when handling native photo uploads","author":"GarrickBrown","number":23,"repository":"elizaos-plugins/plugin-telegram","body":"$5","createdAt":"2026-01-06T03:33:28Z","closedAt":null,"state":"OPEN","commentCount":0},{"id":"I_kwDOPKJxlM7hiqaa","title":"docs: Add guide for configuring agent memory (knowledge & lore sections)","author":"madjin","number":82,"repository":"elizaos/docs","body":"$6","createdAt":"2026-01-06T06:42:06Z","closedAt":null,"state":"OPEN","commentCount":0},{"id":"I_kwDOMT5cIs7hiqXY","title":"perf: Turbo build consuming excessive memory (21GB+)","author":"madjin","number":6332,"repository":"elizaos/eliza","body":"$7","createdAt":"2026-01-06T06:42:02Z","closedAt":"2026-04-12T19:05:22Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7hipYo","title":"bug: \"Model not found\" error when using agent ID with API endpoints","author":"madjin","number":6331,"repository":"elizaos/eliza","body":"$8","createdAt":"2026-01-06T06:40:19Z","closedAt":"2026-04-12T19:05:21Z","state":"CLOSED","commentCount":0}],"topPullRequests":[],"detailedContributorSummaries":{"GarrickBrown":"GarrickBrown: Today, GarrickBrown's primary contribution was identifying a critical bug, creating issue elizaos-plugins/plugin-telegram#23, which details a TypeError causing the plugin to crash during image processing.","madjin":"madjin: Today, madjin focused on identifying and documenting several key issues across the ElizaOS ecosystem, creating four new issues including a critical performance concern regarding excessive memory consumption in elizaos/eliza (#6332) and a bug related to model not found errors in the same repository (#6331). They also highlighted a publishing failure for elizaos-plugins/plugin-discord (#40) and proposed documentation for configuring agent memory in elizaos/docs (#82)."}},"summaryContent":"$9","className":"self-end sm:self-start"}]]}],"$La","$Lb","$Lc"]}]}],["$Ld","$Le","$Lf"],"$L10"]}],"loading":null,"isPartial":false}
+a:["$","div",null,{"className":"mb-6","children":["$","div",null,{"className":"flex items-center justify-between","children":[[["$","$L11",null,{"href":"/summary/day/2026-01-05","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left mr-2 h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"children":"Previous"}],false],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$L11",null,{"href":"/summary/day/2026-01-05","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Previous"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]],["$","div",null,{"className":"flex flex-col items-center","children":[["$","div",null,{"className":"text-sm font-medium text-gray-500","children":["Daily"," Summary"]}],["$","time",null,{"dateTime":"2026-01-06","className":"text-md font-bold","children":"Jan 6, 2026"}]]}],[["$","$L11",null,{"href":"/summary/day/2026-01-07","children":[false,["$","span",null,{"children":"Next"}],["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right ml-2 h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}]],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$L11",null,{"href":"/summary/day/2026-01-07","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Next"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]]]}]}]
+13:T60c,## Context
+Discord plugin v1.3.4 failed to publish, resulting in a version jump from v1.3.3 directly to v1.3.5.
+
+- **Source**: Discord discussion (2026-01-03)
+- **Priority**: P1 (from issue-triage assessment)
+- **Impact**: Medium-High (breaks predictable upgrades; may strand users on bad versions)
+
+## Evidence
+- Discord: "v1.3.4 failed to publish; version jumped from v1.3.3 to v1.3.5"
+- Reporter: YogaFlame
+- Related: Previous issue #9 (v1.0.x getWavHeader) is different and closed
+- Pattern: Indicates release pipeline fragility
+
+## Technical Details
+- **Component**: Plugin System / Publishing pipeline (npm, registry, CI workflows)
+- **Complexity**: 3/5 (requires pipeline audit and safeguards)
+- **Required Expertise**: npm publishing, CI release workflows, semver/tagging
+
+## Proposed Investigation
+1. Audit npm error logs + CI run for v1.3.4 publish attempt
+2. Check for tag creation issues, provenance problems, npm token scope
+3. Determine if v1.3.4 contained important fixes that users need
+4. Add automated guard: fail if version already exists / missing changelog
+
+## Proposed Prevention
+1. Add "release checklist" to CI workflow
+2. Implement dry-run publish in CI before actual release
+3. Add Slack/Discord notification on publish failure
+
+## Acceptance Criteria
+- [ ] Root cause of v1.3.4 failure documented
+- [ ] Release workflow improved to prevent recurrence
+- [ ] Process documented for handling skipped versions
+
+---
+Generated from [elizaOS intelligence pipeline](https://github.com/elizaOS/knowledge)
+Evidence date: 2026-01-0614:Tac1,### **Issue Report for `elizaos-plugins/plugin-telegram`**
+
+**1. Describe the bug**
+The `@elizaos/plugin-telegram` crashes when a user uploads an image "as a photo" via the Telegram client (as opposed to sending it "as a file"). The internal `processImage` function within the plugin's `messageManager.ts` calls `runtime.useModel(ModelType.IMAGE_DESCRIPTION, ...)` with incorrect parameters. It passes a raw string (`imageUrl`) as the second argument, but the `useModel` function for `IMAGE_DESCRIPTION` expects an object (`ImageDescriptionParams`). This results in a `TypeError: paramsObj is not an Object.` which halts all further message processing.
+
+**2. To Reproduce**
+Steps to reproduce the behavior:
+1.  Set up an ElizaOS project with `@elizaos/plugin-telegram`.
+2.  Ensure a model provider that can handle `ModelType.IMAGE_DESCRIPTION` is configured (e.g., `@elizaos/plugin-google-genai` with `GOOGLE_IMAGE_MODEL` set).
+3.  Start the ElizaOS server (`elizaos dev`).
+4.  In a Telegram chat with the bot, send an image by selecting it as a "Photo" (using the compressed/gallery option), not as a "File".
+5.  Observe the server logs. The application will throw a `TypeError` and likely fail to respond to the message.
+
+**3. Expected behavior**
+The `processImage` function should not crash. It should successfully call `runtime.useModel` with the correct parameters, receive an image description, and create a valid `attachment` object that can be passed to the main message processing pipeline.
+
+**4. Logs**
+Here is the relevant stack trace from the crash:
+```
+❌ Error processing image: TypeError: paramsObj is not an Object. (evaluating '"prompt" in paramsObj')
+      at useModel (.../node_modules/@elizaos/core/dist/node/index.node.js:48866:53)
+      at processImage (.../node_modules/@elizaos/plugin-telegram/dist/index.js:207:59)
+      at async processMessage (.../node_modules/@elizaos/plugin-telegram/dist/index.js:431:36)
+      ...```
+
+**5. Suggested Fix**
+The call to `useModel` inside the `processImage` function in `plugin-telegram/src/messageManager.ts` needs to be updated to match the expected `ImageDescriptionParams` interface.
+
+The current implementation is:
+```typescript
+const { title, description } = await this.runtime.useModel(
+  ModelType.IMAGE_DESCRIPTION,
+  imageUrl
+);
+```
+This should be changed to pass an object, and it should also include the user's caption as the prompt for better contextual analysis:
+```typescript
+const { title, description } = await this.runtime.useModel(
+  ModelType.IMAGE_DESCRIPTION,
+  { 
+    imageUrl: imageUrl,
+    prompt: message.caption || "Describe this image." 
+  }
+);
+```
+
+This change aligns the function call with the core `@elizaos/core` type definitions and resolves the `TypeError`.15:T622,## Context
+Users struggle with agent memory/recall configuration. Need clearer guidance on "knowledge" and "lore" sections in agent JSON.
+
+- **Source**: Discord discussion (2026-01-03)
+- **Priority**: P2 (from issue-triage assessment)
+- **Impact**: High (recurring onboarding pain; "memory doesn't work" complaints)
+
+## Evidence
+- Discord: Users asking "How should knowledge and lore sections be added to JSON configurations?"
+- Open question in daily facts: "How should knowledge and lore sections be added to JSON configurations to improve agent memory/recall?"
+- Pattern: Configuration discoverability problems across multiple reports
+
+## Technical Details
+- **Component**: Docs + Agent configuration schema
+- **Complexity**: 2/5 (primarily documentation work)
+- **Required Expertise**: Agent config schema, technical writing, examples
+
+## Proposed Implementation
+1. Create docs page: "Configuring Agent Memory: Knowledge & Lore Guide"
+2. Include working JSON examples for both `knowledge` and `lore` sections
+3. Explain the difference between knowledge (factual) and lore (personality/backstory)
+4. Add schema validation guidance (what's required vs optional)
+5. Include troubleshooting section for common memory issues
+
+## Acceptance Criteria
+- [ ] Documentation page exists with clear examples
+- [ ] Both knowledge and lore sections covered
+- [ ] At least one working agent template with memory configured
+- [ ] FAQ/troubleshooting section included
+
+---
+Generated from [elizaOS intelligence pipeline](https://github.com/elizaOS/knowledge)
+Evidence date: 2026-01-0616:T5ed,## Context
+Turbo build tool consuming excessive memory (21GB+), impacting developer experience and potentially CI stability.
+
+- **Source**: Discord discussion (2026-01-04)
+- **Priority**: P2 (from issue-triage assessment)
+- **Impact**: Medium (primarily contributors/devs; may block lower-RAM machines/CI)
+
+## Evidence
+- Discord: "Turbo builds were reported as using 21GB+ of memory"
+- Reporter: Omid Sa
+- Related: No existing GitHub issue found
+- Pattern: Operational reliability signal
+
+## Technical Details
+- **Component**: Tooling / Build system (Turbo)
+- **Complexity**: 4/5 (could be caching, watch mode, monorepo graph, misconfig)
+- **Required Expertise**: JS/TS build systems, Turbo config, monorepo patterns, CI tuning
+
+## Proposed Investigation
+1. Collect repro details: peak RSS, command, repo state, Turbo version, OS, node/bun version
+2. Attempt reproduction on CI runner + local machine; capture heap snapshots if possible
+3. Review Turbo pipeline for tasks that fan out too broadly
+4. Check if caching is effective or causing issues
+
+## Proposed Mitigations
+1. Document workarounds (limit concurrency, scope packages, disable sourcemaps in dev)
+2. Consider tuning Turbo config for memory-constrained environments
+3. Add CI monitoring for build memory usage
+
+## Acceptance Criteria
+- [ ] Memory usage reproduced and measured
+- [ ] Root cause identified
+- [ ] Workaround or fix documented
+
+---
+Generated from [elizaOS intelligence pipeline](https://github.com/elizaOS/knowledge)
+Evidence date: 2026-01-0617:T58b,## Context
+Users report "Model not found" errors when using agent ID with API endpoints.
+
+- **Source**: Discord discussion (2026-01-03)
+- **Priority**: P1 (from issue-triage assessment)
+- **Impact**: High (blocks API-based agent usage)
+
+## Evidence
+- Discord: User reported "Model not found" error when using agent ID + API endpoints
+- Reporter: BAOVERSE
+- Related: No existing GitHub issue found
+- Frequency: Ongoing reports in #support channel
+
+## Technical Details
+- **Component**: API / Model Integration routing (agent ID → model/provider resolution)
+- **Complexity**: 4/5 (could be config, registry, auth scope, or routing mismatch)
+- **Required Expertise**: API layer, agent config resolution, provider/model registry, auth/tenancy
+
+## Proposed Investigation
+1. Create minimal repro template (endpoint, headers, agentId, provider, model name)
+2. Add diagnostic logging around model resolution (requested model, resolved provider, final model string)
+3. Confirm whether error originates from provider (OpenAI/Anthropic/etc.) vs internal registry
+4. Add API validation step returning clearer error (e.g., "provider configured but model missing")
+
+## Acceptance Criteria
+- [ ] Root cause identified and documented
+- [ ] Fix implemented with test coverage
+- [ ] Error message improved for debugging
+
+---
+Generated from [elizaOS intelligence pipeline](https://github.com/elizaOS/knowledge)
+Evidence date: 2026-01-06b:["$","div",null,{"className":"mb-8 space-y-6","children":[["$","$L12",null,{"metrics":{"date":"2026-01-06","interval":{"intervalStart":"$D2026-01-06T00:00:00.000Z","intervalEnd":"$D2026-01-07T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":0,"merged":0,"total":0},"issues":{"new":5,"closed":0,"total":5},"activeContributors":4,"codeChanges":{"additions":0,"deletions":0,"files":0,"commitCount":14},"topContributors":[{"username":"madjin","avatarUrl":"https://avatars.githubusercontent.com/u/32600939?u=cdcf89f44c7a50906c7a80d889efa85023af2049&v=4","totalScore":8,"prScore":0,"issueScore":8,"reviewScore":0,"commentScore":0,"summary":"madjin: Today, madjin focused on identifying and documenting several key issues across the ElizaOS ecosystem, creating four new issues including a critical performance concern regarding excessive memory consumption in elizaos/eliza (#6332) and a bug related to model not found errors in the same repository (#6331). They also highlighted a publishing failure for elizaos-plugins/plugin-discord (#40) and proposed documentation for configuring agent memory in elizaos/docs (#82)."},{"username":"GarrickBrown","avatarUrl":"https://avatars.githubusercontent.com/u/41980127?u=605528eb2347d8e0368ae5b08e6fdbdbfb5c293b&v=4","totalScore":2,"prScore":0,"issueScore":2,"reviewScore":0,"commentScore":0,"summary":"GarrickBrown: Today, GarrickBrown's primary contribution was identifying a critical bug, creating issue elizaos-plugins/plugin-telegram#23, which details a TypeError causing the plugin to crash during image processing."}],"focusAreas":[],"topIssues":[{"id":"I_kwDOOtXZkc7hiptm","title":"bug: Version v1.3.4 failed to publish (jumped from v1.3.3 to v1.3.5)","author":"madjin","number":40,"repository":"elizaos-plugins/plugin-discord","body":"$13","createdAt":"2026-01-06T06:40:56Z","closedAt":null,"state":"OPEN","commentCount":0},{"id":"I_kwDOOtl_Us7hhTta","title":"Bug: Plugin crashes with TypeError in processImage when handling native photo uploads","author":"GarrickBrown","number":23,"repository":"elizaos-plugins/plugin-telegram","body":"$14","createdAt":"2026-01-06T03:33:28Z","closedAt":null,"state":"OPEN","commentCount":0},{"id":"I_kwDOPKJxlM7hiqaa","title":"docs: Add guide for configuring agent memory (knowledge & lore sections)","author":"madjin","number":82,"repository":"elizaos/docs","body":"$15","createdAt":"2026-01-06T06:42:06Z","closedAt":null,"state":"OPEN","commentCount":0},{"id":"I_kwDOMT5cIs7hiqXY","title":"perf: Turbo build consuming excessive memory (21GB+)","author":"madjin","number":6332,"repository":"elizaos/eliza","body":"$16","createdAt":"2026-01-06T06:42:02Z","closedAt":"2026-04-12T19:05:22Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7hipYo","title":"bug: \"Model not found\" error when using agent ID with API endpoints","author":"madjin","number":6331,"repository":"elizaos/eliza","body":"$17","createdAt":"2026-01-06T06:40:19Z","closedAt":"2026-04-12T19:05:21Z","state":"CLOSED","commentCount":0}],"topPullRequests":[],"detailedContributorSummaries":{"GarrickBrown":"GarrickBrown: Today, GarrickBrown's primary contribution was identifying a critical bug, creating issue elizaos-plugins/plugin-telegram#23, which details a TypeError causing the plugin to crash during image processing.","madjin":"madjin: Today, madjin focused on identifying and documenting several key issues across the ElizaOS ecosystem, creating four new issues including a critical performance concern regarding excessive memory consumption in elizaos/eliza (#6332) and a bug related to model not found errors in the same repository (#6331). They also highlighted a publishing failure for elizaos-plugins/plugin-discord (#40) and proposed documentation for configuring agent memory in elizaos/docs (#82)."}}}],"$L18"]}]
+c:["$","div",null,{"className":"prose prose-sm mx-auto mt-8 dark:prose-invert sm:prose lg:prose-lg xl:prose-xl","children":[["$","p","p-0",{"children":"On Jan 6, 2026, the ElizaOS project saw significant activity in identifying critical bugs across several repositories, including a publishing failure in the Discord plugin, an image processing crash in the Telegram plugin, and \"Model not found\" errors in the core Eliza agent. Documentation efforts began for agent memory configuration, while a performance concern regarding excessive memory consumption by the Turbo build tool was also raised."}],"\n",["$","h2","h2-0",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"🚨 Needs Attention","position":{"start":{"line":3,"column":4,"offset":449},"end":{"line":3,"column":22,"offset":467}}}],"position":{"start":{"line":3,"column":1,"offset":446},"end":{"line":3,"column":22,"offset":467}}},"children":"🚨 Needs Attention"}],"\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"Urgent Discussions"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos-plugins/plugin-discord/issues/40","children":"elizaos-plugins/plugin-discord#40"}],": Investigation into the critical publishing failure of the Discord plugin (v1.3.4 and v1.3.6) requires further analysis of TypeScript errors and ",["$","code","code-0",{"children":"package.json"}]," dependencies."]}],"\n"]}],"\n"]}],"\n"]}],"\n",["$","h2","h2-1",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"🐞 Issue Triage","position":{"start":{"line":7,"column":4,"offset":775},"end":{"line":7,"column":19,"offset":790}}}],"position":{"start":{"line":7,"column":1,"offset":772},"end":{"line":7,"column":19,"offset":790}}},"children":"🐞 Issue Triage"}],"\n",["$","ul","ul-1",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"New Issues"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"elizaos/docs"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/docs/issues/82","children":"Documentation for Agent Memory Configuration #82"}],": A new guide is needed for configuring agent memory, specifically \"knowledge\" and \"lore\" sections, to address user difficulties."]}],"\n"]}],"\n"]}],"\n",["$","li","li-1",{"children":[["$","strong","strong-0",{"children":"elizaos-plugins/plugin-discord"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos-plugins/plugin-discord/issues/40","children":"Critical Publishing Failure Investigation #40"}],": Version v1.3.4 of the Discord plugin failed to publish, causing a direct jump to v1.3.5, with v1.3.6 also failing."]}],"\n"]}],"\n"]}],"\n",["$","li","li-2",{"children":[["$","strong","strong-0",{"children":"elizaos-plugins/plugin-telegram"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos-plugins/plugin-telegram/issues/23","children":"Critical Bug Identified in Image Processing #23"}],": The plugin crashes with a ",["$","code","code-0",{"children":"TypeError"}]," when processing images uploaded \"as a photo\" via Telegram."]}],"\n"]}],"\n"]}],"\n",["$","li","li-3",{"children":[["$","strong","strong-0",{"children":"elizaos/eliza"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/6331","children":"Critical Bug Reports #6331"}],": Users are encountering \"Model not found\" errors when using agent IDs with API endpoints."]}],"\n",["$","li","li-1",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/6332","children":"Performance Concerns #6332"}],": The Turbo build tool is consuming excessive memory (21GB+), impacting developer experience and CI stability."]}],"\n"]}],"\n"]}],"\n"]}],"\n"]}],"\n"]}]]}]
+d:["$","script","script-0",{"src":"/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","async":true}]
+e:["$","script","script-1",{"src":"/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","async":true}]
+f:["$","script","script-2",{"src":"/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js","async":true}]
+10:["$","$L19",null,{"children":["$","$1a",null,{"name":"Next.MetadataOutlet","children":"$@1b"}]}]
+18:["$","div",null,{"className":"rounded-lg border bg-card text-card-foreground shadow-sm","children":[["$","div",null,{"className":"flex flex-col space-y-1.5 p-6 py-4","children":["$","div",null,{"className":"tracking-tight text-sm font-medium","children":["$undefined","Code Changes"]}]}],["$","div",null,{"className":"p-6 pt-0","children":["$","div",null,{"className":"grid grid-cols-2 gap-4 md:grid-cols-4","children":[["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-git-commit-vertical h-5 w-5","aria-hidden":"true","children":[["$","path","1holv5",{"d":"M12 3v6"}],["$","circle","1v7zrd",{"cx":"12","cy":"12","r":"3"}],["$","path","a9ows0",{"d":"M12 15v6"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":14}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Commits"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-file-code h-5 w-5","aria-hidden":"true","children":[["$","path","1oefj6",{"d":"M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"}],["$","path","wfsgrz",{"d":"M14 2v5a1 1 0 0 0 1 1h5"}],["$","path","1tg20x",{"d":"M10 12.5 8 15l2 2.5"}],["$","path","yinavb",{"d":"m14 12.5 2 2.5-2 2.5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":0}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Files Changed"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-green-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-up h-5 w-5 text-green-500","aria-hidden":"true","children":[["$","path","hav0vg",{"d":"m5 12 7-7 7 7"}],["$","path","x0mq9r",{"d":"M12 19V5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-green-500","children":"+0"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Added"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-red-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-down h-5 w-5 text-red-500","aria-hidden":"true","children":[["$","path","s699le",{"d":"M12 5v14"}],["$","path","1idqje",{"d":"m19 12-7 7-7-7"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-red-500","children":"-0"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Deleted"}]]}]]}]]}]}]]}]
+1b:null

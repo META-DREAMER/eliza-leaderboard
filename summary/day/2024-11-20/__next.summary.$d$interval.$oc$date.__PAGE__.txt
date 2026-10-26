@@ -1,0 +1,2027 @@
+1:"$Sreact.fragment"
+2:I[4817319,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"IntervalSelector"]
+3:I[6998365,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"LlmCopyButton"]
+1f:I[3642796,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],""]
+20:I[3238488,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"StatCardsDisplay"]
+39:I[4261541,["/eliza-leaderboard/_next/static/chunks/b33bcbdcb3f88354.js","/eliza-leaderboard/_next/static/chunks/8ba59154b6704904.js"],"OutletBoundary"]
+3a:"$Sreact.suspense"
+4:T754,when adding postDirections on chatDirections
+should grab all of the guidelines to follow
+this is so it does not ignore requests that are extremely important to follow for how the character behaves
+really instead of random for the character file the agent should be able to select what it puts into its context as part of the shouldRespond logic or some other way 
+
+in runtime.ts
+```
+            postDirections:
+                this.character?.style?.all?.length > 0 ||
+                this.character?.style?.post.length > 0
+                    ? addHeader(
+                            "# Post Directions for " + this.character.name,
+                            (() => {
+                                const all = this.character?.style?.all || [];
+                                const post = this.character?.style?.post || [];
+                                const shuffled = [...all, ...post].sort(
+                                    () => 0.5 - Math.random()
+                                );
+                                return shuffled
+                                    .slice(0, conversationLength / 2)
+                                    .join("\n");
+                            })()
+                        )
+                    : "",*
+```
+>
+```
+            postDirections:
+                this.character?.style?.all?.length > 0 ||
+                this.character?.style?.post.length > 0
+                    ? addHeader(
+                        "# Post Directions for " + this.character.name,
+                        (() => {
+                            const all = this.character?.style?.all || [];
+                            const post = this.character?.style?.post || [];
+                            return [...all, ...post].join("\n");
+                        })()
+                    )
+                    : "",
+
+```5:T4b5,**Describe the bug**
+
+<!-- A clear and concise description of what the bug is. -->
+
+Current token.test.ts and videoGeneration.test.ts are throwing errors:
+
+ FAIL  src/tests/videoGeneration.test.ts [ src/tests/videoGeneration.test.ts ]
+Error: [vitest] No "default" export is defined on the "fs" mock. Did you forget to return it from "vi.mock"?
+If you need to partially mock a module, you can use "importOriginal" helper inside:
+
+
+ FAIL  src/tests/token.test.ts [ src/tests/token.test.ts ]
+Error: Failed to load url @ai16z/adapter-sqlite (resolved id: @ai16z/adapter-sqlite) in eliza/packages/core/src/test_resources/createRuntime.ts. Does the file exist?
+ ❯ loadAndTransform ../../node_modules/vite/dist/node/chunks/dep-CB_7IfJ-.js:51920:17
+ 
+**To Reproduce**
+
+<!-- Steps to reproduce the behavior. -->
+
+Navigate to packages/core and run pnpm test.
+
+**Expected behavior**
+
+<!-- A clear and concise description of what you expected to happen. -->
+Tests should run without errors and provide valid output.
+**Screenshots**
+
+<!-- If applicable, add screenshots to help explain your problem. -->
+
+**Additional context**
+
+<!-- Add any other context about the problem here. -->
+6:T569,**Describe the bug**
+
+The `getCachedEmbeddings` for the sqlite adapter is flawed with the recent [introduction of vec_distance_L2](https://github.com/ai16z/eliza/commit/e96764a53c1d15b6f53cff6ec842f63f70d13842). 
+
+```
+packages/adapter-sqlite/src/index.ts:226
+const memories = this.db.prepare(sql).all(opts.query_table_name, new Float32Array(opts.query_input.split(",").map(Number)), // Convert string to Float32Array
+                                              ^
+RangeError: Too few parameter values were provided
+```
+
+
+1. The sql query expects 5 values, but only 4 are passed. `query_match_count` should be used for `LIMIT`
+2. The creation of the float array seems off. The `query_input` does not include any comma separated values. The resulting array is `[NaN]`
+3. Distance comparison is between a float array and a string. It should probably be compared to `query_threshold`, not `query_input`
+
+Related function is here:
+https://github.com/ai16z/eliza/blob/15f7ba88d04d9d7d1cf0f608762fa84da06cb313/packages/adapter-sqlite/src/index.ts#L332C11-L360
+
+I'm happy to contribute if someone can guide me. I have little clue about `vec_distance` and didn't manage to infer what the intention of the change was exactly.
+
+**To Reproduce**
+
+`pnpm start --characters="characters/custom.character.json"` and type something
+
+**Expected behavior**
+
+No sqlite errors
+7:T451,**Describe the bug**
+
+Users without merge access are unable to view specific merge conflicts in pull requests. This limitation prevents them from resolving or contributing to conflict resolution effectively, as they cannot see the conflicting files or lines of code.
+
+**To Reproduce**
+
+1. Create a pull request with merge conflicts.
+2. Ensure that the user reviewing the PR does not have merge access.
+3. Attempt to view the specific merge conflicts as the non-merge access user.
+
+**Expected behavior**
+
+Users without merge access should be able to view the specific merge conflicts within the pull request, including the files and lines of code in conflict, to assist in resolving the issue.
+
+**Screenshots**
+
+<!-- Add screenshots of the PR interface showing the issue for users without merge access, highlighting the lack of visibility into merge conflicts. -->
+
+**Additional context**
+
+This limitation may hinder collaboration and delay the resolution of merge conflicts, especially in teams where code reviews and conflict resolutions involve contributors without merge privileges.8:T153a,During **pnpm i** section of the  install I received the following error " _ELIFECYCLE  Command failed with exit code 7._"
+
+I managed to fix it, by manually downlaoding the Discord Opus piece that it failed on, but for some reason, it is not downloading via the script.
+
+I tried downloading to the actual directory via a browser and it failed - windows reported the download reported an error,.  So I downloaded it into the 'downloads' folder under my profile and manually copied the file in.  I then extracted the files and re-ran 
+
+pnpm i 
+
+It seems to have worked.  So this is an FYI really.  
+
+Thanks
+
+N
+
+C:\Users\clancynl\Documents\GitHub\eliza-starter>pnpm i
+Lockfile is up to date, resolution step is skipped
+Packages: +1108
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+Progress: resolved 1108, reused 1108, downloaded 0, added 0, done
+node_modules/.pnpm/es5-ext@0.10.64/node_modules/es5-ext: Running postinstall script, done in 167ms
+node_modules/.pnpm/@discordjs+opus@https+++codeload.github.com+discordjs+opus+tar.gz+31da49d8d2cc6c5a2ab1bfd332033ff7d5f9fb02/node_modules/@discordjs/opus: Running install script, failed in 640ms
+.../node_modules/@discordjs/opus install$ node-pre-gyp install --fallback-to-build
+│ node-pre-gyp info it worked if it ends with ok
+│ node-pre-gyp info using node-pre-gyp@0.4.5
+│ node-pre-gyp info using node@23.2.0 | win32 | x64
+│ (node:30168) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+│ (Use `node --trace-deprecation ...` to show where the warning was created)
+│ node-pre-gyp info check checked for "C:\Users\clancynl\Documents\GitHub\eliza-starter\node_modules\.pnpm\@discordjs+opus@https+++codeload.github.com+discordjs+opus+tar.gz+31da49d8d2cc6c5a2ab1bfd332033ff7d5f9fb02\node_modules\@discordjs\opus\prebuild\node-v131-napi-v3-win32-x64-unknown-unknown\opus.node" (not found)
+│ node-pre-gyp http GET https://github.com/discordjs/opus/releases/download/v0.9.0/opus-v0.9.0-node-v131-napi-v3-win32-x64-unknown-unknown.tar.gz
+│ node-pre-gyp ERR! install response status 404 Not Found on https://github.com/discordjs/opus/releases/download/v0.9.0/opus-v0.9.0-node-v131-napi-v3-win32-x64-unknown-unknown.tar.gz
+│ node-pre-gyp WARN Pre-built binaries not installable for @discordjs/opus@0.9.0 and node@23.2.0 (node-v131 ABI, unknown) (falling back to source compile with node-gyp)
+│ node-pre-gyp WARN Hit error response status 404 Not Found on https://github.com/discordjs/opus/releases/download/v0.9.0/opus-v0.9.0-node-v131-napi-v3-win32-x64-unknown-unknown.tar.gz
+│ node-pre-gyp ERR! UNCAUGHT EXCEPTION
+│ node-pre-gyp ERR! stack Error: spawn EINVAL
+│ node-pre-gyp ERR! stack     at ChildProcess.spawn (node:internal/child_process:421:11)
+│ node-pre-gyp ERR! stack     at Object.spawn (node:child_process:753:9)
+│ node-pre-gyp ERR! stack     at module.exports.run_gyp (C:\Users\clancynl\Documents\GitHub\eliza-starter\node_modules\.pnpm\@discordjs+node-pre-gyp@0.4.5\node_modules\@discordjs\node-pre-gyp\lib\util\compile.js:72:17)
+│ node-pre-gyp ERR! stack     at build (C:\Users\clancynl\Documents\GitHub\eliza-starter\node_modules\.pnpm\@discordjs+node-pre-gyp@0.4.5\node_modules\@discordjs\node-pre-gyp\lib\build.js:36:11)
+│ node-pre-gyp ERR! stack     at self.commands.<computed> [as build] (C:\Users\clancynl\Documents\GitHub\eliza-starter\node_modules\.pnpm\@discordjs+node-pre-gyp@0.4.5\node_modules\@discordjs\node-pre-gyp\lib\node-pre-gyp.js:72:34)
+│ node-pre-gyp ERR! stack     at run (C:\Users\clancynl\Documents\GitHub\eliza-starter\node_modules\.pnpm\@discordjs+node-pre-gyp@0.4.5\node_modules\@discordjs\node-pre-gyp\lib\main.js:90:29)
+│ node-pre-gyp ERR! stack     at process.processTicksAndRejections (node:internal/process/task_queues:85:11)
+│ node-pre-gyp ERR! System Windows_NT 10.0.26120
+│ node-pre-gyp ERR! command "C:\\Program Files\\nodejs\\node.exe" "C:\\Users\\clancynl\\Documents\\GitHub\\eliza-starter\\node_modules\\.pnpm\\@discordjs+node-pre-gyp@0.4.5\\node_modules\\@discordjs\\node-pre-gyp\\bin\\node-pre-gyp" "install" "--fallback-to-build"
+│ node-pre-gyp ERR! cwd C:\Users\clancynl\Documents\GitHub\eliza-starter\node_modules\.pnpm\@discordjs+opus@https+++codeload.github.com+discordjs+opus+tar.gz+31da49d8d2cc6c5a2ab1bfd332033ff7d5f9fb02\node_modules\@discordjs\opus
+│ node-pre-gyp ERR! node -v v23.2.0
+│ node-pre-gyp ERR! node-pre-gyp -v v0.4.5
+└─ Failed in 640ms at C:\Users\clancynl\Documents\GitHub\eliza-starter\node_modules\.pnpm\@discordjs+opus@https+++codeload.github.com+discordjs+opus+tar.gz+31da49d8d2cc6c5a2ab1bfd332033ff7d5f9fb02\node_modules\@discordjs\opus
+node_modules/.pnpm/canvas@2.11.2/node_modules/canvas: Running install script, failed in 626ms (skipped as optional)
+node_modules/.pnpm/puppeteer@19.11.1_bufferutil@4.0.8_typescript@5.6.3_utf-8-validate@5.0.10/node_modules/puppeteer: Running postinstall script...
+node_modules/.pnpm/node-llama-cpp@3.1.1_typescript@5.6.3/node_modules/node-llama-cpp: Running postinstall script...
+ ELIFECYCLE  Command failed with exit code 7.9:T7d6,<!-- Use this template by filling in information and copy and pasting relevant items out of the html comments. -->
+
+Cheshire Terminal
+https://zany-cantaloupe-d3d.notion.site/Cheshire-Terminal-142ea810c1f7803f9040c91541e710e5?pvs=73
+
+Low
+
+-->
+
+# Background
+
+## What does this PR do?
+A new Character, Cross Chain, Memetic Warfare, Adds music, and verifies the Cheshire Terminal $grin token launch through Eliza Fork and framework. Also want to establish a foundation for Cheshire Framework integrating metaplex and helius as well as cross chain zero knowledge recursion using on chain ai oracles using metaplex core, zero knowledge recursion, and cross chain communication of assets on Bitcoin, Solana, And Beyond.
+
+## What kind of change is this?
+
+Features, Character Add.
+
+This is my first official pull request on any github and I would be honored if it would be included in the Eliza Framework. I have been working on Cross Chain Multi Mo del Ai Agents, on and off chain for about 6 months now, and have specifically trained data sets and fine tunes models for Solana Bitcoin and beyond.
+
+# Documentation changes needed?
+MemeticWarfare
+trading
+characters/cheshire
+eliza/music
+# Testing
+
+## Where should a reviewer start?
+
+## Detailed testing steps
+
+<!--
+None, automtated tests are fine.
+-->
+
+<!--
+- As [anon/admin], go to [link]
+  - [do action]
+  - verify [result]
+-->
+
+<!-- If there is a UI change, please include before and after screenshots or videos. This will speed up PRs being merged. It is extra nice to annotate screenshots with arrows or boxes pointing out the differences. -->
+<!--
+## Screenshots
+### Before
+### After
+-->
+
+<!-- If there is anything about the deploy, please make a note. -->
+<!--
+# Deploy Notes
+-->
+
+<!--  Copy and paste commandline output. -->
+<!--
+## Database changes
+-->
+
+<!--  If there is something more than the automated steps, please specifiy deploy instructions. -->
+<!--
+## Deployment instructions
+-->
+a:Ta3b,<!-- Use this template by filling in information and copy and pasting relevant items out of the html comments. -->
+
+# Relates to:
+https://github.com/ai16z/eliza/issues/185
+<!-- LINK TO ISSUE OR TICKET -->
+
+<!-- This risks section is to be filled out before final review and merge. -->
+
+# Risks
+Low: Only modification to src code files was adding optional syntax an
+
+<!--
+Low, medium, large. List what kind of risks, and what could be effected.
+-->
+
+# Background
+
+## What does this PR do?
+- Removes jest in favor of vitest as discussed in this issue: https://github.com/ai16z/eliza/issues/340
+- Fixes tests that were no longer running in `packages/core/src/tests/token.test.ts`
+
+## What kind of change is this?
+Improvements - Tests
+<!--
+Bug fixes (non-breaking change which fixes an issue)
+Improvements (misc. changes to existing features)
+Features (non-breaking change which adds functionality)
+Updates (new versions of included code)
+-->
+
+<!-- This "Why" section is most relevant if there is no linked issue explaining why. If there is a related issue it might make sense to skip this why section. -->
+<!--
+## Why are we doing this? Any context or related work?
+-->
+See Issue above
+
+# Documentation changes needed?
+My changes do not require a change to the project documentation.
+
+<!--
+My changes do not require a change to the project documentation.
+My changes require a change to the project documentation.
+If a docs change is needed: I have updated the documentation accordingly.
+-->
+
+<!-- Please show how you tested the PR. This will really help if the PR needs to be retested, and probably help the PR get merged quicker. -->
+
+# Testing
+`pnpm -w run test -- 'src/tests/token.test.ts'`
+
+## Where should a reviewer start?
+```
+pnpm install
+pnpm run build
+pnpm -w run test -- 'src/tests/token.test.ts'
+```
+
+## Detailed testing steps
+
+<!--
+None, automtated tests are fine.
+-->
+
+<!--
+- As [anon/admin], go to [link]
+  - [do action]
+  - verify [result]
+-->
+
+<!-- If there is a UI change, please include before and after screenshots or videos. This will speed up PRs being merged. It is extra nice to annotate screenshots with arrows or boxes pointing out the differences. -->
+<!--
+## Screenshots
+### Before
+### After
+-->
+
+<!-- If there is anything about the deploy, please make a note. -->
+<!--
+# Deploy Notes
+-->
+
+<!--  Copy and paste commandline output. -->
+<!--
+## Database changes
+-->
+
+<!--  If there is something more than the automated steps, please specifiy deploy instructions. -->
+<!--
+## Deployment instructions
+-->
+b:T517,# Relates to:
+
+Eliza community’s best practices documentation
+
+<!-- LINK TO ISSUE OR TICKET -->
+
+# Risks
+
+Low risk. This PR focuses on updating documentation to reflect the latest best practices for submitting pull requests, including pre-review with AI and template usage. No functional code changes are involved.
+
+# Background
+
+## What does this PR do?
+
+This PR updates the contributing guidelines to include new best practices for pull request submissions. It adds a recommendation for conducting pre-reviews using AI tools, elaborates on the use of PR templates, and emphasizes the importance of squashing commits.
+
+## What kind of change is this?
+
+- **Documentation**: This PR add the best practices documentation to streamline the contribution process and make it more consistent for all team members.
+
+# Documentation changes needed?
+
+My changes require an update to the project documentation. The best practices guidelines have been added to include instructions about using AI tools for pre-review, PR templates, and squashing commits. All updates have been made accordingly.
+
+# Testing
+
+## Where should a reviewer start?
+
+Review the updated sections on "Pre-Review with AI," "Pull Request Templates," and "Squashing Commits" in the best-practices documentation.
+c:T4e3,# Relates to:
+
+No specific issue linked. Adding PR templates as part of process improvements.
+
+# Risks
+
+Low: Adding templates and updating documentation does not impact code or production systems.
+
+# Background
+
+## What does this PR do?
+
+This PR updates the `CONTRIBUTING.md` file to include details about the new PR templates. It informs contributors about the location of the templates and how to use them when creating a pull request.
+
+## What kind of change is this?
+
+- Documentation update (non-breaking change).
+
+## Why are we doing this? Any context or related work?
+
+To improve contributor onboarding and ensure a standardized process for submitting pull requests.
+
+# Documentation changes needed?
+
+My changes require a change to the project documentation.  
+I have updated the `CONTRIBUTING.md` file to reflect the new templates.
+
+# Testing
+
+## Where should a reviewer start?
+
+Review the changes made to the `CONTRIBUTING.md` file. Check that the instructions are clear and accurate.
+
+## Detailed testing steps
+
+1. Navigate to the `CONTRIBUTING.md` file.
+2. Confirm the added sections about PR templates.
+3. Verify that the file points to the correct location of the PR templates in the repository.
+
+---d:T94c,<!-- Use this template by filling in information and copy and pasting relevant items out of the html comments. -->
+
+# Relates to:
+https://github.com/ai16z/eliza/issues/464
+<!-- LINK TO ISSUE OR TICKET -->
+
+<!-- This risks section is to be filled out before final review and merge. -->
+
+# Risks
+Low: Fixing tests.
+<!--
+Low, medium, large. List what kind of risks, and what could be effected.
+-->
+
+# Background
+Fixing failing test setup for token.test.ts and videoGeneration.test.ts
+## What does this PR do?
+Fixes two issues with following tests:
+token.test.ts
+videoGeneration.test.ts
+## What kind of change is this?
+Bug-fix
+<!--
+Bug fixes (non-breaking change which fixes an issue)
+Improvements (misc. changes to existing features)
+Features (non-breaking change which adds functionality)
+Updates (new versions of included code)
+-->
+
+<!-- This "Why" section is most relevant if there is no linked issue explaining why. If there is a related issue it might make sense to skip this why section. -->
+<!--
+## Why are we doing this? Any context or related work?
+-->
+Avoiding flaky tests
+# Documentation changes needed?
+None
+<!--
+My changes do not require a change to the project documentation.
+My changes require a change to the project documentation.
+If a docs change is needed: I have updated the documentation accordingly.
+-->
+
+<!-- Please show how you tested the PR. This will really help if the PR needs to be retested, and probably help the PR get merged quicker. -->
+
+# Testing
+
+## Where should a reviewer start?
+navigate to packages/core
+## Detailed testing steps
+Navigate to packages/core
+run pnpm test
+<!--
+None, automtated tests are fine.
+-->
+
+<!--
+- As [anon/admin], go to [link]
+  - [do action]
+  - verify [result]
+-->
+
+<!-- If there is a UI change, please include before and after screenshots or videos. This will speed up PRs being merged. It is extra nice to annotate screenshots with arrows or boxes pointing out the differences. -->
+<!--
+## Screenshots
+### Before
+### After
+-->
+
+<!-- If there is anything about the deploy, please make a note. -->
+<!--
+# Deploy Notes
+-->
+
+<!--  Copy and paste commandline output. -->
+<!--
+## Database changes
+-->
+
+<!--  If there is something more than the automated steps, please specifiy deploy instructions. -->
+<!--
+## Deployment instructions
+-->
+e:T4e9,# Relates to:
+*No specific issue linked - appears to be a code quality improvement PR*
+
+# Risks
+Low - Changes are purely related to code style and import organization with no functional changes.
+
+# Background
+## What does this PR do?
+This PR addresses linting issues in the codebase by:
+1. Reorganizing and consolidating imports
+2. Removing unused imports
+3. Removing empty catch variable declarations
+4. Fixing import ordering
+5. Removing extra blank lines
+
+## What kind of change is this?
+Improvements (misc. changes to existing features)
+
+# Documentation changes needed?
+My changes do not require a change to the project documentation.
+
+# Testing
+## Where should a reviewer start?
+Review the changes in the following files:
+- packages/core/src/embedding.ts
+- packages/core/src/generation.ts  
+- packages/core/src/parsing.ts
+
+## Detailed testing steps
+No, automated tests are fine. These changes are purely syntactic and don't affect functionality.
+
+The changes include:
+1. Import reorganization
+2. Removal of unused imports (fs)
+3. Simplifying catch blocks by removing unused error variables
+4. Consistent import ordering
+
+Since these are linter-driven changes, existing tests should cover functionality verification.f:T639,# Relates to:
+(No linked issue provided in the diff)
+
+# Risks
+Low - Changes only affect voice channel behavior for the Discord bot, specifically its deafened/muted state when joining channels.
+
+# Background
+## What does this PR do?
+This PR fixes an issue where the Discord bot was joining voice channels in a deafened state by default. The changes include:
+1. Explicitly setting the bot to undeafened and unmuted when joining voice channels
+2. Improved voice connection cleanup by clearing streams and monitors when destroying old connections
+3. Added error handling for voice connections
+4. Refactored voice channel join logic to use VoiceManager instead of direct joinVoiceChannel calls
+
+## What kind of change is this?
+Bug fix (non-breaking change which fixes an issue)
+
+# Documentation changes needed?
+My changes do not require a change to the project documentation.
+
+# Testing
+## Where should a reviewer start?
+1. Review the changes in `packages/client-discord/src/actions/joinvoice.ts` where joinVoiceChannel calls are replaced with state.voiceManager
+2. Check the new voice connection setup in `packages/client-discord/src/voice.ts`
+
+## Detailed testing steps
+1. As a user, invite the bot to a Discord server
+2. Join a voice channel
+3. Make the bot join the same voice channel
+4. Verify that:
+   - The bot joins successfully
+   - The bot is not deafened by default
+   - The bot is not muted by default
+   - The bot can properly hear and process voice input from users
+
+The automated tests should be updated to verify this behaviour remains consistent.10:T695,<!-- Use this template by filling in information and copy and pasting relevant items out of the html comments. -->
+
+# Relates to:
+
+#469 
+
+<!-- LINK TO ISSUE OR TICKET -->
+
+<!-- This risks section is to be filled out before final review and merge. -->
+
+# Risks
+
+<!--
+Low, medium, large. List what kind of risks, and what could be effected.
+-->
+
+Low: fix a bug
+
+# Background
+
+## What does this PR do?
+
+This PR fixes the bug that wrong parameter is used for function trimToken
+
+## What kind of change is this?
+
+Bug fixes (non-breaking change which fixes an issue)
+
+## Why are we doing this? Any context or related work?
+
+This would incur errors to generate objects
+
+# Documentation changes needed?
+
+no
+
+<!-- Please show how you tested the PR. This will really help if the PR needs to be retested, and probably help the PR get merged quicker. -->
+
+# Testing
+
+## Where should a reviewer start?
+
+## Detailed testing steps
+
+<!--
+None, automtated tests are fine.
+-->
+
+<!--
+- As [anon/admin], go to [link]
+  - [do action]
+  - verify [result]
+-->
+
+<!-- If there is a UI change, please include before and after screenshots or videos. This will speed up PRs being merged. It is extra nice to annotate screenshots with arrows or boxes pointing out the differences. -->
+<!--
+## Screenshots
+### Before
+### After
+-->
+
+<!-- If there is anything about the deploy, please make a note. -->
+<!--
+# Deploy Notes
+-->
+
+<!--  Copy and paste commandline output. -->
+<!--
+## Database changes
+-->
+
+<!--  If there is something more than the automated steps, please specifiy deploy instructions. -->
+<!--
+## Deployment instructions
+-->
+11:T5f8,# Relates to:
+*No specific issue linked - database schema enhancement*
+
+# Risks
+Low - Adding a PostgreSQL extension that is commonly used for fuzzy string matching. This is a database schema change but only adds functionality without modifying existing structures.
+
+# Background
+## What does this PR do?
+Adds the `fuzzystrmatch` PostgreSQL extension to the database schema. This extension provides several functions for determining similarities between strings and fuzzy string matching.
+
+## What kind of change is this?
+Features (non-breaking change which adds functionality)
+
+# Documentation changes needed?
+My changes do not require a change to the project documentation, as this is an infrastructure-level change that doesn't affect application interfaces.
+
+# Testing
+## Where should a reviewer start?
+1. Review the schema.sql file in packages/adapter-postgres
+2. Verify the fuzzystrmatch extension installation in a test database
+
+## Detailed testing steps
+1. Create a fresh test database
+2. Run the schema.sql migration
+3. Verify the fuzzystrmatch extension is installed by running:
+```sql
+SELECT * FROM pg_extension WHERE extname = 'fuzzystrmatch';
+```
+
+# Deploy Notes
+## Database changes
+- Requires PostgreSQL with fuzzystrmatch extension available
+- Schema change: `CREATE EXTENSION IF NOT EXISTS fuzzystrmatch;`
+
+## Deployment instructions
+Standard deployment process applies:
+1. Ensure the PostgreSQL server has fuzzystrmatch extension available
+2. Run schema migrations as normal12:T8c7,<!-- Use this template by filling in information and copy and pasting relevant items out of the html comments. -->
+
+# Relates to:
+
+![image](https://github.com/user-attachments/assets/1525f08a-0bf6-45be-a601-e2f8c7bd90dd)
+
+
+<!-- LINK TO ISSUE OR TICKET -->
+
+<!-- This risks section is to be filled out before final review and merge. -->
+
+# Risks
+
+<!--
+Low, medium, large. List what kind of risks, and what could be effected.
+-->
+
+# Background
+
+## What does this PR do?
+Replaces `npm package coming soon` with `npm install @ai16z/eliza`
+
+## What kind of change is this?
+Update
+
+<!--
+Bug fixes (non-breaking change which fixes an issue)
+Improvements (misc. changes to existing features)
+Features (non-breaking change which adds functionality)
+Updates (new versions of included code)
+-->
+
+<!-- This "Why" section is most relevant if there is no linked issue explaining why. If there is a related issue it might make sense to skip this why section. -->
+<!--
+## Why are we doing this? Any context or related work?
+-->
+
+# Documentation changes needed?
+
+<!--
+My changes do not require a change to the project documentation.
+My changes require a change to the project documentation.
+If a docs change is needed: I have updated the documentation accordingly.
+-->
+
+<!-- Please show how you tested the PR. This will really help if the PR needs to be retested, and probably help the PR get merged quicker. -->
+
+# Testing
+
+## Where should a reviewer start?
+
+## Detailed testing steps
+
+<!--
+None, automtated tests are fine.
+-->
+
+<!--
+- As [anon/admin], go to [link]
+  - [do action]
+  - verify [result]
+-->
+
+<!-- If there is a UI change, please include before and after screenshots or videos. This will speed up PRs being merged. It is extra nice to annotate screenshots with arrows or boxes pointing out the differences. -->
+<!--
+## Screenshots
+### Before
+### After
+-->
+
+<!-- If there is anything about the deploy, please make a note. -->
+<!--
+# Deploy Notes
+-->
+
+<!--  Copy and paste commandline output. -->
+<!--
+## Database changes
+-->
+
+<!--  If there is something more than the automated steps, please specifiy deploy instructions. -->
+<!--
+## Deployment instructions
+-->
+13:T4b6,---
+
+# Relates to:
+
+No specific issue linked. Improving PR error messaging.
+
+# Risks
+
+Low: This change only affects error messages shown during PR validation.
+
+# Background
+
+## What does this PR do?
+
+This PR updates the `pr.yaml` configuration file to include explicit error messages for pull request validation. The messages provide clear guidance on expected fields and values.
+
+## What kind of change is this?
+
+- Improvement (miscellaneous changes to existing features).
+
+## Why are we doing this? Any context or related work?
+
+To enhance the contributor experience by providing clearer error messages, reducing confusion, and speeding up corrections.
+
+# Documentation changes needed?
+
+My changes do not require a change to the project documentation.
+
+# Testing
+
+## Where should a reviewer start?
+
+Review the updated `pr.yaml` file. Focus on the `checks` section where the error messages have been updated.
+
+## Detailed testing steps
+
+1. Create a pull request with missing or incorrect fields.
+2. Confirm that the error messages specify the required corrections.
+3. Verify that all expected options (e.g., PR types) are listed clearly in the error message.
+
+---
+14:T491,# Relates to:
+
+Docker running error
+
+
+# Risks
+
+Low, The scope of influence is the operation of docker
+
+
+# Background
+
+## What does this PR do?
+
+After the author moved the agent folder, docker could not map the agent directory in docker, so docker volumn mapping incorrectly. I re-mapped the agent directory
+
+docker has the following error:
+```
+sudo docker compose -f docker-compose-waifu.yaml up
+[+] Running 1/0
+✔ Container waifu  Created                                                                                               0.0 s
+Attaching to waifu
+waifu  |
+waifu  | &gt;  eliza@ start /app
+waifu  | &gt;  pnpm --filter "@ai16z/agent" start --isRoot "--characters=characters/waifu.character.json"
+waifu  |
+waifu  | No projects matched the filters in "/app"
+```
+
+## What kind of change is this?
+
+Bug fixes (non-breaking change which fixes an issue)
+
+
+# Documentation changes needed?
+
+My changes do not require a change to the project documentation.
+
+
+# Testing
+
+## Where should a reviewer start?
+
+Carry out
+```
+. ./scripts/docker.sh build
+. ./scripts/docker.sh run
+```
+Try to see if the docker log is error free15:T81c,<!-- Use this template by filling in information and copy and pasting relevant items out of the html comments. -->
+
+# Relates to:
+
+<!-- LINK TO ISSUE OR TICKET -->
+
+<!-- This risks section is to be filled out before final review and merge. -->
+
+# Risks
+
+<!--
+Low, medium, large. List what kind of risks, and what could be effected.
+-->
+
+# Background
+
+## What does this PR do?
+
+## What kind of change is this?
+
+<!--
+Bug fixes (non-breaking change which fixes an issue)
+Improvements (misc. changes to existing features)
+Features (non-breaking change which adds functionality)
+Updates (new versions of included code)
+-->
+
+<!-- This "Why" section is most relevant if there is no linked issue explaining why. If there is a related issue it might make sense to skip this why section. -->
+<!--
+## Why are we doing this? Any context or related work?
+-->
+
+# Documentation changes needed?
+
+<!--
+My changes do not require a change to the project documentation.
+My changes require a change to the project documentation.
+If a docs change is needed: I have updated the documentation accordingly.
+-->
+
+<!-- Please show how you tested the PR. This will really help if the PR needs to be retested, and probably help the PR get merged quicker. -->
+
+# Testing
+
+## Where should a reviewer start?
+
+## Detailed testing steps
+
+<!--
+None, automtated tests are fine.
+-->
+
+<!--
+- As [anon/admin], go to [link]
+  - [do action]
+  - verify [result]
+-->
+
+<!-- If there is a UI change, please include before and after screenshots or videos. This will speed up PRs being merged. It is extra nice to annotate screenshots with arrows or boxes pointing out the differences. -->
+<!--
+## Screenshots
+### Before
+### After
+-->
+
+<!-- If there is anything about the deploy, please make a note. -->
+<!--
+# Deploy Notes
+-->
+
+<!--  Copy and paste commandline output. -->
+<!--
+## Database changes
+-->
+
+<!--  If there is something more than the automated steps, please specifiy deploy instructions. -->
+<!--
+## Deployment instructions
+-->
+16:T966,<!-- Use this template by filling in information and copy and pasting relevant items out of the html comments. -->
+
+# Relates to:
+
+<!-- LINK TO ISSUE OR TICKET -->
+
+<!-- This risks section is to be filled out before final review and merge. -->
+
+# Risks
+
+<!--
+Low, medium, large. List what kind of risks, and what could be effected.
+-->
+
+# Background
+
+## What does this PR do?
+
+## What kind of change is this?
+Improvement
+
+<!--
+Bug fixes (non-breaking change which fixes an issue)
+Improvements (misc. changes to existing features)
+Features (non-breaking change which adds functionality)
+Updates (new versions of included code)
+-->
+
+<!-- This "Why" section is most relevant if there is no linked issue explaining why. If there is a related issue it might make sense to skip this why section. -->
+
+## Why are we doing this? Any context or related work?
+Users pass character paths via command-line. If the character file fails to be found / parsed, Eliza just launches the default character. This is counterintuitive for a newcomer like myself, since the error logged is immediately cleared from the screen when the chat loop is started. More intuitive to just throw directly.
+
+
+# Documentation changes needed?
+
+<!--
+My changes do not require a change to the project documentation.
+My changes require a change to the project documentation.
+If a docs change is needed: I have updated the documentation accordingly.
+-->
+
+<!-- Please show how you tested the PR. This will really help if the PR needs to be retested, and probably help the PR get merged quicker. -->
+
+# Testing
+
+## Where should a reviewer start?
+
+## Detailed testing steps
+
+<!--
+None, automtated tests are fine.
+-->
+
+<!--
+- As [anon/admin], go to [link]
+  - [do action]
+  - verify [result]
+-->
+
+<!-- If there is a UI change, please include before and after screenshots or videos. This will speed up PRs being merged. It is extra nice to annotate screenshots with arrows or boxes pointing out the differences. -->
+<!--
+## Screenshots
+### Before
+### After
+-->
+
+<!-- If there is anything about the deploy, please make a note. -->
+<!--
+# Deploy Notes
+-->
+
+<!--  Copy and paste commandline output. -->
+<!--
+## Database changes
+-->
+
+<!--  If there is something more than the automated steps, please specifiy deploy instructions. -->
+<!--
+## Deployment instructions
+-->
+17:T8a1,# ElizaOS Daily Update (Nov 20, 2024)
+
+## OVERVIEW 
+Significant progress was made today with 26 PRs merged, including new features and bug fixes. The team focused on enhancing documentation and improving the PostgreSQL schema, contributing to the overall stability and usability of the ElizaOS framework.
+
+## PROJECT METRICS
+- **PRs:** 26 merged PRs, 33 new PRs
+- **Issues:** 7 new issues, 8 closed issues
+- **Unique Contributors:** 26
+- **Code Changes:** +4442/-1313 lines across 110 files
+- **Total Commits:** 77
+- **Most Active Contributors:** ponderingdemocritus, odilitime, monilpat, snobbee, martincik
+
+## TOP ISSUES
+### Bug Fixes and Improvements
+- Addressed various bugs affecting functionality, including voice permissions and loading issues. Relevant issues include [#452](https://github.com/elizaos/eliza/issues/452), [#447](https://github.com/elizaos/eliza/issues/447), and [#444](https://github.com/elizaos/eliza/issues/444).
+
+### Documentation Updates
+- Enhanced documentation to improve clarity and usability, including updates to `contributing.md` and the homepage. Key PRs include [#430](https://github.com/elizaos/eliza/pull/430) and [#459](https://github.com/elizaos/eliza/pull/459).
+
+## KEY TECHNICAL DEVELOPMENTS
+### Feature Additions
+- Introduced several new features, such as the creation of the Eliza app ([#462](https://github.com/elizaos/eliza/pull/462)) and improvements to the PostgreSQL schema with the addition of the fuzzystrmatch extension ([#460](https://github.com/elizaos/eliza/pull/460)).
+
+### Linting and Style Guidelines
+- Implemented linting improvements and added style guidelines to the project context, enhancing code quality and maintainability. Relevant PRs include [#441](https://github.com/elizaos/eliza/pull/441) and [#433](https://github.com/elizaos/eliza/pull/433).
+
+### Configuration and Environment Enhancements
+- Made adjustments to configuration settings, including not requiring a `.env` file to exist ([#427](https://github.com/elizaos/eliza/pull/427)) and fixing various path and import issues to streamline the development process. Key PRs include [#432](https://github.com/elizaos/eliza/pull/432) and [#436](https://github.com/elizaos/eliza/pull/436).0:{"buildId":"US8XLB_zHXYj_PVAECGcd","rsc":["$","$1","c",{"children":[["$","div",null,{"className":"container mx-auto px-6 py-8 md:px-8","children":["$","div",null,{"className":"mx-auto max-w-4xl","children":[["$","div",null,{"className":"mb-4 flex flex-col justify-between sm:flex-row","children":[["$","$L2",null,{"currentInterval":"day","currentDate":"2024-11-20"}],["$","$L3",null,{"metrics":{"date":"2024-11-20","interval":{"intervalStart":"$D2024-11-20T00:00:00.000Z","intervalEnd":"$D2024-11-21T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":33,"merged":26,"total":38},"issues":{"new":7,"closed":8,"total":14},"activeContributors":26,"codeChanges":{"additions":4442,"deletions":1313,"files":110,"commitCount":77},"topContributors":[{"username":"ponderingdemocritus","avatarUrl":"https://avatars.githubusercontent.com/u/90423308?u=fa7a84e8e946db253241c7aaabbb57e7c6495f0b&v=4","totalScore":355.66416753692505,"prScore":337.46416753692506,"issueScore":0,"reviewScore":18,"commentScore":0.2,"summary":null},{"username":"odilitime","avatarUrl":"https://avatars.githubusercontent.com/u/16395496?u=c9bac48e632aae594a0d85aaf9e9c9c69b674d8b&v=4","totalScore":111.02042096886807,"prScore":92.08242096886806,"issueScore":4,"reviewScore":14.5,"commentScore":0.43799999999999994,"summary":null},{"username":"monilpat","avatarUrl":"https://avatars.githubusercontent.com/u/15067321?v=4","totalScore":89.79002569139008,"prScore":55.25202569139009,"issueScore":4.1,"reviewScore":30,"commentScore":0.43799999999999994,"summary":null},{"username":"snobbee","avatarUrl":"https://avatars.githubusercontent.com/u/125891987?u=ba9ca14b922f8fb73f38ba0981d157247af3dd03&v=4","totalScore":57.614825503280834,"prScore":40.67682550328083,"issueScore":0,"reviewScore":16.5,"commentScore":0.43799999999999994,"summary":null},{"username":"martincik","avatarUrl":"https://avatars.githubusercontent.com/u/2183?u=b1f920b7fc3d0361c6d0ecbb62e2e8844ff1ab4f&v=4","totalScore":54.18623970929603,"prScore":53.98623970929603,"issueScore":0,"reviewScore":0,"commentScore":0.2,"summary":null},{"username":"tarrencev","avatarUrl":"https://avatars.githubusercontent.com/u/4740651?u=7fe717380f8ed3e4fa7c19e9c99429d0354e5400&v=4","totalScore":43.477892256852854,"prScore":43.477892256852854,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":null},{"username":"coffeeorgreentea","avatarUrl":"https://avatars.githubusercontent.com/u/90069434?v=4","totalScore":40.637264337945666,"prScore":36.137264337945666,"issueScore":0,"reviewScore":4.5,"commentScore":0,"summary":null},{"username":"8bitsats","avatarUrl":"https://avatars.githubusercontent.com/u/112488261?u=935da76d04acbe13648766ea2afcc9b4a7650713&v=4","totalScore":39.7497738965761,"prScore":39.5497738965761,"issueScore":0,"reviewScore":0,"commentScore":0.2,"summary":null},{"username":"ai16z-demirix","avatarUrl":"https://avatars.githubusercontent.com/u/188117230?u=424cd5b834584b3799da288712b3c4158c8032a1&v=4","totalScore":35.43206509320417,"prScore":31.43206509320417,"issueScore":4,"reviewScore":0,"commentScore":0,"summary":null},{"username":"darwintree","avatarUrl":"https://avatars.githubusercontent.com/u/17946284?v=4","totalScore":31.40902691517397,"prScore":31.40902691517397,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":null},{"username":"remiroyc","avatarUrl":"https://avatars.githubusercontent.com/u/11146088?u=23d64f3d4e4942ef587da8af19904bbc2f3438ef&v=4","totalScore":30.87850955863044,"prScore":30.87850955863044,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":null},{"username":"laser-riot","avatarUrl":"https://avatars.githubusercontent.com/u/123244198?v=4","totalScore":28.429879734614026,"prScore":23.889879734614027,"issueScore":4.2,"reviewScore":0,"commentScore":0.33999999999999997,"summary":null},{"username":"o-on-x","avatarUrl":"https://avatars.githubusercontent.com/u/186759703?u=4e674b1542bbb9fe7d7ea0e034c8c525689cb191&v=4","totalScore":27.55405325229863,"prScore":23.55405325229863,"issueScore":4,"reviewScore":0,"commentScore":0,"summary":null},{"username":"null-hax","avatarUrl":"https://avatars.githubusercontent.com/u/89671623?u=4eb85858c4f8e47f68d0cd0333f2deaa7adc1197&v=4","totalScore":27.278306144334053,"prScore":27.278306144334053,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":null},{"username":"THtianhao","avatarUrl":"https://avatars.githubusercontent.com/u/7608485?u=e7162b8e6dc62f920d3a5810a3b35b2c5534051c&v=4","totalScore":24.050306144334055,"prScore":24.050306144334055,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":null},{"username":"liamzebedee","avatarUrl":"https://avatars.githubusercontent.com/u/584141?u=4d923d0d46611d47175069baca238238f33281da&v=4","totalScore":22.115147180559944,"prScore":22.115147180559944,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":null},{"username":"Wilbert957","avatarUrl":"https://avatars.githubusercontent.com/u/161988856?u=5fb1e5f079f796e3e83992fbec4800d2ecff976d&v=4","totalScore":18.438,"prScore":0,"issueScore":0,"reviewScore":18,"commentScore":0.43799999999999994,"summary":null},{"username":"bmgalego","avatarUrl":"https://avatars.githubusercontent.com/u/2568430?v=4","totalScore":4.5,"prScore":0,"issueScore":0,"reviewScore":4.5,"commentScore":0,"summary":null},{"username":"notOccupanther","avatarUrl":"https://avatars.githubusercontent.com/u/30435593?v=4","totalScore":4,"prScore":0,"issueScore":4,"reviewScore":0,"commentScore":0,"summary":null},{"username":"FGhrawi","avatarUrl":"https://avatars.githubusercontent.com/u/89403229?v=4","totalScore":4,"prScore":0,"issueScore":4,"reviewScore":0,"commentScore":0,"summary":null},{"username":"normand1","avatarUrl":"https://avatars.githubusercontent.com/u/1393261?u=65c44e54967b1db250d20661877c1dc9768c6add&v=4","totalScore":0.2,"prScore":0,"issueScore":0,"reviewScore":0,"commentScore":0.2,"summary":null}],"focusAreas":[{"area":"core","count":39},{"area":"client-discord","count":9},{"area":"docs/docs","count":7},{"area":"plugin-starknet","count":6},{"area":"plugin-video-generation","count":6},{"area":"agent/src","count":5},{"area":"plugin-bootstrap","count":4},{"area":"adapter-postgres","count":3},{"area":"client-twitter","count":3},{"area":"plugin-solana","count":2}],"topIssues":[{"id":"I_kwDOMT5cIs6fgwfW","title":"Twitter Dry Run not working","author":"laser-riot","number":451,"repository":"elizaos/eliza","body":"**Describe the bug**\r\n\r\nTwitter dry run option is not working\r\n\r\n**To Reproduce**\r\n\r\nSet TWITTER_DRY_RUN to true and run the agent\r\nThe agent then proceeds to post on X\r\n\r\n**Expected behavior**\r\n\r\nThe agent does not post on X\r\n\r\n**Screenshots**\r\n\r\n**Additional context**\r\n","createdAt":"2024-11-20T14:58:01Z","closedAt":"2024-11-20T23:57:03Z","state":"CLOSED","commentCount":2},{"id":"I_kwDOMT5cIs6fbPmB","title":"Feature: when getting style guidelines should always add all of them to context","author":"o-on-x","number":438,"repository":"elizaos/eliza","body":"$4","createdAt":"2024-11-20T07:16:21Z","closedAt":"2025-01-04T18:31:40Z","state":"CLOSED","commentCount":1},{"id":"I_kwDOMT5cIs6fls2k","title":"Current token.test.ts and videoGeneration.test.ts are throwing errors","author":"ai16z-demirix","number":464,"repository":"elizaos/eliza","body":"$5","createdAt":"2024-11-20T23:01:03Z","closedAt":"2024-11-22T20:11:00Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs6fJGtf","title":"Move cache into DB","author":"ponderingdemocritus","number":403,"repository":"elizaos/eliza","body":"Current all cache is local file storage. This is problematic as does not allow persistence in containers.\r\n\r\nWe need to move all cache into sql tables.\r\n\r\n- [ ] Core\r\n- [ ] twitter client\r\n- [ ] discord client\r\n- [ ] telegram client","createdAt":"2024-11-18T21:28:29Z","closedAt":"2024-11-20T03:14:25Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs6ewQE-","title":"Move Trust DB into package","author":"ponderingdemocritus","number":342,"repository":"elizaos/eliza","body":"Currently the Trust DB is coupled into the Solana plugin.\r\n\r\nThis should be decoupled into a dedicated package, then imported into the Solana.\r\n\r\nThis will allow for solid Unit testing along with building wrappers for other chains that might not follow the exact schema that is defined. ","createdAt":"2024-11-15T23:29:21Z","closedAt":"2024-11-20T23:24:04Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs6dywGV","title":"getCachedEmbeddings broken for sqlite adapter ","author":"boldkoala4615","number":251,"repository":"elizaos/eliza","body":"$6","createdAt":"2024-11-10T15:05:15Z","closedAt":"2024-11-20T10:30:34Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs6b-McL","title":"⚙️Take Order Action Integration","author":"sirkitree","number":53,"repository":"elizaos/eliza","body":"⚙️ Action Integration: The integration of the \"take order\" action into the agent represents a foundational step in enhancing the system's capabilities, similar to adding new features to a smart assistant.\r\n\r\nIntegrate the \"take order\" action into the system as a foundational feature.\r\n\r\n#### Requirements\r\n- Design take order workflow\r\n- Implement action handlers\r\n- Add validation and verification steps\r\n- Create response handling system\r\n\r\n#### Acceptance Criteria\r\n- [ ] Users can successfully take orders\r\n- [ ] Action is properly integrated with order book\r\n- [ ] Validation checks are in place\r\n- [ ] Response handling works correctly","createdAt":"2024-10-27T18:11:05Z","closedAt":"2024-11-20T09:58:28Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs6b-MW8","title":"🔍 Trust Score Calculator","author":"sirkitree","number":52,"repository":"elizaos/eliza","body":"🔄 Trust Score Development: Creating a trust score based on trade outcomes will be essential for building credibility within the marketplace. It will allow users to make informed decisions based on past performance.\r\n\r\nDevelop a trust score calculation system based on trade outcomes and user recommendations.\r\n\r\n#### Requirements\r\n- Define trust score metrics\r\n- Implement calculation algorithm\r\n- Create history tracking for score changes\r\n- Add user recommendation integration\r\n\r\n#### Acceptance Criteria\r\n- [ ] Trust scores are calculated accurately\r\n- [ ] Historical data is tracked and accessible\r\n- [ ] User recommendations affect trust scores\r\n- [ ] Score changes are properly logged","createdAt":"2024-10-27T18:10:23Z","closedAt":"2024-11-20T09:58:27Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs6b-MCh","title":"📊 Order Book System","author":"sirkitree","number":49,"repository":"elizaos/eliza","body":"📈 Importance of the Order Book: The order book is critical for establishing a framework of trust within the marketplace. By documenting trades and their success rates, it lays the groundwork for a reliable trading environment.\r\n\r\nDevelop a central order book system for managing trades and trust assessments.\r\n\r\n#### Requirements\r\n- Design database schema for order storage\r\n- Implement order matching logic\r\n- Create APIs for order submission and retrieval\r\n- Add trust assessment calculations\r\n\r\n#### Acceptance Criteria\r\n- [ ] Orders can be created and stored in the system\r\n- [ ] Order matching algorithm is functioning\r\n- [ ] APIs are documented and tested\r\n- [ ] Trust assessments are calculated correctly","createdAt":"2024-10-27T18:07:18Z","closedAt":"2024-11-20T09:58:27Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs6b56ZQ","title":"daos.fun integration","author":"lalalune","number":33,"repository":"elizaos/eliza","body":"We want daos.fun integration\r\n\r\nThis includes a basic service to interact with daos.fun and have a wallet and all that, as well as actions that mirror the swap actions but with the DAO wallet.","createdAt":"2024-10-26T08:09:49Z","closedAt":"2024-11-20T09:58:26Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs6fiJ0M","title":"Non-Merge Access Users Cannot View Specific Merge Conflicts in Pull Requests They Review","author":"monilpat","number":457,"repository":"elizaos/eliza","body":"$7","createdAt":"2024-11-20T16:50:34Z","closedAt":"2025-01-04T18:31:39Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs6fbpPE","title":"Feat: Hot reload json","author":"odilitime","number":439,"repository":"elizaos/eliza","body":"**Is your feature request related to a problem? Please describe.**\r\n\r\nBe able to reload a character json without restarting\r\n\r\n**Describe the solution you'd like**\r\n\r\nREST API?\r\n\r\nSIGHUP to reload all characters?\r\nSIGUSR1 to reload all characters as soon as they're done with their current action?\r\n\r\n**Describe alternatives you've considered**\r\n\r\nTBD\r\n\r\n**Additional context**\r\n\r\nCredit to ICJR on discord for the idea\r\n","createdAt":"2024-11-20T07:43:07Z","closedAt":"2025-01-04T18:31:39Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs6fkrkV","title":"Windows 11:  Command Failed with exit Code 7:","author":"notOccupanther","number":461,"repository":"elizaos/eliza","body":"$8","createdAt":"2024-11-20T21:08:36Z","closedAt":"2025-01-12T10:48:09Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs6fcrPP","title":"When using Ollama, a long loop of Initializing Ollama Model happens before any output","author":"FGhrawi","number":443,"repository":"elizaos/eliza","body":"**Describe the bug**\r\n\r\nWhen using Ollama, the model being used is loaded over and over in a loop (sometimes 10-15+ times) in the terminal before any output or agent decision-making happens.\r\nFwiw, one model is configured at a time in .env (so no swapping is being done)\r\n\r\n**To Reproduce**\r\n\r\nUse any model with the Ollama provider\r\n\r\n**Expected behavior**\r\n\r\nModel loads once. (Since ollama is on keepalive and only 1 model is being used)\r\n\r\n**Screenshots**\r\n![Screenshot_2024-11-19_at_10 46 50_PM](https://github.com/user-attachments/assets/9aee0e5e-a587-482e-9afc-b860b1a23614)\r\n\r\n\r\n\r\n\r\n**Additional context**\r\nI am on a fresh clone of the repo with a basic character configuration.\r\nFwiw, I have 24gb vram, and this happens even on smaller models.\r\n\r\n\r\n\r\n","createdAt":"2024-11-20T09:15:15Z","closedAt":"2025-01-12T10:47:47Z","state":"CLOSED","commentCount":0}],"topPullRequests":[{"id":"PR_kwDOMT5cIs6CjMGJ","title":"Cheshire Terminal","author":"8bitsats","number":455,"body":"$9","repository":"elizaos/eliza","createdAt":"2024-11-20T15:42:32Z","mergedAt":null,"additions":38619,"deletions":14064},{"id":"PR_kwDOMT5cIs6CdwoH","title":"feat: lerna an npm","author":"ponderingdemocritus","number":428,"body":"- implements lerna\r\n- moves agent out of packages as it is not a npm package","repository":"elizaos/eliza","createdAt":"2024-11-20T02:55:33Z","mergedAt":"2024-11-20T03:58:06Z","additions":1584,"deletions":466},{"id":"PR_kwDOMT5cIs6ClZL7","title":"feat: create-eliza-app","author":"coffeeorgreentea","number":462,"body":"This PR adds a cli tool `create-eliza-app` and a registry folder for it.\r\nIt's currently pointed to the eliza-starter repo's main branch.","repository":"elizaos/eliza","createdAt":"2024-11-20T21:35:08Z","mergedAt":"2024-11-20T22:05:16Z","additions":1536,"deletions":148},{"id":"PR_kwDOMT5cIs6ChFWS","title":"feat: replace `unruggable-core` with `unruggable-sdk`","author":"remiroyc","number":450,"body":"## Description\r\nThis PR proposes to replace the current implementation using `unruggable-core` with the newly published `unruggable-sdk` package. The SDK provides a more developer-friendly experience with:\r\n\r\n- Improved TypeScript support\r\n- More concise and readable API\r\n- Maintained wrapper around the core package functionality\r\n\r\n## Changes\r\n- Replace `unruggable-core` dependency with `unruggable-sdk`\r\n- Update relevant implementations to use the new SDK interface\r\n- Update types where necessary\r\n\r\n## Benefits\r\n- Better developer experience through improved typing\r\n- More maintainable code through cleaner abstractions\r\n- Same core functionality with a more ergonomic interface","repository":"elizaos/eliza","createdAt":"2024-11-20T11:21:07Z","mergedAt":"2024-12-26T06:55:15Z","additions":1259,"deletions":1115},{"id":"PR_kwDOMT5cIs6Cl4RD","title":"feat: adds check","author":"ponderingdemocritus","number":466,"body":"The idea is to push all env checks to the clients and plugins. Seperate the concerns.","repository":"elizaos/eliza","createdAt":"2024-11-20T23:17:36Z","mergedAt":"2024-11-21T09:20:04Z","additions":1028,"deletions":460},{"id":"PR_kwDOMT5cIs6Cjoe9","title":"feat: init github client","author":"tarrencev","number":456,"body":"ingest github repos into knowledge base","repository":"elizaos/eliza","createdAt":"2024-11-20T16:37:20Z","mergedAt":"2024-11-21T01:42:46Z","additions":451,"deletions":3},{"id":"PR_kwDOMT5cIs6CI12q","title":"feat: [Issue-185] Token Provider Tests ","author":"normand1","number":365,"body":"$a","repository":"elizaos/eliza","createdAt":"2024-11-16T20:12:11Z","mergedAt":"2024-11-20T00:19:49Z","additions":380,"deletions":86},{"id":"PR_kwDOMT5cIs6CeUo2","title":"fix: linting and imports ready for npm","author":"ponderingdemocritus","number":433,"body":"- linting and imports","repository":"elizaos/eliza","createdAt":"2024-11-20T05:00:33Z","mergedAt":"2024-11-20T05:02:20Z","additions":192,"deletions":170},{"id":"PR_kwDOMT5cIs6CgGbi","title":"fix: unrug","author":"ponderingdemocritus","number":444,"body":"- fixes unruggable deployer\r\n- adds constants","repository":"elizaos/eliza","createdAt":"2024-11-20T09:25:40Z","mergedAt":"2024-11-20T10:24:30Z","additions":149,"deletions":15},{"id":"PR_kwDOMT5cIs6Clu2N","title":"docs: Create best-practices.md documentation","author":"snobbee","number":463,"body":"$b","repository":"elizaos/eliza","createdAt":"2024-11-20T22:45:16Z","mergedAt":"2024-11-21T18:23:48Z","additions":107,"deletions":3},{"id":"PR_kwDOMT5cIs6Cd8B5","title":"docs: Update contributing.md to incorporate Contribution Guidelines","author":"monilpat","number":430,"body":"$c","repository":"elizaos/eliza","createdAt":"2024-11-20T03:44:03Z","mergedAt":"2024-11-20T04:58:18Z","additions":105,"deletions":0},{"id":"PR_kwDOMT5cIs6Cgr0B","title":"feat: readme and linting","author":"ponderingdemocritus","number":449,"body":"- updates readme","repository":"elizaos/eliza","createdAt":"2024-11-20T10:33:03Z","mergedAt":"2024-11-20T10:36:39Z","additions":97,"deletions":74},{"id":"PR_kwDOMT5cIs6CY2fZ","title":"feat: unruggable on starknet","author":"RedBeardEth","number":418,"body":"\r\n# Risks\r\n\r\nLow\r\n\r\n## What does this PR do?\r\n\r\nAdds the deploy token action from Unruggable Memes to the Starknet plugin\r\n","repository":"elizaos/eliza","createdAt":"2024-11-19T13:11:31Z","mergedAt":"2024-11-20T00:31:31Z","additions":82,"deletions":74},{"id":"PR_kwDOMT5cIs6Cl2Nm","title":"fix: Fixing failling tests token.test.ts and videoGeneration.test.ts","author":"ai16z-demirix","number":465,"body":"$d","repository":"elizaos/eliza","createdAt":"2024-11-20T23:10:51Z","mergedAt":"2024-11-21T00:56:09Z","additions":65,"deletions":8},{"id":"PR_kwDOMT5cIs6CO_xW","title":"fix: Fix linter issues","author":"martincik","number":397,"body":"$e","repository":"elizaos/eliza","createdAt":"2024-11-18T11:37:22Z","mergedAt":"2024-11-20T06:56:48Z","additions":60,"deletions":60},{"id":"PR_kwDOMT5cIs6Ce-cH","title":"fix: The bot is by default deafened and we don't want that","author":"martincik","number":437,"body":"$f","repository":"elizaos/eliza","createdAt":"2024-11-20T07:05:04Z","mergedAt":"2024-11-20T08:10:12Z","additions":42,"deletions":29},{"id":"PR_kwDOMT5cIs6Cb3go","title":"fix: Update adapters.md psql schema","author":"tarrencev","number":424,"body":"I found I needed these schemas (ported from the supabase migration) in order to successfully run an agent with the discord client","repository":"elizaos/eliza","createdAt":"2024-11-19T19:50:44Z","mergedAt":"2024-11-20T00:07:34Z","additions":42,"deletions":1},{"id":"PR_kwDOMT5cIs6CeNmN","title":"fix: configs","author":"ponderingdemocritus","number":431,"body":"- fixes tsconfig","repository":"elizaos/eliza","createdAt":"2024-11-20T04:36:01Z","mergedAt":"2024-11-20T04:47:29Z","additions":40,"deletions":42},{"id":"PR_kwDOMT5cIs6CfWoN","title":"feat:  add all the style guidelines to the context","author":"o-on-x","number":441,"body":"the character style should always be followed,\r\nbecause the use expects this when designing their character and also this will reduce slop content more than anything\r\nif the user puts \"no slop\" as a style instruction for prompting, there was a %50 chance that would get picked up\r\n\r\nthis is a modification that for style it should be all of the characters style added for each post or message\r\n\r\nadditional ideas in the issues/features:\r\nhttps://github.com/ai16z/eliza/issues/438","repository":"elizaos/eliza","createdAt":"2024-11-20T07:54:13Z","mergedAt":"2024-11-20T08:05:56Z","additions":39,"deletions":29},{"id":"PR_kwDOMT5cIs6CfVWV","title":"fix: fixes some console logs","author":"ponderingdemocritus","number":440,"body":"","repository":"elizaos/eliza","createdAt":"2024-11-20T07:51:58Z","mergedAt":"2024-11-20T08:06:19Z","additions":30,"deletions":30},{"id":"PR_kwDOMT5cIs6CejHc","title":"fix: imports","author":"ponderingdemocritus","number":435,"body":"- fixes more imports around the place","repository":"elizaos/eliza","createdAt":"2024-11-20T05:48:52Z","mergedAt":"2024-11-20T05:51:27Z","additions":16,"deletions":20},{"id":"PR_kwDOMT5cIs6CcrQO","title":"fix: postgres embedding issues","author":"tarrencev","number":425,"body":"","repository":"elizaos/eliza","createdAt":"2024-11-19T22:20:55Z","mergedAt":"2024-11-20T10:51:17Z","additions":14,"deletions":38},{"id":"PR_kwDOMT5cIs6Cgm3s","title":"fix: voice perms","author":"ponderingdemocritus","number":447,"body":"- fixes issue if bot does not have the perms","repository":"elizaos/eliza","createdAt":"2024-11-20T10:23:30Z","mergedAt":"2024-11-20T10:25:29Z","additions":12,"deletions":5},{"id":"PR_kwDOMT5cIs6Cdt47","title":"feat: don't require .env to exist","author":"odilitime","number":427,"body":"# Risks\r\n\r\nMedium, haven't discussed this widely\r\n\r\n# Background\r\n\r\n## What does this PR do?\r\n\r\nRemoves the requirement for .env to exists\r\n\r\n## What kind of change is this?\r\n\r\nImprovement\r\n\r\n## Why are we doing this? Any context or related work?\r\n\r\nLarge multiagent instances will have to rely on character.json to have all the settings and secrets for that agent. Have a default .env in these instances to set defaults might be helpful but also hurtful. This allows the admin to choose if they want any defaults across all their agents or nots.\r\n\r\n# Documentation changes needed?\r\n\r\nMy changes do not require a change to the project documentation.\r\n\r\n# Testing\r\n\r\nRan against stable-11-17 branch without issue","repository":"elizaos/eliza","createdAt":"2024-11-20T02:42:13Z","mergedAt":"2024-11-20T05:36:57Z","additions":7,"deletions":11},{"id":"PR_kwDOMT5cIs6Ci1p_","title":"fix: X dry run","author":"laser-riot","number":452,"body":"<!-- Use this template by filling in information and copy and pasting relevant items out of the html comments. -->\r\n\r\n# Relates to:\r\n\r\n[Twitter dry run not working](https://github.com/ai16z/eliza/issues/451)\r\n\r\n# Risks\r\n\r\nAffects anyone working to improve their agents and trying to test their changes\r\n\r\n# Background\r\n\r\n## What does this PR do?\r\n\r\nThis PR reenables the TWITTER_DRY_RUN flag\r\n\r\n## What kind of change is this?\r\n\r\nBug fix\r\n\r\n# Documentation changes needed?\r\n\r\nNone\r\n\r\n# Testing\r\n\r\n![image](https://github.com/user-attachments/assets/9ab992c9-d6fe-4e54-bfde-24dd0dfeb0f6)\r\n\r\n\r\n## Where should a reviewer start?\r\n\r\nIt's straightforward enough to just look at the 4 lines :)\r\n\r\n## Screenshots\r\n### Before\r\n![image](https://github.com/user-attachments/assets/00070997-25ae-4810-81e3-2100b21d7dc2)\r\n\r\n### After\r\n\r\n![image](https://github.com/user-attachments/assets/260bbc6d-19b5-417a-a2b5-200350e51b39)\r\n\r\n# Deploy Notes\r\nN/A\r\n## Database changes\r\nN/A\r\n## Deployment instructions\r\nN/A\r\n","repository":"elizaos/eliza","createdAt":"2024-11-20T15:03:35Z","mergedAt":"2024-11-20T16:55:07Z","additions":5,"deletions":0},{"id":"PR_kwDOMT5cIs6CgYor","title":"fix: wrong parameter for trimTokens in generateObjectV2","author":"darwintree","number":445,"body":"$10","repository":"elizaos/eliza","createdAt":"2024-11-20T09:56:04Z","mergedAt":null,"additions":4,"deletions":1},{"id":"PR_kwDOMT5cIs6CeNx5","title":"fix: since agent is moved out of packages, adjust default path","author":"odilitime","number":432,"body":"# Risks\r\n\r\nMedium, may affect npm packaging\r\n\r\n# Background\r\n\r\n## What does this PR do?\r\n\r\nfixes\r\n`Error loading character from ../../characters/trump.character.json: Error: ENOENT: no such file or directory, open '../../characters/trump.character.json'`\r\nwhen running it like\r\n`pnpm start --characters=\"characters/trump.character.json\" from the repo on 0.1.1`\r\n\r\n## What kind of change is this?\r\n\r\nBug fixes (non-breaking change which fixes an issue)\r\n\r\n## Why are we doing this? Any context or related work?\r\n\r\nLoaf asked\r\n\r\n# Documentation changes needed?\r\n\r\nMy changes do not require a change to the project documentation.\r\n\r\n# Testing\r\n\r\nI ran a quick test","repository":"elizaos/eliza","createdAt":"2024-11-20T04:36:51Z","mergedAt":"2024-11-20T05:59:16Z","additions":3,"deletions":10},{"id":"PR_kwDOMT5cIs6CgkOm","title":"fix: ignored modelEndpointOverride in generation","author":"darwintree","number":446,"body":"# Background\r\n\r\n## What does this PR do?\r\n\r\nThis PR fixes the issue of OpenAi object initialization which ignores the `modelEndpointOverride` optioin of the character\r\n\r\n## What kind of change is this?\r\n\r\nBug fixes (non-breaking change which fixes an issue)\r\n","repository":"elizaos/eliza","createdAt":"2024-11-20T10:18:16Z","mergedAt":"2024-11-21T09:26:26Z","additions":2,"deletions":1},{"id":"PR_kwDOMT5cIs6CdsUP","title":"fix: don't continue to load if a specified file is not found","author":"odilitime","number":426,"body":"# Risks\r\n\r\nLow\r\n\r\n# Background\r\n\r\n## What does this PR do?\r\n\r\nIf you specify a file to load, don't just load default and continue if you can't find it\r\n\r\n## What kind of change is this?\r\n\r\nUX clean up, should reduce confusion and reduce support issues\r\n\r\n## Why are we doing this? Any context or related work?\r\n\r\n# Documentation changes needed?\r\n\r\nMy changes do not require a change to the project documentation.\r\n\r\n# Testing\r\n\r\nI tested on stable-11-17 branch\r\n\r\n","repository":"elizaos/eliza","createdAt":"2024-11-20T02:34:26Z","mergedAt":"2024-11-20T03:43:20Z","additions":2,"deletions":1},{"id":"PR_kwDOMT5cIs6ClEOP","title":"fix: Add missing fuzzystrmatch extension for levenshtein() method to postgresql schema.sql definition","author":"martincik","number":460,"body":"$11","repository":"elizaos/eliza","createdAt":"2024-11-20T20:33:00Z","mergedAt":"2024-11-20T23:40:44Z","additions":1,"deletions":0},{"id":"PR_kwDOMT5cIs6CkA1x","title":"Add npm install instructions to homepage header","author":"null-hax","number":459,"body":"$12","repository":"elizaos/eliza","createdAt":"2024-11-20T17:29:44Z","mergedAt":"2024-11-20T18:40:45Z","additions":1,"deletions":1},{"id":"PR_kwDOMT5cIs6Cfu8s","title":"docs: Fix my name in stream notes","author":"odilitime","number":442,"body":"\r\n# Risks\r\n\r\nNone\r\n\r\n# Background\r\n\r\n## What does this PR do?\r\n\r\nFix my name\r\n\r\n## What kind of change is this?\r\n\r\nDocumentation / Archive correction\r\n\r\n## Why are we doing this? Any context or related work?\r\n\r\nautotranslate got it really wrong\r\n\r\n# Documentation changes needed?\r\n\r\nIf a docs change is needed: I have updated the documentation accordingly.","repository":"elizaos/eliza","createdAt":"2024-11-20T08:46:32Z","mergedAt":"2024-11-20T19:08:23Z","additions":1,"deletions":1},{"id":"PR_kwDOMT5cIs6Cenyy","title":"fix: path","author":"ponderingdemocritus","number":436,"body":"fixes paths","repository":"elizaos/eliza","createdAt":"2024-11-20T05:59:03Z","mergedAt":"2024-11-20T05:59:10Z","additions":1,"deletions":1},{"id":"PR_kwDOMT5cIs6Cd7uW","title":"chore: Update pr.yaml to show actual condition so easier to follow","author":"monilpat","number":429,"body":"$13","repository":"elizaos/eliza","createdAt":"2024-11-20T03:43:14Z","mergedAt":"2024-11-20T05:37:18Z","additions":1,"deletions":1},{"id":"PR_kwDOMT5cIs6Cj36c","title":"bugfix: Modify docker run error after agent folder move","author":"THtianhao","number":458,"body":"$14","repository":"elizaos/eliza","createdAt":"2024-11-20T17:07:19Z","mergedAt":"2024-11-26T18:39:28Z","additions":1,"deletions":1},{"id":"PR_kwDOMT5cIs6CjG-0","title":"fix: don't reply to tweets older than 5 days","author":"liamzebedee","number":454,"body":"$15","repository":"elizaos/eliza","createdAt":"2024-11-20T15:32:56Z","mergedAt":null,"additions":1,"deletions":0},{"id":"PR_kwDOMT5cIs6Cgn24","title":"throw error on character failing to load","author":"liamzebedee","number":448,"body":"$16","repository":"elizaos/eliza","createdAt":"2024-11-20T10:25:26Z","mergedAt":null,"additions":1,"deletions":0},{"id":"PR_kwDOMT5cIs6CefFv","title":"fix: Lerna","author":"ponderingdemocritus","number":434,"body":"- reverts version","repository":"elizaos/eliza","createdAt":"2024-11-20T05:38:01Z","mergedAt":null,"additions":0,"deletions":0}],"detailedContributorSummaries":{}},"summaryContent":"$17","className":"self-end sm:self-start"}]]}],"$L18","$L19","$L1a"]}]}],["$L1b","$L1c","$L1d"],"$L1e"]}],"loading":null,"isPartial":false}
+18:["$","div",null,{"className":"mb-6","children":["$","div",null,{"className":"flex items-center justify-between","children":[[["$","$L1f",null,{"href":"/summary/day/2024-11-19","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left mr-2 h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"children":"Previous"}],false],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$L1f",null,{"href":"/summary/day/2024-11-19","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Previous"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]],["$","div",null,{"className":"flex flex-col items-center","children":[["$","div",null,{"className":"text-sm font-medium text-gray-500","children":["Daily"," Summary"]}],["$","time",null,{"dateTime":"2024-11-20","className":"text-md font-bold","children":"Nov 20, 2024"}]]}],[["$","$L1f",null,{"href":"/summary/day/2024-11-21","children":[false,["$","span",null,{"children":"Next"}],["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right ml-2 h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}]],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$L1f",null,{"href":"/summary/day/2024-11-21","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Next"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]]]}]}]
+21:T754,when adding postDirections on chatDirections
+should grab all of the guidelines to follow
+this is so it does not ignore requests that are extremely important to follow for how the character behaves
+really instead of random for the character file the agent should be able to select what it puts into its context as part of the shouldRespond logic or some other way 
+
+in runtime.ts
+```
+            postDirections:
+                this.character?.style?.all?.length > 0 ||
+                this.character?.style?.post.length > 0
+                    ? addHeader(
+                            "# Post Directions for " + this.character.name,
+                            (() => {
+                                const all = this.character?.style?.all || [];
+                                const post = this.character?.style?.post || [];
+                                const shuffled = [...all, ...post].sort(
+                                    () => 0.5 - Math.random()
+                                );
+                                return shuffled
+                                    .slice(0, conversationLength / 2)
+                                    .join("\n");
+                            })()
+                        )
+                    : "",*
+```
+>
+```
+            postDirections:
+                this.character?.style?.all?.length > 0 ||
+                this.character?.style?.post.length > 0
+                    ? addHeader(
+                        "# Post Directions for " + this.character.name,
+                        (() => {
+                            const all = this.character?.style?.all || [];
+                            const post = this.character?.style?.post || [];
+                            return [...all, ...post].join("\n");
+                        })()
+                    )
+                    : "",
+
+```22:T4b5,**Describe the bug**
+
+<!-- A clear and concise description of what the bug is. -->
+
+Current token.test.ts and videoGeneration.test.ts are throwing errors:
+
+ FAIL  src/tests/videoGeneration.test.ts [ src/tests/videoGeneration.test.ts ]
+Error: [vitest] No "default" export is defined on the "fs" mock. Did you forget to return it from "vi.mock"?
+If you need to partially mock a module, you can use "importOriginal" helper inside:
+
+
+ FAIL  src/tests/token.test.ts [ src/tests/token.test.ts ]
+Error: Failed to load url @ai16z/adapter-sqlite (resolved id: @ai16z/adapter-sqlite) in eliza/packages/core/src/test_resources/createRuntime.ts. Does the file exist?
+ ❯ loadAndTransform ../../node_modules/vite/dist/node/chunks/dep-CB_7IfJ-.js:51920:17
+ 
+**To Reproduce**
+
+<!-- Steps to reproduce the behavior. -->
+
+Navigate to packages/core and run pnpm test.
+
+**Expected behavior**
+
+<!-- A clear and concise description of what you expected to happen. -->
+Tests should run without errors and provide valid output.
+**Screenshots**
+
+<!-- If applicable, add screenshots to help explain your problem. -->
+
+**Additional context**
+
+<!-- Add any other context about the problem here. -->
+23:T569,**Describe the bug**
+
+The `getCachedEmbeddings` for the sqlite adapter is flawed with the recent [introduction of vec_distance_L2](https://github.com/ai16z/eliza/commit/e96764a53c1d15b6f53cff6ec842f63f70d13842). 
+
+```
+packages/adapter-sqlite/src/index.ts:226
+const memories = this.db.prepare(sql).all(opts.query_table_name, new Float32Array(opts.query_input.split(",").map(Number)), // Convert string to Float32Array
+                                              ^
+RangeError: Too few parameter values were provided
+```
+
+
+1. The sql query expects 5 values, but only 4 are passed. `query_match_count` should be used for `LIMIT`
+2. The creation of the float array seems off. The `query_input` does not include any comma separated values. The resulting array is `[NaN]`
+3. Distance comparison is between a float array and a string. It should probably be compared to `query_threshold`, not `query_input`
+
+Related function is here:
+https://github.com/ai16z/eliza/blob/15f7ba88d04d9d7d1cf0f608762fa84da06cb313/packages/adapter-sqlite/src/index.ts#L332C11-L360
+
+I'm happy to contribute if someone can guide me. I have little clue about `vec_distance` and didn't manage to infer what the intention of the change was exactly.
+
+**To Reproduce**
+
+`pnpm start --characters="characters/custom.character.json"` and type something
+
+**Expected behavior**
+
+No sqlite errors
+24:T451,**Describe the bug**
+
+Users without merge access are unable to view specific merge conflicts in pull requests. This limitation prevents them from resolving or contributing to conflict resolution effectively, as they cannot see the conflicting files or lines of code.
+
+**To Reproduce**
+
+1. Create a pull request with merge conflicts.
+2. Ensure that the user reviewing the PR does not have merge access.
+3. Attempt to view the specific merge conflicts as the non-merge access user.
+
+**Expected behavior**
+
+Users without merge access should be able to view the specific merge conflicts within the pull request, including the files and lines of code in conflict, to assist in resolving the issue.
+
+**Screenshots**
+
+<!-- Add screenshots of the PR interface showing the issue for users without merge access, highlighting the lack of visibility into merge conflicts. -->
+
+**Additional context**
+
+This limitation may hinder collaboration and delay the resolution of merge conflicts, especially in teams where code reviews and conflict resolutions involve contributors without merge privileges.25:T153a,During **pnpm i** section of the  install I received the following error " _ELIFECYCLE  Command failed with exit code 7._"
+
+I managed to fix it, by manually downlaoding the Discord Opus piece that it failed on, but for some reason, it is not downloading via the script.
+
+I tried downloading to the actual directory via a browser and it failed - windows reported the download reported an error,.  So I downloaded it into the 'downloads' folder under my profile and manually copied the file in.  I then extracted the files and re-ran 
+
+pnpm i 
+
+It seems to have worked.  So this is an FYI really.  
+
+Thanks
+
+N
+
+C:\Users\clancynl\Documents\GitHub\eliza-starter>pnpm i
+Lockfile is up to date, resolution step is skipped
+Packages: +1108
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+Progress: resolved 1108, reused 1108, downloaded 0, added 0, done
+node_modules/.pnpm/es5-ext@0.10.64/node_modules/es5-ext: Running postinstall script, done in 167ms
+node_modules/.pnpm/@discordjs+opus@https+++codeload.github.com+discordjs+opus+tar.gz+31da49d8d2cc6c5a2ab1bfd332033ff7d5f9fb02/node_modules/@discordjs/opus: Running install script, failed in 640ms
+.../node_modules/@discordjs/opus install$ node-pre-gyp install --fallback-to-build
+│ node-pre-gyp info it worked if it ends with ok
+│ node-pre-gyp info using node-pre-gyp@0.4.5
+│ node-pre-gyp info using node@23.2.0 | win32 | x64
+│ (node:30168) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+│ (Use `node --trace-deprecation ...` to show where the warning was created)
+│ node-pre-gyp info check checked for "C:\Users\clancynl\Documents\GitHub\eliza-starter\node_modules\.pnpm\@discordjs+opus@https+++codeload.github.com+discordjs+opus+tar.gz+31da49d8d2cc6c5a2ab1bfd332033ff7d5f9fb02\node_modules\@discordjs\opus\prebuild\node-v131-napi-v3-win32-x64-unknown-unknown\opus.node" (not found)
+│ node-pre-gyp http GET https://github.com/discordjs/opus/releases/download/v0.9.0/opus-v0.9.0-node-v131-napi-v3-win32-x64-unknown-unknown.tar.gz
+│ node-pre-gyp ERR! install response status 404 Not Found on https://github.com/discordjs/opus/releases/download/v0.9.0/opus-v0.9.0-node-v131-napi-v3-win32-x64-unknown-unknown.tar.gz
+│ node-pre-gyp WARN Pre-built binaries not installable for @discordjs/opus@0.9.0 and node@23.2.0 (node-v131 ABI, unknown) (falling back to source compile with node-gyp)
+│ node-pre-gyp WARN Hit error response status 404 Not Found on https://github.com/discordjs/opus/releases/download/v0.9.0/opus-v0.9.0-node-v131-napi-v3-win32-x64-unknown-unknown.tar.gz
+│ node-pre-gyp ERR! UNCAUGHT EXCEPTION
+│ node-pre-gyp ERR! stack Error: spawn EINVAL
+│ node-pre-gyp ERR! stack     at ChildProcess.spawn (node:internal/child_process:421:11)
+│ node-pre-gyp ERR! stack     at Object.spawn (node:child_process:753:9)
+│ node-pre-gyp ERR! stack     at module.exports.run_gyp (C:\Users\clancynl\Documents\GitHub\eliza-starter\node_modules\.pnpm\@discordjs+node-pre-gyp@0.4.5\node_modules\@discordjs\node-pre-gyp\lib\util\compile.js:72:17)
+│ node-pre-gyp ERR! stack     at build (C:\Users\clancynl\Documents\GitHub\eliza-starter\node_modules\.pnpm\@discordjs+node-pre-gyp@0.4.5\node_modules\@discordjs\node-pre-gyp\lib\build.js:36:11)
+│ node-pre-gyp ERR! stack     at self.commands.<computed> [as build] (C:\Users\clancynl\Documents\GitHub\eliza-starter\node_modules\.pnpm\@discordjs+node-pre-gyp@0.4.5\node_modules\@discordjs\node-pre-gyp\lib\node-pre-gyp.js:72:34)
+│ node-pre-gyp ERR! stack     at run (C:\Users\clancynl\Documents\GitHub\eliza-starter\node_modules\.pnpm\@discordjs+node-pre-gyp@0.4.5\node_modules\@discordjs\node-pre-gyp\lib\main.js:90:29)
+│ node-pre-gyp ERR! stack     at process.processTicksAndRejections (node:internal/process/task_queues:85:11)
+│ node-pre-gyp ERR! System Windows_NT 10.0.26120
+│ node-pre-gyp ERR! command "C:\\Program Files\\nodejs\\node.exe" "C:\\Users\\clancynl\\Documents\\GitHub\\eliza-starter\\node_modules\\.pnpm\\@discordjs+node-pre-gyp@0.4.5\\node_modules\\@discordjs\\node-pre-gyp\\bin\\node-pre-gyp" "install" "--fallback-to-build"
+│ node-pre-gyp ERR! cwd C:\Users\clancynl\Documents\GitHub\eliza-starter\node_modules\.pnpm\@discordjs+opus@https+++codeload.github.com+discordjs+opus+tar.gz+31da49d8d2cc6c5a2ab1bfd332033ff7d5f9fb02\node_modules\@discordjs\opus
+│ node-pre-gyp ERR! node -v v23.2.0
+│ node-pre-gyp ERR! node-pre-gyp -v v0.4.5
+└─ Failed in 640ms at C:\Users\clancynl\Documents\GitHub\eliza-starter\node_modules\.pnpm\@discordjs+opus@https+++codeload.github.com+discordjs+opus+tar.gz+31da49d8d2cc6c5a2ab1bfd332033ff7d5f9fb02\node_modules\@discordjs\opus
+node_modules/.pnpm/canvas@2.11.2/node_modules/canvas: Running install script, failed in 626ms (skipped as optional)
+node_modules/.pnpm/puppeteer@19.11.1_bufferutil@4.0.8_typescript@5.6.3_utf-8-validate@5.0.10/node_modules/puppeteer: Running postinstall script...
+node_modules/.pnpm/node-llama-cpp@3.1.1_typescript@5.6.3/node_modules/node-llama-cpp: Running postinstall script...
+ ELIFECYCLE  Command failed with exit code 7.26:T7d6,<!-- Use this template by filling in information and copy and pasting relevant items out of the html comments. -->
+
+Cheshire Terminal
+https://zany-cantaloupe-d3d.notion.site/Cheshire-Terminal-142ea810c1f7803f9040c91541e710e5?pvs=73
+
+Low
+
+-->
+
+# Background
+
+## What does this PR do?
+A new Character, Cross Chain, Memetic Warfare, Adds music, and verifies the Cheshire Terminal $grin token launch through Eliza Fork and framework. Also want to establish a foundation for Cheshire Framework integrating metaplex and helius as well as cross chain zero knowledge recursion using on chain ai oracles using metaplex core, zero knowledge recursion, and cross chain communication of assets on Bitcoin, Solana, And Beyond.
+
+## What kind of change is this?
+
+Features, Character Add.
+
+This is my first official pull request on any github and I would be honored if it would be included in the Eliza Framework. I have been working on Cross Chain Multi Mo del Ai Agents, on and off chain for about 6 months now, and have specifically trained data sets and fine tunes models for Solana Bitcoin and beyond.
+
+# Documentation changes needed?
+MemeticWarfare
+trading
+characters/cheshire
+eliza/music
+# Testing
+
+## Where should a reviewer start?
+
+## Detailed testing steps
+
+<!--
+None, automtated tests are fine.
+-->
+
+<!--
+- As [anon/admin], go to [link]
+  - [do action]
+  - verify [result]
+-->
+
+<!-- If there is a UI change, please include before and after screenshots or videos. This will speed up PRs being merged. It is extra nice to annotate screenshots with arrows or boxes pointing out the differences. -->
+<!--
+## Screenshots
+### Before
+### After
+-->
+
+<!-- If there is anything about the deploy, please make a note. -->
+<!--
+# Deploy Notes
+-->
+
+<!--  Copy and paste commandline output. -->
+<!--
+## Database changes
+-->
+
+<!--  If there is something more than the automated steps, please specifiy deploy instructions. -->
+<!--
+## Deployment instructions
+-->
+27:Ta3b,<!-- Use this template by filling in information and copy and pasting relevant items out of the html comments. -->
+
+# Relates to:
+https://github.com/ai16z/eliza/issues/185
+<!-- LINK TO ISSUE OR TICKET -->
+
+<!-- This risks section is to be filled out before final review and merge. -->
+
+# Risks
+Low: Only modification to src code files was adding optional syntax an
+
+<!--
+Low, medium, large. List what kind of risks, and what could be effected.
+-->
+
+# Background
+
+## What does this PR do?
+- Removes jest in favor of vitest as discussed in this issue: https://github.com/ai16z/eliza/issues/340
+- Fixes tests that were no longer running in `packages/core/src/tests/token.test.ts`
+
+## What kind of change is this?
+Improvements - Tests
+<!--
+Bug fixes (non-breaking change which fixes an issue)
+Improvements (misc. changes to existing features)
+Features (non-breaking change which adds functionality)
+Updates (new versions of included code)
+-->
+
+<!-- This "Why" section is most relevant if there is no linked issue explaining why. If there is a related issue it might make sense to skip this why section. -->
+<!--
+## Why are we doing this? Any context or related work?
+-->
+See Issue above
+
+# Documentation changes needed?
+My changes do not require a change to the project documentation.
+
+<!--
+My changes do not require a change to the project documentation.
+My changes require a change to the project documentation.
+If a docs change is needed: I have updated the documentation accordingly.
+-->
+
+<!-- Please show how you tested the PR. This will really help if the PR needs to be retested, and probably help the PR get merged quicker. -->
+
+# Testing
+`pnpm -w run test -- 'src/tests/token.test.ts'`
+
+## Where should a reviewer start?
+```
+pnpm install
+pnpm run build
+pnpm -w run test -- 'src/tests/token.test.ts'
+```
+
+## Detailed testing steps
+
+<!--
+None, automtated tests are fine.
+-->
+
+<!--
+- As [anon/admin], go to [link]
+  - [do action]
+  - verify [result]
+-->
+
+<!-- If there is a UI change, please include before and after screenshots or videos. This will speed up PRs being merged. It is extra nice to annotate screenshots with arrows or boxes pointing out the differences. -->
+<!--
+## Screenshots
+### Before
+### After
+-->
+
+<!-- If there is anything about the deploy, please make a note. -->
+<!--
+# Deploy Notes
+-->
+
+<!--  Copy and paste commandline output. -->
+<!--
+## Database changes
+-->
+
+<!--  If there is something more than the automated steps, please specifiy deploy instructions. -->
+<!--
+## Deployment instructions
+-->
+28:T517,# Relates to:
+
+Eliza community’s best practices documentation
+
+<!-- LINK TO ISSUE OR TICKET -->
+
+# Risks
+
+Low risk. This PR focuses on updating documentation to reflect the latest best practices for submitting pull requests, including pre-review with AI and template usage. No functional code changes are involved.
+
+# Background
+
+## What does this PR do?
+
+This PR updates the contributing guidelines to include new best practices for pull request submissions. It adds a recommendation for conducting pre-reviews using AI tools, elaborates on the use of PR templates, and emphasizes the importance of squashing commits.
+
+## What kind of change is this?
+
+- **Documentation**: This PR add the best practices documentation to streamline the contribution process and make it more consistent for all team members.
+
+# Documentation changes needed?
+
+My changes require an update to the project documentation. The best practices guidelines have been added to include instructions about using AI tools for pre-review, PR templates, and squashing commits. All updates have been made accordingly.
+
+# Testing
+
+## Where should a reviewer start?
+
+Review the updated sections on "Pre-Review with AI," "Pull Request Templates," and "Squashing Commits" in the best-practices documentation.
+29:T4e3,# Relates to:
+
+No specific issue linked. Adding PR templates as part of process improvements.
+
+# Risks
+
+Low: Adding templates and updating documentation does not impact code or production systems.
+
+# Background
+
+## What does this PR do?
+
+This PR updates the `CONTRIBUTING.md` file to include details about the new PR templates. It informs contributors about the location of the templates and how to use them when creating a pull request.
+
+## What kind of change is this?
+
+- Documentation update (non-breaking change).
+
+## Why are we doing this? Any context or related work?
+
+To improve contributor onboarding and ensure a standardized process for submitting pull requests.
+
+# Documentation changes needed?
+
+My changes require a change to the project documentation.  
+I have updated the `CONTRIBUTING.md` file to reflect the new templates.
+
+# Testing
+
+## Where should a reviewer start?
+
+Review the changes made to the `CONTRIBUTING.md` file. Check that the instructions are clear and accurate.
+
+## Detailed testing steps
+
+1. Navigate to the `CONTRIBUTING.md` file.
+2. Confirm the added sections about PR templates.
+3. Verify that the file points to the correct location of the PR templates in the repository.
+
+---2a:T94c,<!-- Use this template by filling in information and copy and pasting relevant items out of the html comments. -->
+
+# Relates to:
+https://github.com/ai16z/eliza/issues/464
+<!-- LINK TO ISSUE OR TICKET -->
+
+<!-- This risks section is to be filled out before final review and merge. -->
+
+# Risks
+Low: Fixing tests.
+<!--
+Low, medium, large. List what kind of risks, and what could be effected.
+-->
+
+# Background
+Fixing failing test setup for token.test.ts and videoGeneration.test.ts
+## What does this PR do?
+Fixes two issues with following tests:
+token.test.ts
+videoGeneration.test.ts
+## What kind of change is this?
+Bug-fix
+<!--
+Bug fixes (non-breaking change which fixes an issue)
+Improvements (misc. changes to existing features)
+Features (non-breaking change which adds functionality)
+Updates (new versions of included code)
+-->
+
+<!-- This "Why" section is most relevant if there is no linked issue explaining why. If there is a related issue it might make sense to skip this why section. -->
+<!--
+## Why are we doing this? Any context or related work?
+-->
+Avoiding flaky tests
+# Documentation changes needed?
+None
+<!--
+My changes do not require a change to the project documentation.
+My changes require a change to the project documentation.
+If a docs change is needed: I have updated the documentation accordingly.
+-->
+
+<!-- Please show how you tested the PR. This will really help if the PR needs to be retested, and probably help the PR get merged quicker. -->
+
+# Testing
+
+## Where should a reviewer start?
+navigate to packages/core
+## Detailed testing steps
+Navigate to packages/core
+run pnpm test
+<!--
+None, automtated tests are fine.
+-->
+
+<!--
+- As [anon/admin], go to [link]
+  - [do action]
+  - verify [result]
+-->
+
+<!-- If there is a UI change, please include before and after screenshots or videos. This will speed up PRs being merged. It is extra nice to annotate screenshots with arrows or boxes pointing out the differences. -->
+<!--
+## Screenshots
+### Before
+### After
+-->
+
+<!-- If there is anything about the deploy, please make a note. -->
+<!--
+# Deploy Notes
+-->
+
+<!--  Copy and paste commandline output. -->
+<!--
+## Database changes
+-->
+
+<!--  If there is something more than the automated steps, please specifiy deploy instructions. -->
+<!--
+## Deployment instructions
+-->
+2b:T4e9,# Relates to:
+*No specific issue linked - appears to be a code quality improvement PR*
+
+# Risks
+Low - Changes are purely related to code style and import organization with no functional changes.
+
+# Background
+## What does this PR do?
+This PR addresses linting issues in the codebase by:
+1. Reorganizing and consolidating imports
+2. Removing unused imports
+3. Removing empty catch variable declarations
+4. Fixing import ordering
+5. Removing extra blank lines
+
+## What kind of change is this?
+Improvements (misc. changes to existing features)
+
+# Documentation changes needed?
+My changes do not require a change to the project documentation.
+
+# Testing
+## Where should a reviewer start?
+Review the changes in the following files:
+- packages/core/src/embedding.ts
+- packages/core/src/generation.ts  
+- packages/core/src/parsing.ts
+
+## Detailed testing steps
+No, automated tests are fine. These changes are purely syntactic and don't affect functionality.
+
+The changes include:
+1. Import reorganization
+2. Removal of unused imports (fs)
+3. Simplifying catch blocks by removing unused error variables
+4. Consistent import ordering
+
+Since these are linter-driven changes, existing tests should cover functionality verification.2c:T639,# Relates to:
+(No linked issue provided in the diff)
+
+# Risks
+Low - Changes only affect voice channel behavior for the Discord bot, specifically its deafened/muted state when joining channels.
+
+# Background
+## What does this PR do?
+This PR fixes an issue where the Discord bot was joining voice channels in a deafened state by default. The changes include:
+1. Explicitly setting the bot to undeafened and unmuted when joining voice channels
+2. Improved voice connection cleanup by clearing streams and monitors when destroying old connections
+3. Added error handling for voice connections
+4. Refactored voice channel join logic to use VoiceManager instead of direct joinVoiceChannel calls
+
+## What kind of change is this?
+Bug fix (non-breaking change which fixes an issue)
+
+# Documentation changes needed?
+My changes do not require a change to the project documentation.
+
+# Testing
+## Where should a reviewer start?
+1. Review the changes in `packages/client-discord/src/actions/joinvoice.ts` where joinVoiceChannel calls are replaced with state.voiceManager
+2. Check the new voice connection setup in `packages/client-discord/src/voice.ts`
+
+## Detailed testing steps
+1. As a user, invite the bot to a Discord server
+2. Join a voice channel
+3. Make the bot join the same voice channel
+4. Verify that:
+   - The bot joins successfully
+   - The bot is not deafened by default
+   - The bot is not muted by default
+   - The bot can properly hear and process voice input from users
+
+The automated tests should be updated to verify this behaviour remains consistent.2d:T695,<!-- Use this template by filling in information and copy and pasting relevant items out of the html comments. -->
+
+# Relates to:
+
+#469 
+
+<!-- LINK TO ISSUE OR TICKET -->
+
+<!-- This risks section is to be filled out before final review and merge. -->
+
+# Risks
+
+<!--
+Low, medium, large. List what kind of risks, and what could be effected.
+-->
+
+Low: fix a bug
+
+# Background
+
+## What does this PR do?
+
+This PR fixes the bug that wrong parameter is used for function trimToken
+
+## What kind of change is this?
+
+Bug fixes (non-breaking change which fixes an issue)
+
+## Why are we doing this? Any context or related work?
+
+This would incur errors to generate objects
+
+# Documentation changes needed?
+
+no
+
+<!-- Please show how you tested the PR. This will really help if the PR needs to be retested, and probably help the PR get merged quicker. -->
+
+# Testing
+
+## Where should a reviewer start?
+
+## Detailed testing steps
+
+<!--
+None, automtated tests are fine.
+-->
+
+<!--
+- As [anon/admin], go to [link]
+  - [do action]
+  - verify [result]
+-->
+
+<!-- If there is a UI change, please include before and after screenshots or videos. This will speed up PRs being merged. It is extra nice to annotate screenshots with arrows or boxes pointing out the differences. -->
+<!--
+## Screenshots
+### Before
+### After
+-->
+
+<!-- If there is anything about the deploy, please make a note. -->
+<!--
+# Deploy Notes
+-->
+
+<!--  Copy and paste commandline output. -->
+<!--
+## Database changes
+-->
+
+<!--  If there is something more than the automated steps, please specifiy deploy instructions. -->
+<!--
+## Deployment instructions
+-->
+2e:T5f8,# Relates to:
+*No specific issue linked - database schema enhancement*
+
+# Risks
+Low - Adding a PostgreSQL extension that is commonly used for fuzzy string matching. This is a database schema change but only adds functionality without modifying existing structures.
+
+# Background
+## What does this PR do?
+Adds the `fuzzystrmatch` PostgreSQL extension to the database schema. This extension provides several functions for determining similarities between strings and fuzzy string matching.
+
+## What kind of change is this?
+Features (non-breaking change which adds functionality)
+
+# Documentation changes needed?
+My changes do not require a change to the project documentation, as this is an infrastructure-level change that doesn't affect application interfaces.
+
+# Testing
+## Where should a reviewer start?
+1. Review the schema.sql file in packages/adapter-postgres
+2. Verify the fuzzystrmatch extension installation in a test database
+
+## Detailed testing steps
+1. Create a fresh test database
+2. Run the schema.sql migration
+3. Verify the fuzzystrmatch extension is installed by running:
+```sql
+SELECT * FROM pg_extension WHERE extname = 'fuzzystrmatch';
+```
+
+# Deploy Notes
+## Database changes
+- Requires PostgreSQL with fuzzystrmatch extension available
+- Schema change: `CREATE EXTENSION IF NOT EXISTS fuzzystrmatch;`
+
+## Deployment instructions
+Standard deployment process applies:
+1. Ensure the PostgreSQL server has fuzzystrmatch extension available
+2. Run schema migrations as normal2f:T8c7,<!-- Use this template by filling in information and copy and pasting relevant items out of the html comments. -->
+
+# Relates to:
+
+![image](https://github.com/user-attachments/assets/1525f08a-0bf6-45be-a601-e2f8c7bd90dd)
+
+
+<!-- LINK TO ISSUE OR TICKET -->
+
+<!-- This risks section is to be filled out before final review and merge. -->
+
+# Risks
+
+<!--
+Low, medium, large. List what kind of risks, and what could be effected.
+-->
+
+# Background
+
+## What does this PR do?
+Replaces `npm package coming soon` with `npm install @ai16z/eliza`
+
+## What kind of change is this?
+Update
+
+<!--
+Bug fixes (non-breaking change which fixes an issue)
+Improvements (misc. changes to existing features)
+Features (non-breaking change which adds functionality)
+Updates (new versions of included code)
+-->
+
+<!-- This "Why" section is most relevant if there is no linked issue explaining why. If there is a related issue it might make sense to skip this why section. -->
+<!--
+## Why are we doing this? Any context or related work?
+-->
+
+# Documentation changes needed?
+
+<!--
+My changes do not require a change to the project documentation.
+My changes require a change to the project documentation.
+If a docs change is needed: I have updated the documentation accordingly.
+-->
+
+<!-- Please show how you tested the PR. This will really help if the PR needs to be retested, and probably help the PR get merged quicker. -->
+
+# Testing
+
+## Where should a reviewer start?
+
+## Detailed testing steps
+
+<!--
+None, automtated tests are fine.
+-->
+
+<!--
+- As [anon/admin], go to [link]
+  - [do action]
+  - verify [result]
+-->
+
+<!-- If there is a UI change, please include before and after screenshots or videos. This will speed up PRs being merged. It is extra nice to annotate screenshots with arrows or boxes pointing out the differences. -->
+<!--
+## Screenshots
+### Before
+### After
+-->
+
+<!-- If there is anything about the deploy, please make a note. -->
+<!--
+# Deploy Notes
+-->
+
+<!--  Copy and paste commandline output. -->
+<!--
+## Database changes
+-->
+
+<!--  If there is something more than the automated steps, please specifiy deploy instructions. -->
+<!--
+## Deployment instructions
+-->
+30:T4b6,---
+
+# Relates to:
+
+No specific issue linked. Improving PR error messaging.
+
+# Risks
+
+Low: This change only affects error messages shown during PR validation.
+
+# Background
+
+## What does this PR do?
+
+This PR updates the `pr.yaml` configuration file to include explicit error messages for pull request validation. The messages provide clear guidance on expected fields and values.
+
+## What kind of change is this?
+
+- Improvement (miscellaneous changes to existing features).
+
+## Why are we doing this? Any context or related work?
+
+To enhance the contributor experience by providing clearer error messages, reducing confusion, and speeding up corrections.
+
+# Documentation changes needed?
+
+My changes do not require a change to the project documentation.
+
+# Testing
+
+## Where should a reviewer start?
+
+Review the updated `pr.yaml` file. Focus on the `checks` section where the error messages have been updated.
+
+## Detailed testing steps
+
+1. Create a pull request with missing or incorrect fields.
+2. Confirm that the error messages specify the required corrections.
+3. Verify that all expected options (e.g., PR types) are listed clearly in the error message.
+
+---
+31:T491,# Relates to:
+
+Docker running error
+
+
+# Risks
+
+Low, The scope of influence is the operation of docker
+
+
+# Background
+
+## What does this PR do?
+
+After the author moved the agent folder, docker could not map the agent directory in docker, so docker volumn mapping incorrectly. I re-mapped the agent directory
+
+docker has the following error:
+```
+sudo docker compose -f docker-compose-waifu.yaml up
+[+] Running 1/0
+✔ Container waifu  Created                                                                                               0.0 s
+Attaching to waifu
+waifu  |
+waifu  | &gt;  eliza@ start /app
+waifu  | &gt;  pnpm --filter "@ai16z/agent" start --isRoot "--characters=characters/waifu.character.json"
+waifu  |
+waifu  | No projects matched the filters in "/app"
+```
+
+## What kind of change is this?
+
+Bug fixes (non-breaking change which fixes an issue)
+
+
+# Documentation changes needed?
+
+My changes do not require a change to the project documentation.
+
+
+# Testing
+
+## Where should a reviewer start?
+
+Carry out
+```
+. ./scripts/docker.sh build
+. ./scripts/docker.sh run
+```
+Try to see if the docker log is error free32:T81c,<!-- Use this template by filling in information and copy and pasting relevant items out of the html comments. -->
+
+# Relates to:
+
+<!-- LINK TO ISSUE OR TICKET -->
+
+<!-- This risks section is to be filled out before final review and merge. -->
+
+# Risks
+
+<!--
+Low, medium, large. List what kind of risks, and what could be effected.
+-->
+
+# Background
+
+## What does this PR do?
+
+## What kind of change is this?
+
+<!--
+Bug fixes (non-breaking change which fixes an issue)
+Improvements (misc. changes to existing features)
+Features (non-breaking change which adds functionality)
+Updates (new versions of included code)
+-->
+
+<!-- This "Why" section is most relevant if there is no linked issue explaining why. If there is a related issue it might make sense to skip this why section. -->
+<!--
+## Why are we doing this? Any context or related work?
+-->
+
+# Documentation changes needed?
+
+<!--
+My changes do not require a change to the project documentation.
+My changes require a change to the project documentation.
+If a docs change is needed: I have updated the documentation accordingly.
+-->
+
+<!-- Please show how you tested the PR. This will really help if the PR needs to be retested, and probably help the PR get merged quicker. -->
+
+# Testing
+
+## Where should a reviewer start?
+
+## Detailed testing steps
+
+<!--
+None, automtated tests are fine.
+-->
+
+<!--
+- As [anon/admin], go to [link]
+  - [do action]
+  - verify [result]
+-->
+
+<!-- If there is a UI change, please include before and after screenshots or videos. This will speed up PRs being merged. It is extra nice to annotate screenshots with arrows or boxes pointing out the differences. -->
+<!--
+## Screenshots
+### Before
+### After
+-->
+
+<!-- If there is anything about the deploy, please make a note. -->
+<!--
+# Deploy Notes
+-->
+
+<!--  Copy and paste commandline output. -->
+<!--
+## Database changes
+-->
+
+<!--  If there is something more than the automated steps, please specifiy deploy instructions. -->
+<!--
+## Deployment instructions
+-->
+33:T966,<!-- Use this template by filling in information and copy and pasting relevant items out of the html comments. -->
+
+# Relates to:
+
+<!-- LINK TO ISSUE OR TICKET -->
+
+<!-- This risks section is to be filled out before final review and merge. -->
+
+# Risks
+
+<!--
+Low, medium, large. List what kind of risks, and what could be effected.
+-->
+
+# Background
+
+## What does this PR do?
+
+## What kind of change is this?
+Improvement
+
+<!--
+Bug fixes (non-breaking change which fixes an issue)
+Improvements (misc. changes to existing features)
+Features (non-breaking change which adds functionality)
+Updates (new versions of included code)
+-->
+
+<!-- This "Why" section is most relevant if there is no linked issue explaining why. If there is a related issue it might make sense to skip this why section. -->
+
+## Why are we doing this? Any context or related work?
+Users pass character paths via command-line. If the character file fails to be found / parsed, Eliza just launches the default character. This is counterintuitive for a newcomer like myself, since the error logged is immediately cleared from the screen when the chat loop is started. More intuitive to just throw directly.
+
+
+# Documentation changes needed?
+
+<!--
+My changes do not require a change to the project documentation.
+My changes require a change to the project documentation.
+If a docs change is needed: I have updated the documentation accordingly.
+-->
+
+<!-- Please show how you tested the PR. This will really help if the PR needs to be retested, and probably help the PR get merged quicker. -->
+
+# Testing
+
+## Where should a reviewer start?
+
+## Detailed testing steps
+
+<!--
+None, automtated tests are fine.
+-->
+
+<!--
+- As [anon/admin], go to [link]
+  - [do action]
+  - verify [result]
+-->
+
+<!-- If there is a UI change, please include before and after screenshots or videos. This will speed up PRs being merged. It is extra nice to annotate screenshots with arrows or boxes pointing out the differences. -->
+<!--
+## Screenshots
+### Before
+### After
+-->
+
+<!-- If there is anything about the deploy, please make a note. -->
+<!--
+# Deploy Notes
+-->
+
+<!--  Copy and paste commandline output. -->
+<!--
+## Database changes
+-->
+
+<!--  If there is something more than the automated steps, please specifiy deploy instructions. -->
+<!--
+## Deployment instructions
+-->
+19:["$","div",null,{"className":"mb-8 space-y-6","children":[["$","$L20",null,{"metrics":{"date":"2024-11-20","interval":{"intervalStart":"$D2024-11-20T00:00:00.000Z","intervalEnd":"$D2024-11-21T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":33,"merged":26,"total":38},"issues":{"new":7,"closed":8,"total":14},"activeContributors":26,"codeChanges":{"additions":4442,"deletions":1313,"files":110,"commitCount":77},"topContributors":[{"username":"ponderingdemocritus","avatarUrl":"https://avatars.githubusercontent.com/u/90423308?u=fa7a84e8e946db253241c7aaabbb57e7c6495f0b&v=4","totalScore":355.66416753692505,"prScore":337.46416753692506,"issueScore":0,"reviewScore":18,"commentScore":0.2,"summary":null},{"username":"odilitime","avatarUrl":"https://avatars.githubusercontent.com/u/16395496?u=c9bac48e632aae594a0d85aaf9e9c9c69b674d8b&v=4","totalScore":111.02042096886807,"prScore":92.08242096886806,"issueScore":4,"reviewScore":14.5,"commentScore":0.43799999999999994,"summary":null},{"username":"monilpat","avatarUrl":"https://avatars.githubusercontent.com/u/15067321?v=4","totalScore":89.79002569139008,"prScore":55.25202569139009,"issueScore":4.1,"reviewScore":30,"commentScore":0.43799999999999994,"summary":null},{"username":"snobbee","avatarUrl":"https://avatars.githubusercontent.com/u/125891987?u=ba9ca14b922f8fb73f38ba0981d157247af3dd03&v=4","totalScore":57.614825503280834,"prScore":40.67682550328083,"issueScore":0,"reviewScore":16.5,"commentScore":0.43799999999999994,"summary":null},{"username":"martincik","avatarUrl":"https://avatars.githubusercontent.com/u/2183?u=b1f920b7fc3d0361c6d0ecbb62e2e8844ff1ab4f&v=4","totalScore":54.18623970929603,"prScore":53.98623970929603,"issueScore":0,"reviewScore":0,"commentScore":0.2,"summary":null},{"username":"tarrencev","avatarUrl":"https://avatars.githubusercontent.com/u/4740651?u=7fe717380f8ed3e4fa7c19e9c99429d0354e5400&v=4","totalScore":43.477892256852854,"prScore":43.477892256852854,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":null},{"username":"coffeeorgreentea","avatarUrl":"https://avatars.githubusercontent.com/u/90069434?v=4","totalScore":40.637264337945666,"prScore":36.137264337945666,"issueScore":0,"reviewScore":4.5,"commentScore":0,"summary":null},{"username":"8bitsats","avatarUrl":"https://avatars.githubusercontent.com/u/112488261?u=935da76d04acbe13648766ea2afcc9b4a7650713&v=4","totalScore":39.7497738965761,"prScore":39.5497738965761,"issueScore":0,"reviewScore":0,"commentScore":0.2,"summary":null},{"username":"ai16z-demirix","avatarUrl":"https://avatars.githubusercontent.com/u/188117230?u=424cd5b834584b3799da288712b3c4158c8032a1&v=4","totalScore":35.43206509320417,"prScore":31.43206509320417,"issueScore":4,"reviewScore":0,"commentScore":0,"summary":null},{"username":"darwintree","avatarUrl":"https://avatars.githubusercontent.com/u/17946284?v=4","totalScore":31.40902691517397,"prScore":31.40902691517397,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":null},{"username":"remiroyc","avatarUrl":"https://avatars.githubusercontent.com/u/11146088?u=23d64f3d4e4942ef587da8af19904bbc2f3438ef&v=4","totalScore":30.87850955863044,"prScore":30.87850955863044,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":null},{"username":"laser-riot","avatarUrl":"https://avatars.githubusercontent.com/u/123244198?v=4","totalScore":28.429879734614026,"prScore":23.889879734614027,"issueScore":4.2,"reviewScore":0,"commentScore":0.33999999999999997,"summary":null},{"username":"o-on-x","avatarUrl":"https://avatars.githubusercontent.com/u/186759703?u=4e674b1542bbb9fe7d7ea0e034c8c525689cb191&v=4","totalScore":27.55405325229863,"prScore":23.55405325229863,"issueScore":4,"reviewScore":0,"commentScore":0,"summary":null},{"username":"null-hax","avatarUrl":"https://avatars.githubusercontent.com/u/89671623?u=4eb85858c4f8e47f68d0cd0333f2deaa7adc1197&v=4","totalScore":27.278306144334053,"prScore":27.278306144334053,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":null},{"username":"THtianhao","avatarUrl":"https://avatars.githubusercontent.com/u/7608485?u=e7162b8e6dc62f920d3a5810a3b35b2c5534051c&v=4","totalScore":24.050306144334055,"prScore":24.050306144334055,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":null},{"username":"liamzebedee","avatarUrl":"https://avatars.githubusercontent.com/u/584141?u=4d923d0d46611d47175069baca238238f33281da&v=4","totalScore":22.115147180559944,"prScore":22.115147180559944,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":null},{"username":"Wilbert957","avatarUrl":"https://avatars.githubusercontent.com/u/161988856?u=5fb1e5f079f796e3e83992fbec4800d2ecff976d&v=4","totalScore":18.438,"prScore":0,"issueScore":0,"reviewScore":18,"commentScore":0.43799999999999994,"summary":null},{"username":"bmgalego","avatarUrl":"https://avatars.githubusercontent.com/u/2568430?v=4","totalScore":4.5,"prScore":0,"issueScore":0,"reviewScore":4.5,"commentScore":0,"summary":null},{"username":"notOccupanther","avatarUrl":"https://avatars.githubusercontent.com/u/30435593?v=4","totalScore":4,"prScore":0,"issueScore":4,"reviewScore":0,"commentScore":0,"summary":null},{"username":"FGhrawi","avatarUrl":"https://avatars.githubusercontent.com/u/89403229?v=4","totalScore":4,"prScore":0,"issueScore":4,"reviewScore":0,"commentScore":0,"summary":null},{"username":"normand1","avatarUrl":"https://avatars.githubusercontent.com/u/1393261?u=65c44e54967b1db250d20661877c1dc9768c6add&v=4","totalScore":0.2,"prScore":0,"issueScore":0,"reviewScore":0,"commentScore":0.2,"summary":null}],"focusAreas":[{"area":"core","count":39},{"area":"client-discord","count":9},{"area":"docs/docs","count":7},{"area":"plugin-starknet","count":6},{"area":"plugin-video-generation","count":6},{"area":"agent/src","count":5},{"area":"plugin-bootstrap","count":4},{"area":"adapter-postgres","count":3},{"area":"client-twitter","count":3},{"area":"plugin-solana","count":2}],"topIssues":[{"id":"I_kwDOMT5cIs6fgwfW","title":"Twitter Dry Run not working","author":"laser-riot","number":451,"repository":"elizaos/eliza","body":"**Describe the bug**\r\n\r\nTwitter dry run option is not working\r\n\r\n**To Reproduce**\r\n\r\nSet TWITTER_DRY_RUN to true and run the agent\r\nThe agent then proceeds to post on X\r\n\r\n**Expected behavior**\r\n\r\nThe agent does not post on X\r\n\r\n**Screenshots**\r\n\r\n**Additional context**\r\n","createdAt":"2024-11-20T14:58:01Z","closedAt":"2024-11-20T23:57:03Z","state":"CLOSED","commentCount":2},{"id":"I_kwDOMT5cIs6fbPmB","title":"Feature: when getting style guidelines should always add all of them to context","author":"o-on-x","number":438,"repository":"elizaos/eliza","body":"$21","createdAt":"2024-11-20T07:16:21Z","closedAt":"2025-01-04T18:31:40Z","state":"CLOSED","commentCount":1},{"id":"I_kwDOMT5cIs6fls2k","title":"Current token.test.ts and videoGeneration.test.ts are throwing errors","author":"ai16z-demirix","number":464,"repository":"elizaos/eliza","body":"$22","createdAt":"2024-11-20T23:01:03Z","closedAt":"2024-11-22T20:11:00Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs6fJGtf","title":"Move cache into DB","author":"ponderingdemocritus","number":403,"repository":"elizaos/eliza","body":"Current all cache is local file storage. This is problematic as does not allow persistence in containers.\r\n\r\nWe need to move all cache into sql tables.\r\n\r\n- [ ] Core\r\n- [ ] twitter client\r\n- [ ] discord client\r\n- [ ] telegram client","createdAt":"2024-11-18T21:28:29Z","closedAt":"2024-11-20T03:14:25Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs6ewQE-","title":"Move Trust DB into package","author":"ponderingdemocritus","number":342,"repository":"elizaos/eliza","body":"Currently the Trust DB is coupled into the Solana plugin.\r\n\r\nThis should be decoupled into a dedicated package, then imported into the Solana.\r\n\r\nThis will allow for solid Unit testing along with building wrappers for other chains that might not follow the exact schema that is defined. ","createdAt":"2024-11-15T23:29:21Z","closedAt":"2024-11-20T23:24:04Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs6dywGV","title":"getCachedEmbeddings broken for sqlite adapter ","author":"boldkoala4615","number":251,"repository":"elizaos/eliza","body":"$23","createdAt":"2024-11-10T15:05:15Z","closedAt":"2024-11-20T10:30:34Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs6b-McL","title":"⚙️Take Order Action Integration","author":"sirkitree","number":53,"repository":"elizaos/eliza","body":"⚙️ Action Integration: The integration of the \"take order\" action into the agent represents a foundational step in enhancing the system's capabilities, similar to adding new features to a smart assistant.\r\n\r\nIntegrate the \"take order\" action into the system as a foundational feature.\r\n\r\n#### Requirements\r\n- Design take order workflow\r\n- Implement action handlers\r\n- Add validation and verification steps\r\n- Create response handling system\r\n\r\n#### Acceptance Criteria\r\n- [ ] Users can successfully take orders\r\n- [ ] Action is properly integrated with order book\r\n- [ ] Validation checks are in place\r\n- [ ] Response handling works correctly","createdAt":"2024-10-27T18:11:05Z","closedAt":"2024-11-20T09:58:28Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs6b-MW8","title":"🔍 Trust Score Calculator","author":"sirkitree","number":52,"repository":"elizaos/eliza","body":"🔄 Trust Score Development: Creating a trust score based on trade outcomes will be essential for building credibility within the marketplace. It will allow users to make informed decisions based on past performance.\r\n\r\nDevelop a trust score calculation system based on trade outcomes and user recommendations.\r\n\r\n#### Requirements\r\n- Define trust score metrics\r\n- Implement calculation algorithm\r\n- Create history tracking for score changes\r\n- Add user recommendation integration\r\n\r\n#### Acceptance Criteria\r\n- [ ] Trust scores are calculated accurately\r\n- [ ] Historical data is tracked and accessible\r\n- [ ] User recommendations affect trust scores\r\n- [ ] Score changes are properly logged","createdAt":"2024-10-27T18:10:23Z","closedAt":"2024-11-20T09:58:27Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs6b-MCh","title":"📊 Order Book System","author":"sirkitree","number":49,"repository":"elizaos/eliza","body":"📈 Importance of the Order Book: The order book is critical for establishing a framework of trust within the marketplace. By documenting trades and their success rates, it lays the groundwork for a reliable trading environment.\r\n\r\nDevelop a central order book system for managing trades and trust assessments.\r\n\r\n#### Requirements\r\n- Design database schema for order storage\r\n- Implement order matching logic\r\n- Create APIs for order submission and retrieval\r\n- Add trust assessment calculations\r\n\r\n#### Acceptance Criteria\r\n- [ ] Orders can be created and stored in the system\r\n- [ ] Order matching algorithm is functioning\r\n- [ ] APIs are documented and tested\r\n- [ ] Trust assessments are calculated correctly","createdAt":"2024-10-27T18:07:18Z","closedAt":"2024-11-20T09:58:27Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs6b56ZQ","title":"daos.fun integration","author":"lalalune","number":33,"repository":"elizaos/eliza","body":"We want daos.fun integration\r\n\r\nThis includes a basic service to interact with daos.fun and have a wallet and all that, as well as actions that mirror the swap actions but with the DAO wallet.","createdAt":"2024-10-26T08:09:49Z","closedAt":"2024-11-20T09:58:26Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs6fiJ0M","title":"Non-Merge Access Users Cannot View Specific Merge Conflicts in Pull Requests They Review","author":"monilpat","number":457,"repository":"elizaos/eliza","body":"$24","createdAt":"2024-11-20T16:50:34Z","closedAt":"2025-01-04T18:31:39Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs6fbpPE","title":"Feat: Hot reload json","author":"odilitime","number":439,"repository":"elizaos/eliza","body":"**Is your feature request related to a problem? Please describe.**\r\n\r\nBe able to reload a character json without restarting\r\n\r\n**Describe the solution you'd like**\r\n\r\nREST API?\r\n\r\nSIGHUP to reload all characters?\r\nSIGUSR1 to reload all characters as soon as they're done with their current action?\r\n\r\n**Describe alternatives you've considered**\r\n\r\nTBD\r\n\r\n**Additional context**\r\n\r\nCredit to ICJR on discord for the idea\r\n","createdAt":"2024-11-20T07:43:07Z","closedAt":"2025-01-04T18:31:39Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs6fkrkV","title":"Windows 11:  Command Failed with exit Code 7:","author":"notOccupanther","number":461,"repository":"elizaos/eliza","body":"$25","createdAt":"2024-11-20T21:08:36Z","closedAt":"2025-01-12T10:48:09Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs6fcrPP","title":"When using Ollama, a long loop of Initializing Ollama Model happens before any output","author":"FGhrawi","number":443,"repository":"elizaos/eliza","body":"**Describe the bug**\r\n\r\nWhen using Ollama, the model being used is loaded over and over in a loop (sometimes 10-15+ times) in the terminal before any output or agent decision-making happens.\r\nFwiw, one model is configured at a time in .env (so no swapping is being done)\r\n\r\n**To Reproduce**\r\n\r\nUse any model with the Ollama provider\r\n\r\n**Expected behavior**\r\n\r\nModel loads once. (Since ollama is on keepalive and only 1 model is being used)\r\n\r\n**Screenshots**\r\n![Screenshot_2024-11-19_at_10 46 50_PM](https://github.com/user-attachments/assets/9aee0e5e-a587-482e-9afc-b860b1a23614)\r\n\r\n\r\n\r\n\r\n**Additional context**\r\nI am on a fresh clone of the repo with a basic character configuration.\r\nFwiw, I have 24gb vram, and this happens even on smaller models.\r\n\r\n\r\n\r\n","createdAt":"2024-11-20T09:15:15Z","closedAt":"2025-01-12T10:47:47Z","state":"CLOSED","commentCount":0}],"topPullRequests":[{"id":"PR_kwDOMT5cIs6CjMGJ","title":"Cheshire Terminal","author":"8bitsats","number":455,"body":"$26","repository":"elizaos/eliza","createdAt":"2024-11-20T15:42:32Z","mergedAt":null,"additions":38619,"deletions":14064},{"id":"PR_kwDOMT5cIs6CdwoH","title":"feat: lerna an npm","author":"ponderingdemocritus","number":428,"body":"- implements lerna\r\n- moves agent out of packages as it is not a npm package","repository":"elizaos/eliza","createdAt":"2024-11-20T02:55:33Z","mergedAt":"2024-11-20T03:58:06Z","additions":1584,"deletions":466},{"id":"PR_kwDOMT5cIs6ClZL7","title":"feat: create-eliza-app","author":"coffeeorgreentea","number":462,"body":"This PR adds a cli tool `create-eliza-app` and a registry folder for it.\r\nIt's currently pointed to the eliza-starter repo's main branch.","repository":"elizaos/eliza","createdAt":"2024-11-20T21:35:08Z","mergedAt":"2024-11-20T22:05:16Z","additions":1536,"deletions":148},{"id":"PR_kwDOMT5cIs6ChFWS","title":"feat: replace `unruggable-core` with `unruggable-sdk`","author":"remiroyc","number":450,"body":"## Description\r\nThis PR proposes to replace the current implementation using `unruggable-core` with the newly published `unruggable-sdk` package. The SDK provides a more developer-friendly experience with:\r\n\r\n- Improved TypeScript support\r\n- More concise and readable API\r\n- Maintained wrapper around the core package functionality\r\n\r\n## Changes\r\n- Replace `unruggable-core` dependency with `unruggable-sdk`\r\n- Update relevant implementations to use the new SDK interface\r\n- Update types where necessary\r\n\r\n## Benefits\r\n- Better developer experience through improved typing\r\n- More maintainable code through cleaner abstractions\r\n- Same core functionality with a more ergonomic interface","repository":"elizaos/eliza","createdAt":"2024-11-20T11:21:07Z","mergedAt":"2024-12-26T06:55:15Z","additions":1259,"deletions":1115},{"id":"PR_kwDOMT5cIs6Cl4RD","title":"feat: adds check","author":"ponderingdemocritus","number":466,"body":"The idea is to push all env checks to the clients and plugins. Seperate the concerns.","repository":"elizaos/eliza","createdAt":"2024-11-20T23:17:36Z","mergedAt":"2024-11-21T09:20:04Z","additions":1028,"deletions":460},{"id":"PR_kwDOMT5cIs6Cjoe9","title":"feat: init github client","author":"tarrencev","number":456,"body":"ingest github repos into knowledge base","repository":"elizaos/eliza","createdAt":"2024-11-20T16:37:20Z","mergedAt":"2024-11-21T01:42:46Z","additions":451,"deletions":3},{"id":"PR_kwDOMT5cIs6CI12q","title":"feat: [Issue-185] Token Provider Tests ","author":"normand1","number":365,"body":"$27","repository":"elizaos/eliza","createdAt":"2024-11-16T20:12:11Z","mergedAt":"2024-11-20T00:19:49Z","additions":380,"deletions":86},{"id":"PR_kwDOMT5cIs6CeUo2","title":"fix: linting and imports ready for npm","author":"ponderingdemocritus","number":433,"body":"- linting and imports","repository":"elizaos/eliza","createdAt":"2024-11-20T05:00:33Z","mergedAt":"2024-11-20T05:02:20Z","additions":192,"deletions":170},{"id":"PR_kwDOMT5cIs6CgGbi","title":"fix: unrug","author":"ponderingdemocritus","number":444,"body":"- fixes unruggable deployer\r\n- adds constants","repository":"elizaos/eliza","createdAt":"2024-11-20T09:25:40Z","mergedAt":"2024-11-20T10:24:30Z","additions":149,"deletions":15},{"id":"PR_kwDOMT5cIs6Clu2N","title":"docs: Create best-practices.md documentation","author":"snobbee","number":463,"body":"$28","repository":"elizaos/eliza","createdAt":"2024-11-20T22:45:16Z","mergedAt":"2024-11-21T18:23:48Z","additions":107,"deletions":3},{"id":"PR_kwDOMT5cIs6Cd8B5","title":"docs: Update contributing.md to incorporate Contribution Guidelines","author":"monilpat","number":430,"body":"$29","repository":"elizaos/eliza","createdAt":"2024-11-20T03:44:03Z","mergedAt":"2024-11-20T04:58:18Z","additions":105,"deletions":0},{"id":"PR_kwDOMT5cIs6Cgr0B","title":"feat: readme and linting","author":"ponderingdemocritus","number":449,"body":"- updates readme","repository":"elizaos/eliza","createdAt":"2024-11-20T10:33:03Z","mergedAt":"2024-11-20T10:36:39Z","additions":97,"deletions":74},{"id":"PR_kwDOMT5cIs6CY2fZ","title":"feat: unruggable on starknet","author":"RedBeardEth","number":418,"body":"\r\n# Risks\r\n\r\nLow\r\n\r\n## What does this PR do?\r\n\r\nAdds the deploy token action from Unruggable Memes to the Starknet plugin\r\n","repository":"elizaos/eliza","createdAt":"2024-11-19T13:11:31Z","mergedAt":"2024-11-20T00:31:31Z","additions":82,"deletions":74},{"id":"PR_kwDOMT5cIs6Cl2Nm","title":"fix: Fixing failling tests token.test.ts and videoGeneration.test.ts","author":"ai16z-demirix","number":465,"body":"$2a","repository":"elizaos/eliza","createdAt":"2024-11-20T23:10:51Z","mergedAt":"2024-11-21T00:56:09Z","additions":65,"deletions":8},{"id":"PR_kwDOMT5cIs6CO_xW","title":"fix: Fix linter issues","author":"martincik","number":397,"body":"$2b","repository":"elizaos/eliza","createdAt":"2024-11-18T11:37:22Z","mergedAt":"2024-11-20T06:56:48Z","additions":60,"deletions":60},{"id":"PR_kwDOMT5cIs6Ce-cH","title":"fix: The bot is by default deafened and we don't want that","author":"martincik","number":437,"body":"$2c","repository":"elizaos/eliza","createdAt":"2024-11-20T07:05:04Z","mergedAt":"2024-11-20T08:10:12Z","additions":42,"deletions":29},{"id":"PR_kwDOMT5cIs6Cb3go","title":"fix: Update adapters.md psql schema","author":"tarrencev","number":424,"body":"I found I needed these schemas (ported from the supabase migration) in order to successfully run an agent with the discord client","repository":"elizaos/eliza","createdAt":"2024-11-19T19:50:44Z","mergedAt":"2024-11-20T00:07:34Z","additions":42,"deletions":1},{"id":"PR_kwDOMT5cIs6CeNmN","title":"fix: configs","author":"ponderingdemocritus","number":431,"body":"- fixes tsconfig","repository":"elizaos/eliza","createdAt":"2024-11-20T04:36:01Z","mergedAt":"2024-11-20T04:47:29Z","additions":40,"deletions":42},{"id":"PR_kwDOMT5cIs6CfWoN","title":"feat:  add all the style guidelines to the context","author":"o-on-x","number":441,"body":"the character style should always be followed,\r\nbecause the use expects this when designing their character and also this will reduce slop content more than anything\r\nif the user puts \"no slop\" as a style instruction for prompting, there was a %50 chance that would get picked up\r\n\r\nthis is a modification that for style it should be all of the characters style added for each post or message\r\n\r\nadditional ideas in the issues/features:\r\nhttps://github.com/ai16z/eliza/issues/438","repository":"elizaos/eliza","createdAt":"2024-11-20T07:54:13Z","mergedAt":"2024-11-20T08:05:56Z","additions":39,"deletions":29},{"id":"PR_kwDOMT5cIs6CfVWV","title":"fix: fixes some console logs","author":"ponderingdemocritus","number":440,"body":"","repository":"elizaos/eliza","createdAt":"2024-11-20T07:51:58Z","mergedAt":"2024-11-20T08:06:19Z","additions":30,"deletions":30},{"id":"PR_kwDOMT5cIs6CejHc","title":"fix: imports","author":"ponderingdemocritus","number":435,"body":"- fixes more imports around the place","repository":"elizaos/eliza","createdAt":"2024-11-20T05:48:52Z","mergedAt":"2024-11-20T05:51:27Z","additions":16,"deletions":20},{"id":"PR_kwDOMT5cIs6CcrQO","title":"fix: postgres embedding issues","author":"tarrencev","number":425,"body":"","repository":"elizaos/eliza","createdAt":"2024-11-19T22:20:55Z","mergedAt":"2024-11-20T10:51:17Z","additions":14,"deletions":38},{"id":"PR_kwDOMT5cIs6Cgm3s","title":"fix: voice perms","author":"ponderingdemocritus","number":447,"body":"- fixes issue if bot does not have the perms","repository":"elizaos/eliza","createdAt":"2024-11-20T10:23:30Z","mergedAt":"2024-11-20T10:25:29Z","additions":12,"deletions":5},{"id":"PR_kwDOMT5cIs6Cdt47","title":"feat: don't require .env to exist","author":"odilitime","number":427,"body":"# Risks\r\n\r\nMedium, haven't discussed this widely\r\n\r\n# Background\r\n\r\n## What does this PR do?\r\n\r\nRemoves the requirement for .env to exists\r\n\r\n## What kind of change is this?\r\n\r\nImprovement\r\n\r\n## Why are we doing this? Any context or related work?\r\n\r\nLarge multiagent instances will have to rely on character.json to have all the settings and secrets for that agent. Have a default .env in these instances to set defaults might be helpful but also hurtful. This allows the admin to choose if they want any defaults across all their agents or nots.\r\n\r\n# Documentation changes needed?\r\n\r\nMy changes do not require a change to the project documentation.\r\n\r\n# Testing\r\n\r\nRan against stable-11-17 branch without issue","repository":"elizaos/eliza","createdAt":"2024-11-20T02:42:13Z","mergedAt":"2024-11-20T05:36:57Z","additions":7,"deletions":11},{"id":"PR_kwDOMT5cIs6Ci1p_","title":"fix: X dry run","author":"laser-riot","number":452,"body":"<!-- Use this template by filling in information and copy and pasting relevant items out of the html comments. -->\r\n\r\n# Relates to:\r\n\r\n[Twitter dry run not working](https://github.com/ai16z/eliza/issues/451)\r\n\r\n# Risks\r\n\r\nAffects anyone working to improve their agents and trying to test their changes\r\n\r\n# Background\r\n\r\n## What does this PR do?\r\n\r\nThis PR reenables the TWITTER_DRY_RUN flag\r\n\r\n## What kind of change is this?\r\n\r\nBug fix\r\n\r\n# Documentation changes needed?\r\n\r\nNone\r\n\r\n# Testing\r\n\r\n![image](https://github.com/user-attachments/assets/9ab992c9-d6fe-4e54-bfde-24dd0dfeb0f6)\r\n\r\n\r\n## Where should a reviewer start?\r\n\r\nIt's straightforward enough to just look at the 4 lines :)\r\n\r\n## Screenshots\r\n### Before\r\n![image](https://github.com/user-attachments/assets/00070997-25ae-4810-81e3-2100b21d7dc2)\r\n\r\n### After\r\n\r\n![image](https://github.com/user-attachments/assets/260bbc6d-19b5-417a-a2b5-200350e51b39)\r\n\r\n# Deploy Notes\r\nN/A\r\n## Database changes\r\nN/A\r\n## Deployment instructions\r\nN/A\r\n","repository":"elizaos/eliza","createdAt":"2024-11-20T15:03:35Z","mergedAt":"2024-11-20T16:55:07Z","additions":5,"deletions":0},{"id":"PR_kwDOMT5cIs6CgYor","title":"fix: wrong parameter for trimTokens in generateObjectV2","author":"darwintree","number":445,"body":"$2d","repository":"elizaos/eliza","createdAt":"2024-11-20T09:56:04Z","mergedAt":null,"additions":4,"deletions":1},{"id":"PR_kwDOMT5cIs6CeNx5","title":"fix: since agent is moved out of packages, adjust default path","author":"odilitime","number":432,"body":"# Risks\r\n\r\nMedium, may affect npm packaging\r\n\r\n# Background\r\n\r\n## What does this PR do?\r\n\r\nfixes\r\n`Error loading character from ../../characters/trump.character.json: Error: ENOENT: no such file or directory, open '../../characters/trump.character.json'`\r\nwhen running it like\r\n`pnpm start --characters=\"characters/trump.character.json\" from the repo on 0.1.1`\r\n\r\n## What kind of change is this?\r\n\r\nBug fixes (non-breaking change which fixes an issue)\r\n\r\n## Why are we doing this? Any context or related work?\r\n\r\nLoaf asked\r\n\r\n# Documentation changes needed?\r\n\r\nMy changes do not require a change to the project documentation.\r\n\r\n# Testing\r\n\r\nI ran a quick test","repository":"elizaos/eliza","createdAt":"2024-11-20T04:36:51Z","mergedAt":"2024-11-20T05:59:16Z","additions":3,"deletions":10},{"id":"PR_kwDOMT5cIs6CgkOm","title":"fix: ignored modelEndpointOverride in generation","author":"darwintree","number":446,"body":"# Background\r\n\r\n## What does this PR do?\r\n\r\nThis PR fixes the issue of OpenAi object initialization which ignores the `modelEndpointOverride` optioin of the character\r\n\r\n## What kind of change is this?\r\n\r\nBug fixes (non-breaking change which fixes an issue)\r\n","repository":"elizaos/eliza","createdAt":"2024-11-20T10:18:16Z","mergedAt":"2024-11-21T09:26:26Z","additions":2,"deletions":1},{"id":"PR_kwDOMT5cIs6CdsUP","title":"fix: don't continue to load if a specified file is not found","author":"odilitime","number":426,"body":"# Risks\r\n\r\nLow\r\n\r\n# Background\r\n\r\n## What does this PR do?\r\n\r\nIf you specify a file to load, don't just load default and continue if you can't find it\r\n\r\n## What kind of change is this?\r\n\r\nUX clean up, should reduce confusion and reduce support issues\r\n\r\n## Why are we doing this? Any context or related work?\r\n\r\n# Documentation changes needed?\r\n\r\nMy changes do not require a change to the project documentation.\r\n\r\n# Testing\r\n\r\nI tested on stable-11-17 branch\r\n\r\n","repository":"elizaos/eliza","createdAt":"2024-11-20T02:34:26Z","mergedAt":"2024-11-20T03:43:20Z","additions":2,"deletions":1},{"id":"PR_kwDOMT5cIs6ClEOP","title":"fix: Add missing fuzzystrmatch extension for levenshtein() method to postgresql schema.sql definition","author":"martincik","number":460,"body":"$2e","repository":"elizaos/eliza","createdAt":"2024-11-20T20:33:00Z","mergedAt":"2024-11-20T23:40:44Z","additions":1,"deletions":0},{"id":"PR_kwDOMT5cIs6CkA1x","title":"Add npm install instructions to homepage header","author":"null-hax","number":459,"body":"$2f","repository":"elizaos/eliza","createdAt":"2024-11-20T17:29:44Z","mergedAt":"2024-11-20T18:40:45Z","additions":1,"deletions":1},{"id":"PR_kwDOMT5cIs6Cfu8s","title":"docs: Fix my name in stream notes","author":"odilitime","number":442,"body":"\r\n# Risks\r\n\r\nNone\r\n\r\n# Background\r\n\r\n## What does this PR do?\r\n\r\nFix my name\r\n\r\n## What kind of change is this?\r\n\r\nDocumentation / Archive correction\r\n\r\n## Why are we doing this? Any context or related work?\r\n\r\nautotranslate got it really wrong\r\n\r\n# Documentation changes needed?\r\n\r\nIf a docs change is needed: I have updated the documentation accordingly.","repository":"elizaos/eliza","createdAt":"2024-11-20T08:46:32Z","mergedAt":"2024-11-20T19:08:23Z","additions":1,"deletions":1},{"id":"PR_kwDOMT5cIs6Cenyy","title":"fix: path","author":"ponderingdemocritus","number":436,"body":"fixes paths","repository":"elizaos/eliza","createdAt":"2024-11-20T05:59:03Z","mergedAt":"2024-11-20T05:59:10Z","additions":1,"deletions":1},{"id":"PR_kwDOMT5cIs6Cd7uW","title":"chore: Update pr.yaml to show actual condition so easier to follow","author":"monilpat","number":429,"body":"$30","repository":"elizaos/eliza","createdAt":"2024-11-20T03:43:14Z","mergedAt":"2024-11-20T05:37:18Z","additions":1,"deletions":1},{"id":"PR_kwDOMT5cIs6Cj36c","title":"bugfix: Modify docker run error after agent folder move","author":"THtianhao","number":458,"body":"$31","repository":"elizaos/eliza","createdAt":"2024-11-20T17:07:19Z","mergedAt":"2024-11-26T18:39:28Z","additions":1,"deletions":1},{"id":"PR_kwDOMT5cIs6CjG-0","title":"fix: don't reply to tweets older than 5 days","author":"liamzebedee","number":454,"body":"$32","repository":"elizaos/eliza","createdAt":"2024-11-20T15:32:56Z","mergedAt":null,"additions":1,"deletions":0},{"id":"PR_kwDOMT5cIs6Cgn24","title":"throw error on character failing to load","author":"liamzebedee","number":448,"body":"$33","repository":"elizaos/eliza","createdAt":"2024-11-20T10:25:26Z","mergedAt":null,"additions":1,"deletions":0},{"id":"PR_kwDOMT5cIs6CefFv","title":"fix: Lerna","author":"ponderingdemocritus","number":434,"body":"- reverts version","repository":"elizaos/eliza","createdAt":"2024-11-20T05:38:01Z","mergedAt":null,"additions":0,"deletions":0}],"detailedContributorSummaries":{}}}],"$L34"]}]
+1a:["$","div",null,{"className":"prose prose-sm mx-auto mt-8 dark:prose-invert sm:prose lg:prose-lg xl:prose-xl","children":[["$","h2","h2-0",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"OVERVIEW","position":{"start":{"line":3,"column":4,"offset":42},"end":{"line":3,"column":12,"offset":50}}}],"position":{"start":{"line":3,"column":1,"offset":39},"end":{"line":3,"column":13,"offset":51}}},"children":"OVERVIEW"}],"\n",["$","p","p-0",{"children":"Significant progress was made today with 26 PRs merged, including new features and bug fixes. The team focused on enhancing documentation and improving the PostgreSQL schema, contributing to the overall stability and usability of the ElizaOS framework."}],"\n",["$","h2","h2-1",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"PROJECT METRICS","position":{"start":{"line":6,"column":4,"offset":309},"end":{"line":6,"column":19,"offset":324}}}],"position":{"start":{"line":6,"column":1,"offset":306},"end":{"line":6,"column":19,"offset":324}}},"children":"PROJECT METRICS"}],"\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"PRs:"}]," 26 merged PRs, 33 new PRs"]}],"\n",["$","li","li-1",{"children":[["$","strong","strong-0",{"children":"Issues:"}]," 7 new issues, 8 closed issues"]}],"\n",["$","li","li-2",{"children":[["$","strong","strong-0",{"children":"Unique Contributors:"}]," 26"]}],"\n",["$","li","li-3",{"children":[["$","strong","strong-0",{"children":"Code Changes:"}]," +4442/-1313 lines across 110 files"]}],"\n",["$","li","li-4",{"children":[["$","strong","strong-0",{"children":"Total Commits:"}]," 77"]}],"\n",["$","li","li-5",{"children":[["$","strong","strong-0",{"children":"Most Active Contributors:"}]," ponderingdemocritus, odilitime, monilpat, snobbee, martincik"]}],"\n"]}],"\n",["$","h2","h2-2",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"TOP ISSUES","position":{"start":{"line":14,"column":4,"offset":612},"end":{"line":14,"column":14,"offset":622}}}],"position":{"start":{"line":14,"column":1,"offset":609},"end":{"line":14,"column":14,"offset":622}}},"children":"TOP ISSUES"}],"\n",["$","h3","h3-0",{"children":"Bug Fixes and Improvements"}],"\n",["$","ul","ul-1",{"children":["\n",["$","li","li-0",{"children":["Addressed various bugs affecting functionality, including voice permissions and loading issues. Relevant issues include ",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/452","children":"#452"}],", ",["$","a","a-1",{"href":"https://github.com/elizaos/eliza/issues/447","children":"#447"}],", and ",["$","a","a-2",{"href":"https://github.com/elizaos/eliza/issues/444","children":"#444"}],"."]}],"\n"]}],"\n",["$","h3","h3-1",{"children":"Documentation Updates"}],"\n",["$","ul","ul-2",{"children":["\n",["$","li","li-0",{"children":["Enhanced documentation to improve clarity and usability, including updates to ",["$","code","code-0",{"children":"contributing.md"}]," and the homepage. Key PRs include ",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/430","children":"#430"}]," and ",["$","a","a-1",{"href":"https://github.com/elizaos/eliza/pull/459","children":"#459"}],"."]}],"\n"]}],"\n",["$","h2","h2-3",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"KEY TECHNICAL DEVELOPMENTS","position":{"start":{"line":21,"column":4,"offset":1207},"end":{"line":21,"column":30,"offset":1233}}}],"position":{"start":{"line":21,"column":1,"offset":1204},"end":{"line":21,"column":30,"offset":1233}}},"children":"KEY TECHNICAL DEVELOPMENTS"}],"\n",["$","h3","h3-2",{"children":"Feature Additions"}],"\n",["$","ul","ul-3",{"children":["\n",["$","li","li-0",{"children":["Introduced several new features, such as the creation of the Eliza app (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/462","children":"#462"}],") and improvements to the PostgreSQL schema with the addition of the fuzzystrmatch extension (",["$","a","a-1",{"href":"https://github.com/elizaos/eliza/pull/460","children":"#460"}],")."]}],"\n"]}],"\n",["$","h3","h3-3",{"children":"Linting and Style Guidelines"}],"\n",["$","ul","ul-4",{"children":["\n",["$","li","li-0",{"children":["Implemented linting improvements and added style guidelines to the project context, enhancing code quality and maintainability. Relevant PRs include ","$L35"," and ","$L36","."]}],"\n"]}],"\n","$L37","\n","$L38"]}]
+1b:["$","script","script-0",{"src":"/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","async":true}]
+1c:["$","script","script-1",{"src":"/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","async":true}]
+1d:["$","script","script-2",{"src":"/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js","async":true}]
+1e:["$","$L39",null,{"children":["$","$3a",null,{"name":"Next.MetadataOutlet","children":"$@3b"}]}]
+34:["$","div",null,{"className":"rounded-lg border bg-card text-card-foreground shadow-sm","children":[["$","div",null,{"className":"flex flex-col space-y-1.5 p-6 py-4","children":["$","div",null,{"className":"tracking-tight text-sm font-medium","children":["$undefined","Code Changes"]}]}],["$","div",null,{"className":"p-6 pt-0","children":["$","div",null,{"className":"grid grid-cols-2 gap-4 md:grid-cols-4","children":[["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-git-commit-vertical h-5 w-5","aria-hidden":"true","children":[["$","path","1holv5",{"d":"M12 3v6"}],["$","circle","1v7zrd",{"cx":"12","cy":"12","r":"3"}],["$","path","a9ows0",{"d":"M12 15v6"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":77}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Commits"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-file-code h-5 w-5","aria-hidden":"true","children":[["$","path","1oefj6",{"d":"M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"}],["$","path","wfsgrz",{"d":"M14 2v5a1 1 0 0 0 1 1h5"}],["$","path","1tg20x",{"d":"M10 12.5 8 15l2 2.5"}],["$","path","yinavb",{"d":"m14 12.5 2 2.5-2 2.5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":110}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Files Changed"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-green-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-up h-5 w-5 text-green-500","aria-hidden":"true","children":[["$","path","hav0vg",{"d":"m5 12 7-7 7 7"}],["$","path","x0mq9r",{"d":"M12 19V5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-green-500","children":"+4,442"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Added"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-red-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-down h-5 w-5 text-red-500","aria-hidden":"true","children":[["$","path","s699le",{"d":"M12 5v14"}],["$","path","1idqje",{"d":"m19 12-7 7-7-7"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-red-500","children":"-1,313"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Deleted"}]]}]]}]]}]}]]}]
+35:["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/441","children":"#441"}]
+36:["$","a","a-1",{"href":"https://github.com/elizaos/eliza/pull/433","children":"#433"}]
+37:["$","h3","h3-4",{"children":"Configuration and Environment Enhancements"}]
+38:["$","ul","ul-5",{"children":["\n",["$","li","li-0",{"children":["Made adjustments to configuration settings, including not requiring a ",["$","code","code-0",{"children":".env"}]," file to exist (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/427","children":"#427"}],") and fixing various path and import issues to streamline the development process. Key PRs include ",["$","a","a-1",{"href":"https://github.com/elizaos/eliza/pull/432","children":"#432"}]," and ",["$","a","a-2",{"href":"https://github.com/elizaos/eliza/pull/436","children":"#436"}],"."]}],"\n"]}]
+3b:null

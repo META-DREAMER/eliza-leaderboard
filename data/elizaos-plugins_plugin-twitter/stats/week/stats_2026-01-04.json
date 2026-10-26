@@ -1,0 +1,220 @@
+{
+  "interval": {
+    "intervalStart": "2026-01-04T00:00:00.000Z",
+    "intervalEnd": "2026-01-11T00:00:00.000Z",
+    "intervalType": "week"
+  },
+  "repository": "elizaos-plugins/plugin-twitter",
+  "overview": "From 2026-01-04 to 2026-01-11, elizaos-plugins/plugin-twitter had 0 new PRs (1 merged), 0 new issues, and 7 active contributors.",
+  "topIssues": [],
+  "topPRs": [
+    {
+      "id": "PR_kwDONkwNcc67GQmV",
+      "title": "feat: OAuth2 PKCE auth mode + provider abstraction (env-compatible)",
+      "author": "vbkotecha",
+      "number": 46,
+      "body": "### Summary\r\nAdds 3-legged \"login + approve\" Twitter/X auth (OAuth 2.0 Authorization Code + PKCE) to @elizaos/plugin-twitter without shipping any client secret, while keeping full backward compatibility with the existing env-var OAuth 1.0a credentials. Also adds a broker-ready auth mode stub (not functional yet) so a future Eliza-hosted broker can be added without touching tweet logic.\r\n\r\nThis requires a “Twitter broker” I referenced below which is a future Eliza-hosted service (not implemented in this repo) that would sit between the plugin and Twitter to handle the parts that require a client secret and a user session.\r\n\r\nWhat it is\r\nA separate web service (owned by ElizaOS) that:\r\n- Runs the OAuth2 “login + approve” flow on behalf of users\r\n- Stores the client secret and refresh tokens securely\r\n- Hands the agent/plugin short‑lived access tokens (so the plugin never needs secrets)\r\n\r\n\r\n### What changed in this PR (exact)\r\n- Introduced a single auth abstraction: TwitterAuthProvider#getAccessToken(): Promise<string>\r\n- Added TWITTER_AUTH_MODE (env|oauth|broker) and centralized auth selection\r\n- env mode (default): preserves TWITTER_API_KEY / TWITTER_API_SECRET_KEY / TWITTER_ACCESS_TOKEN / TWITTER_ACCESS_TOKEN_SECRET behavior\r\n- oauth mode: OAuth2 PKCE interactive login + token refresh + persistence\r\n- broker mode: stub-only; fails clearly until an Eliza Twitter broker service exists\r\n- Refactored TwitterAuth + client call sites to use provider-driven tokens (no direct env reads in request logic)\r\n- Added unit tests for PKCE, OAuth2 refresh flows, token store, and broker stub\r\n- Updated docs and plugin parameter metadata\r\n\r\n### Auth modes\r\n#### 1) Legacy env mode (no behavior change)\r\nSet:\r\n- TWITTER_AUTH_MODE=env (or omit)\r\n- TWITTER_API_KEY\r\n- TWITTER_API_SECRET_KEY\r\n- TWITTER_ACCESS_TOKEN\r\n- TWITTER_ACCESS_TOKEN_SECRET\r\n\r\n#### 2) OAuth2 PKCE mode (\"login + approve\")\r\nSet:\r\n- TWITTER_AUTH_MODE=oauth\r\n- TWITTER_CLIENT_ID\r\n- TWITTER_REDIRECT_URI (loopback recommended, e.g. http://127.0.0.1:8080/callback)\r\nOptional:\r\n- TWITTER_SCOPES (default: tweet.read tweet.write users.read offline.access)\r\n\r\nFirst run prints an authorization URL. After approval it stores tokens and auto-refreshes.\r\n\r\nRequires a \r\n\r\n### Local callback server (required for best UX)\r\nIn oauth mode, the plugin starts a small local HTTP server bound to 127.0.0.1 to capture the OAuth redirect at the host/port/path in TWITTER_REDIRECT_URI.\r\n- If it can’t bind, it falls back to \"paste the redirected URL\".\r\n\r\n### Broker mode (stub; requires Eliza Twitter broker server)\r\nIf TWITTER_AUTH_MODE=broker:\r\n- Requires TWITTER_BROKER_URL\r\n- This PR does NOT implement the broker server; it only provides the plugin-side provider stub.\r\n- Later, an Eliza-hosted broker (e.g. eliza twitter auth server) can hold the client secret and return short-lived access tokens.\r\n\r\n### Validation\r\n- bun run build\r\n- bun run test:coverage (unit tests; E2E stays env-mode only / skipped without credentials)\n\n<!-- greptile_comment -->\n\n<h3>Greptile Summary</h3>\n\n\n- Introduces OAuth2 PKCE authentication mode for Twitter/X integration while preserving backward compatibility with existing OAuth 1.0a environment variable credentials\n- Implements auth provider abstraction with three modes: 'env' (default legacy), 'oauth' (OAuth2 PKCE), and 'broker' (stub for future hosted service)\n- Adds interactive \"login + approve\" flow with local callback server, automatic token refresh, token persistence, and comprehensive error handling\n\n<h3>Important Files Changed</h3>\n\n\n| Filename | Overview |\n|----------|----------|\n| `src/client/auth-providers/oauth2-pkce.ts` | New OAuth2 PKCE authentication provider with interactive login, token refresh, and persistence |\n| `src/client/auth.ts` | Refactored to use provider abstraction; made `getV2Client()` async, added lazy initialization and token refresh detection |\n| `src/environment.ts` | Added `TWITTER_AUTH_MODE` configuration with mode-specific validation for env/oauth/broker authentication |\n| `src/client/tweets.ts` | Updated all API client retrieval calls to be async to support dynamic token operations |\n| `src/index.ts` | Modified plugin initialization to validate credentials based on selected auth mode instead of hardcoded OAuth 1.0a |\n\n<h3>Confidence score: 4/5</h3>\n\n\n- This PR introduces significant but well-architected changes that maintain backward compatibility\n- Score reflects comprehensive testing coverage, clean abstractions, and thorough error handling, but deducted one point due to the complexity of authentication refactoring affecting many files\n- Pay close attention to the async changes in `tweets.ts`, `relationships.ts`, `profile.ts`, and `search.ts` to ensure all callers handle Promise rejections properly\n\n<h3>Sequence Diagram</h3>\n\n```mermaid\nsequenceDiagram\n    participant User\n    participant Plugin as TwitterPlugin\n    participant Provider as OAuth2PKCEAuthProvider\n    participant TwitterAPI as Twitter/X API\n    participant TokenStore as Token Store\n    participant Browser\n\n    User->>Plugin: \"Initialize with TWITTER_AUTH_MODE=oauth\"\n    Plugin->>Provider: \"createTwitterAuthProvider(runtime, state)\"\n    Provider->>TokenStore: \"load()\"\n    TokenStore-->>Provider: \"null (no existing tokens)\"\n    \n    User->>Plugin: \"Perform Twitter action (post tweet, etc.)\"\n    Plugin->>Provider: \"getAccessToken()\"\n    Provider->>Provider: \"interactiveLogin()\"\n    Provider->>Provider: \"createCodeVerifier() & createCodeChallenge()\"\n    Provider->>Provider: \"buildAuthorizeUrl(state, codeChallenge)\"\n    \n    Provider->>User: \"Print authorization URL\"\n    User->>Browser: \"Open authorization URL\"\n    Browser->>TwitterAPI: \"GET /oauth2/authorize with PKCE params\"\n    TwitterAPI-->>Browser: \"User consent page\"\n    User->>Browser: \"Approve application\"\n    Browser->>Provider: \"Redirect with authorization code\"\n    \n    Provider->>TwitterAPI: \"POST /oauth2/token with code & verifier\"\n    TwitterAPI-->>Provider: \"access_token + refresh_token + expires_in\"\n    Provider->>TokenStore: \"save(tokens)\"\n    Provider-->>Plugin: \"access_token\"\n    \n    Plugin->>TwitterAPI: \"API call with Bearer token\"\n    TwitterAPI-->>Plugin: \"API response\"\n    Plugin-->>User: \"Success\"\n```\n\n<!-- greptile_other_comments_section -->\n\n<!-- /greptile_comment -->\n\n<!-- This is an auto-generated comment: release notes by coderabbit.ai -->\n## Summary by CodeRabbit\n\n* **New Features**\n  * Added interactive OAuth2 PKCE login and a broker option alongside legacy env-based auth\n  * New authenticate() entrypoint and mode-aware client initialization for Twitter integration\n\n* **Documentation**\n  * Reworked auth setup docs to explain auth-mode choices, PKCE flow, and mode-specific troubleshooting\n  * Updated test guides to reflect auth-mode behaviors\n\n* **Configuration**\n  * New TWITTER_AUTH_MODE plus client ID, redirect URI, scopes, and broker URL settings\n\n* **Tests**\n  * Added suites for PKCE, token stores, OAuth provider behaviors, and broker validation\n\n* **Chores**\n  * Ignore local OAuth token files and related artifacts in repo ignore list\n\n<sub>✏️ Tip: You can customize this high-level summary in your review settings.</sub>\n<!-- end of auto-generated comment: release notes by coderabbit.ai -->",
+      "repository": "elizaos-plugins/plugin-twitter",
+      "createdAt": "2025-12-31T12:05:13Z",
+      "mergedAt": "2026-01-09T00:37:28Z",
+      "additions": 1554,
+      "deletions": 193
+    }
+  ],
+  "codeChanges": {
+    "additions": 1554,
+    "deletions": 193,
+    "files": 33,
+    "commitCount": 1
+  },
+  "completedItems": [
+    {
+      "title": "feat: OAuth2 PKCE auth mode + provider abstraction (env-compatible)",
+      "prNumber": 46,
+      "type": "feature",
+      "body": "### Summary\r\nAdds 3-legged \"login + approve\" Twitter/X auth (OAuth 2.0 Authorization Code + PKCE) to @elizaos/plugin-twitter without shipping any client secret, while keeping full backward compatibility with the existing env-var OAuth 1.0a ",
+      "files": [
+        ".gitignore",
+        "README.md",
+        "package.json",
+        "src/__tests__/README.md",
+        "src/__tests__/TESTING_GUIDE.md",
+        "src/__tests__/e2e/twitter-integration.test.ts",
+        "src/__tests__/environment.test.ts",
+        "src/base.ts",
+        "src/client/__tests__/auth.test.ts",
+        "src/client/__tests__/broker-provider.test.ts",
+        "src/client/__tests__/oauth2-provider.test.ts",
+        "src/client/__tests__/pkce.test.ts",
+        "src/client/__tests__/token-store.test.ts",
+        "src/client/auth-providers/broker.ts",
+        "src/client/auth-providers/env.ts",
+        "src/client/auth-providers/factory.ts",
+        "src/client/auth-providers/interactive.ts",
+        "src/client/auth-providers/oauth2-pkce.ts",
+        "src/client/auth-providers/pkce.ts",
+        "src/client/auth-providers/token-store.ts",
+        "src/client/auth-providers/types.ts",
+        "src/client/auth.ts",
+        "src/client/client.ts",
+        "src/client/profile.ts",
+        "src/client/relationships.ts",
+        "src/client/search.ts",
+        "src/client/tweets.ts",
+        "src/environment.ts",
+        "src/index.ts",
+        "src/services/MessageService.ts",
+        "src/services/PostService.ts",
+        "src/services/__tests__/PostService.test.ts",
+        "tsup.config.ts"
+      ]
+    }
+  ],
+  "topContributors": [
+    {
+      "username": "wtfsayo",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/82053242?u=98209a1f10456f42d4d2fa71db4d5bf4a672cbc3&v=4",
+      "totalScore": 139.6150097019045,
+      "prScore": 130.17700970190452,
+      "issueScore": 0,
+      "reviewScore": 9,
+      "commentScore": 0.43799999999999994,
+      "summary": "wtfsayo: Focused on strengthening infrastructure and database reliability, notably delivering a major overhaul to the SQL plugin in elizaos/eliza (#6323) that introduced pool configurations and error handling across thousands of lines of code. They also modernized the project's CI/CD pipeline by upgrading Claude workflows to Opus 4.5 and enabling bot-triggered automation (#6324, #6328). Their work this week primarily centered on critical bug fixes and configuration management, significantly improving system stability and developer workflow efficiency."
+    },
+    {
+      "username": "standujar",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/16385918?u=718bdcd1585be8447bdfffb8c11ce249baa7532d&v=4",
+      "totalScore": 127.93553651779862,
+      "prScore": 117.99753651779862,
+      "issueScore": 0,
+      "reviewScore": 9.5,
+      "commentScore": 0.43799999999999994,
+      "summary": "standujar: Focused on strengthening the database infrastructure within the elizaos/eliza repository, notably by implementing Neon serverless support and enhancing Row Level Security (RLS) stability through PR #6343. They executed a significant overhaul of the testing suite for the SQL plugin, contributing over 7,700 lines of test-related code in PR #6330 to ensure robust entity context isolation. Their work primarily centered on bug fixes and architectural improvements for database plugins, with a heavy emphasis on rigorous testing and runtime optimization."
+    },
+    {
+      "username": "madjin",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/32600939?u=cdcf89f44c7a50906c7a80d889efa85023af2049&v=4",
+      "totalScore": 102.50445676214966,
+      "prScore": 80.30445676214967,
+      "issueScore": 22,
+      "reviewScore": 0,
+      "commentScore": 0.2,
+      "summary": "madjin: Focused on expanding the ecosystem's gamification and documentation infrastructure, notably implementing a comprehensive MMORPG-style character system for the leaderboard API in PR #193 (+2,830 lines). They also improved the user experience for RSS feeds with a new XSL stylesheet (#188) and proactively identified eleven critical issues ranging from memory consumption in turbo builds (#6332) to agent memory configuration guides (#82). Their work this week primarily centered on feature development and system architecture, with a significant emphasis on code and configuration updates across the elizaos.github.io repository."
+    },
+    {
+      "username": "odilitime",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/16395496?u=c9bac48e632aae594a0d85aaf9e9c9c69b674d8b&v=4",
+      "totalScore": 69.34861962271484,
+      "prScore": 68.57061962271483,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0.7779999999999999,
+      "summary": "odilitime: Focused on enhancing core plugin functionality and build efficiency, notably merging a substantial update to the bootstrap plugin and SQL actions in elizaos/eliza (#6333) that involved over 6,700 lines of code changes. They also addressed infrastructure performance by optimizing build task inputs in turbo.json (#6349) and triaged a regression in Discord slash commands (#15). Their work this week primarily centered on system-wide code refinements and bug fixes, with a significant emphasis on stabilizing plugin providers and configuration."
+    },
+    {
+      "username": "greptile-apps",
+      "avatarUrl": "https://avatars.githubusercontent.com/in/867647?v=4",
+      "totalScore": 59.099999999999994,
+      "prScore": 0,
+      "issueScore": 0,
+      "reviewScore": 58.5,
+      "commentScore": 0.6000000000000001,
+      "summary": "greptile-apps: Focused exclusively on providing technical feedback and oversight through 14 code reviews and 3 pull request comments. This high volume of peer review activity indicates a focus on maintaining code quality and supporting the development workflow of others. Their primary impact this week was centered on collaborative review and guidance rather than direct code contributions."
+    },
+    {
+      "username": "lalalune",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/18633264?u=e2e906c3712c2506ebfa98df01c2cfdc50050b30&v=4",
+      "totalScore": 34.1407738965761,
+      "prScore": 34.1407738965761,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "lalalune: Focused on a massive structural overhaul of the codebase, primarily driven by the ongoing development of the \"V2.0.0\" release in elizaos/eliza (#6351). This high-impact effort involved 120 commits and extensive modifications across over 22,000 files, signaling a comprehensive restructuring of the project's architecture. Their work this week centered on large-scale bugfixes and configuration updates, with a balanced focus on core code, testing frameworks, and documentation."
+    },
+    {
+      "username": "0xbbjoker",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/54844437?u=90fe1762420de6ad493a1c1582f1f70c0d87d8e2&v=4",
+      "totalScore": 32.81750955863044,
+      "prScore": 22.81750955863044,
+      "issueScore": 0,
+      "reviewScore": 10,
+      "commentScore": 0,
+      "summary": "0xbbjoker: Focused on enhancing database performance and scalability by introducing a CachedDatabaseAdapter with LRU caching in elizaos/eliza (#6329). While this major feature remains in progress, they demonstrated high technical engagement through 12 commits and 2 code reviews, managing a substantial codebase footprint of over 34,000 new lines. Their primary focus this week centered on infrastructure optimization, bugfixes, and expanding test coverage to ensure system reliability."
+    },
+    {
+      "username": "borisudovicic",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/31806472?u=8935f4d43fd7e4eb9bf5ff92d54d4d2f8ac8a786&v=4",
+      "totalScore": 26,
+      "prScore": 0,
+      "issueScore": 26,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "borisudovicic: Focused on refining the user experience and product logic for the Eliza project, creating 28 issues and successfully closing 18 of them to streamline the agent creation and chat interfaces. Their contributions prioritized platform sustainability and UX polish, including adjusting credit limits (#6315), implementing message caps for guest users (#6312), and optimizing UI elements like chat box dynamics (#6310) and agent state separation (#6313). This work demonstrates a primary focus on product management, user onboarding flows, and interface consistency."
+    },
+    {
+      "username": "linear",
+      "avatarUrl": "https://avatars.githubusercontent.com/in/20150?v=4",
+      "totalScore": 18,
+      "prScore": 0,
+      "issueScore": 18,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "linear: Focused on identifying and documenting critical system optimizations and architectural improvements, creating 9 issues aimed at enhancing performance and security. They addressed key infrastructure needs by closing issues related to JWT authentication (#6327), messaging API transport alignment (#6298), and SQL plugin compatibility (#6340). Their primary focus centered on proposing solutions for runtime initialization, database query patterns, and message processing parallelization to improve overall system efficiency."
+    },
+    {
+      "username": "takasaki404",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/193405421?u=8b79613f736e04d6e10ebe37042851efa758768d&v=4",
+      "totalScore": 14.346573590279972,
+      "prScore": 14.346573590279972,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "takasaki404: Focused on ecosystem expansion by initiating the integration of a new plugin into the registry. They opened PR #247 in elizaos-plugins/registry to add the @zane-archer/plugin-aimo-router package, facilitating broader tool availability. Their primary focus this week was on configuration management and registry maintenance."
+    },
+    {
+      "username": "kamiyo-ai",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/197570892?u=4c83683aeb4fdfcb6c7e747ec6fd77619964952b&v=4",
+      "totalScore": 14.346573590279972,
+      "prScore": 14.346573590279972,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "kamiyo-ai: Focused on expanding the ecosystem by initiating the integration of the @kamiyo/eliza plugin into the registry. This effort is currently represented by an open pull request in elizaos-plugins/registry (#246). Their primary focus this week was on plugin registration and ecosystem contribution."
+    },
+    {
+      "username": "ChristopherTrimboli",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/27584221?u=0d816ce1dcdea8f925aba18bb710153d4a87a719&v=4",
+      "totalScore": 10,
+      "prScore": 0,
+      "issueScore": 0,
+      "reviewScore": 10,
+      "commentScore": 0,
+      "summary": "ChristopherTrimboli: Focused on quality assurance and team collaboration this week by providing two pull request approvals. Their primary impact centered on the review process, ensuring code standards were met across the project. Their activity was exclusively dedicated to peer reviews and maintaining development momentum through approvals."
+    },
+    {
+      "username": "samarth30",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/48334430?u=1fc119a6c2deb8cf60448b4c8961cb21dc69baeb&v=4",
+      "totalScore": 2,
+      "prScore": 0,
+      "issueScore": 2,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "samarth30: Focused on product expansion by proposing a new \"Apps promotion\" feature for the elizaos/eliza repository. This contribution, initiated through issue #6341, aims to enhance the platform's visibility and engagement capabilities. Their primary focus this week was on feature conceptualization and project growth."
+    },
+    {
+      "username": "GarrickBrown",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/41980127?u=605528eb2347d8e0368ae5b08e6fdbdbfb5c293b&v=4",
+      "totalScore": 2,
+      "prScore": 0,
+      "issueScore": 2,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "GarrickBrown: Focused on identifying and documenting stability issues within the Telegram plugin ecosystem. They reported a critical crash involving a TypeError in the image processing logic via issue #23 in elizaos-plugins/plugin-telegram. Their primary focus this week was on bug discovery and improving error handling for media processing."
+    }
+  ],
+  "newPRs": 0,
+  "mergedPRs": 1,
+  "newIssues": 0,
+  "closedIssues": 0,
+  "activeContributors": 7
+}

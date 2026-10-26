@@ -1,0 +1,416 @@
+1:"$Sreact.fragment"
+2:I[4817319,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"IntervalSelector"]
+3:I[6998365,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"LlmCopyButton"]
+f:I[3642796,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],""]
+10:I[3238488,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"StatCardsDisplay"]
+15:I[4261541,["/eliza-leaderboard/_next/static/chunks/b33bcbdcb3f88354.js","/eliza-leaderboard/_next/static/chunks/8ba59154b6704904.js"],"OutletBoundary"]
+16:"$Sreact.suspense"
+4:T569,**Describe the bug**
+
+The `getCachedEmbeddings` for the sqlite adapter is flawed with the recent [introduction of vec_distance_L2](https://github.com/ai16z/eliza/commit/e96764a53c1d15b6f53cff6ec842f63f70d13842). 
+
+```
+packages/adapter-sqlite/src/index.ts:226
+const memories = this.db.prepare(sql).all(opts.query_table_name, new Float32Array(opts.query_input.split(",").map(Number)), // Convert string to Float32Array
+                                              ^
+RangeError: Too few parameter values were provided
+```
+
+
+1. The sql query expects 5 values, but only 4 are passed. `query_match_count` should be used for `LIMIT`
+2. The creation of the float array seems off. The `query_input` does not include any comma separated values. The resulting array is `[NaN]`
+3. Distance comparison is between a float array and a string. It should probably be compared to `query_threshold`, not `query_input`
+
+Related function is here:
+https://github.com/ai16z/eliza/blob/15f7ba88d04d9d7d1cf0f608762fa84da06cb313/packages/adapter-sqlite/src/index.ts#L332C11-L360
+
+I'm happy to contribute if someone can guide me. I have little clue about `vec_distance` and didn't manage to infer what the intention of the change was exactly.
+
+**To Reproduce**
+
+`pnpm start --characters="characters/custom.character.json"` and type something
+
+**Expected behavior**
+
+No sqlite errors
+5:T81c,<!-- Use this template by filling in information and copy and pasting relevant items out of the html comments. -->
+
+# Relates to:
+
+<!-- LINK TO ISSUE OR TICKET -->
+
+<!-- This risks section is to be filled out before final review and merge. -->
+
+# Risks
+
+<!--
+Low, medium, large. List what kind of risks, and what could be effected.
+-->
+
+# Background
+
+## What does this PR do?
+
+## What kind of change is this?
+
+<!--
+Bug fixes (non-breaking change which fixes an issue)
+Improvements (misc. changes to existing features)
+Features (non-breaking change which adds functionality)
+Updates (new versions of included code)
+-->
+
+<!-- This "Why" section is most relevant if there is no linked issue explaining why. If there is a related issue it might make sense to skip this why section. -->
+<!--
+## Why are we doing this? Any context or related work?
+-->
+
+# Documentation changes needed?
+
+<!--
+My changes do not require a change to the project documentation.
+My changes require a change to the project documentation.
+If a docs change is needed: I have updated the documentation accordingly.
+-->
+
+<!-- Please show how you tested the PR. This will really help if the PR needs to be retested, and probably help the PR get merged quicker. -->
+
+# Testing
+
+## Where should a reviewer start?
+
+## Detailed testing steps
+
+<!--
+None, automtated tests are fine.
+-->
+
+<!--
+- As [anon/admin], go to [link]
+  - [do action]
+  - verify [result]
+-->
+
+<!-- If there is a UI change, please include before and after screenshots or videos. This will speed up PRs being merged. It is extra nice to annotate screenshots with arrows or boxes pointing out the differences. -->
+<!--
+## Screenshots
+### Before
+### After
+-->
+
+<!-- If there is anything about the deploy, please make a note. -->
+<!--
+# Deploy Notes
+-->
+
+<!--  Copy and paste commandline output. -->
+<!--
+## Database changes
+-->
+
+<!--  If there is something more than the automated steps, please specifiy deploy instructions. -->
+<!--
+## Deployment instructions
+-->
+6:T81c,<!-- Use this template by filling in information and copy and pasting relevant items out of the html comments. -->
+
+# Relates to:
+
+<!-- LINK TO ISSUE OR TICKET -->
+
+<!-- This risks section is to be filled out before final review and merge. -->
+
+# Risks
+
+<!--
+Low, medium, large. List what kind of risks, and what could be effected.
+-->
+
+# Background
+
+## What does this PR do?
+
+## What kind of change is this?
+
+<!--
+Bug fixes (non-breaking change which fixes an issue)
+Improvements (misc. changes to existing features)
+Features (non-breaking change which adds functionality)
+Updates (new versions of included code)
+-->
+
+<!-- This "Why" section is most relevant if there is no linked issue explaining why. If there is a related issue it might make sense to skip this why section. -->
+<!--
+## Why are we doing this? Any context or related work?
+-->
+
+# Documentation changes needed?
+
+<!--
+My changes do not require a change to the project documentation.
+My changes require a change to the project documentation.
+If a docs change is needed: I have updated the documentation accordingly.
+-->
+
+<!-- Please show how you tested the PR. This will really help if the PR needs to be retested, and probably help the PR get merged quicker. -->
+
+# Testing
+
+## Where should a reviewer start?
+
+## Detailed testing steps
+
+<!--
+None, automtated tests are fine.
+-->
+
+<!--
+- As [anon/admin], go to [link]
+  - [do action]
+  - verify [result]
+-->
+
+<!-- If there is a UI change, please include before and after screenshots or videos. This will speed up PRs being merged. It is extra nice to annotate screenshots with arrows or boxes pointing out the differences. -->
+<!--
+## Screenshots
+### Before
+### After
+-->
+
+<!-- If there is anything about the deploy, please make a note. -->
+<!--
+# Deploy Notes
+-->
+
+<!--  Copy and paste commandline output. -->
+<!--
+## Database changes
+-->
+
+<!--  If there is something more than the automated steps, please specifiy deploy instructions. -->
+<!--
+## Deployment instructions
+-->
+7:T5ee,# ElizaOS Daily Update (Nov 10, 2024)
+
+## OVERVIEW 
+Today, ElizaOS made significant strides in enhancing our AI agent framework, focusing on integrations and support for various models. The team actively contributed to multiple areas, ensuring robust development across the core system and plugins.
+
+## PROJECT METRICS
+- **PRs:** 4 merged PRs, 6 new PRs
+- **Issues:** 1 new issue, 0 closed issues
+- **Unique Contributors:** 9
+- **Code Changes:** +671/-195 lines across 16 files
+- **Total Commits:** 14
+- **Most Active Contributors:** MarcoMandar, madjin, cvartanian, v1xingyue, o-on-x
+
+## TOP ISSUES
+- **Integration Challenges**
+  - Ongoing work on trust integration to enhance system reliability ([#248](https://github.com/elizaos/eliza/issues/248)).
+  
+- **Model Support Enhancements**
+  - Addressing the need for broader model support, particularly for Google models in generation ([#246](https://github.com/elizaos/eliza/issues/246)).
+
+## KEY TECHNICAL DEVELOPMENTS
+- **Model and Integration Support**
+  - Implemented support for Google models in generation ([#246](https://github.com/elizaos/eliza/pull/246)).
+  - Developed a working PostGres adapter to improve database interactions ([#247](https://github.com/elizaos/eliza/pull/247)).
+  - Integrated trust features to bolster system security and reliability ([#248](https://github.com/elizaos/eliza/pull/248)).
+  
+- **Embedding Utilization**
+  - Utilized OpenAI embeddings settings to enhance AI capabilities ([#252](https://github.com/elizaos/eliza/pull/252)).0:{"buildId":"US8XLB_zHXYj_PVAECGcd","rsc":["$","$1","c",{"children":[["$","div",null,{"className":"container mx-auto px-6 py-8 md:px-8","children":["$","div",null,{"className":"mx-auto max-w-4xl","children":[["$","div",null,{"className":"mb-4 flex flex-col justify-between sm:flex-row","children":[["$","$L2",null,{"currentInterval":"day","currentDate":"2024-11-10"}],["$","$L3",null,{"metrics":{"date":"2024-11-10","interval":{"intervalStart":"$D2024-11-10T00:00:00.000Z","intervalEnd":"$D2024-11-11T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":6,"merged":4,"total":7},"issues":{"new":1,"closed":0,"total":1},"activeContributors":9,"codeChanges":{"additions":671,"deletions":195,"files":16,"commitCount":14},"topContributors":[{"username":"MarcoMandar","avatarUrl":"https://avatars.githubusercontent.com/u/70625671?u=88aeaa8b5ed43a818bdac96843f2fd40c0abf8ff&v=4","totalScore":90.00848484090845,"prScore":90.00848484090845,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":null},{"username":"madjin","avatarUrl":"https://avatars.githubusercontent.com/u/32600939?u=cdcf89f44c7a50906c7a80d889efa85023af2049&v=4","totalScore":50.4407738965761,"prScore":50.4407738965761,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":null},{"username":"cvartanian","avatarUrl":"https://avatars.githubusercontent.com/u/64427702?v=4","totalScore":29.790639203842083,"prScore":29.790639203842083,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":null},{"username":"v1xingyue","avatarUrl":"https://avatars.githubusercontent.com/u/974169?u=96c6a113a91978c041e5cf90965d7b66c5540af4&v=4","totalScore":24.72829191355212,"prScore":24.52829191355212,"issueScore":0,"reviewScore":0,"commentScore":0.2,"summary":null},{"username":"o-on-x","avatarUrl":"https://avatars.githubusercontent.com/u/186759703?u=4e674b1542bbb9fe7d7ea0e034c8c525689cb191&v=4","totalScore":22.98705020110221,"prScore":22.98705020110221,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":null},{"username":"lalalune","avatarUrl":"https://avatars.githubusercontent.com/u/18633264?u=e2e906c3712c2506ebfa98df01c2cfdc50050b30&v=4","totalScore":5.34,"prScore":0,"issueScore":0,"reviewScore":5,"commentScore":0.33999999999999997,"summary":null},{"username":"boldkoala4615","avatarUrl":"https://avatars.githubusercontent.com/u/107146784?v=4","totalScore":4,"prScore":0,"issueScore":4,"reviewScore":0,"commentScore":0,"summary":null}],"focusAreas":[{"area":"core","count":6},{"area":"plugin-solana","count":6},{"area":"adapter-postgres","count":1},{"area":"client-telegram","count":1}],"topIssues":[{"id":"I_kwDOMT5cIs6dywGV","title":"getCachedEmbeddings broken for sqlite adapter ","author":"boldkoala4615","number":251,"repository":"elizaos/eliza","body":"$4","createdAt":"2024-11-10T15:05:15Z","closedAt":"2024-11-20T10:30:34Z","state":"CLOSED","commentCount":0}],"topPullRequests":[{"id":"PR_kwDOMT5cIs6BbkjL","title":"recommendations, token info, client auto","author":"MarcoMandar","number":250,"body":"$5","repository":"elizaos/eliza","createdAt":"2024-11-10T15:03:24Z","mergedAt":"2024-11-12T10:33:23Z","additions":11561,"deletions":14470},{"id":"PR_kwDOMT5cIs6BcK1V","title":"Update docs","author":"madjin","number":253,"body":"- update discord links\r\n- consolidate basic usage / installation / quickstart\r\n- update frontpage\r\n\r\n![image](https://github.com/user-attachments/assets/1188d208-7b60-4e6e-a00a-eb6b2201877b)\r\n\r\n\r\nadd emojis\r\n![image](https://github.com/user-attachments/assets/01f9f79f-994d-4ed5-92ec-82b057f28bea)\r\n","repository":"elizaos/eliza","createdAt":"2024-11-10T22:09:06Z","mergedAt":"2024-11-11T11:05:08Z","additions":1119,"deletions":975},{"id":"PR_kwDOMT5cIs6BaoKZ","title":"trust integration","author":"MarcoMandar","number":248,"body":"$6","repository":"elizaos/eliza","createdAt":"2024-11-10T01:00:10Z","mergedAt":"2024-11-10T01:12:18Z","additions":514,"deletions":44},{"id":"PR_kwDOMT5cIs6Bancf","title":"Working PostGres Adapter","author":"cvartanian","number":247,"body":"# Relates to:\r\n\r\nPG Adapter wasn't working properly due to case insensitivity on calls\r\n\r\n# Risks\r\n\r\nLow\r\n\r\n# Background\r\n\r\nAdding proper quotes around column names in SQL queries\r\nFixing JSONB field access syntax in cached embeddings query\r\nAdding fuzzystrmatch extension for text similarity searches\r\nAdding additional performance indexes\r\nImproving error handling and logging\r\n\r\n## What kind of change is this?\r\n\r\nBug fixes (non-breaking change which fixes an issue)\r\n\r\n\r\n# Documentation changes needed?\r\n\r\nMy changes do not require a change to the project documentation.\r\n\r\n\r\n# Testing\r\n\r\n## Where should a reviewer start?\r\n\r\n## Detailed testing steps\r\n\r\nNone, automtated tests are fine.\r\n\r\n\r\n\r\n\r\n","repository":"elizaos/eliza","createdAt":"2024-11-10T00:46:35Z","mergedAt":"2024-11-10T01:12:35Z","additions":108,"deletions":107},{"id":"PR_kwDOMT5cIs6BachH","title":"Support google models in generation","author":"parzival418","number":246,"body":"# Relates to:\r\n\r\nNo issue for ticket for this yet.\r\n\r\n# Risks\r\n\r\nLow risk.\r\n\r\n# Background\r\n\r\n## What does this PR do?\r\n\r\nThis PR adds support for the Google models, which are represented in the types but not implemented in the generation file.  Adds env ket to example env file and main readme env example.\r\n\r\n## What kind of change is this?\r\n\r\nFeatures (non-breaking change which adds functionality)\r\n\r\n## Why are we doing this? Any context or related work?\r\n\r\nJust need Google models to work.\r\n\r\n<!-- Please show how you tested the PR. This will really help if the PR needs to be retested, and probably help the PR get merged quicker. -->\r\n\r\n# Testing\r\n\r\n## Where should a reviewer start?\r\n\r\nSwitch the character to use ModelProviderName.GOOGLE and ensure you have the API key for Gemini in your env:\r\n\r\nGOOGLE_GENERATIVE_AI_API_KEY= # Gemini API key\r\n\r\nThings should continue to run.\r\n","repository":"elizaos/eliza","createdAt":"2024-11-09T21:48:14Z","mergedAt":"2024-11-10T00:36:55Z","additions":39,"deletions":40},{"id":"PR_kwDOMT5cIs6BasLX","title":"add verbose config with logger","author":"v1xingyue","number":249,"body":"Let's add verbose with logger config.\r\nMost log output will use logger.debug write infomation , with the verbose = true.\r\nWhen developer want quite , they can change the verbose = false.","repository":"elizaos/eliza","createdAt":"2024-11-10T02:15:33Z","mergedAt":"2024-11-11T11:28:43Z","additions":29,"deletions":23},{"id":"PR_kwDOMT5cIs6BcHbY","title":"use openai embeddings setting","author":"o-on-x","number":252,"body":".env variable for setting to use openai embedding\r\nadded this flag into embeddings.ts logic\r\n","repository":"elizaos/eliza","createdAt":"2024-11-10T21:34:08Z","mergedAt":"2024-11-10T21:52:56Z","additions":10,"deletions":4}],"detailedContributorSummaries":{}},"summaryContent":"$7","className":"self-end sm:self-start"}]]}],"$L8","$L9","$La"]}]}],["$Lb","$Lc","$Ld"],"$Le"]}],"loading":null,"isPartial":false}
+8:["$","div",null,{"className":"mb-6","children":["$","div",null,{"className":"flex items-center justify-between","children":[[["$","$Lf",null,{"href":"/summary/day/2024-11-09","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left mr-2 h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"children":"Previous"}],false],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$Lf",null,{"href":"/summary/day/2024-11-09","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Previous"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]],["$","div",null,{"className":"flex flex-col items-center","children":[["$","div",null,{"className":"text-sm font-medium text-gray-500","children":["Daily"," Summary"]}],["$","time",null,{"dateTime":"2024-11-10","className":"text-md font-bold","children":"Nov 10, 2024"}]]}],[["$","$Lf",null,{"href":"/summary/day/2024-11-11","children":[false,["$","span",null,{"children":"Next"}],["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right ml-2 h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}]],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$Lf",null,{"href":"/summary/day/2024-11-11","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Next"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]]]}]}]
+11:T569,**Describe the bug**
+
+The `getCachedEmbeddings` for the sqlite adapter is flawed with the recent [introduction of vec_distance_L2](https://github.com/ai16z/eliza/commit/e96764a53c1d15b6f53cff6ec842f63f70d13842). 
+
+```
+packages/adapter-sqlite/src/index.ts:226
+const memories = this.db.prepare(sql).all(opts.query_table_name, new Float32Array(opts.query_input.split(",").map(Number)), // Convert string to Float32Array
+                                              ^
+RangeError: Too few parameter values were provided
+```
+
+
+1. The sql query expects 5 values, but only 4 are passed. `query_match_count` should be used for `LIMIT`
+2. The creation of the float array seems off. The `query_input` does not include any comma separated values. The resulting array is `[NaN]`
+3. Distance comparison is between a float array and a string. It should probably be compared to `query_threshold`, not `query_input`
+
+Related function is here:
+https://github.com/ai16z/eliza/blob/15f7ba88d04d9d7d1cf0f608762fa84da06cb313/packages/adapter-sqlite/src/index.ts#L332C11-L360
+
+I'm happy to contribute if someone can guide me. I have little clue about `vec_distance` and didn't manage to infer what the intention of the change was exactly.
+
+**To Reproduce**
+
+`pnpm start --characters="characters/custom.character.json"` and type something
+
+**Expected behavior**
+
+No sqlite errors
+12:T81c,<!-- Use this template by filling in information and copy and pasting relevant items out of the html comments. -->
+
+# Relates to:
+
+<!-- LINK TO ISSUE OR TICKET -->
+
+<!-- This risks section is to be filled out before final review and merge. -->
+
+# Risks
+
+<!--
+Low, medium, large. List what kind of risks, and what could be effected.
+-->
+
+# Background
+
+## What does this PR do?
+
+## What kind of change is this?
+
+<!--
+Bug fixes (non-breaking change which fixes an issue)
+Improvements (misc. changes to existing features)
+Features (non-breaking change which adds functionality)
+Updates (new versions of included code)
+-->
+
+<!-- This "Why" section is most relevant if there is no linked issue explaining why. If there is a related issue it might make sense to skip this why section. -->
+<!--
+## Why are we doing this? Any context or related work?
+-->
+
+# Documentation changes needed?
+
+<!--
+My changes do not require a change to the project documentation.
+My changes require a change to the project documentation.
+If a docs change is needed: I have updated the documentation accordingly.
+-->
+
+<!-- Please show how you tested the PR. This will really help if the PR needs to be retested, and probably help the PR get merged quicker. -->
+
+# Testing
+
+## Where should a reviewer start?
+
+## Detailed testing steps
+
+<!--
+None, automtated tests are fine.
+-->
+
+<!--
+- As [anon/admin], go to [link]
+  - [do action]
+  - verify [result]
+-->
+
+<!-- If there is a UI change, please include before and after screenshots or videos. This will speed up PRs being merged. It is extra nice to annotate screenshots with arrows or boxes pointing out the differences. -->
+<!--
+## Screenshots
+### Before
+### After
+-->
+
+<!-- If there is anything about the deploy, please make a note. -->
+<!--
+# Deploy Notes
+-->
+
+<!--  Copy and paste commandline output. -->
+<!--
+## Database changes
+-->
+
+<!--  If there is something more than the automated steps, please specifiy deploy instructions. -->
+<!--
+## Deployment instructions
+-->
+13:T81c,<!-- Use this template by filling in information and copy and pasting relevant items out of the html comments. -->
+
+# Relates to:
+
+<!-- LINK TO ISSUE OR TICKET -->
+
+<!-- This risks section is to be filled out before final review and merge. -->
+
+# Risks
+
+<!--
+Low, medium, large. List what kind of risks, and what could be effected.
+-->
+
+# Background
+
+## What does this PR do?
+
+## What kind of change is this?
+
+<!--
+Bug fixes (non-breaking change which fixes an issue)
+Improvements (misc. changes to existing features)
+Features (non-breaking change which adds functionality)
+Updates (new versions of included code)
+-->
+
+<!-- This "Why" section is most relevant if there is no linked issue explaining why. If there is a related issue it might make sense to skip this why section. -->
+<!--
+## Why are we doing this? Any context or related work?
+-->
+
+# Documentation changes needed?
+
+<!--
+My changes do not require a change to the project documentation.
+My changes require a change to the project documentation.
+If a docs change is needed: I have updated the documentation accordingly.
+-->
+
+<!-- Please show how you tested the PR. This will really help if the PR needs to be retested, and probably help the PR get merged quicker. -->
+
+# Testing
+
+## Where should a reviewer start?
+
+## Detailed testing steps
+
+<!--
+None, automtated tests are fine.
+-->
+
+<!--
+- As [anon/admin], go to [link]
+  - [do action]
+  - verify [result]
+-->
+
+<!-- If there is a UI change, please include before and after screenshots or videos. This will speed up PRs being merged. It is extra nice to annotate screenshots with arrows or boxes pointing out the differences. -->
+<!--
+## Screenshots
+### Before
+### After
+-->
+
+<!-- If there is anything about the deploy, please make a note. -->
+<!--
+# Deploy Notes
+-->
+
+<!--  Copy and paste commandline output. -->
+<!--
+## Database changes
+-->
+
+<!--  If there is something more than the automated steps, please specifiy deploy instructions. -->
+<!--
+## Deployment instructions
+-->
+9:["$","div",null,{"className":"mb-8 space-y-6","children":[["$","$L10",null,{"metrics":{"date":"2024-11-10","interval":{"intervalStart":"$D2024-11-10T00:00:00.000Z","intervalEnd":"$D2024-11-11T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":6,"merged":4,"total":7},"issues":{"new":1,"closed":0,"total":1},"activeContributors":9,"codeChanges":{"additions":671,"deletions":195,"files":16,"commitCount":14},"topContributors":[{"username":"MarcoMandar","avatarUrl":"https://avatars.githubusercontent.com/u/70625671?u=88aeaa8b5ed43a818bdac96843f2fd40c0abf8ff&v=4","totalScore":90.00848484090845,"prScore":90.00848484090845,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":null},{"username":"madjin","avatarUrl":"https://avatars.githubusercontent.com/u/32600939?u=cdcf89f44c7a50906c7a80d889efa85023af2049&v=4","totalScore":50.4407738965761,"prScore":50.4407738965761,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":null},{"username":"cvartanian","avatarUrl":"https://avatars.githubusercontent.com/u/64427702?v=4","totalScore":29.790639203842083,"prScore":29.790639203842083,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":null},{"username":"v1xingyue","avatarUrl":"https://avatars.githubusercontent.com/u/974169?u=96c6a113a91978c041e5cf90965d7b66c5540af4&v=4","totalScore":24.72829191355212,"prScore":24.52829191355212,"issueScore":0,"reviewScore":0,"commentScore":0.2,"summary":null},{"username":"o-on-x","avatarUrl":"https://avatars.githubusercontent.com/u/186759703?u=4e674b1542bbb9fe7d7ea0e034c8c525689cb191&v=4","totalScore":22.98705020110221,"prScore":22.98705020110221,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":null},{"username":"lalalune","avatarUrl":"https://avatars.githubusercontent.com/u/18633264?u=e2e906c3712c2506ebfa98df01c2cfdc50050b30&v=4","totalScore":5.34,"prScore":0,"issueScore":0,"reviewScore":5,"commentScore":0.33999999999999997,"summary":null},{"username":"boldkoala4615","avatarUrl":"https://avatars.githubusercontent.com/u/107146784?v=4","totalScore":4,"prScore":0,"issueScore":4,"reviewScore":0,"commentScore":0,"summary":null}],"focusAreas":[{"area":"core","count":6},{"area":"plugin-solana","count":6},{"area":"adapter-postgres","count":1},{"area":"client-telegram","count":1}],"topIssues":[{"id":"I_kwDOMT5cIs6dywGV","title":"getCachedEmbeddings broken for sqlite adapter ","author":"boldkoala4615","number":251,"repository":"elizaos/eliza","body":"$11","createdAt":"2024-11-10T15:05:15Z","closedAt":"2024-11-20T10:30:34Z","state":"CLOSED","commentCount":0}],"topPullRequests":[{"id":"PR_kwDOMT5cIs6BbkjL","title":"recommendations, token info, client auto","author":"MarcoMandar","number":250,"body":"$12","repository":"elizaos/eliza","createdAt":"2024-11-10T15:03:24Z","mergedAt":"2024-11-12T10:33:23Z","additions":11561,"deletions":14470},{"id":"PR_kwDOMT5cIs6BcK1V","title":"Update docs","author":"madjin","number":253,"body":"- update discord links\r\n- consolidate basic usage / installation / quickstart\r\n- update frontpage\r\n\r\n![image](https://github.com/user-attachments/assets/1188d208-7b60-4e6e-a00a-eb6b2201877b)\r\n\r\n\r\nadd emojis\r\n![image](https://github.com/user-attachments/assets/01f9f79f-994d-4ed5-92ec-82b057f28bea)\r\n","repository":"elizaos/eliza","createdAt":"2024-11-10T22:09:06Z","mergedAt":"2024-11-11T11:05:08Z","additions":1119,"deletions":975},{"id":"PR_kwDOMT5cIs6BaoKZ","title":"trust integration","author":"MarcoMandar","number":248,"body":"$13","repository":"elizaos/eliza","createdAt":"2024-11-10T01:00:10Z","mergedAt":"2024-11-10T01:12:18Z","additions":514,"deletions":44},{"id":"PR_kwDOMT5cIs6Bancf","title":"Working PostGres Adapter","author":"cvartanian","number":247,"body":"# Relates to:\r\n\r\nPG Adapter wasn't working properly due to case insensitivity on calls\r\n\r\n# Risks\r\n\r\nLow\r\n\r\n# Background\r\n\r\nAdding proper quotes around column names in SQL queries\r\nFixing JSONB field access syntax in cached embeddings query\r\nAdding fuzzystrmatch extension for text similarity searches\r\nAdding additional performance indexes\r\nImproving error handling and logging\r\n\r\n## What kind of change is this?\r\n\r\nBug fixes (non-breaking change which fixes an issue)\r\n\r\n\r\n# Documentation changes needed?\r\n\r\nMy changes do not require a change to the project documentation.\r\n\r\n\r\n# Testing\r\n\r\n## Where should a reviewer start?\r\n\r\n## Detailed testing steps\r\n\r\nNone, automtated tests are fine.\r\n\r\n\r\n\r\n\r\n","repository":"elizaos/eliza","createdAt":"2024-11-10T00:46:35Z","mergedAt":"2024-11-10T01:12:35Z","additions":108,"deletions":107},{"id":"PR_kwDOMT5cIs6BachH","title":"Support google models in generation","author":"parzival418","number":246,"body":"# Relates to:\r\n\r\nNo issue for ticket for this yet.\r\n\r\n# Risks\r\n\r\nLow risk.\r\n\r\n# Background\r\n\r\n## What does this PR do?\r\n\r\nThis PR adds support for the Google models, which are represented in the types but not implemented in the generation file.  Adds env ket to example env file and main readme env example.\r\n\r\n## What kind of change is this?\r\n\r\nFeatures (non-breaking change which adds functionality)\r\n\r\n## Why are we doing this? Any context or related work?\r\n\r\nJust need Google models to work.\r\n\r\n<!-- Please show how you tested the PR. This will really help if the PR needs to be retested, and probably help the PR get merged quicker. -->\r\n\r\n# Testing\r\n\r\n## Where should a reviewer start?\r\n\r\nSwitch the character to use ModelProviderName.GOOGLE and ensure you have the API key for Gemini in your env:\r\n\r\nGOOGLE_GENERATIVE_AI_API_KEY= # Gemini API key\r\n\r\nThings should continue to run.\r\n","repository":"elizaos/eliza","createdAt":"2024-11-09T21:48:14Z","mergedAt":"2024-11-10T00:36:55Z","additions":39,"deletions":40},{"id":"PR_kwDOMT5cIs6BasLX","title":"add verbose config with logger","author":"v1xingyue","number":249,"body":"Let's add verbose with logger config.\r\nMost log output will use logger.debug write infomation , with the verbose = true.\r\nWhen developer want quite , they can change the verbose = false.","repository":"elizaos/eliza","createdAt":"2024-11-10T02:15:33Z","mergedAt":"2024-11-11T11:28:43Z","additions":29,"deletions":23},{"id":"PR_kwDOMT5cIs6BcHbY","title":"use openai embeddings setting","author":"o-on-x","number":252,"body":".env variable for setting to use openai embedding\r\nadded this flag into embeddings.ts logic\r\n","repository":"elizaos/eliza","createdAt":"2024-11-10T21:34:08Z","mergedAt":"2024-11-10T21:52:56Z","additions":10,"deletions":4}],"detailedContributorSummaries":{}}}],"$L14"]}]
+a:["$","div",null,{"className":"prose prose-sm mx-auto mt-8 dark:prose-invert sm:prose lg:prose-lg xl:prose-xl","children":[["$","h2","h2-0",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"OVERVIEW","position":{"start":{"line":3,"column":4,"offset":42},"end":{"line":3,"column":12,"offset":50}}}],"position":{"start":{"line":3,"column":1,"offset":39},"end":{"line":3,"column":13,"offset":51}}},"children":"OVERVIEW"}],"\n",["$","p","p-0",{"children":"Today, ElizaOS made significant strides in enhancing our AI agent framework, focusing on integrations and support for various models. The team actively contributed to multiple areas, ensuring robust development across the core system and plugins."}],"\n",["$","h2","h2-1",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"PROJECT METRICS","position":{"start":{"line":6,"column":4,"offset":303},"end":{"line":6,"column":19,"offset":318}}}],"position":{"start":{"line":6,"column":1,"offset":300},"end":{"line":6,"column":19,"offset":318}}},"children":"PROJECT METRICS"}],"\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"PRs:"}]," 4 merged PRs, 6 new PRs"]}],"\n",["$","li","li-1",{"children":[["$","strong","strong-0",{"children":"Issues:"}]," 1 new issue, 0 closed issues"]}],"\n",["$","li","li-2",{"children":[["$","strong","strong-0",{"children":"Unique Contributors:"}]," 9"]}],"\n",["$","li","li-3",{"children":[["$","strong","strong-0",{"children":"Code Changes:"}]," +671/-195 lines across 16 files"]}],"\n",["$","li","li-4",{"children":[["$","strong","strong-0",{"children":"Total Commits:"}]," 14"]}],"\n",["$","li","li-5",{"children":[["$","strong","strong-0",{"children":"Most Active Contributors:"}]," MarcoMandar, madjin, cvartanian, v1xingyue, o-on-x"]}],"\n"]}],"\n",["$","h2","h2-2",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"TOP ISSUES","position":{"start":{"line":14,"column":4,"offset":589},"end":{"line":14,"column":14,"offset":599}}}],"position":{"start":{"line":14,"column":1,"offset":586},"end":{"line":14,"column":14,"offset":599}}},"children":"TOP ISSUES"}],"\n",["$","ul","ul-1",{"children":["\n",["$","li","li-0",{"children":["\n",["$","p","p-0",{"children":["$","strong","strong-0",{"children":"Integration Challenges"}]}],"\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["Ongoing work on trust integration to enhance system reliability (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/248","children":"#248"}],")."]}],"\n"]}],"\n"]}],"\n",["$","li","li-1",{"children":["\n",["$","p","p-0",{"children":["$","strong","strong-0",{"children":"Model Support Enhancements"}]}],"\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["Addressing the need for broader model support, particularly for Google models in generation (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/246","children":"#246"}],")."]}],"\n"]}],"\n"]}],"\n"]}],"\n",["$","h2","h2-3",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"KEY TECHNICAL DEVELOPMENTS","position":{"start":{"line":21,"column":4,"offset":943},"end":{"line":21,"column":30,"offset":969}}}],"position":{"start":{"line":21,"column":1,"offset":940},"end":{"line":21,"column":30,"offset":969}}},"children":"KEY TECHNICAL DEVELOPMENTS"}],"\n",["$","ul","ul-2",{"children":["\n",["$","li","li-0",{"children":["\n",["$","p","p-0",{"children":["$","strong","strong-0",{"children":"Model and Integration Support"}]}],"\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["Implemented support for Google models in generation (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/246","children":"#246"}],")."]}],"\n",["$","li","li-1",{"children":["Developed a working PostGres adapter to improve database interactions (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/247","children":"#247"}],")."]}],"\n",["$","li","li-2",{"children":["Integrated trust features to bolster system security and reliability (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/248","children":"#248"}],")."]}],"\n"]}],"\n"]}],"\n",["$","li","li-1",{"children":["\n",["$","p","p-0",{"children":["$","strong","strong-0",{"children":"Embedding Utilization"}]}],"\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["Utilized OpenAI embeddings settings to enhance AI capabilities (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/252","children":"#252"}],")."]}],"\n"]}],"\n"]}],"\n"]}]]}]
+b:["$","script","script-0",{"src":"/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","async":true}]
+c:["$","script","script-1",{"src":"/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","async":true}]
+d:["$","script","script-2",{"src":"/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js","async":true}]
+e:["$","$L15",null,{"children":["$","$16",null,{"name":"Next.MetadataOutlet","children":"$@17"}]}]
+14:["$","div",null,{"className":"rounded-lg border bg-card text-card-foreground shadow-sm","children":[["$","div",null,{"className":"flex flex-col space-y-1.5 p-6 py-4","children":["$","div",null,{"className":"tracking-tight text-sm font-medium","children":["$undefined","Code Changes"]}]}],["$","div",null,{"className":"p-6 pt-0","children":["$","div",null,{"className":"grid grid-cols-2 gap-4 md:grid-cols-4","children":[["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-git-commit-vertical h-5 w-5","aria-hidden":"true","children":[["$","path","1holv5",{"d":"M12 3v6"}],["$","circle","1v7zrd",{"cx":"12","cy":"12","r":"3"}],["$","path","a9ows0",{"d":"M12 15v6"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":14}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Commits"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-file-code h-5 w-5","aria-hidden":"true","children":[["$","path","1oefj6",{"d":"M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"}],["$","path","wfsgrz",{"d":"M14 2v5a1 1 0 0 0 1 1h5"}],["$","path","1tg20x",{"d":"M10 12.5 8 15l2 2.5"}],["$","path","yinavb",{"d":"m14 12.5 2 2.5-2 2.5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":16}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Files Changed"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-green-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-up h-5 w-5 text-green-500","aria-hidden":"true","children":[["$","path","hav0vg",{"d":"m5 12 7-7 7 7"}],["$","path","x0mq9r",{"d":"M12 19V5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-green-500","children":"+671"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Added"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-red-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-down h-5 w-5 text-red-500","aria-hidden":"true","children":[["$","path","s699le",{"d":"M12 5v14"}],["$","path","1idqje",{"d":"m19 12-7 7-7-7"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-red-500","children":"-195"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Deleted"}]]}]]}]]}]}]]}]
+17:null

@@ -1,0 +1,400 @@
+1:"$Sreact.fragment"
+2:I[4817319,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"IntervalSelector"]
+3:I[6998365,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"LlmCopyButton"]
+f:I[3642796,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],""]
+10:I[3238488,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"StatCardsDisplay"]
+15:I[4261541,["/eliza-leaderboard/_next/static/chunks/b33bcbdcb3f88354.js","/eliza-leaderboard/_next/static/chunks/8ba59154b6704904.js"],"OutletBoundary"]
+16:"$Sreact.suspense"
+4:T958,   Bug Report: thanks to claude code....
+
+  Issue Summary
+
+  LOG_LEVEL set in .env files is ignored, but works when
+  set via command line environment variables.
+
+  Root Cause
+
+  Timing/Order of Operations Problem: The core logger is
+  initialized during module import (before .env loading)
+  and never rechecks environment variables.
+
+  Technical Details
+
+  Problem Code Locations:
+
+  1. Early Logger Initialization
+  (packages/core/src/logger.ts):
+  // Lines 148-152 - Logger configured at module import 
+  time
+  const isDebugMode = (process?.env?.LOG_LEVEL ||
+  '').toLowerCase() === 'debug';
+  const effectiveLogLevel = isDebugMode ? 'debug' :
+  process?.env?.DEFAULT_LOG_LEVEL || 'info';
+
+  2. Late .env Loading
+  (packages/cli/src/commands/start.ts):
+  // Lines 334-380 - .env loaded much later in start 
+  command
+  const loadEnvConfig = () => {
+    // ... .env file processing happens here
+  }
+
+  Problematic Sequence:
+
+  1. Node.js starts → CLI imports modules
+  2. logger.ts imported → reads process.env.LOG_LEVEL 
+  (empty) → configures 'info' level
+  3. Much later: start command executes
+  4. Much later: .env file loaded → LOG_LEVEL set in
+  process.env
+  5. Logger already configured, never rechecks LOG_LEVEL
+
+  Why Command Line Works:
+
+  Command line env vars are set before Node.js starts, so
+  they're available during early logger initialization.
+
+  Evidence
+
+  - ✅ Command line: LOG_LEVEL=debug elizaos start → Debug
+   logs appear
+  - ❌ .env file: LOG_LEVEL=debug → Debug logs don't
+  appear
+  - ❌ Runtime check: Logger configuration is static after
+   module import
+
+  Code Snippets
+
+  Logger reads LOG_LEVEL too early:
+  // packages/core/src/logger.ts:151-152
+  const isDebugMode = (process?.env?.LOG_LEVEL ||
+  '').toLowerCase() === 'debug';
+  const effectiveLogLevel = isDebugMode ? 'debug' :
+  process?.env?.DEFAULT_LOG_LEVEL || 'info';
+
+  But .env loading happens later:
+  // packages/cli/src/commands/start.ts:334-380  
+  const loadEnvConfig = () => {
+    // Environment loading happens in start command, after
+   logger init
+  }
+
+  Proposed Fix
+
+  Make logger initialization lazy/dynamic - defer
+  LOG_LEVEL reading until after .env files are loaded, or
+  add a mechanism to reconfigure logger when environment
+  changes.
+
+  This is a clear architectural issue where static module
+  initialization happens before dynamic environment
+  loading.5:T97c,**Describe the bug**
+
+I am trying to get rag working and following docs, but that code is not implemented in 1.0.6.  It appears to be commented as a placeholder in 
+ 
+**To Reproduce**
+
+settings: {
+    secrets: {},
+    ragKnowledge: true,
+  },
+  knowledge: [
+    {
+      directory: 'knowledge/foobar',
+      shared: true,
+    },
+  ],
+
+**Expected behavior**
+
+I expect that it would parse on startup and it was not doing that, as it used to do.  So, I looked into code and found this... summary from claude....
+
+Missing Implementation Locations
+
+  1. AgentRuntime Initialization Missing Knowledge 
+  Processing
+
+  File: /packages/core/src/runtime.ts (lines 494-651)
+  - The AgentRuntime.initialize() method should process
+  character.knowledge but doesn't
+  - No call to any knowledge processing function during
+  agent startup
+
+  2. TODO Comment Confirms Missing Implementation
+
+  File: /packages/core/src/specs/v1/index.ts (line 50)
+  // TODO: Implement the remaining adapters: ... - 
+  knowledge / memory
+  This is a developer comment explicitly stating that
+  knowledge processing is not implemented yet.
+
+  3. Bootstrap Plugin Missing KNOWLEDGE Provider
+
+  File: /packages/plugin-bootstrap/src/providers/index.ts
+  - Multiple message examples reference providers: 
+  ['KNOWLEDGE'] in character files
+  - But the bootstrap plugin doesn't export any KNOWLEDGE 
+  provider
+  - Provider list is incomplete - missing the knowledge
+  provider entirely
+
+  4. RagService Interface Exists But No Implementation
+
+  File: /packages/core/src/runtime.ts (lines 52-61)
+  interface RagServiceDelegator extends Service {
+    getKnowledge(message: Memory, scope?: { roomId?: UUID;
+   worldId?: UUID; entityId?: UUID }):
+  Promise<KnowledgeItem[]>;
+    _internalAddKnowledge(item: KnowledgeItem, options?:
+  any, scope?: any): Promise<void>;
+  }
+  The interface exists but no actual implementation of
+  this service.
+
+  5. Missing Functions
+
+  - processCharacterKnowledge() - Referenced in docs but
+  doesn't exist anywhere
+  - No knowledge file reading/processing logic
+  - No connection between character.knowledge array and
+  embedding system
+
+  Developer Comments Confirming This
+
+  The codebase has explicit TODO comments indicating that
+  knowledge/memory functionality is intentionally 
+  unfinished. The character examples even reference
+   a KNOWLEDGE provider that doesn't exist, suggesting
+  this was planned but never implemented.
+
+6:T47c,## Summary
+- Adds automatic lockfile cleanup when falling back to GitHub installations
+- Prevents circular dependency issues during npm-to-GitHub fallback scenarios
+
+## Changes
+- **New `removeFromBunLock()` function**: Safely removes package entries from bun.lock using `bun remove`
+- **New `executeInstallationWithFallback()` function**: Handles npm installation with automatic GitHub fallback and lockfile cleanup
+- **Updated `installPlugin()` function**: Uses the new fallback mechanism for registry-based installations
+
+## How it works
+1. Attempts npm installation first
+2. If npm fails and GitHub fallback is available:
+   - Calls `removeFromBunLock()` to clean up any partial lockfile entries
+   - Attempts GitHub installation with clean lockfile
+3. Prevents circular dependency errors that can occur with stale lockfile entries
+
+## Test plan
+- [ ] Test npm installation success (should work as before)
+- [ ] Test npm installation failure with GitHub fallback available
+- [ ] Verify lockfile cleanup occurs before GitHub installation
+- [ ] Test with and without existing bun.lock file
+- [ ] Verify no regression in existing installation flows7:T71b,Today's development focused on enhancing the ElizaOS core framework, with significant efforts in improving code modularity and logging functionality. Key achievements include restructuring type definitions for better maintainability and refining log outputs, alongside addressing several bugs to improve stability. Emerging challenges include issues with logging configuration and the knowledge management feature.
+
+## ✅ Completed Work
+### Codebase Refinements & Modularity
+- Split the large `types.ts` file into more manageable, logical sections to enhance maintainability in `elizaos/eliza` ([elizaos/eliza#4999](https://github.com/elizaos/eliza/pull/4999)).
+
+### Logging & Documentation Improvements
+- Excluded text embedding content from debug logs to improve readability in `elizaos/eliza` ([elizaos/eliza#5003](https://github.com/elizaos/eliza/pull/5003)).
+- Resolved an issue where the logs viewer incorrectly displayed an empty state when data was present in `elizaos/eliza` ([elizaos/eliza#5006](https://github.com/elizaos/eliza/pull/5006)).
+- Corrected typos in the `gitcoin-passport.md` documentation in `elizaos/eliza` ([elizaos/eliza#5008](https://github.com/elizaos/eliza/pull/5008)).
+
+### Stability & Bug Fixes
+- Attempted to fix matrix run issues on Windows in `elizaos/eliza` ([elizaos/eliza#5007](https://github.com/elizaos/eliza/pull/5007)).
+
+## 🐞 Issue Triage
+### New Issues
+- **elizaos/eliza**: Reported that `LOG_LEVEL` set in `.env` files is ignored, functioning only when set via command line ([elizaos/eliza#5005](https://github.com/elizaos/eliza/issues/5005)).
+- **elizaos/eliza**: Identified that the knowledge management (RAG) feature is not functioning as expected in version 1.0.6, with relevant code commented out ([elizaos/eliza#5004](https://github.com/elizaos/eliza/issues/5004)).0:{"buildId":"US8XLB_zHXYj_PVAECGcd","rsc":["$","$1","c",{"children":[["$","div",null,{"className":"container mx-auto px-6 py-8 md:px-8","children":["$","div",null,{"className":"mx-auto max-w-4xl","children":[["$","div",null,{"className":"mb-4 flex flex-col justify-between sm:flex-row","children":[["$","$L2",null,{"currentInterval":"day","currentDate":"2025-06-08"}],["$","$L3",null,{"metrics":{"date":"2025-06-08","interval":{"intervalStart":"$D2025-06-08T00:00:00.000Z","intervalEnd":"$D2025-06-09T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":5,"merged":5,"total":7},"issues":{"new":2,"closed":0,"total":2},"activeContributors":8,"codeChanges":{"additions":5212,"deletions":12785,"files":52,"commitCount":24},"topContributors":[{"username":"wtfsayo","avatarUrl":"https://avatars.githubusercontent.com/u/82053242?u=98209a1f10456f42d4d2fa71db4d5bf4a672cbc3&v=4","totalScore":53.819278407684166,"prScore":53.819278407684166,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"wtfsayo: Merged 1 PR (#5007) with a fix for matrix runs on Windows (+3/-0 lines) and opened another PR (#5009) to add lockfile cleanup for GitHub fallback installations. Made significant code changes across 34 files (+1036/-511 lines) with a focus on other work (45%) and bugfixes (36%), demonstrating consistent activity with 11 commits today."},{"username":"madjin","avatarUrl":"https://avatars.githubusercontent.com/u/32600939?u=cdcf89f44c7a50906c7a80d889efa85023af2049&v=4","totalScore":34.0587738965761,"prScore":33.858773896576096,"issueScore":0,"reviewScore":0,"commentScore":0.2,"summary":null},{"username":"0xbbjoker","avatarUrl":"https://avatars.githubusercontent.com/u/54844437?u=90fe1762420de6ad493a1c1582f1f70c0d87d8e2&v=4","totalScore":32.491045395879425,"prScore":32.491045395879425,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"0xbbjoker: Merged 1 PR (#5006) focused on bugfix work, resolving empty logs display with significant changes of +84/-43 lines. Maintained a consistent activity pattern, being active every day."},{"username":"davidjsonn","avatarUrl":"https://avatars.githubusercontent.com/u/155117116?u=c0d37dc63f2fa62f48b5c54342917b17460af966&v=4","totalScore":21.104718956217052,"prScore":21.104718956217052,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"davidjsonn: Merged 1 PR (#5008) focused on fixing typos in the documentation, contributing +2/-2 lines. Maintained a consistent activity pattern, actively contributing to bugfix work in documentation."},{"username":"harperaa","avatarUrl":"https://avatars.githubusercontent.com/u/1330944?v=4","totalScore":8.64,"prScore":0,"issueScore":8.3,"reviewScore":0,"commentScore":0.33999999999999997,"summary":"harperaa: Created 2 new issues (#5005 \"LOG_LEVEL from .env Not Working in 1.0.6\" and #5004 \"Knowledge management (RAG) not working (implemented) in 1.0.6\"), and commented on 2 issues, showing sporadic activity today."}],"focusAreas":[{"area":"core","count":25},{"area":".cursor/rules","count":16},{"area":"client","count":4},{"area":"plugin-bootstrap","count":3},{"area":"cli","count":2},{"area":".github/workflows","count":1},{"area":"docs","count":1}],"topIssues":[{"id":"I_kwDOMT5cIs66bQZc","title":"LOG_LEVEL from .env Not Working in 1.0.6","author":"harperaa","number":5005,"repository":"elizaos/eliza","body":"$4","createdAt":"2025-06-08T00:14:19Z","closedAt":"2025-06-09T18:48:17Z","state":"CLOSED","commentCount":1},{"id":"I_kwDOMT5cIs66bOWK","title":"Knowledge management (RAG) not working (implemented) in 1.0.6","author":"harperaa","number":5004,"repository":"elizaos/eliza","body":"$5","createdAt":"2025-06-08T00:06:14Z","closedAt":"2025-06-17T18:10:11Z","state":"CLOSED","commentCount":0}],"topPullRequests":[{"id":"PR_kwDONNAI986ZjTbd","title":"feat: add docusaurus","author":"madjin","number":126,"body":"It's a start\r\n![image](https://github.com/user-attachments/assets/bc99eadb-ce00-4f37-8c2d-d651f6b04dfb)\r\n","repository":"elizaos/elizaos.github.io","createdAt":"2025-06-08T01:09:05Z","mergedAt":null,"additions":26698,"deletions":2},{"id":"PR_kwDOMT5cIs6ZiFGc","title":"feat: Split types.ts into granular files","author":"lalalune","number":4999,"body":"This PR splits the gigantic types.ts into logical and granular sections\r\n\r\nNice for agentic search etc","repository":"elizaos/eliza","createdAt":"2025-06-07T19:31:43Z","mergedAt":"2025-06-08T10:14:45Z","additions":5075,"deletions":12729},{"id":"PR_kwDOMT5cIs6ZmWSH","title":"feat: add lockfile cleanup for GitHub fallback installations","author":"wtfsayo","number":5009,"body":"$6","repository":"elizaos/eliza","createdAt":"2025-06-08T20:45:32Z","mergedAt":"2025-06-09T17:00:07Z","additions":92,"deletions":15},{"id":"PR_kwDOMT5cIs6ZjKez","title":"fix(logs): resolve empty logs display with existing data","author":"0xbbjoker","number":5006,"body":"Fixes logs viewer incorrectly showing empty state when data is present.","repository":"elizaos/eliza","createdAt":"2025-06-08T00:37:52Z","mergedAt":"2025-06-08T07:26:28Z","additions":84,"deletions":43},{"id":"PR_kwDOMT5cIs6ZivM1","title":"[DO NOT MERGE] test multi-action reply","author":"wtfsayo","number":5002,"body":"","repository":"elizaos/eliza","createdAt":"2025-06-07T22:28:14Z","mergedAt":null,"additions":49,"deletions":33},{"id":"PR_kwDOMT5cIs6ZjBc0","title":"feat: exclude text embedding from view","author":"0xbbjoker","number":5003,"body":"Filters out text embedding content from debug logs to reduce noise and improve log readability.","repository":"elizaos/eliza","createdAt":"2025-06-07T23:58:41Z","mergedAt":"2025-06-08T07:25:38Z","additions":48,"deletions":11},{"id":"PR_kwDOMT5cIs6ZkMUi","title":"fix: attempt to fix matrix run on windows","author":"wtfsayo","number":5007,"body":"","repository":"elizaos/eliza","createdAt":"2025-06-08T07:31:58Z","mergedAt":"2025-06-08T07:32:04Z","additions":3,"deletions":0},{"id":"PR_kwDOMT5cIs6ZkU6n","title":"fix typos gitcoin-passport.md","author":"davidjsonn","number":5008,"body":"packages/docs/packages/plugins/gitcoin-passport.md\r\n`treshold` - `threshold`\r\n`retrive` - `retrieve`","repository":"elizaos/eliza","createdAt":"2025-06-08T08:17:08Z","mergedAt":"2025-06-08T10:14:33Z","additions":2,"deletions":2}],"detailedContributorSummaries":{"0xbbjoker":"0xbbjoker: Merged 1 PR (#5006) focused on bugfix work, resolving empty logs display with significant changes of +84/-43 lines. Maintained a consistent activity pattern, being active every day.","davidjsonn":"davidjsonn: Merged 1 PR (#5008) focused on fixing typos in the documentation, contributing +2/-2 lines. Maintained a consistent activity pattern, actively contributing to bugfix work in documentation.","harperaa":"harperaa: Created 2 new issues (#5005 \"LOG_LEVEL from .env Not Working in 1.0.6\" and #5004 \"Knowledge management (RAG) not working (implemented) in 1.0.6\"), and commented on 2 issues, showing sporadic activity today.","wtfsayo":"wtfsayo: Merged 1 PR (#5007) with a fix for matrix runs on Windows (+3/-0 lines) and opened another PR (#5009) to add lockfile cleanup for GitHub fallback installations. Made significant code changes across 34 files (+1036/-511 lines) with a focus on other work (45%) and bugfixes (36%), demonstrating consistent activity with 11 commits today."}},"summaryContent":"$7","className":"self-end sm:self-start"}]]}],"$L8","$L9","$La"]}]}],["$Lb","$Lc","$Ld"],"$Le"]}],"loading":null,"isPartial":false}
+8:["$","div",null,{"className":"mb-6","children":["$","div",null,{"className":"flex items-center justify-between","children":[[["$","$Lf",null,{"href":"/summary/day/2025-06-07","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left mr-2 h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"children":"Previous"}],false],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$Lf",null,{"href":"/summary/day/2025-06-07","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Previous"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]],["$","div",null,{"className":"flex flex-col items-center","children":[["$","div",null,{"className":"text-sm font-medium text-gray-500","children":["Daily"," Summary"]}],["$","time",null,{"dateTime":"2025-06-08","className":"text-md font-bold","children":"Jun 8, 2025"}]]}],[["$","$Lf",null,{"href":"/summary/day/2025-06-09","children":[false,["$","span",null,{"children":"Next"}],["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right ml-2 h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}]],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$Lf",null,{"href":"/summary/day/2025-06-09","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Next"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]]]}]}]
+11:T958,   Bug Report: thanks to claude code....
+
+  Issue Summary
+
+  LOG_LEVEL set in .env files is ignored, but works when
+  set via command line environment variables.
+
+  Root Cause
+
+  Timing/Order of Operations Problem: The core logger is
+  initialized during module import (before .env loading)
+  and never rechecks environment variables.
+
+  Technical Details
+
+  Problem Code Locations:
+
+  1. Early Logger Initialization
+  (packages/core/src/logger.ts):
+  // Lines 148-152 - Logger configured at module import 
+  time
+  const isDebugMode = (process?.env?.LOG_LEVEL ||
+  '').toLowerCase() === 'debug';
+  const effectiveLogLevel = isDebugMode ? 'debug' :
+  process?.env?.DEFAULT_LOG_LEVEL || 'info';
+
+  2. Late .env Loading
+  (packages/cli/src/commands/start.ts):
+  // Lines 334-380 - .env loaded much later in start 
+  command
+  const loadEnvConfig = () => {
+    // ... .env file processing happens here
+  }
+
+  Problematic Sequence:
+
+  1. Node.js starts → CLI imports modules
+  2. logger.ts imported → reads process.env.LOG_LEVEL 
+  (empty) → configures 'info' level
+  3. Much later: start command executes
+  4. Much later: .env file loaded → LOG_LEVEL set in
+  process.env
+  5. Logger already configured, never rechecks LOG_LEVEL
+
+  Why Command Line Works:
+
+  Command line env vars are set before Node.js starts, so
+  they're available during early logger initialization.
+
+  Evidence
+
+  - ✅ Command line: LOG_LEVEL=debug elizaos start → Debug
+   logs appear
+  - ❌ .env file: LOG_LEVEL=debug → Debug logs don't
+  appear
+  - ❌ Runtime check: Logger configuration is static after
+   module import
+
+  Code Snippets
+
+  Logger reads LOG_LEVEL too early:
+  // packages/core/src/logger.ts:151-152
+  const isDebugMode = (process?.env?.LOG_LEVEL ||
+  '').toLowerCase() === 'debug';
+  const effectiveLogLevel = isDebugMode ? 'debug' :
+  process?.env?.DEFAULT_LOG_LEVEL || 'info';
+
+  But .env loading happens later:
+  // packages/cli/src/commands/start.ts:334-380  
+  const loadEnvConfig = () => {
+    // Environment loading happens in start command, after
+   logger init
+  }
+
+  Proposed Fix
+
+  Make logger initialization lazy/dynamic - defer
+  LOG_LEVEL reading until after .env files are loaded, or
+  add a mechanism to reconfigure logger when environment
+  changes.
+
+  This is a clear architectural issue where static module
+  initialization happens before dynamic environment
+  loading.12:T97c,**Describe the bug**
+
+I am trying to get rag working and following docs, but that code is not implemented in 1.0.6.  It appears to be commented as a placeholder in 
+ 
+**To Reproduce**
+
+settings: {
+    secrets: {},
+    ragKnowledge: true,
+  },
+  knowledge: [
+    {
+      directory: 'knowledge/foobar',
+      shared: true,
+    },
+  ],
+
+**Expected behavior**
+
+I expect that it would parse on startup and it was not doing that, as it used to do.  So, I looked into code and found this... summary from claude....
+
+Missing Implementation Locations
+
+  1. AgentRuntime Initialization Missing Knowledge 
+  Processing
+
+  File: /packages/core/src/runtime.ts (lines 494-651)
+  - The AgentRuntime.initialize() method should process
+  character.knowledge but doesn't
+  - No call to any knowledge processing function during
+  agent startup
+
+  2. TODO Comment Confirms Missing Implementation
+
+  File: /packages/core/src/specs/v1/index.ts (line 50)
+  // TODO: Implement the remaining adapters: ... - 
+  knowledge / memory
+  This is a developer comment explicitly stating that
+  knowledge processing is not implemented yet.
+
+  3. Bootstrap Plugin Missing KNOWLEDGE Provider
+
+  File: /packages/plugin-bootstrap/src/providers/index.ts
+  - Multiple message examples reference providers: 
+  ['KNOWLEDGE'] in character files
+  - But the bootstrap plugin doesn't export any KNOWLEDGE 
+  provider
+  - Provider list is incomplete - missing the knowledge
+  provider entirely
+
+  4. RagService Interface Exists But No Implementation
+
+  File: /packages/core/src/runtime.ts (lines 52-61)
+  interface RagServiceDelegator extends Service {
+    getKnowledge(message: Memory, scope?: { roomId?: UUID;
+   worldId?: UUID; entityId?: UUID }):
+  Promise<KnowledgeItem[]>;
+    _internalAddKnowledge(item: KnowledgeItem, options?:
+  any, scope?: any): Promise<void>;
+  }
+  The interface exists but no actual implementation of
+  this service.
+
+  5. Missing Functions
+
+  - processCharacterKnowledge() - Referenced in docs but
+  doesn't exist anywhere
+  - No knowledge file reading/processing logic
+  - No connection between character.knowledge array and
+  embedding system
+
+  Developer Comments Confirming This
+
+  The codebase has explicit TODO comments indicating that
+  knowledge/memory functionality is intentionally 
+  unfinished. The character examples even reference
+   a KNOWLEDGE provider that doesn't exist, suggesting
+  this was planned but never implemented.
+
+13:T47c,## Summary
+- Adds automatic lockfile cleanup when falling back to GitHub installations
+- Prevents circular dependency issues during npm-to-GitHub fallback scenarios
+
+## Changes
+- **New `removeFromBunLock()` function**: Safely removes package entries from bun.lock using `bun remove`
+- **New `executeInstallationWithFallback()` function**: Handles npm installation with automatic GitHub fallback and lockfile cleanup
+- **Updated `installPlugin()` function**: Uses the new fallback mechanism for registry-based installations
+
+## How it works
+1. Attempts npm installation first
+2. If npm fails and GitHub fallback is available:
+   - Calls `removeFromBunLock()` to clean up any partial lockfile entries
+   - Attempts GitHub installation with clean lockfile
+3. Prevents circular dependency errors that can occur with stale lockfile entries
+
+## Test plan
+- [ ] Test npm installation success (should work as before)
+- [ ] Test npm installation failure with GitHub fallback available
+- [ ] Verify lockfile cleanup occurs before GitHub installation
+- [ ] Test with and without existing bun.lock file
+- [ ] Verify no regression in existing installation flows9:["$","div",null,{"className":"mb-8 space-y-6","children":[["$","$L10",null,{"metrics":{"date":"2025-06-08","interval":{"intervalStart":"$D2025-06-08T00:00:00.000Z","intervalEnd":"$D2025-06-09T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":5,"merged":5,"total":7},"issues":{"new":2,"closed":0,"total":2},"activeContributors":8,"codeChanges":{"additions":5212,"deletions":12785,"files":52,"commitCount":24},"topContributors":[{"username":"wtfsayo","avatarUrl":"https://avatars.githubusercontent.com/u/82053242?u=98209a1f10456f42d4d2fa71db4d5bf4a672cbc3&v=4","totalScore":53.819278407684166,"prScore":53.819278407684166,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"wtfsayo: Merged 1 PR (#5007) with a fix for matrix runs on Windows (+3/-0 lines) and opened another PR (#5009) to add lockfile cleanup for GitHub fallback installations. Made significant code changes across 34 files (+1036/-511 lines) with a focus on other work (45%) and bugfixes (36%), demonstrating consistent activity with 11 commits today."},{"username":"madjin","avatarUrl":"https://avatars.githubusercontent.com/u/32600939?u=cdcf89f44c7a50906c7a80d889efa85023af2049&v=4","totalScore":34.0587738965761,"prScore":33.858773896576096,"issueScore":0,"reviewScore":0,"commentScore":0.2,"summary":null},{"username":"0xbbjoker","avatarUrl":"https://avatars.githubusercontent.com/u/54844437?u=90fe1762420de6ad493a1c1582f1f70c0d87d8e2&v=4","totalScore":32.491045395879425,"prScore":32.491045395879425,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"0xbbjoker: Merged 1 PR (#5006) focused on bugfix work, resolving empty logs display with significant changes of +84/-43 lines. Maintained a consistent activity pattern, being active every day."},{"username":"davidjsonn","avatarUrl":"https://avatars.githubusercontent.com/u/155117116?u=c0d37dc63f2fa62f48b5c54342917b17460af966&v=4","totalScore":21.104718956217052,"prScore":21.104718956217052,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"davidjsonn: Merged 1 PR (#5008) focused on fixing typos in the documentation, contributing +2/-2 lines. Maintained a consistent activity pattern, actively contributing to bugfix work in documentation."},{"username":"harperaa","avatarUrl":"https://avatars.githubusercontent.com/u/1330944?v=4","totalScore":8.64,"prScore":0,"issueScore":8.3,"reviewScore":0,"commentScore":0.33999999999999997,"summary":"harperaa: Created 2 new issues (#5005 \"LOG_LEVEL from .env Not Working in 1.0.6\" and #5004 \"Knowledge management (RAG) not working (implemented) in 1.0.6\"), and commented on 2 issues, showing sporadic activity today."}],"focusAreas":[{"area":"core","count":25},{"area":".cursor/rules","count":16},{"area":"client","count":4},{"area":"plugin-bootstrap","count":3},{"area":"cli","count":2},{"area":".github/workflows","count":1},{"area":"docs","count":1}],"topIssues":[{"id":"I_kwDOMT5cIs66bQZc","title":"LOG_LEVEL from .env Not Working in 1.0.6","author":"harperaa","number":5005,"repository":"elizaos/eliza","body":"$11","createdAt":"2025-06-08T00:14:19Z","closedAt":"2025-06-09T18:48:17Z","state":"CLOSED","commentCount":1},{"id":"I_kwDOMT5cIs66bOWK","title":"Knowledge management (RAG) not working (implemented) in 1.0.6","author":"harperaa","number":5004,"repository":"elizaos/eliza","body":"$12","createdAt":"2025-06-08T00:06:14Z","closedAt":"2025-06-17T18:10:11Z","state":"CLOSED","commentCount":0}],"topPullRequests":[{"id":"PR_kwDONNAI986ZjTbd","title":"feat: add docusaurus","author":"madjin","number":126,"body":"It's a start\r\n![image](https://github.com/user-attachments/assets/bc99eadb-ce00-4f37-8c2d-d651f6b04dfb)\r\n","repository":"elizaos/elizaos.github.io","createdAt":"2025-06-08T01:09:05Z","mergedAt":null,"additions":26698,"deletions":2},{"id":"PR_kwDOMT5cIs6ZiFGc","title":"feat: Split types.ts into granular files","author":"lalalune","number":4999,"body":"This PR splits the gigantic types.ts into logical and granular sections\r\n\r\nNice for agentic search etc","repository":"elizaos/eliza","createdAt":"2025-06-07T19:31:43Z","mergedAt":"2025-06-08T10:14:45Z","additions":5075,"deletions":12729},{"id":"PR_kwDOMT5cIs6ZmWSH","title":"feat: add lockfile cleanup for GitHub fallback installations","author":"wtfsayo","number":5009,"body":"$13","repository":"elizaos/eliza","createdAt":"2025-06-08T20:45:32Z","mergedAt":"2025-06-09T17:00:07Z","additions":92,"deletions":15},{"id":"PR_kwDOMT5cIs6ZjKez","title":"fix(logs): resolve empty logs display with existing data","author":"0xbbjoker","number":5006,"body":"Fixes logs viewer incorrectly showing empty state when data is present.","repository":"elizaos/eliza","createdAt":"2025-06-08T00:37:52Z","mergedAt":"2025-06-08T07:26:28Z","additions":84,"deletions":43},{"id":"PR_kwDOMT5cIs6ZivM1","title":"[DO NOT MERGE] test multi-action reply","author":"wtfsayo","number":5002,"body":"","repository":"elizaos/eliza","createdAt":"2025-06-07T22:28:14Z","mergedAt":null,"additions":49,"deletions":33},{"id":"PR_kwDOMT5cIs6ZjBc0","title":"feat: exclude text embedding from view","author":"0xbbjoker","number":5003,"body":"Filters out text embedding content from debug logs to reduce noise and improve log readability.","repository":"elizaos/eliza","createdAt":"2025-06-07T23:58:41Z","mergedAt":"2025-06-08T07:25:38Z","additions":48,"deletions":11},{"id":"PR_kwDOMT5cIs6ZkMUi","title":"fix: attempt to fix matrix run on windows","author":"wtfsayo","number":5007,"body":"","repository":"elizaos/eliza","createdAt":"2025-06-08T07:31:58Z","mergedAt":"2025-06-08T07:32:04Z","additions":3,"deletions":0},{"id":"PR_kwDOMT5cIs6ZkU6n","title":"fix typos gitcoin-passport.md","author":"davidjsonn","number":5008,"body":"packages/docs/packages/plugins/gitcoin-passport.md\r\n`treshold` - `threshold`\r\n`retrive` - `retrieve`","repository":"elizaos/eliza","createdAt":"2025-06-08T08:17:08Z","mergedAt":"2025-06-08T10:14:33Z","additions":2,"deletions":2}],"detailedContributorSummaries":{"0xbbjoker":"0xbbjoker: Merged 1 PR (#5006) focused on bugfix work, resolving empty logs display with significant changes of +84/-43 lines. Maintained a consistent activity pattern, being active every day.","davidjsonn":"davidjsonn: Merged 1 PR (#5008) focused on fixing typos in the documentation, contributing +2/-2 lines. Maintained a consistent activity pattern, actively contributing to bugfix work in documentation.","harperaa":"harperaa: Created 2 new issues (#5005 \"LOG_LEVEL from .env Not Working in 1.0.6\" and #5004 \"Knowledge management (RAG) not working (implemented) in 1.0.6\"), and commented on 2 issues, showing sporadic activity today.","wtfsayo":"wtfsayo: Merged 1 PR (#5007) with a fix for matrix runs on Windows (+3/-0 lines) and opened another PR (#5009) to add lockfile cleanup for GitHub fallback installations. Made significant code changes across 34 files (+1036/-511 lines) with a focus on other work (45%) and bugfixes (36%), demonstrating consistent activity with 11 commits today."}}}],"$L14"]}]
+a:["$","div",null,{"className":"prose prose-sm mx-auto mt-8 dark:prose-invert sm:prose lg:prose-lg xl:prose-xl","children":[["$","p","p-0",{"children":"Today's development focused on enhancing the ElizaOS core framework, with significant efforts in improving code modularity and logging functionality. Key achievements include restructuring type definitions for better maintainability and refining log outputs, alongside addressing several bugs to improve stability. Emerging challenges include issues with logging configuration and the knowledge management feature."}],"\n",["$","h2","h2-0",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"✅ Completed Work","position":{"start":{"line":3,"column":4,"offset":419},"end":{"line":3,"column":20,"offset":435}}}],"position":{"start":{"line":3,"column":1,"offset":416},"end":{"line":3,"column":20,"offset":435}}},"children":"✅ Completed Work"}],"\n",["$","h3","h3-0",{"children":"Codebase Refinements & Modularity"}],"\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["Split the large ",["$","code","code-0",{"children":"types.ts"}]," file into more manageable, logical sections to enhance maintainability in ",["$","code","code-1",{"children":"elizaos/eliza"}]," (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/4999","children":"elizaos/eliza#4999"}],")."]}],"\n"]}],"\n",["$","h3","h3-1",{"children":"Logging & Documentation Improvements"}],"\n",["$","ul","ul-1",{"children":["\n",["$","li","li-0",{"children":["Excluded text embedding content from debug logs to improve readability in ",["$","code","code-0",{"children":"elizaos/eliza"}]," (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5003","children":"elizaos/eliza#5003"}],")."]}],"\n",["$","li","li-1",{"children":["Resolved an issue where the logs viewer incorrectly displayed an empty state when data was present in ",["$","code","code-0",{"children":"elizaos/eliza"}]," (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5006","children":"elizaos/eliza#5006"}],")."]}],"\n",["$","li","li-2",{"children":["Corrected typos in the ",["$","code","code-0",{"children":"gitcoin-passport.md"}]," documentation in ",["$","code","code-1",{"children":"elizaos/eliza"}]," (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5008","children":"elizaos/eliza#5008"}],")."]}],"\n"]}],"\n",["$","h3","h3-2",{"children":"Stability & Bug Fixes"}],"\n",["$","ul","ul-2",{"children":["\n",["$","li","li-0",{"children":["Attempted to fix matrix run issues on Windows in ",["$","code","code-0",{"children":"elizaos/eliza"}]," (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5007","children":"elizaos/eliza#5007"}],")."]}],"\n"]}],"\n",["$","h2","h2-1",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"🐞 Issue Triage","position":{"start":{"line":15,"column":4,"offset":1365},"end":{"line":15,"column":19,"offset":1380}}}],"position":{"start":{"line":15,"column":1,"offset":1362},"end":{"line":15,"column":19,"offset":1380}}},"children":"🐞 Issue Triage"}],"\n",["$","h3","h3-3",{"children":"New Issues"}],"\n",["$","ul","ul-3",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"elizaos/eliza"}],": Reported that ",["$","code","code-0",{"children":"LOG_LEVEL"}]," set in ",["$","code","code-1",{"children":".env"}]," files is ignored, functioning only when set via command line (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/5005","children":"elizaos/eliza#5005"}],")."]}],"\n",["$","li","li-1",{"children":[["$","strong","strong-0",{"children":"elizaos/eliza"}],": Identified that the knowledge management (RAG) feature is not functioning as expected in version 1.0.6, with relevant code commented out (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/5004","children":"elizaos/eliza#5004"}],")."]}],"\n"]}]]}]
+b:["$","script","script-0",{"src":"/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","async":true}]
+c:["$","script","script-1",{"src":"/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","async":true}]
+d:["$","script","script-2",{"src":"/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js","async":true}]
+e:["$","$L15",null,{"children":["$","$16",null,{"name":"Next.MetadataOutlet","children":"$@17"}]}]
+14:["$","div",null,{"className":"rounded-lg border bg-card text-card-foreground shadow-sm","children":[["$","div",null,{"className":"flex flex-col space-y-1.5 p-6 py-4","children":["$","div",null,{"className":"tracking-tight text-sm font-medium","children":["$undefined","Code Changes"]}]}],["$","div",null,{"className":"p-6 pt-0","children":["$","div",null,{"className":"grid grid-cols-2 gap-4 md:grid-cols-4","children":[["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-git-commit-vertical h-5 w-5","aria-hidden":"true","children":[["$","path","1holv5",{"d":"M12 3v6"}],["$","circle","1v7zrd",{"cx":"12","cy":"12","r":"3"}],["$","path","a9ows0",{"d":"M12 15v6"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":24}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Commits"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-file-code h-5 w-5","aria-hidden":"true","children":[["$","path","1oefj6",{"d":"M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"}],["$","path","wfsgrz",{"d":"M14 2v5a1 1 0 0 0 1 1h5"}],["$","path","1tg20x",{"d":"M10 12.5 8 15l2 2.5"}],["$","path","yinavb",{"d":"m14 12.5 2 2.5-2 2.5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":52}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Files Changed"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-green-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-up h-5 w-5 text-green-500","aria-hidden":"true","children":[["$","path","hav0vg",{"d":"m5 12 7-7 7 7"}],["$","path","x0mq9r",{"d":"M12 19V5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-green-500","children":"+5,212"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Added"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-red-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-down h-5 w-5 text-red-500","aria-hidden":"true","children":[["$","path","s699le",{"d":"M12 5v14"}],["$","path","1idqje",{"d":"m19 12-7 7-7-7"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-red-500","children":"-12,785"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Deleted"}]]}]]}]]}]}]]}]
+17:null

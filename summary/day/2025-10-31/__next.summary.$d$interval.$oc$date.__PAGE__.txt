@@ -1,0 +1,424 @@
+1:"$Sreact.fragment"
+2:I[4817319,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"IntervalSelector"]
+3:I[6998365,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"LlmCopyButton"]
+12:I[3642796,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],""]
+13:I[3238488,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"StatCardsDisplay"]
+1b:I[4261541,["/eliza-leaderboard/_next/static/chunks/b33bcbdcb3f88354.js","/eliza-leaderboard/_next/static/chunks/8ba59154b6704904.js"],"OutletBoundary"]
+1c:"$Sreact.suspense"
+4:T840,<!-- CURSOR_SUMMARY -->
+> [!NOTE]
+> Adds exchange-driven swap execution, robust Token‑2022 metadata parsing, and a refactored transaction/portfolio flow; also registers Solana nets with INTEL_CHAIN.
+> 
+> - **Solana Service**:
+>   - **Exchange API**: Add registry and `doSwapOnExchange`, plus `getSwapAmounts`; basic `selectExchange`.
+>   - **Transaction refactor**: Introduce `buildAndSendTransaction` and unify send via `sendTx`; add `transferSplToken` and `executeCustomTransaction`; update `transferSol` to new flow.
+>   - **Token‑2022 support**: Implement TLV parsing (`parseTLVExtensions`, `parseToken2022MetadataExtension`, `parseToken2022SymbolFromMintOrPtr`); enhance `getTokensSymbols` and `parseTokenAccounts` (supply/decimals caching, isMutable, program detection).
+>   - **Wallet/portfolio**: Add subscription-driven refresh in `ensurePublicKey`; add `getCachedData`; streamline `updateWalletData` fallback; improve `getBalancesByAddrs` handling and add `getPubkeyFromSecret`.
+> - **Wallet Service**:
+>   - Lazy-init linkage to main service; delegate `transferSol`; make balance lookups tolerate nulls; `getTokenAccountsByKeypairs` returns nullable arrays.
+> - **Plugin (index.ts)**:
+>   - Register multiple Solana networks (`mainnet`, `devnet`, `testnet`, `localnet`) with `INTEL_CHAIN` including RPC URLs.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit c438b704e3576391d2c7f5f61638c709ccc663da. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+* **New Features**
+  * Added support for multiple Solana networks (mainnet, devnet, testnet, localnet)
+  * Implemented token swap and exchange functionality
+  * Enhanced token metadata handling and support
+  * Added wallet data caching and refresh capabilities
+  * Enabled direct SOL and SPL token transfers with improved transaction reliability
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->5:T931,<!-- CURSOR_SUMMARY -->
+> [!NOTE]
+> Integrates with Spartan-Intel chain registry and overhauls EVMService to add wallet/key ops, validation/signing, balances/portfolio, transfers, DEX registry, and multicall batching; plus provider optimization and logging tweaks.
+> 
+> - **EVM Plugin (`src/index.ts`)**:
+>   - Integrates with `spartan-intel` by awaiting `INTEL_CHAIN` service and registering EVM chains (`eth`, `base`).
+> - **Service (`src/service.ts`) – Major expansion**:
+>   - Adds wallet/key management (`createWallet`, `getPubkeysFromSecrets`, private key detection).
+>   - Address ops: detection, validation, and type inference via bytecode checks.
+>   - Message signing/verification using `viem`.
+>   - Balances/Portfolio: batched native balance reads; CAIP asset parsing; portfolio aggregation.
+>   - Transfers: native token transfers (ERC20 TODO).
+>   - DEX integration: exchange registry (`registerExchange`, `listExchanges`, `doSwapOnExchange`).
+>   - Multicall3 batch executor and ERC20 balance helper; public client with HTTP batching.
+>   - Chain registry utilities via `viem/chains`; improved runtime-based logging; refactored static `start/stop`.
+> - **Providers**:
+>   - `get-balance`: short-circuits when no message text to avoid model calls.
+>   - `wallet`: improved log messages and fallback handling; unchanged external API.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit b329b3eb1f1e2ac8f0ab8c8d78850352747adadd. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+## Release Notes
+
+* **New Features**
+  * Added wallet creation and key management capabilities
+  * Implemented address validation and type detection
+  * Added message signing and verification functionality
+  * Enable multi-wallet balance and portfolio retrieval
+  * Support for native token transfers
+  * Pluggable DEX/exchange provider integration
+  * Enhanced multi-chain support
+
+* **Bug Fixes**
+  * Improved performance by skipping unnecessary processing for empty messages
+
+* **Chores**
+  * Updated logging system integration
+  * Refined plugin description
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->6:T903,<!-- CURSOR_SUMMARY -->
+> [!NOTE]
+> Adds dynamic slash command registration and modal handling, enables sending attachments in DMs/channels, and improves message/interaction processing with new exports.
+> 
+> - **Discord Service**:
+>   - Introduces dynamic slash command system: `SLASH_COMMAND`/`MODAL_SUBMIT` events, `DiscordSlashCommand` type, `slashCommands` store, and runtime event `DISCORD_REGISTER_COMMANDS` to register/update app and guild commands.
+>   - Enhances interaction handling: ensures connections for interactions and emits unified events (no automatic defer to allow ephemeral replies).
+>   - Makes `clientReadyPromise` public/nullable; refines client init and logging.
+> - **Messaging**:
+>   - Enables sending attachments in DMs and channels by converting `Media` to `AttachmentBuilder` and passing to `sendMessageInChunks`.
+>   - Improves reply reference resolution via `fetchReference`; refines permission checks and structured logging.
+> - **Utils**:
+>   - Widens `sendMessageInChunks` `files` type to accept `AttachmentBuilder`; attaches files on last chunk; safer component handling.
+> - **Voice**:
+>   - Updates callback signature in voice response handler.
+> - **Exports**:
+>   - Re-exports `DISCORD_SERVICE_NAME`, `DiscordService`, and `IDiscordService` from `index`.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit 7fd4add1cc73f5c5b8780dd073aa16fe663d4029. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+* **New Features**
+  * Added slash command registration and handling capabilities
+  * Introduced modal submission support for enhanced interactions
+  * Added client readiness detection for better initialization tracking
+  * Implemented channel permission management and access controls
+
+* **Improvements**
+  * Enhanced attachment handling in messages
+  * Improved message reference resolution and context tracking
+  * Better error handling and diagnostic logging during startup and runtime
+
+* **Refactor**
+  * Updated event types and payload structures for interactions
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->7:T67d,<!-- CURSOR_SUMMARY -->
+> [!NOTE]
+> Introduces a Solana CA lookup provider to fetch on-chain token details from message addresses and registers it only when spartan-intel isn't loaded, with comprehensive tests.
+> 
+> - **Providers**:
+>   - Add `src/providers/ca-lookup.ts` (`SOLANA_CA_SYMBOL_LOOKUP`) to extract addresses from messages and fetch on-chain token data (`symbol`, `type`, `decimals`, `supply`), filtering non-token addresses and handling errors.
+> - **Plugin Init (`src/index.ts`)**:
+>   - Conditionally register `caLookupProvider` only if `spartan-intel` plugin is absent; minor logging/formatting tweaks.
+> - **Tests**:
+>   - Add `__tests__/providers/ca-lookup.test.ts` covering no addresses, single/multiple addresses, missing service, non-token filtering, error handling, and provider metadata.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit 8be9e87abc5314c1ab38f11fd8e834144d469026. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+## Summary by CodeRabbit
+
+* **New Features**
+  * Added a Solana CA symbol lookup that retrieves token symbol, type, decimals, and supply for detected on-chain addresses.
+  * Provider registration now conditionally skips adding the lookup when an overlapping plugin is present to avoid duplicate registration.
+
+* **Tests**
+  * Added comprehensive tests validating address extraction, token filtering, error paths, and provider metadata.
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->8:T7c2,<!-- CURSOR_SUMMARY -->
+> [!NOTE]
+> Moves to Bun-centric strict TypeScript with pre-build typechecking, adds config guard tests, improves SOL swap handling, and switches tests to bun.
+> 
+> - **TypeScript/Build**
+>   - Add `tsconfig.typecheck.json` with `skipLibCheck: false` and run pre-build typecheck in `build.ts`.
+>   - Tighten `tsconfig.json` (strict flags, Bun-only `types`, include `.d.ts`), and set `tsconfig.build.json` to use Bun types with `skipLibCheck: true` for dts emit.
+>   - Add `src/types.d.ts` to reconcile Bun and Node `ProcessEnv` typings (ensure `TZ?: string`).
+> - **Tests**
+>   - Migrate tests to Bun (`vitest` → `bun test`); update `__tests__/actions/swap.test.ts` import.
+>   - Add `__tests__/tsconfig.test.ts` to enforce type safety config (Bun types present, Node types absent, `skipLibCheck` rules, presence of `types.d.ts`).
+> - **Solana Swap Action** (`src/actions/swap.ts`)
+>   - Validate `SOL_ADDRESS` presence when swapping SOL; handle decimals safely; improve error messages and wallet token resolution defaults.
+> - **Routes** (`src/routes/index.ts`)
+>   - Build `ApiError` conditionally to omit `details` when undefined.
+> - **Package** (`package.json`)
+>   - Switch test script to `bun test`; remove `vitest` and `@types/node` dev deps.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit 72a3fb81d395723c2444fba7fd2cc0049c73dd53. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+* **Tests**
+  * Added TypeScript configuration validation test suite.
+
+* **Chores**
+  * Transitioned test framework to Bun runtime.
+  * Enhanced TypeScript compilation strictness for improved type safety.
+  * Integrated pre-build type checking to catch errors early.
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->9:T6c6,<!-- CURSOR_SUMMARY -->
+> [!NOTE]
+> Adds configurable CoT budgets and topP support, updating text handlers, Anthropic client, and build settings.
+> 
+> - **Text generation (models)**:
+>   - Add `topP` support with exclusive selection vs `temperature` (throws if both provided) and pass through to `generateText`.
+>   - Add CoT budget injection via `providerOptions.anthropic.thinking` using `getCoTBudget` (small/large with fallback).
+>   - Improve `maxTokens` resolution and include agent metadata in `experimental_telemetry`.
+> - **Providers**:
+>   - Introduce `createAnthropicClientWithTopPSupport` that strips `temperature` when `top_p` is present and `temperature` is 0.
+> - **Config**:
+>   - Expose new env settings: `ANTHROPIC_COT_BUDGET`, `ANTHROPIC_COT_BUDGET_SMALL`, `ANTHROPIC_COT_BUDGET_LARGE` and implement `getCoTBudget`.
+> - **Build**:
+>   - Set `tsconfig.build.json` `skipLibCheck` to `false`.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit cffb51219c12e4ad62b43679c466bfe4d923088a. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+## Summary by CodeRabbit
+
+* **New Features**
+  * Configurable Chain-of-Thought (CoT) budget settings (global and per-model size).
+  * Improved handling of temperature vs topP to avoid parameter conflicts during text generation.
+  * Provider now supports topP-based generation and includes enhanced telemetry metadata.
+
+* **Chores**
+  * Tightened TypeScript build checks to catch more type issues during builds.
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->a:T70d,Overall Project Summary:
+
+Today's development saw significant new feature introductions across several plugin repositories, including Discord slash commands, Anthropic Chain-of-Thought support, and major Solana plugin refactoring for multichain capabilities. Documentation received a minor update, highlighting new launch resources. The primary focus was on initiating new work through several key pull requests, setting the stage for upcoming enhancements.
+
+## 🏗️ Work in Progress
+### New Pull Requests
+*   **elizaos/docs**
+    *   Added a "new" tag to the launch resources section ([#79](https://github.com/elizaos/docs/pull/79))
+*   **elizaos-plugins/plugin-discord**
+    *   Introduced Discord slash commands, enhanced modal interaction capabilities, and included fixes related to attachments ([#23](https://github.com/elizaos-plugins/plugin-discord/pull/23))
+*   **elizaos-plugins/plugin-evm**
+    *   Opened "Spartan-Intel work" pull request ([#24](https://github.com/elizaos-plugins/plugin-evm/pull/24))
+*   **elizaos-plugins/plugin-anthropic**
+    *   Introduced support for Chain-of-Thought (COT) reasoning and added the `topP` option ([#11](https://github.com/elizaos-plugins/plugin-anthropic/pull/11))
+*   **elizaos-plugins/plugin-solana**
+    *   Addressed multichain and exchange API work, refactored the transaction system, and improved Token2022 functionalities ([#24](https://github.com/elizaos-plugins/plugin-solana/pull/24))
+    *   Implemented a conditional CA lookup provider for cases where `spartan-intel` is not used ([#23](https://github.com/elizaos-plugins/plugin-solana/pull/23))
+    *   Enabled typechecks in the build process, enforced stricter TypeScript rules, and migrated from Vitest to Bun for testing ([#22](https://github.com/elizaos-plugins/plugin-solana/pull/22))0:{"buildId":"US8XLB_zHXYj_PVAECGcd","rsc":["$","$1","c",{"children":[["$","div",null,{"className":"container mx-auto px-6 py-8 md:px-8","children":["$","div",null,{"className":"mx-auto max-w-4xl","children":[["$","div",null,{"className":"mb-4 flex flex-col justify-between sm:flex-row","children":[["$","$L2",null,{"currentInterval":"day","currentDate":"2025-10-31"}],["$","$L3",null,{"metrics":{"date":"2025-10-31","interval":{"intervalStart":"$D2025-10-31T00:00:00.000Z","intervalEnd":"$D2025-11-01T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":7,"merged":1,"total":7},"issues":{"new":0,"closed":0,"total":0},"activeContributors":3,"codeChanges":{"additions":1,"deletions":0,"files":1,"commitCount":114},"topContributors":[{"username":"odilitime","avatarUrl":"https://avatars.githubusercontent.com/u/16395496?u=c9bac48e632aae594a0d85aaf9e9c9c69b674d8b&v=4","totalScore":213.8316205291223,"prScore":213.8316205291223,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"odilitime: Today, odilitime focused on substantial development efforts, evidenced by 6 open pull requests across various plugins, including significant work on \"COT support & add topP option support\" in plugin-anthropic#11, \"Discord slash commands interface, modal interaction enhanceme...\" in plugin-discord#23, and extensive \"multichain/exchange api work, tx system refactor and token202...\" in plugin-solana#24, indicating a primary focus on other work with 89% of their 45 commits modifying 82 files (+5245/-1671 lines) predominantly in code (74%) and config (16%) file types."},{"username":"yungalgo","avatarUrl":"https://avatars.githubusercontent.com/u/113615973?u=92e0f29f7e2fbb8ce46ed13c51f692ca803de02d&v=4","totalScore":20.391573590279975,"prScore":20.391573590279975,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"yungalgo: Focused on documentation updates, merging a small but impactful PR in elizaos/docs#79 to add a new tag to the launch resources section. This work primarily involved documentation changes, reflecting a focus on improving clarity and organization within the project's resources."}],"focusAreas":[{"area":"launch-resources","count":1}],"topIssues":[],"topPullRequests":[{"id":"PR_kwDOOtpAWM6aIglT","title":"Added Multiwallet Swap, Sweep and Transfer","author":"Freytes","number":11,"body":"Added the following functionality:\r\n\r\n1. Multiwallet Swap\r\n2. Multiwallet Sweep\r\n3. Multiwallet Transfer\r\n\r\nAllows user to specify token -> source wallet -> amount -> destination from a newly generated wallet.","repository":"elizaos/spartan","createdAt":"2025-06-12T03:23:46Z","mergedAt":null,"additions":8309,"deletions":777},{"id":"PR_kwDONkwLhs6wvd49","title":"multichain/exchange api work, tx system refactor and token2022 improvements","author":"odilitime","number":24,"body":"$4","repository":"elizaos-plugins/plugin-solana","createdAt":"2025-10-31T02:43:16Z","mergedAt":"2026-02-08T18:16:11Z","additions":1023,"deletions":592},{"id":"PR_kwDONkwHXM6wwCwQ","title":"Spartan-Intel work","author":"odilitime","number":24,"body":"$5","repository":"elizaos-plugins/plugin-evm","createdAt":"2025-10-31T04:25:52Z","mergedAt":"2026-02-08T18:15:26Z","additions":1004,"deletions":36},{"id":"PR_kwDOOtXZkc6wwBNq","title":"Discord slash commands interface, modal interaction enhancements, attachment fixes","author":"odilitime","number":23,"body":"$6","repository":"elizaos-plugins/plugin-discord","createdAt":"2025-10-31T04:21:47Z","mergedAt":"2025-11-21T06:41:42Z","additions":683,"deletions":345},{"id":"PR_kwDONkwLhs6wvYgu","title":"caLookupProvider (if not spartan-intel)","author":"odilitime","number":23,"body":"$7","repository":"elizaos-plugins/plugin-solana","createdAt":"2025-10-31T02:24:58Z","mergedAt":"2026-02-08T18:16:00Z","additions":323,"deletions":2},{"id":"PR_kwDONkwLhs6wu7Um","title":"Enable typechecks in build, stricter TypeScript (remove node types) + vitest => bun test","author":"odilitime","number":22,"body":"$8","repository":"elizaos-plugins/plugin-solana","createdAt":"2025-10-31T01:05:02Z","mergedAt":"2025-11-12T02:46:35Z","additions":235,"deletions":33},{"id":"PR_kwDOOjIiUc6wvIds","title":"COT support & add topP option support","author":"odilitime","number":11,"body":"$9","repository":"elizaos-plugins/plugin-anthropic","createdAt":"2025-10-31T01:38:13Z","mergedAt":"2025-12-18T00:42:41Z","additions":194,"deletions":24},{"id":"PR_kwDOPKJxlM6wvO71","title":"add a little new tag to new section (launch resources)","author":"yungalgo","number":79,"body":"minor lil thing","repository":"elizaos/docs","createdAt":"2025-10-31T02:02:59Z","mergedAt":"2025-10-31T02:03:08Z","additions":1,"deletions":0}],"detailedContributorSummaries":{"odilitime":"odilitime: Today, odilitime focused on substantial development efforts, evidenced by 6 open pull requests across various plugins, including significant work on \"COT support & add topP option support\" in plugin-anthropic#11, \"Discord slash commands interface, modal interaction enhanceme...\" in plugin-discord#23, and extensive \"multichain/exchange api work, tx system refactor and token202...\" in plugin-solana#24, indicating a primary focus on other work with 89% of their 45 commits modifying 82 files (+5245/-1671 lines) predominantly in code (74%) and config (16%) file types.","yungalgo":"yungalgo: Focused on documentation updates, merging a small but impactful PR in elizaos/docs#79 to add a new tag to the launch resources section. This work primarily involved documentation changes, reflecting a focus on improving clarity and organization within the project's resources."}},"summaryContent":"$a","className":"self-end sm:self-start"}]]}],"$Lb","$Lc","$Ld"]}]}],["$Le","$Lf","$L10"],"$L11"]}],"loading":null,"isPartial":false}
+b:["$","div",null,{"className":"mb-6","children":["$","div",null,{"className":"flex items-center justify-between","children":[[["$","$L12",null,{"href":"/summary/day/2025-10-30","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left mr-2 h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"children":"Previous"}],false],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$L12",null,{"href":"/summary/day/2025-10-30","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Previous"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]],["$","div",null,{"className":"flex flex-col items-center","children":[["$","div",null,{"className":"text-sm font-medium text-gray-500","children":["Daily"," Summary"]}],["$","time",null,{"dateTime":"2025-10-31","className":"text-md font-bold","children":"Oct 31, 2025"}]]}],[["$","$L12",null,{"href":"/summary/day/2025-11-01","children":[false,["$","span",null,{"children":"Next"}],["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right ml-2 h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}]],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$L12",null,{"href":"/summary/day/2025-11-01","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Next"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]]]}]}]
+14:T840,<!-- CURSOR_SUMMARY -->
+> [!NOTE]
+> Adds exchange-driven swap execution, robust Token‑2022 metadata parsing, and a refactored transaction/portfolio flow; also registers Solana nets with INTEL_CHAIN.
+> 
+> - **Solana Service**:
+>   - **Exchange API**: Add registry and `doSwapOnExchange`, plus `getSwapAmounts`; basic `selectExchange`.
+>   - **Transaction refactor**: Introduce `buildAndSendTransaction` and unify send via `sendTx`; add `transferSplToken` and `executeCustomTransaction`; update `transferSol` to new flow.
+>   - **Token‑2022 support**: Implement TLV parsing (`parseTLVExtensions`, `parseToken2022MetadataExtension`, `parseToken2022SymbolFromMintOrPtr`); enhance `getTokensSymbols` and `parseTokenAccounts` (supply/decimals caching, isMutable, program detection).
+>   - **Wallet/portfolio**: Add subscription-driven refresh in `ensurePublicKey`; add `getCachedData`; streamline `updateWalletData` fallback; improve `getBalancesByAddrs` handling and add `getPubkeyFromSecret`.
+> - **Wallet Service**:
+>   - Lazy-init linkage to main service; delegate `transferSol`; make balance lookups tolerate nulls; `getTokenAccountsByKeypairs` returns nullable arrays.
+> - **Plugin (index.ts)**:
+>   - Register multiple Solana networks (`mainnet`, `devnet`, `testnet`, `localnet`) with `INTEL_CHAIN` including RPC URLs.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit c438b704e3576391d2c7f5f61638c709ccc663da. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+* **New Features**
+  * Added support for multiple Solana networks (mainnet, devnet, testnet, localnet)
+  * Implemented token swap and exchange functionality
+  * Enhanced token metadata handling and support
+  * Added wallet data caching and refresh capabilities
+  * Enabled direct SOL and SPL token transfers with improved transaction reliability
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->15:T931,<!-- CURSOR_SUMMARY -->
+> [!NOTE]
+> Integrates with Spartan-Intel chain registry and overhauls EVMService to add wallet/key ops, validation/signing, balances/portfolio, transfers, DEX registry, and multicall batching; plus provider optimization and logging tweaks.
+> 
+> - **EVM Plugin (`src/index.ts`)**:
+>   - Integrates with `spartan-intel` by awaiting `INTEL_CHAIN` service and registering EVM chains (`eth`, `base`).
+> - **Service (`src/service.ts`) – Major expansion**:
+>   - Adds wallet/key management (`createWallet`, `getPubkeysFromSecrets`, private key detection).
+>   - Address ops: detection, validation, and type inference via bytecode checks.
+>   - Message signing/verification using `viem`.
+>   - Balances/Portfolio: batched native balance reads; CAIP asset parsing; portfolio aggregation.
+>   - Transfers: native token transfers (ERC20 TODO).
+>   - DEX integration: exchange registry (`registerExchange`, `listExchanges`, `doSwapOnExchange`).
+>   - Multicall3 batch executor and ERC20 balance helper; public client with HTTP batching.
+>   - Chain registry utilities via `viem/chains`; improved runtime-based logging; refactored static `start/stop`.
+> - **Providers**:
+>   - `get-balance`: short-circuits when no message text to avoid model calls.
+>   - `wallet`: improved log messages and fallback handling; unchanged external API.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit b329b3eb1f1e2ac8f0ab8c8d78850352747adadd. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+## Release Notes
+
+* **New Features**
+  * Added wallet creation and key management capabilities
+  * Implemented address validation and type detection
+  * Added message signing and verification functionality
+  * Enable multi-wallet balance and portfolio retrieval
+  * Support for native token transfers
+  * Pluggable DEX/exchange provider integration
+  * Enhanced multi-chain support
+
+* **Bug Fixes**
+  * Improved performance by skipping unnecessary processing for empty messages
+
+* **Chores**
+  * Updated logging system integration
+  * Refined plugin description
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->16:T903,<!-- CURSOR_SUMMARY -->
+> [!NOTE]
+> Adds dynamic slash command registration and modal handling, enables sending attachments in DMs/channels, and improves message/interaction processing with new exports.
+> 
+> - **Discord Service**:
+>   - Introduces dynamic slash command system: `SLASH_COMMAND`/`MODAL_SUBMIT` events, `DiscordSlashCommand` type, `slashCommands` store, and runtime event `DISCORD_REGISTER_COMMANDS` to register/update app and guild commands.
+>   - Enhances interaction handling: ensures connections for interactions and emits unified events (no automatic defer to allow ephemeral replies).
+>   - Makes `clientReadyPromise` public/nullable; refines client init and logging.
+> - **Messaging**:
+>   - Enables sending attachments in DMs and channels by converting `Media` to `AttachmentBuilder` and passing to `sendMessageInChunks`.
+>   - Improves reply reference resolution via `fetchReference`; refines permission checks and structured logging.
+> - **Utils**:
+>   - Widens `sendMessageInChunks` `files` type to accept `AttachmentBuilder`; attaches files on last chunk; safer component handling.
+> - **Voice**:
+>   - Updates callback signature in voice response handler.
+> - **Exports**:
+>   - Re-exports `DISCORD_SERVICE_NAME`, `DiscordService`, and `IDiscordService` from `index`.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit 7fd4add1cc73f5c5b8780dd073aa16fe663d4029. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+* **New Features**
+  * Added slash command registration and handling capabilities
+  * Introduced modal submission support for enhanced interactions
+  * Added client readiness detection for better initialization tracking
+  * Implemented channel permission management and access controls
+
+* **Improvements**
+  * Enhanced attachment handling in messages
+  * Improved message reference resolution and context tracking
+  * Better error handling and diagnostic logging during startup and runtime
+
+* **Refactor**
+  * Updated event types and payload structures for interactions
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->17:T67d,<!-- CURSOR_SUMMARY -->
+> [!NOTE]
+> Introduces a Solana CA lookup provider to fetch on-chain token details from message addresses and registers it only when spartan-intel isn't loaded, with comprehensive tests.
+> 
+> - **Providers**:
+>   - Add `src/providers/ca-lookup.ts` (`SOLANA_CA_SYMBOL_LOOKUP`) to extract addresses from messages and fetch on-chain token data (`symbol`, `type`, `decimals`, `supply`), filtering non-token addresses and handling errors.
+> - **Plugin Init (`src/index.ts`)**:
+>   - Conditionally register `caLookupProvider` only if `spartan-intel` plugin is absent; minor logging/formatting tweaks.
+> - **Tests**:
+>   - Add `__tests__/providers/ca-lookup.test.ts` covering no addresses, single/multiple addresses, missing service, non-token filtering, error handling, and provider metadata.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit 8be9e87abc5314c1ab38f11fd8e834144d469026. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+## Summary by CodeRabbit
+
+* **New Features**
+  * Added a Solana CA symbol lookup that retrieves token symbol, type, decimals, and supply for detected on-chain addresses.
+  * Provider registration now conditionally skips adding the lookup when an overlapping plugin is present to avoid duplicate registration.
+
+* **Tests**
+  * Added comprehensive tests validating address extraction, token filtering, error paths, and provider metadata.
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->18:T7c2,<!-- CURSOR_SUMMARY -->
+> [!NOTE]
+> Moves to Bun-centric strict TypeScript with pre-build typechecking, adds config guard tests, improves SOL swap handling, and switches tests to bun.
+> 
+> - **TypeScript/Build**
+>   - Add `tsconfig.typecheck.json` with `skipLibCheck: false` and run pre-build typecheck in `build.ts`.
+>   - Tighten `tsconfig.json` (strict flags, Bun-only `types`, include `.d.ts`), and set `tsconfig.build.json` to use Bun types with `skipLibCheck: true` for dts emit.
+>   - Add `src/types.d.ts` to reconcile Bun and Node `ProcessEnv` typings (ensure `TZ?: string`).
+> - **Tests**
+>   - Migrate tests to Bun (`vitest` → `bun test`); update `__tests__/actions/swap.test.ts` import.
+>   - Add `__tests__/tsconfig.test.ts` to enforce type safety config (Bun types present, Node types absent, `skipLibCheck` rules, presence of `types.d.ts`).
+> - **Solana Swap Action** (`src/actions/swap.ts`)
+>   - Validate `SOL_ADDRESS` presence when swapping SOL; handle decimals safely; improve error messages and wallet token resolution defaults.
+> - **Routes** (`src/routes/index.ts`)
+>   - Build `ApiError` conditionally to omit `details` when undefined.
+> - **Package** (`package.json`)
+>   - Switch test script to `bun test`; remove `vitest` and `@types/node` dev deps.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit 72a3fb81d395723c2444fba7fd2cc0049c73dd53. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+* **Tests**
+  * Added TypeScript configuration validation test suite.
+
+* **Chores**
+  * Transitioned test framework to Bun runtime.
+  * Enhanced TypeScript compilation strictness for improved type safety.
+  * Integrated pre-build type checking to catch errors early.
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->19:T6c6,<!-- CURSOR_SUMMARY -->
+> [!NOTE]
+> Adds configurable CoT budgets and topP support, updating text handlers, Anthropic client, and build settings.
+> 
+> - **Text generation (models)**:
+>   - Add `topP` support with exclusive selection vs `temperature` (throws if both provided) and pass through to `generateText`.
+>   - Add CoT budget injection via `providerOptions.anthropic.thinking` using `getCoTBudget` (small/large with fallback).
+>   - Improve `maxTokens` resolution and include agent metadata in `experimental_telemetry`.
+> - **Providers**:
+>   - Introduce `createAnthropicClientWithTopPSupport` that strips `temperature` when `top_p` is present and `temperature` is 0.
+> - **Config**:
+>   - Expose new env settings: `ANTHROPIC_COT_BUDGET`, `ANTHROPIC_COT_BUDGET_SMALL`, `ANTHROPIC_COT_BUDGET_LARGE` and implement `getCoTBudget`.
+> - **Build**:
+>   - Set `tsconfig.build.json` `skipLibCheck` to `false`.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit cffb51219c12e4ad62b43679c466bfe4d923088a. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+## Summary by CodeRabbit
+
+* **New Features**
+  * Configurable Chain-of-Thought (CoT) budget settings (global and per-model size).
+  * Improved handling of temperature vs topP to avoid parameter conflicts during text generation.
+  * Provider now supports topP-based generation and includes enhanced telemetry metadata.
+
+* **Chores**
+  * Tightened TypeScript build checks to catch more type issues during builds.
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->c:["$","div",null,{"className":"mb-8 space-y-6","children":[["$","$L13",null,{"metrics":{"date":"2025-10-31","interval":{"intervalStart":"$D2025-10-31T00:00:00.000Z","intervalEnd":"$D2025-11-01T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":7,"merged":1,"total":7},"issues":{"new":0,"closed":0,"total":0},"activeContributors":3,"codeChanges":{"additions":1,"deletions":0,"files":1,"commitCount":114},"topContributors":[{"username":"odilitime","avatarUrl":"https://avatars.githubusercontent.com/u/16395496?u=c9bac48e632aae594a0d85aaf9e9c9c69b674d8b&v=4","totalScore":213.8316205291223,"prScore":213.8316205291223,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"odilitime: Today, odilitime focused on substantial development efforts, evidenced by 6 open pull requests across various plugins, including significant work on \"COT support & add topP option support\" in plugin-anthropic#11, \"Discord slash commands interface, modal interaction enhanceme...\" in plugin-discord#23, and extensive \"multichain/exchange api work, tx system refactor and token202...\" in plugin-solana#24, indicating a primary focus on other work with 89% of their 45 commits modifying 82 files (+5245/-1671 lines) predominantly in code (74%) and config (16%) file types."},{"username":"yungalgo","avatarUrl":"https://avatars.githubusercontent.com/u/113615973?u=92e0f29f7e2fbb8ce46ed13c51f692ca803de02d&v=4","totalScore":20.391573590279975,"prScore":20.391573590279975,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"yungalgo: Focused on documentation updates, merging a small but impactful PR in elizaos/docs#79 to add a new tag to the launch resources section. This work primarily involved documentation changes, reflecting a focus on improving clarity and organization within the project's resources."}],"focusAreas":[{"area":"launch-resources","count":1}],"topIssues":[],"topPullRequests":[{"id":"PR_kwDOOtpAWM6aIglT","title":"Added Multiwallet Swap, Sweep and Transfer","author":"Freytes","number":11,"body":"Added the following functionality:\r\n\r\n1. Multiwallet Swap\r\n2. Multiwallet Sweep\r\n3. Multiwallet Transfer\r\n\r\nAllows user to specify token -> source wallet -> amount -> destination from a newly generated wallet.","repository":"elizaos/spartan","createdAt":"2025-06-12T03:23:46Z","mergedAt":null,"additions":8309,"deletions":777},{"id":"PR_kwDONkwLhs6wvd49","title":"multichain/exchange api work, tx system refactor and token2022 improvements","author":"odilitime","number":24,"body":"$14","repository":"elizaos-plugins/plugin-solana","createdAt":"2025-10-31T02:43:16Z","mergedAt":"2026-02-08T18:16:11Z","additions":1023,"deletions":592},{"id":"PR_kwDONkwHXM6wwCwQ","title":"Spartan-Intel work","author":"odilitime","number":24,"body":"$15","repository":"elizaos-plugins/plugin-evm","createdAt":"2025-10-31T04:25:52Z","mergedAt":"2026-02-08T18:15:26Z","additions":1004,"deletions":36},{"id":"PR_kwDOOtXZkc6wwBNq","title":"Discord slash commands interface, modal interaction enhancements, attachment fixes","author":"odilitime","number":23,"body":"$16","repository":"elizaos-plugins/plugin-discord","createdAt":"2025-10-31T04:21:47Z","mergedAt":"2025-11-21T06:41:42Z","additions":683,"deletions":345},{"id":"PR_kwDONkwLhs6wvYgu","title":"caLookupProvider (if not spartan-intel)","author":"odilitime","number":23,"body":"$17","repository":"elizaos-plugins/plugin-solana","createdAt":"2025-10-31T02:24:58Z","mergedAt":"2026-02-08T18:16:00Z","additions":323,"deletions":2},{"id":"PR_kwDONkwLhs6wu7Um","title":"Enable typechecks in build, stricter TypeScript (remove node types) + vitest => bun test","author":"odilitime","number":22,"body":"$18","repository":"elizaos-plugins/plugin-solana","createdAt":"2025-10-31T01:05:02Z","mergedAt":"2025-11-12T02:46:35Z","additions":235,"deletions":33},{"id":"PR_kwDOOjIiUc6wvIds","title":"COT support & add topP option support","author":"odilitime","number":11,"body":"$19","repository":"elizaos-plugins/plugin-anthropic","createdAt":"2025-10-31T01:38:13Z","mergedAt":"2025-12-18T00:42:41Z","additions":194,"deletions":24},{"id":"PR_kwDOPKJxlM6wvO71","title":"add a little new tag to new section (launch resources)","author":"yungalgo","number":79,"body":"minor lil thing","repository":"elizaos/docs","createdAt":"2025-10-31T02:02:59Z","mergedAt":"2025-10-31T02:03:08Z","additions":1,"deletions":0}],"detailedContributorSummaries":{"odilitime":"odilitime: Today, odilitime focused on substantial development efforts, evidenced by 6 open pull requests across various plugins, including significant work on \"COT support & add topP option support\" in plugin-anthropic#11, \"Discord slash commands interface, modal interaction enhanceme...\" in plugin-discord#23, and extensive \"multichain/exchange api work, tx system refactor and token202...\" in plugin-solana#24, indicating a primary focus on other work with 89% of their 45 commits modifying 82 files (+5245/-1671 lines) predominantly in code (74%) and config (16%) file types.","yungalgo":"yungalgo: Focused on documentation updates, merging a small but impactful PR in elizaos/docs#79 to add a new tag to the launch resources section. This work primarily involved documentation changes, reflecting a focus on improving clarity and organization within the project's resources."}}}],"$L1a"]}]
+d:["$","div",null,{"className":"prose prose-sm mx-auto mt-8 dark:prose-invert sm:prose lg:prose-lg xl:prose-xl","children":[["$","p","p-0",{"children":"Overall Project Summary:"}],"\n",["$","p","p-1",{"children":"Today's development saw significant new feature introductions across several plugin repositories, including Discord slash commands, Anthropic Chain-of-Thought support, and major Solana plugin refactoring for multichain capabilities. Documentation received a minor update, highlighting new launch resources. The primary focus was on initiating new work through several key pull requests, setting the stage for upcoming enhancements."}],"\n",["$","h2","h2-0",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"🏗️ Work in Progress","position":{"start":{"line":5,"column":4,"offset":462},"end":{"line":5,"column":24,"offset":482}}}],"position":{"start":{"line":5,"column":1,"offset":459},"end":{"line":5,"column":24,"offset":482}}},"children":"🏗️ Work in Progress"}],"\n",["$","h3","h3-0",{"children":"New Pull Requests"}],"\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"elizaos/docs"}],"\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["Added a \"new\" tag to the launch resources section (",["$","a","a-0",{"href":"https://github.com/elizaos/docs/pull/79","children":"#79"}],")"]}],"\n"]}],"\n"]}],"\n",["$","li","li-1",{"children":[["$","strong","strong-0",{"children":"elizaos-plugins/plugin-discord"}],"\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["Introduced Discord slash commands, enhanced modal interaction capabilities, and included fixes related to attachments (",["$","a","a-0",{"href":"https://github.com/elizaos-plugins/plugin-discord/pull/23","children":"#23"}],")"]}],"\n"]}],"\n"]}],"\n",["$","li","li-2",{"children":[["$","strong","strong-0",{"children":"elizaos-plugins/plugin-evm"}],"\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["Opened \"Spartan-Intel work\" pull request (",["$","a","a-0",{"href":"https://github.com/elizaos-plugins/plugin-evm/pull/24","children":"#24"}],")"]}],"\n"]}],"\n"]}],"\n",["$","li","li-3",{"children":[["$","strong","strong-0",{"children":"elizaos-plugins/plugin-anthropic"}],"\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["Introduced support for Chain-of-Thought (COT) reasoning and added the ",["$","code","code-0",{"children":"topP"}]," option (",["$","a","a-0",{"href":"https://github.com/elizaos-plugins/plugin-anthropic/pull/11","children":"#11"}],")"]}],"\n"]}],"\n"]}],"\n",["$","li","li-4",{"children":[["$","strong","strong-0",{"children":"elizaos-plugins/plugin-solana"}],"\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["Addressed multichain and exchange API work, refactored the transaction system, and improved Token2022 functionalities (",["$","a","a-0",{"href":"https://github.com/elizaos-plugins/plugin-solana/pull/24","children":"#24"}],")"]}],"\n",["$","li","li-1",{"children":["Implemented a conditional CA lookup provider for cases where ",["$","code","code-0",{"children":"spartan-intel"}]," is not used (",["$","a","a-0",{"href":"https://github.com/elizaos-plugins/plugin-solana/pull/23","children":"#23"}],")"]}],"\n",["$","li","li-2",{"children":["Enabled typechecks in the build process, enforced stricter TypeScript rules, and migrated from Vitest to Bun for testing (",["$","a","a-0",{"href":"https://github.com/elizaos-plugins/plugin-solana/pull/22","children":"#22"}],")"]}],"\n"]}],"\n"]}],"\n"]}]]}]
+e:["$","script","script-0",{"src":"/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","async":true}]
+f:["$","script","script-1",{"src":"/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","async":true}]
+10:["$","script","script-2",{"src":"/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js","async":true}]
+11:["$","$L1b",null,{"children":["$","$1c",null,{"name":"Next.MetadataOutlet","children":"$@1d"}]}]
+1a:["$","div",null,{"className":"rounded-lg border bg-card text-card-foreground shadow-sm","children":[["$","div",null,{"className":"flex flex-col space-y-1.5 p-6 py-4","children":["$","div",null,{"className":"tracking-tight text-sm font-medium","children":["$undefined","Code Changes"]}]}],["$","div",null,{"className":"p-6 pt-0","children":["$","div",null,{"className":"grid grid-cols-2 gap-4 md:grid-cols-4","children":[["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-git-commit-vertical h-5 w-5","aria-hidden":"true","children":[["$","path","1holv5",{"d":"M12 3v6"}],["$","circle","1v7zrd",{"cx":"12","cy":"12","r":"3"}],["$","path","a9ows0",{"d":"M12 15v6"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":114}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Commits"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-file-code h-5 w-5","aria-hidden":"true","children":[["$","path","1oefj6",{"d":"M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"}],["$","path","wfsgrz",{"d":"M14 2v5a1 1 0 0 0 1 1h5"}],["$","path","1tg20x",{"d":"M10 12.5 8 15l2 2.5"}],["$","path","yinavb",{"d":"m14 12.5 2 2.5-2 2.5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":1}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Files Changed"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-green-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-up h-5 w-5 text-green-500","aria-hidden":"true","children":[["$","path","hav0vg",{"d":"m5 12 7-7 7 7"}],["$","path","x0mq9r",{"d":"M12 19V5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-green-500","children":"+1"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Added"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-red-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-down h-5 w-5 text-red-500","aria-hidden":"true","children":[["$","path","s699le",{"d":"M12 5v14"}],["$","path","1idqje",{"d":"m19 12-7 7-7-7"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-red-500","children":"-0"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Deleted"}]]}]]}]]}]}]]}]
+1d:null

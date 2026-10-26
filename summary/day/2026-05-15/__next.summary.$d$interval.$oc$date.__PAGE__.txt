@@ -1,0 +1,197 @@
+1:"$Sreact.fragment"
+2:I[4817319,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"IntervalSelector"]
+3:I[6998365,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"LlmCopyButton"]
+c:I[3642796,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],""]
+d:I[3238488,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"StatCardsDisplay"]
+10:I[4261541,["/eliza-leaderboard/_next/static/chunks/b33bcbdcb3f88354.js","/eliza-leaderboard/_next/static/chunks/8ba59154b6704904.js"],"OutletBoundary"]
+11:"$Sreact.suspense"
+4:T1908,## Summary
+
+When pairing a Qwen3.6-style body (Sliding Window Attention, hybrid SWA + full pattern) with a community DFlash drafter and `--spec-type dflash`, this fork silently disables speculative decoding because the SWA-based KV cache can't do partial sequence removal:
+
+```
+common_speculative_is_compat: the target context does not support partial sequence removal
+srv    load_model: speculative decoding not supported by this context
+```
+
+The server then runs as plain body-only inference — **no draft tokens are ever generated** — but does not surface this in the API response or in any post-load summary line. Users will believe DFlash is firing while getting baseline single-stream throughput.
+
+Affects every SWA-based body that has a community DFlash drafter today:
+
+- `Qwen/Qwen3.6-27B` + `spiritbuun/Qwen3.6-27B-DFlash-GGUF/dflash-draft-3.6-*.gguf`
+- `Qwen/Qwen3.6-35B-A3B` + `z-lab/Qwen3.6-35B-A3B-DFlash`
+- `google/gemma-4-31B-it` + `z-lab/gemma-4-31B-it-DFlash`
+- Future Eliza-1-27b once Shaw publishes the distilled drafter (the upstream `Qwen/Qwen3.6-27B` body has the same `attention.sliding_window` field, see manifest at `packages/shared/src/local-inference/catalog.ts`)
+
+## Why this matters for the eliza recommender
+
+`packages/shared/src/local-inference/catalog.ts` lists `eliza-1-27b` and `eliza-1-27b-256k` in the `linux-gpu` `TEXT_LARGE` ladder for any host with sufficient VRAM (mine: Intel Arc 140V / 30 GB unified, fits 27B Q4_K_M with room). Once the planned Qwen3.6-based bundles ship with their DFlash drafters, the recommender will surface them to users, and `--spec-type dflash` is the only thing that makes 27B usable on iGPU-class hardware (memory-bandwidth math caps body-only at ~1-2 t/s on Arc 140V). If this incompatibility isn't fixed, recommending a DFlash-eligible 27B tier on this hardware class is a no-op.
+
+## Repro
+
+This fork at `d629a3768` (current `milady/main` HEAD), Vulkan build via the existing `linux-x64-vulkan` target (PR #7626 glslc fix applied). All artifacts public on HF.
+
+```bash
+# Body
+huggingface-cli download unsloth/Qwen3.6-27B-GGUF Qwen3.6-27B-Q4_K_M.gguf
+# Drafter (DFlash)
+huggingface-cli download spiritbuun/Qwen3.6-27B-DFlash-GGUF dflash-draft-3.6-q4_k_m.gguf
+# (Q8_0 drafter has the same issue — this is not a drafter-quant problem)
+
+LD_LIBRARY_PATH=~/.eliza/local-inference/bin/dflash/linux-x64-vulkan \
+~/.eliza/local-inference/bin/dflash/linux-x64-vulkan/llama-server \
+  -m Qwen3.6-27B-Q4_K_M.gguf \
+  -md dflash-draft-3.6-q4_k_m.gguf \
+  --spec-type dflash \
+  -ngl 99 -ngld 99 \
+  -np 1 -c 4096 -cd 256 \
+  -fa on -b 256 -ub 64 \
+  --jinja --reasoning-budget 0 \
+  --host 127.0.0.1 --port 31551
+```
+
+Server log:
+
+```
+print_info: arch                  = dflash-draft
+load_tensors: offloaded 6/6 layers to GPU
+common_speculative_is_compat: the target context does not support partial sequence removal
+srv    load_model: speculative decoding not supported by this context
+srv          init: init: chat template, thinking = 0
+main: server is listening on http://127.0.0.1:31551
+main: starting the main loop...
+```
+
+Note how the drafter loads correctly with the canonical `arch = dflash-draft` and 6/6 layers offloaded, but the spec-decode is then disabled — yet the server bootstraps and serves requests as if everything is fine.
+
+Generation works, just without speculation: a chat completion returns the right text but the `timings` object has no `n_drafted` / `n_accept` (and `n_predicted_per_second` is body-only single-stream throughput).
+
+## Where the check fires
+
+`common_speculative_is_compat` in `common/speculative.cpp` (or the equivalent file in this fork). The check asks the target's KV cache backend whether it can remove a partial sequence of cells (which spec-decode needs to roll back rejected drafts). The Qwen3.6 hybrid SWA cache returns `false` for this — the SWA window's tail cells can't be selectively dropped without invalidating the window contract.
+
+The `spiritbuun/buun-llama-cpp` fork (which the spiritbuun drafter README points at) has SWA support for the DFlash drafter landed in commit `b9d01582b` (SD-073 per their README). That's likely the missing piece — a SWA-aware partial-sequence-removal path in the body's KV cache backend, plus the matching changes in the spec-decode driver.
+
+## Suggested fixes (any subset)
+
+1. **Loud failure at load time:** if `--spec-type dflash` is passed with `-md <drafter>` but the body's context returns `is_compat=false`, abort with a clear error message instead of silently falling through. Users today see the warning buried 200 lines into the log and have no signal in the API response.
+
+2. **Surface in the runtime API:** add a `spec_decode_active: bool` field to the `/health` and `/v1/models/<id>` responses so callers (the eliza runtime, the model picker) can show "speculative decoding disabled — fall back" instead of pretending DFlash is firing.
+
+3. **Port the SWA partial-sequence-removal path** from `spiritbuun/buun-llama-cpp` (commit b9d01582b or whatever lineage). This is the real fix — without it, every Qwen3.6 / gemma-4 DFlash bundle is dead on arrival in this fork.
+
+4. **Catalog gate:** in `packages/shared/src/local-inference/catalog.ts`, mark Qwen3.6 / gemma-4 tiers with `kernelCaps.unsupported: ["spec-decode-on-swa-body"]` until (3) lands. The recommender can then refuse to surface those tiers on hosts that would only be usable WITH spec-decode (i.e., iGPU-class).
+
+## Related
+
+- #7626 — glslc fix (required to build the Vulkan binary that reproduces this)
+- #7628 — `linux-x64-sycl` target (parallel work)
+- #7629 — Qwen3.5/3.6 drafter publication gap (this PR's premise was "use community drafter while waiting"; the SWA gate then blocks the community drafter too)
+- #7631 — M-RoPE position validation in spec-decode (different gate, same class of "spec-decode silently doesn't work on modern Qwen architectures")
+- #7633 — RFC for openvino runtime kernel
+- #7634 — linux-x64-openvino target
+
+## Note
+
+I do not have a CUDA host. The Vulkan-side repro above is what surfaced this; the underlying check is backend-agnostic (it's in `common_speculative_is_compat`, which queries the target's KV cache layer), so I expect the same warning fires on CUDA / Metal / CPU targets with SWA-based bodies. Happy to verify if a maintainer wants confirmation.
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)0:{"buildId":"US8XLB_zHXYj_PVAECGcd","rsc":["$","$1","c",{"children":[["$","div",null,{"className":"container mx-auto px-6 py-8 md:px-8","children":["$","div",null,{"className":"mx-auto max-w-4xl","children":[["$","div",null,{"className":"mb-4 flex flex-col justify-between sm:flex-row","children":[["$","$L2",null,{"currentInterval":"day","currentDate":"2026-05-15"}],["$","$L3",null,{"metrics":{"date":"2026-05-15","interval":{"intervalStart":"$D2026-05-15T00:00:00.000Z","intervalEnd":"$D2026-05-16T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":0,"merged":0,"total":0},"issues":{"new":0,"closed":1,"total":1},"activeContributors":0,"codeChanges":{"additions":0,"deletions":0,"files":0,"commitCount":0},"topContributors":[],"focusAreas":[],"topIssues":[{"id":"I_kwDOMT5cIs8AAAABCEbSeg","title":"speculative decoding: 'target context does not support partial sequence removal' silently disables --spec-type dflash for SWA-based bodies (Qwen3.6, gemma-4, etc.)","author":"NubsCarson","number":7635,"repository":"elizaos/eliza","body":"$4","createdAt":"2026-05-13T01:15:51Z","closedAt":"2026-05-15T00:53:26Z","state":"CLOSED","commentCount":1}],"topPullRequests":[],"detailedContributorSummaries":{}},"summaryContent":"No activity recorded for 2026-05-15.","className":"self-end sm:self-start"}]]}],"$L5","$L6","$L7"]}]}],["$L8","$L9","$La"],"$Lb"]}],"loading":null,"isPartial":false}
+5:["$","div",null,{"className":"mb-6","children":["$","div",null,{"className":"flex items-center justify-between","children":[[["$","$Lc",null,{"href":"/summary/day/2026-05-14","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left mr-2 h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"children":"Previous"}],false],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$Lc",null,{"href":"/summary/day/2026-05-14","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Previous"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]],["$","div",null,{"className":"flex flex-col items-center","children":[["$","div",null,{"className":"text-sm font-medium text-gray-500","children":["Daily"," Summary"]}],["$","time",null,{"dateTime":"2026-05-15","className":"text-md font-bold","children":"May 15, 2026"}]]}],[["$","$Lc",null,{"href":"/summary/day/2026-05-16","children":[false,["$","span",null,{"children":"Next"}],["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right ml-2 h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}]],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$Lc",null,{"href":"/summary/day/2026-05-16","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Next"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]]]}]}]
+e:T1908,## Summary
+
+When pairing a Qwen3.6-style body (Sliding Window Attention, hybrid SWA + full pattern) with a community DFlash drafter and `--spec-type dflash`, this fork silently disables speculative decoding because the SWA-based KV cache can't do partial sequence removal:
+
+```
+common_speculative_is_compat: the target context does not support partial sequence removal
+srv    load_model: speculative decoding not supported by this context
+```
+
+The server then runs as plain body-only inference — **no draft tokens are ever generated** — but does not surface this in the API response or in any post-load summary line. Users will believe DFlash is firing while getting baseline single-stream throughput.
+
+Affects every SWA-based body that has a community DFlash drafter today:
+
+- `Qwen/Qwen3.6-27B` + `spiritbuun/Qwen3.6-27B-DFlash-GGUF/dflash-draft-3.6-*.gguf`
+- `Qwen/Qwen3.6-35B-A3B` + `z-lab/Qwen3.6-35B-A3B-DFlash`
+- `google/gemma-4-31B-it` + `z-lab/gemma-4-31B-it-DFlash`
+- Future Eliza-1-27b once Shaw publishes the distilled drafter (the upstream `Qwen/Qwen3.6-27B` body has the same `attention.sliding_window` field, see manifest at `packages/shared/src/local-inference/catalog.ts`)
+
+## Why this matters for the eliza recommender
+
+`packages/shared/src/local-inference/catalog.ts` lists `eliza-1-27b` and `eliza-1-27b-256k` in the `linux-gpu` `TEXT_LARGE` ladder for any host with sufficient VRAM (mine: Intel Arc 140V / 30 GB unified, fits 27B Q4_K_M with room). Once the planned Qwen3.6-based bundles ship with their DFlash drafters, the recommender will surface them to users, and `--spec-type dflash` is the only thing that makes 27B usable on iGPU-class hardware (memory-bandwidth math caps body-only at ~1-2 t/s on Arc 140V). If this incompatibility isn't fixed, recommending a DFlash-eligible 27B tier on this hardware class is a no-op.
+
+## Repro
+
+This fork at `d629a3768` (current `milady/main` HEAD), Vulkan build via the existing `linux-x64-vulkan` target (PR #7626 glslc fix applied). All artifacts public on HF.
+
+```bash
+# Body
+huggingface-cli download unsloth/Qwen3.6-27B-GGUF Qwen3.6-27B-Q4_K_M.gguf
+# Drafter (DFlash)
+huggingface-cli download spiritbuun/Qwen3.6-27B-DFlash-GGUF dflash-draft-3.6-q4_k_m.gguf
+# (Q8_0 drafter has the same issue — this is not a drafter-quant problem)
+
+LD_LIBRARY_PATH=~/.eliza/local-inference/bin/dflash/linux-x64-vulkan \
+~/.eliza/local-inference/bin/dflash/linux-x64-vulkan/llama-server \
+  -m Qwen3.6-27B-Q4_K_M.gguf \
+  -md dflash-draft-3.6-q4_k_m.gguf \
+  --spec-type dflash \
+  -ngl 99 -ngld 99 \
+  -np 1 -c 4096 -cd 256 \
+  -fa on -b 256 -ub 64 \
+  --jinja --reasoning-budget 0 \
+  --host 127.0.0.1 --port 31551
+```
+
+Server log:
+
+```
+print_info: arch                  = dflash-draft
+load_tensors: offloaded 6/6 layers to GPU
+common_speculative_is_compat: the target context does not support partial sequence removal
+srv    load_model: speculative decoding not supported by this context
+srv          init: init: chat template, thinking = 0
+main: server is listening on http://127.0.0.1:31551
+main: starting the main loop...
+```
+
+Note how the drafter loads correctly with the canonical `arch = dflash-draft` and 6/6 layers offloaded, but the spec-decode is then disabled — yet the server bootstraps and serves requests as if everything is fine.
+
+Generation works, just without speculation: a chat completion returns the right text but the `timings` object has no `n_drafted` / `n_accept` (and `n_predicted_per_second` is body-only single-stream throughput).
+
+## Where the check fires
+
+`common_speculative_is_compat` in `common/speculative.cpp` (or the equivalent file in this fork). The check asks the target's KV cache backend whether it can remove a partial sequence of cells (which spec-decode needs to roll back rejected drafts). The Qwen3.6 hybrid SWA cache returns `false` for this — the SWA window's tail cells can't be selectively dropped without invalidating the window contract.
+
+The `spiritbuun/buun-llama-cpp` fork (which the spiritbuun drafter README points at) has SWA support for the DFlash drafter landed in commit `b9d01582b` (SD-073 per their README). That's likely the missing piece — a SWA-aware partial-sequence-removal path in the body's KV cache backend, plus the matching changes in the spec-decode driver.
+
+## Suggested fixes (any subset)
+
+1. **Loud failure at load time:** if `--spec-type dflash` is passed with `-md <drafter>` but the body's context returns `is_compat=false`, abort with a clear error message instead of silently falling through. Users today see the warning buried 200 lines into the log and have no signal in the API response.
+
+2. **Surface in the runtime API:** add a `spec_decode_active: bool` field to the `/health` and `/v1/models/<id>` responses so callers (the eliza runtime, the model picker) can show "speculative decoding disabled — fall back" instead of pretending DFlash is firing.
+
+3. **Port the SWA partial-sequence-removal path** from `spiritbuun/buun-llama-cpp` (commit b9d01582b or whatever lineage). This is the real fix — without it, every Qwen3.6 / gemma-4 DFlash bundle is dead on arrival in this fork.
+
+4. **Catalog gate:** in `packages/shared/src/local-inference/catalog.ts`, mark Qwen3.6 / gemma-4 tiers with `kernelCaps.unsupported: ["spec-decode-on-swa-body"]` until (3) lands. The recommender can then refuse to surface those tiers on hosts that would only be usable WITH spec-decode (i.e., iGPU-class).
+
+## Related
+
+- #7626 — glslc fix (required to build the Vulkan binary that reproduces this)
+- #7628 — `linux-x64-sycl` target (parallel work)
+- #7629 — Qwen3.5/3.6 drafter publication gap (this PR's premise was "use community drafter while waiting"; the SWA gate then blocks the community drafter too)
+- #7631 — M-RoPE position validation in spec-decode (different gate, same class of "spec-decode silently doesn't work on modern Qwen architectures")
+- #7633 — RFC for openvino runtime kernel
+- #7634 — linux-x64-openvino target
+
+## Note
+
+I do not have a CUDA host. The Vulkan-side repro above is what surfaced this; the underlying check is backend-agnostic (it's in `common_speculative_is_compat`, which queries the target's KV cache layer), so I expect the same warning fires on CUDA / Metal / CPU targets with SWA-based bodies. Happy to verify if a maintainer wants confirmation.
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)6:["$","div",null,{"className":"mb-8 space-y-6","children":[["$","$Ld",null,{"metrics":{"date":"2026-05-15","interval":{"intervalStart":"$D2026-05-15T00:00:00.000Z","intervalEnd":"$D2026-05-16T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":0,"merged":0,"total":0},"issues":{"new":0,"closed":1,"total":1},"activeContributors":0,"codeChanges":{"additions":0,"deletions":0,"files":0,"commitCount":0},"topContributors":[],"focusAreas":[],"topIssues":[{"id":"I_kwDOMT5cIs8AAAABCEbSeg","title":"speculative decoding: 'target context does not support partial sequence removal' silently disables --spec-type dflash for SWA-based bodies (Qwen3.6, gemma-4, etc.)","author":"NubsCarson","number":7635,"repository":"elizaos/eliza","body":"$e","createdAt":"2026-05-13T01:15:51Z","closedAt":"2026-05-15T00:53:26Z","state":"CLOSED","commentCount":1}],"topPullRequests":[],"detailedContributorSummaries":{}}}],"$Lf"]}]
+7:["$","div",null,{"className":"prose prose-sm mx-auto mt-8 dark:prose-invert sm:prose lg:prose-lg xl:prose-xl","children":[["$","p","p-0",{"children":"No activity recorded for 2026-05-15."}]]}]
+8:["$","script","script-0",{"src":"/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","async":true}]
+9:["$","script","script-1",{"src":"/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","async":true}]
+a:["$","script","script-2",{"src":"/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js","async":true}]
+b:["$","$L10",null,{"children":["$","$11",null,{"name":"Next.MetadataOutlet","children":"$@12"}]}]
+f:["$","div",null,{"className":"rounded-lg border bg-card text-card-foreground shadow-sm","children":[["$","div",null,{"className":"flex flex-col space-y-1.5 p-6 py-4","children":["$","div",null,{"className":"tracking-tight text-sm font-medium","children":["$undefined","Code Changes"]}]}],["$","div",null,{"className":"p-6 pt-0","children":["$","div",null,{"className":"grid grid-cols-2 gap-4 md:grid-cols-4","children":[["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-git-commit-vertical h-5 w-5","aria-hidden":"true","children":[["$","path","1holv5",{"d":"M12 3v6"}],["$","circle","1v7zrd",{"cx":"12","cy":"12","r":"3"}],["$","path","a9ows0",{"d":"M12 15v6"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":0}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Commits"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-file-code h-5 w-5","aria-hidden":"true","children":[["$","path","1oefj6",{"d":"M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"}],["$","path","wfsgrz",{"d":"M14 2v5a1 1 0 0 0 1 1h5"}],["$","path","1tg20x",{"d":"M10 12.5 8 15l2 2.5"}],["$","path","yinavb",{"d":"m14 12.5 2 2.5-2 2.5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":0}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Files Changed"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-green-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-up h-5 w-5 text-green-500","aria-hidden":"true","children":[["$","path","hav0vg",{"d":"m5 12 7-7 7 7"}],["$","path","x0mq9r",{"d":"M12 19V5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-green-500","children":"+0"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Added"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-red-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-down h-5 w-5 text-red-500","aria-hidden":"true","children":[["$","path","s699le",{"d":"M12 5v14"}],["$","path","1idqje",{"d":"m19 12-7 7-7-7"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-red-500","children":"-0"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Deleted"}]]}]]}]]}]}]]}]
+12:null

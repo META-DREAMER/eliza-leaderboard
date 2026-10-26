@@ -1,0 +1,417 @@
+1:"$Sreact.fragment"
+2:I[4817319,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"IntervalSelector"]
+3:I[6998365,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"LlmCopyButton"]
+e:I[3642796,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],""]
+f:I[3238488,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"StatCardsDisplay"]
+14:I[4261541,["/eliza-leaderboard/_next/static/chunks/b33bcbdcb3f88354.js","/eliza-leaderboard/_next/static/chunks/8ba59154b6704904.js"],"OutletBoundary"]
+15:"$Sreact.suspense"
+4:T1185,## Summary
+
+The `processMessage` method in `packages/typescript/src/services/message.ts` runs evaluators **synchronously** (`await runtime.evaluate(...)`) as part of the message lifecycle. Since evaluators can involve LLM calls (10+ seconds), this blocks the entire message processing pipeline for that room. Any message arriving during that window is **silently discarded** by the race-check mechanism at line 614.
+
+## How It Works
+
+The message service uses a `latestResponseIds` map to track which message is "currently being processed" per room. Each incoming message gets a unique `responseId`.
+
+The race check at line 614:
+
+```typescript
+const currentResponseId = agentResponses.get(message.roomId);
+if (currentResponseId !== responseId) {
+  runtime.logger.info(
+    { src: "service:message", agentId: runtime.agentId, roomId: message.roomId },
+    "Response discarded - newer message being processed",
+  );
+  return { didRespond: false, responseContent: null, responseMessages: [], state, mode: "none" };
+}
+```
+
+The lifecycle order in `processMessage`:
+
+```
+Line 216:  agentResponses.set(roomId, responseId)     // claim the slot
+Line 600:  generate response                           // LLM call (~2-5s)
+Line 614:  race check                                  // pass if still owner
+Line 678:  callback (send response)                    // message delivered to user
+Line 786:  agentResponses.delete(roomId)               // release the slot
+Line 792:  await runtime.evaluate(...)                  // ⚠️ BLOCKS HERE (10s+)
+Line 878:  emit RUN_ENDED
+Line 891:  return                                      // processMessage finally exits
+```
+
+The response is **already sent** at line 678 and the map slot is **already released** at line 786. But `processMessage` doesn't return until evaluators finish at line 814. During that 10+ second window, incoming messages for the same room enter processing but the interaction between concurrent async flows and the `latestResponseIds` map causes the race check at line 614 to fail for the new message — its response is discarded, evaluators never run, and the user gets **no reply**.
+
+## Impact
+
+- **Any plugin with LLM-based evaluators** is affected (not specific to any single project)
+- The longer the evaluator pipeline, the wider the race window
+- Users sending messages in normal conversational cadence (a few seconds apart) will regularly hit this
+- The discarded message is completely lost — no response sent, no evaluators run, no state updates
+- The only log is `"Response discarded - newer message being processed"` with no indication this is a dropped message bug
+
+## Reproduction Steps
+
+1. Register a plugin with an evaluator that makes LLM calls (takes 5-10+ seconds)
+2. Send a message that triggers a response
+3. Send a second message within ~10 seconds (while evaluators from the first message are still running)
+4. Observe: the second message logs `"Response discarded - newer message being processed"` — user receives no reply
+
+## Suggested Fix
+
+Make the evaluator call fire-and-forget. The response is already sent and the map slot is already released — there is no reason for `processMessage` to block on evaluators:
+
+```typescript
+// Before (blocks 10+ seconds):
+await runtime.evaluate(message, state, shouldRespondToMessage, callback, responseMessages);
+
+// After (returns immediately, evaluators run in background):
+runtime
+  .evaluate(message, state, shouldRespondToMessage, callback, responseMessages)
+  .catch((err) => {
+    runtime.logger.error({ src: "service:message", error: String(err) }, "Evaluator error");
+  });
+```
+
+This is safe because:
+
+1. The response is already delivered to the user (callback fired at line 678)
+2. The `responseId` slot is already cleaned up (line 786)
+3. Nothing after `evaluate()` depends on evaluator results (lines 816-897 are logging and event emission only)
+4. Evaluator callbacks still work (the closure captures `callback`)
+5. Errors are caught and logged instead of silently swallowed
+
+### Alternative (More Robust)
+
+A per-room message queue that processes messages strictly one-at-a-time per room would also prevent potential state conflicts from concurrent evaluator runs. But the fire-and-forget fix is the minimal change that solves the immediate "silently dropped messages" problem.
+
+## Environment
+
+- ElizaOS main branch (latest)
+- Reproducible with any evaluator plugin that includes LLM calls
+- Observed on WhatsApp integration but affects all channels5:T5ce,## Summary
+
+Comprehensive dashboard stability and infrastructure monitoring improvements.
+
+### Auth & Proxy Hardening
+- Reject malformed auth tokens early (before hitting Privy API)
+- Cache invalid auth results to short-circuit repeated bad-token requests
+- Fix cookie-based auth error handling (redirect to login instead of error page)
+- Proxy routing cleanup for public vs protected paths
+
+### Navigation & Layout Fixes
+- Fix sidebar anchor navigation (scroll-to-section links)
+- Fix user-menu infinite re-render loop caused by unstable context references
+- Stabilize `PageHeaderProvider` context value with primitive field comparison
+- Fix `useSetPageHeader` to extract primitives so effect deps are stable
+
+### Infrastructure Dashboard
+- **Allocation drift fix**: Use actual sandbox record count instead of stale `allocated_count` column from `docker_nodes`
+- **Health classification**: Downgrade heartbeat-stale severity to warning when Docker reports container as running + healthy
+- **Collapsible incidents panel** with per-container action buttons
+- **Container actions API** (`POST /api/v1/admin/infrastructure/containers/actions`) — logs, restart, stop, start, inspect, pull-recreate via SSH
+
+### Containers Table
+- Upgraded milady-sandboxes-table with improved column layout
+
+### Tests
+- Added proxy auth handling tests
+- Added proxy auth routing tests  
+- Updated infrastructure health classification tests for new severity logic
+
+### Files Changed (20 files, +2383/-655)
+6:T106a,## Plugin: moltspay-eliza-plugin
+
+MoltsPay plugin for ElizaOS - enables AI agents to discover and pay for services using x402 protocol.
+
+### Features
+- 🔐 8 actions: init, status, pay, fund, faucet, services, config, list
+- 💳 Gasless USDC payments via x402 protocol
+- 🔒 Built-in spending limits for safety
+- 🌐 Bilingual support (EN/CN)
+- ⛓️ Multi-chain: Base, Polygon, Base Sepolia (testnet)
+
+### Links
+- **npm:** https://www.npmjs.com/package/moltspay-eliza-plugin
+- **GitHub:** https://github.com/Yaqing2023/moltspay-eliza-plugin
+- **Docs:** https://moltspay.com
+
+### Topics
+Repo has required topic: `elizaos-plugins` ✅
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+## Summary by CodeRabbit
+
+* **New Features**
+  * Added a new plugin source to expand available integrations, increasing the set of available plugins.
+  * Change is additive only (no removals or breaking changes) and low risk for users.
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->
+
+<!-- greptile_comment -->
+
+<h3>Greptile Summary</h3>
+
+This PR adds a single entry to the elizaOS plugin registry for `moltspay-eliza-plugin`, a payment plugin enabling AI agents to discover and pay for services using the x402 protocol with gasless USDC payments on Base, Polygon, and Base Sepolia networks.
+
+**Key observations:**
+- The JSON format is valid, uses the correct `github:` prefix, has no `.git` extension, and is properly comma-delimited ✅
+- The entry is correctly placed alphabetically among the unscoped entries at the end of `index.json` (after all `@`-scoped entries, before `plugin-connections`) ✅
+- The package name `moltspay-eliza-plugin` uses a `{service}-eliza-plugin` naming order, which is the inverse of the registry-recommended `plugin-{name}` convention — all other unscoped entries follow `plugin-{name}` (e.g., `plugin-connections`, `plugin-moltbazaar`)
+
+<h3>Confidence Score: 4/5</h3>
+
+- This PR is safe to merge — it is a minimal, well-formed registry entry with only a minor naming convention deviation.
+- The change is a single-line addition to index.json. The JSON is valid, alphabetically sorted, and uses the correct `github:` reference format. The only minor concern is the unconventional package name ordering (`{service}-eliza-plugin` rather than `plugin-{service}`), but this is a style issue and not a blocker since the key is meant to match the actual npm package name.
+- No files require special attention.
+
+<h3>Important Files Changed</h3>
+
+| Filename | Overview |
+|----------|----------|
+| index.json | Adds a single entry mapping `moltspay-eliza-plugin` to `github:Yaqing2023/moltspay-eliza-plugin`. The format is valid JSON, uses the correct `github:` prefix (no `.git` extension), and is alphabetically placed correctly among unscoped entries. The only concern is that the package name uses `{service}-eliza-plugin` ordering instead of the registry-recommended `plugin-{name}` convention. |
+
+</details>
+
+<h3>Sequence Diagram</h3>
+
+```mermaid
+sequenceDiagram
+    participant User as ElizaOS User
+    participant CLI as ElizaOS CLI
+    participant Registry as registry/index.json
+    participant GH as github:Yaqing2023/moltspay-eliza-plugin
+    participant X402 as x402 Protocol
+    participant Chain as Base/Polygon Blockchain
+
+    User->>CLI: Install moltspay-eliza-plugin
+    CLI->>Registry: Look up "moltspay-eliza-plugin"
+    Registry-->>CLI: github:Yaqing2023/moltspay-eliza-plugin
+    CLI->>GH: Fetch plugin source
+    GH-->>CLI: Plugin code
+    CLI-->>User: Plugin installed
+
+    User->>CLI: Agent triggers pay action
+    CLI->>GH: Execute payment action
+    GH->>X402: Initiate x402 payment request
+    X402->>Chain: Submit gasless USDC transaction
+    Chain-->>X402: Transaction confirmed
+    X402-->>GH: Payment receipt
+    GH-->>CLI: Payment result
+    CLI-->>User: Payment complete
+```
+
+<sub>Last reviewed commit: ["Add moltspay-eliza-p..."](https://github.com/elizaos-plugins/registry/commit/58304c2e350d0bd6425971dfcc29bb888c3f2a3f)</sub>
+
+> Greptile also left **1 inline comment** on this PR.
+
+<sub>(2/5) Greptile learns from your feedback when you react with thumbs up/down!</sub>
+
+<!-- /greptile_comment -->0:{"buildId":"US8XLB_zHXYj_PVAECGcd","rsc":["$","$1","c",{"children":[["$","div",null,{"className":"container mx-auto px-6 py-8 md:px-8","children":["$","div",null,{"className":"mx-auto max-w-4xl","children":[["$","div",null,{"className":"mb-4 flex flex-col justify-between sm:flex-row","children":[["$","$L2",null,{"currentInterval":"day","currentDate":"2026-03-19"}],["$","$L3",null,{"metrics":{"date":"2026-03-19","interval":{"intervalStart":"$D2026-03-19T00:00:00.000Z","intervalEnd":"$D2026-03-20T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":2,"merged":1,"total":2},"issues":{"new":1,"closed":0,"total":1},"activeContributors":7,"codeChanges":{"additions":3025,"deletions":424,"files":22,"commitCount":11},"topContributors":[{"username":"0xSolace","avatarUrl":"https://avatars.githubusercontent.com/u/257989456?u=2138984e3bfc9b5f8cd3f60f134e550b4cc22520&v=4","totalScore":53.9957738965761,"prScore":53.9957738965761,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":null},{"username":"Yaqing2023","avatarUrl":"https://avatars.githubusercontent.com/u/130617529?v=4","totalScore":14.346573590279972,"prScore":14.346573590279972,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":null},{"username":"Heime-Jorgen","avatarUrl":"https://avatars.githubusercontent.com/u/259771901?v=4","totalScore":13.5,"prScore":0,"issueScore":0,"reviewScore":13.5,"commentScore":0,"summary":null},{"username":"greptile-apps","avatarUrl":"https://avatars.githubusercontent.com/in/867647?v=4","totalScore":4.5,"prScore":0,"issueScore":0,"reviewScore":4.5,"commentScore":0,"summary":null},{"username":"hanzlamateen","avatarUrl":"https://avatars.githubusercontent.com/u/10975502?u=53f23921078d9a27d96751373bb44f4bd2d58bf4&v=4","totalScore":4.1,"prScore":0,"issueScore":4.1,"reviewScore":0,"commentScore":0,"summary":null}],"focusAreas":[{"area":"ui","count":10},{"area":"app/dashboard","count":5},{"area":"tests","count":3},{"area":"lib","count":2},{"area":"app/api","count":1}],"topIssues":[{"id":"I_kwDOMT5cIs70nTuc","title":"Race condition: `await runtime.evaluate()` in message service silently discards incoming messages","author":"hanzlamateen","number":6622,"repository":"elizaos/eliza","body":"$4","createdAt":"2026-03-19T19:59:56Z","closedAt":"2026-03-23T07:46:56Z","state":"CLOSED","commentCount":1}],"topPullRequests":[{"id":"PR_kwDOP6BTDM7L1Fbc","title":"fix: dashboard stability, infrastructure improvements, auth hardening","author":"0xSolace","number":399,"body":"$5","repository":"elizaos/cloud","createdAt":"2026-03-19T12:01:03Z","mergedAt":"2026-03-19T13:03:39Z","additions":3025,"deletions":424},{"id":"PR_kwDONkg7v87Ltf1H","title":"Add moltspay-eliza-plugin to registry","author":"Yaqing2023","number":309,"body":"$6","repository":"elizaos-plugins/registry","createdAt":"2026-03-19T01:06:34Z","mergedAt":null,"additions":1,"deletions":0}],"detailedContributorSummaries":{}},"summaryContent":null,"className":"self-end sm:self-start"}]]}],"$L7","$L8","$L9"]}]}],["$La","$Lb","$Lc"],"$Ld"]}],"loading":null,"isPartial":false}
+7:["$","div",null,{"className":"mb-6","children":["$","div",null,{"className":"flex items-center justify-between","children":[[["$","$Le",null,{"href":"/summary/day/2026-03-18","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left mr-2 h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"children":"Previous"}],false],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$Le",null,{"href":"/summary/day/2026-03-18","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Previous"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]],["$","div",null,{"className":"flex flex-col items-center","children":[["$","div",null,{"className":"text-sm font-medium text-gray-500","children":["Daily"," Summary"]}],["$","time",null,{"dateTime":"2026-03-19","className":"text-md font-bold","children":"Mar 19, 2026"}]]}],[["$","$Le",null,{"href":"/summary/day/2026-03-20","children":[false,["$","span",null,{"children":"Next"}],["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right ml-2 h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}]],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$Le",null,{"href":"/summary/day/2026-03-20","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Next"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]]]}]}]
+10:T1185,## Summary
+
+The `processMessage` method in `packages/typescript/src/services/message.ts` runs evaluators **synchronously** (`await runtime.evaluate(...)`) as part of the message lifecycle. Since evaluators can involve LLM calls (10+ seconds), this blocks the entire message processing pipeline for that room. Any message arriving during that window is **silently discarded** by the race-check mechanism at line 614.
+
+## How It Works
+
+The message service uses a `latestResponseIds` map to track which message is "currently being processed" per room. Each incoming message gets a unique `responseId`.
+
+The race check at line 614:
+
+```typescript
+const currentResponseId = agentResponses.get(message.roomId);
+if (currentResponseId !== responseId) {
+  runtime.logger.info(
+    { src: "service:message", agentId: runtime.agentId, roomId: message.roomId },
+    "Response discarded - newer message being processed",
+  );
+  return { didRespond: false, responseContent: null, responseMessages: [], state, mode: "none" };
+}
+```
+
+The lifecycle order in `processMessage`:
+
+```
+Line 216:  agentResponses.set(roomId, responseId)     // claim the slot
+Line 600:  generate response                           // LLM call (~2-5s)
+Line 614:  race check                                  // pass if still owner
+Line 678:  callback (send response)                    // message delivered to user
+Line 786:  agentResponses.delete(roomId)               // release the slot
+Line 792:  await runtime.evaluate(...)                  // ⚠️ BLOCKS HERE (10s+)
+Line 878:  emit RUN_ENDED
+Line 891:  return                                      // processMessage finally exits
+```
+
+The response is **already sent** at line 678 and the map slot is **already released** at line 786. But `processMessage` doesn't return until evaluators finish at line 814. During that 10+ second window, incoming messages for the same room enter processing but the interaction between concurrent async flows and the `latestResponseIds` map causes the race check at line 614 to fail for the new message — its response is discarded, evaluators never run, and the user gets **no reply**.
+
+## Impact
+
+- **Any plugin with LLM-based evaluators** is affected (not specific to any single project)
+- The longer the evaluator pipeline, the wider the race window
+- Users sending messages in normal conversational cadence (a few seconds apart) will regularly hit this
+- The discarded message is completely lost — no response sent, no evaluators run, no state updates
+- The only log is `"Response discarded - newer message being processed"` with no indication this is a dropped message bug
+
+## Reproduction Steps
+
+1. Register a plugin with an evaluator that makes LLM calls (takes 5-10+ seconds)
+2. Send a message that triggers a response
+3. Send a second message within ~10 seconds (while evaluators from the first message are still running)
+4. Observe: the second message logs `"Response discarded - newer message being processed"` — user receives no reply
+
+## Suggested Fix
+
+Make the evaluator call fire-and-forget. The response is already sent and the map slot is already released — there is no reason for `processMessage` to block on evaluators:
+
+```typescript
+// Before (blocks 10+ seconds):
+await runtime.evaluate(message, state, shouldRespondToMessage, callback, responseMessages);
+
+// After (returns immediately, evaluators run in background):
+runtime
+  .evaluate(message, state, shouldRespondToMessage, callback, responseMessages)
+  .catch((err) => {
+    runtime.logger.error({ src: "service:message", error: String(err) }, "Evaluator error");
+  });
+```
+
+This is safe because:
+
+1. The response is already delivered to the user (callback fired at line 678)
+2. The `responseId` slot is already cleaned up (line 786)
+3. Nothing after `evaluate()` depends on evaluator results (lines 816-897 are logging and event emission only)
+4. Evaluator callbacks still work (the closure captures `callback`)
+5. Errors are caught and logged instead of silently swallowed
+
+### Alternative (More Robust)
+
+A per-room message queue that processes messages strictly one-at-a-time per room would also prevent potential state conflicts from concurrent evaluator runs. But the fire-and-forget fix is the minimal change that solves the immediate "silently dropped messages" problem.
+
+## Environment
+
+- ElizaOS main branch (latest)
+- Reproducible with any evaluator plugin that includes LLM calls
+- Observed on WhatsApp integration but affects all channels11:T5ce,## Summary
+
+Comprehensive dashboard stability and infrastructure monitoring improvements.
+
+### Auth & Proxy Hardening
+- Reject malformed auth tokens early (before hitting Privy API)
+- Cache invalid auth results to short-circuit repeated bad-token requests
+- Fix cookie-based auth error handling (redirect to login instead of error page)
+- Proxy routing cleanup for public vs protected paths
+
+### Navigation & Layout Fixes
+- Fix sidebar anchor navigation (scroll-to-section links)
+- Fix user-menu infinite re-render loop caused by unstable context references
+- Stabilize `PageHeaderProvider` context value with primitive field comparison
+- Fix `useSetPageHeader` to extract primitives so effect deps are stable
+
+### Infrastructure Dashboard
+- **Allocation drift fix**: Use actual sandbox record count instead of stale `allocated_count` column from `docker_nodes`
+- **Health classification**: Downgrade heartbeat-stale severity to warning when Docker reports container as running + healthy
+- **Collapsible incidents panel** with per-container action buttons
+- **Container actions API** (`POST /api/v1/admin/infrastructure/containers/actions`) — logs, restart, stop, start, inspect, pull-recreate via SSH
+
+### Containers Table
+- Upgraded milady-sandboxes-table with improved column layout
+
+### Tests
+- Added proxy auth handling tests
+- Added proxy auth routing tests  
+- Updated infrastructure health classification tests for new severity logic
+
+### Files Changed (20 files, +2383/-655)
+12:T106a,## Plugin: moltspay-eliza-plugin
+
+MoltsPay plugin for ElizaOS - enables AI agents to discover and pay for services using x402 protocol.
+
+### Features
+- 🔐 8 actions: init, status, pay, fund, faucet, services, config, list
+- 💳 Gasless USDC payments via x402 protocol
+- 🔒 Built-in spending limits for safety
+- 🌐 Bilingual support (EN/CN)
+- ⛓️ Multi-chain: Base, Polygon, Base Sepolia (testnet)
+
+### Links
+- **npm:** https://www.npmjs.com/package/moltspay-eliza-plugin
+- **GitHub:** https://github.com/Yaqing2023/moltspay-eliza-plugin
+- **Docs:** https://moltspay.com
+
+### Topics
+Repo has required topic: `elizaos-plugins` ✅
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+## Summary by CodeRabbit
+
+* **New Features**
+  * Added a new plugin source to expand available integrations, increasing the set of available plugins.
+  * Change is additive only (no removals or breaking changes) and low risk for users.
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->
+
+<!-- greptile_comment -->
+
+<h3>Greptile Summary</h3>
+
+This PR adds a single entry to the elizaOS plugin registry for `moltspay-eliza-plugin`, a payment plugin enabling AI agents to discover and pay for services using the x402 protocol with gasless USDC payments on Base, Polygon, and Base Sepolia networks.
+
+**Key observations:**
+- The JSON format is valid, uses the correct `github:` prefix, has no `.git` extension, and is properly comma-delimited ✅
+- The entry is correctly placed alphabetically among the unscoped entries at the end of `index.json` (after all `@`-scoped entries, before `plugin-connections`) ✅
+- The package name `moltspay-eliza-plugin` uses a `{service}-eliza-plugin` naming order, which is the inverse of the registry-recommended `plugin-{name}` convention — all other unscoped entries follow `plugin-{name}` (e.g., `plugin-connections`, `plugin-moltbazaar`)
+
+<h3>Confidence Score: 4/5</h3>
+
+- This PR is safe to merge — it is a minimal, well-formed registry entry with only a minor naming convention deviation.
+- The change is a single-line addition to index.json. The JSON is valid, alphabetically sorted, and uses the correct `github:` reference format. The only minor concern is the unconventional package name ordering (`{service}-eliza-plugin` rather than `plugin-{service}`), but this is a style issue and not a blocker since the key is meant to match the actual npm package name.
+- No files require special attention.
+
+<h3>Important Files Changed</h3>
+
+| Filename | Overview |
+|----------|----------|
+| index.json | Adds a single entry mapping `moltspay-eliza-plugin` to `github:Yaqing2023/moltspay-eliza-plugin`. The format is valid JSON, uses the correct `github:` prefix (no `.git` extension), and is alphabetically placed correctly among unscoped entries. The only concern is that the package name uses `{service}-eliza-plugin` ordering instead of the registry-recommended `plugin-{name}` convention. |
+
+</details>
+
+<h3>Sequence Diagram</h3>
+
+```mermaid
+sequenceDiagram
+    participant User as ElizaOS User
+    participant CLI as ElizaOS CLI
+    participant Registry as registry/index.json
+    participant GH as github:Yaqing2023/moltspay-eliza-plugin
+    participant X402 as x402 Protocol
+    participant Chain as Base/Polygon Blockchain
+
+    User->>CLI: Install moltspay-eliza-plugin
+    CLI->>Registry: Look up "moltspay-eliza-plugin"
+    Registry-->>CLI: github:Yaqing2023/moltspay-eliza-plugin
+    CLI->>GH: Fetch plugin source
+    GH-->>CLI: Plugin code
+    CLI-->>User: Plugin installed
+
+    User->>CLI: Agent triggers pay action
+    CLI->>GH: Execute payment action
+    GH->>X402: Initiate x402 payment request
+    X402->>Chain: Submit gasless USDC transaction
+    Chain-->>X402: Transaction confirmed
+    X402-->>GH: Payment receipt
+    GH-->>CLI: Payment result
+    CLI-->>User: Payment complete
+```
+
+<sub>Last reviewed commit: ["Add moltspay-eliza-p..."](https://github.com/elizaos-plugins/registry/commit/58304c2e350d0bd6425971dfcc29bb888c3f2a3f)</sub>
+
+> Greptile also left **1 inline comment** on this PR.
+
+<sub>(2/5) Greptile learns from your feedback when you react with thumbs up/down!</sub>
+
+<!-- /greptile_comment -->8:["$","div",null,{"className":"mb-8 space-y-6","children":[["$","$Lf",null,{"metrics":{"date":"2026-03-19","interval":{"intervalStart":"$D2026-03-19T00:00:00.000Z","intervalEnd":"$D2026-03-20T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":2,"merged":1,"total":2},"issues":{"new":1,"closed":0,"total":1},"activeContributors":7,"codeChanges":{"additions":3025,"deletions":424,"files":22,"commitCount":11},"topContributors":[{"username":"0xSolace","avatarUrl":"https://avatars.githubusercontent.com/u/257989456?u=2138984e3bfc9b5f8cd3f60f134e550b4cc22520&v=4","totalScore":53.9957738965761,"prScore":53.9957738965761,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":null},{"username":"Yaqing2023","avatarUrl":"https://avatars.githubusercontent.com/u/130617529?v=4","totalScore":14.346573590279972,"prScore":14.346573590279972,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":null},{"username":"Heime-Jorgen","avatarUrl":"https://avatars.githubusercontent.com/u/259771901?v=4","totalScore":13.5,"prScore":0,"issueScore":0,"reviewScore":13.5,"commentScore":0,"summary":null},{"username":"greptile-apps","avatarUrl":"https://avatars.githubusercontent.com/in/867647?v=4","totalScore":4.5,"prScore":0,"issueScore":0,"reviewScore":4.5,"commentScore":0,"summary":null},{"username":"hanzlamateen","avatarUrl":"https://avatars.githubusercontent.com/u/10975502?u=53f23921078d9a27d96751373bb44f4bd2d58bf4&v=4","totalScore":4.1,"prScore":0,"issueScore":4.1,"reviewScore":0,"commentScore":0,"summary":null}],"focusAreas":[{"area":"ui","count":10},{"area":"app/dashboard","count":5},{"area":"tests","count":3},{"area":"lib","count":2},{"area":"app/api","count":1}],"topIssues":[{"id":"I_kwDOMT5cIs70nTuc","title":"Race condition: `await runtime.evaluate()` in message service silently discards incoming messages","author":"hanzlamateen","number":6622,"repository":"elizaos/eliza","body":"$10","createdAt":"2026-03-19T19:59:56Z","closedAt":"2026-03-23T07:46:56Z","state":"CLOSED","commentCount":1}],"topPullRequests":[{"id":"PR_kwDOP6BTDM7L1Fbc","title":"fix: dashboard stability, infrastructure improvements, auth hardening","author":"0xSolace","number":399,"body":"$11","repository":"elizaos/cloud","createdAt":"2026-03-19T12:01:03Z","mergedAt":"2026-03-19T13:03:39Z","additions":3025,"deletions":424},{"id":"PR_kwDONkg7v87Ltf1H","title":"Add moltspay-eliza-plugin to registry","author":"Yaqing2023","number":309,"body":"$12","repository":"elizaos-plugins/registry","createdAt":"2026-03-19T01:06:34Z","mergedAt":null,"additions":1,"deletions":0}],"detailedContributorSummaries":{}}}],"$L13"]}]
+9:null
+a:["$","script","script-0",{"src":"/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","async":true}]
+b:["$","script","script-1",{"src":"/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","async":true}]
+c:["$","script","script-2",{"src":"/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js","async":true}]
+d:["$","$L14",null,{"children":["$","$15",null,{"name":"Next.MetadataOutlet","children":"$@16"}]}]
+13:["$","div",null,{"className":"rounded-lg border bg-card text-card-foreground shadow-sm","children":[["$","div",null,{"className":"flex flex-col space-y-1.5 p-6 py-4","children":["$","div",null,{"className":"tracking-tight text-sm font-medium","children":["$undefined","Code Changes"]}]}],["$","div",null,{"className":"p-6 pt-0","children":["$","div",null,{"className":"grid grid-cols-2 gap-4 md:grid-cols-4","children":[["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-git-commit-vertical h-5 w-5","aria-hidden":"true","children":[["$","path","1holv5",{"d":"M12 3v6"}],["$","circle","1v7zrd",{"cx":"12","cy":"12","r":"3"}],["$","path","a9ows0",{"d":"M12 15v6"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":11}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Commits"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-file-code h-5 w-5","aria-hidden":"true","children":[["$","path","1oefj6",{"d":"M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"}],["$","path","wfsgrz",{"d":"M14 2v5a1 1 0 0 0 1 1h5"}],["$","path","1tg20x",{"d":"M10 12.5 8 15l2 2.5"}],["$","path","yinavb",{"d":"m14 12.5 2 2.5-2 2.5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":22}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Files Changed"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-green-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-up h-5 w-5 text-green-500","aria-hidden":"true","children":[["$","path","hav0vg",{"d":"m5 12 7-7 7 7"}],["$","path","x0mq9r",{"d":"M12 19V5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-green-500","children":"+3,025"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Added"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-red-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-down h-5 w-5 text-red-500","aria-hidden":"true","children":[["$","path","s699le",{"d":"M12 5v14"}],["$","path","1idqje",{"d":"m19 12-7 7-7-7"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-red-500","children":"-424"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Deleted"}]]}]]}]]}]}]]}]
+16:null

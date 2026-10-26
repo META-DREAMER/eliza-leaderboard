@@ -1,0 +1,2852 @@
+1:"$Sreact.fragment"
+2:I[4817319,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"IntervalSelector"]
+3:I[6998365,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"LlmCopyButton"]
+1b:I[3642796,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],""]
+1c:I[3238488,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"StatCardsDisplay"]
+36:I[4261541,["/eliza-leaderboard/_next/static/chunks/b33bcbdcb3f88354.js","/eliza-leaderboard/_next/static/chunks/8ba59154b6704904.js"],"OutletBoundary"]
+37:"$Sreact.suspense"
+4:T74f,Hi ElizaOS team,
+
+I’m trying to complete the AI16Z → ElizaOS migration, but I’m running into two major issues and Discord support has become unreliable due to impersonators. I need help from the real development team to determine the correct path.
+
+My situation:
+
+• I purchased AI16Z tokens on Oct 26 using my Phantom wallet.  
+• I then moved them to my Tangem wallet for safety.  
+• On Nov 11 (snapshot date), the tokens were held inside my Tangem wallet.  
+• The migration portal shows my Phantom wallet as “0 eligible” (expected since Phantom didn’t hold them during snapshot).  
+• I cannot connect my Tangem wallet to the migration portal because WalletConnect does not support Tangem.  
+• My Tangem wallet was created using key cards only, so I do not have a seed phrase to export into Phantom.
+
+The Discord server is currently compromised — multiple impersonators posing as support are entering tickets and attempting to direct users to send tokens manually. Because of this, I cannot rely on Discord support or email responses that appear to be spoofed.
+
+What I need from the real team:
+
+1. Confirmation of whether Tangem-held tokens during the snapshot are eligible for migration.  
+2. Whether a manual backend whitelist update is possible so my Phantom wallet can perform migration safely.  
+3. If not, what the official and safe method is for users whose eligible snapshot wallet cannot connect to the portal (Tangem case).  
+4. Any announcements regarding potential whitelist updates or support for non-exportable wallets.
+
+I have NOT sent my tokens anywhere and I have NOT interacted with any unofficial links. My tokens are safe. I’m only seeking official guidance from the verifiable team here on GitHub.
+
+Thank you — I appreciate your time. I prefer to resolve this safely through GitHub to avoid Discord impersonation issues.5:T4f7c,## Summary
+
+This PR implements four major improvements to ElizaOS's security, data architecture, and observability:
+
+1. **Entity-Level Row Level Security (RLS)** - PostgreSQL RLS policies for entity-based data isolation
+2. **Semantic Clarity Refactoring** - Renames `serverId` to `messageServerId` for clarity
+3. **Performance Optimization** - Efficient participant checking methods (`isRoomParticipant`, `isChannelParticipant`)
+4. **Timeline Action Spans Fix** - Correct inclusion of `action_event` logs in run timelines
+
+All changes maintain full backward compatibility with existing deployments and plugins.
+
+---
+
+## Table of Contents
+
+1. [Architecture Overview](#architecture-overview)
+   - [Entity-Level RLS](#1-entity-level-row-level-security-rls)
+   - [Semantic Clarity](#2-semantic-clarity-serverid-vs-messageserverid)
+   - [Performance Optimization](#3-performance-optimization-participant-checking)
+   - [Timeline Action Spans Fix](#4-timeline-action-spans-fix)
+2. [Test Coverage](#test-coverage)
+3. [Database Migration](#database-migration)
+4. [Configuration](#configuration)
+
+---
+
+## Architecture Overview
+
+### 1. Entity-Level Row Level Security (RLS)
+
+**Problem**: ElizaOS needed fine-grained access control to isolate data by entity (users, agents, bots, etc.) within the same database.
+
+**Solution**: Implemented PostgreSQL RLS policies that automatically filter data based on the current entity context.
+
+**Benefits:**
+- ✅ **Data Isolation**: Each entity only sees its own data
+- ✅ **Automatic Enforcement**: RLS is enforced at the database level, preventing accidental data leaks
+- ✅ **Performance**: Database-level filtering is more efficient than application-level checks
+- ✅ **Security**: Even if application code has bugs, RLS prevents unauthorized access
+
+**Implementation:**
+- Added `current_entity_id()` PostgreSQL function to track current entity context via `app.entity_id` session variable
+- Created `add_entity_isolation()` function to apply RLS policies to tables
+- Two isolation strategies:
+  - **Direct ownership**: Tables with `entityId` or `authorId` columns
+  - **Shared access**: Tables with `roomId` that join to `participants` table
+- Integrated with entity context management in ElizaOS core
+
+**RLS Isolation Strategies:**
+
+The system automatically detects which strategy to use based on table schema:
+
+**Strategy 1: Direct Entity Ownership**
+- Tables: `memories`, `tasks`, `components`
+- Policy: `entityId = current_entity_id()`
+- Effect: Users see only their own records
+
+**Strategy 2: Room-Based Shared Access**
+- Tables: `logs`, `messages` (via `roomId`)
+- Policy: `roomId IN (SELECT roomId FROM participants WHERE entityId = current_entity_id())`
+- Effect: Users see all records in rooms they're a participant in
+- **Key Benefit**: In a room with 3 participants, all 3 can see the same logs/messages
+
+---
+
+### 2. Server-Level Row Level Security (RLS)
+
+**Problem**: ElizaOS needed multi-tenant isolation to prevent data leakage between different server instances (deployments, environments).
+
+**Solution**: Implemented PostgreSQL RLS policies that automatically isolate data by ElizaOS server instance.
+
+Already implemented: #6101
+
+---
+
+### 3. Semantic Clarity: `serverId` vs `messageServerId`
+
+#### Problem Statement
+
+##### Why `serverId` was problematic
+
+The term `serverId` was ambiguous and created confusion in the codebase for multiple reasons:
+
+**1. Semantic Ambiguity**
+
+The name `serverId` doesn't clearly indicate what type of server it refers to. In a distributed system like ElizaOS, "server" could mean:
+- Message servers (Discord, Telegram, Slack)
+- Application servers (ElizaOS instances)
+- Database servers
+- Authentication servers
+
+This ambiguity made code harder to read and maintain.
+
+**2. Conflict with Row Level Security (RLS)**
+
+ElizaOS uses PostgreSQL Row Level Security for multi-tenant isolation. In this context:
+- `server_id` in RLS refers to the **ElizaOS server instance** (for tenant isolation)
+- `serverId` in messaging refers to **external message platforms** (Discord guild, Telegram bot, etc.)
+
+**Key distinction:**
+- ONE ElizaOS server instance (`server_id = "abc-123"`) can connect to MULTIPLE message servers
+  - Discord guilds (`messageServerId = "discord-1"`, `messageServerId = "discord-2"`)
+  - Telegram bots (`messageServerId = "telegram-1"`)
+
+This dual meaning created confusion:
+
+```typescript
+// Which serverId is this? ElizaOS instance or Discord guild?
+const room = await adapter.getRoom({ serverId, roomId });
+
+// Is this filtering by tenant or by Discord server?
+await adapter.getRoomsByServerId(serverId);
+```
+
+**3. Developer Confusion**
+
+When working on features involving both RLS and messaging:
+- Setting RLS policies with `server_id` (tenant isolation)
+- Querying rooms by `serverId` (message platform)
+
+Same name, completely different concepts → bugs and confusion
+
+**4. API Inconsistency**
+
+API routes like `/api/agents/:agentId/servers/:serverId/channels` didn't clearly communicate that `serverId` refers to a messaging platform, not an ElizaOS server.
+
+#### Solution
+
+Rename message-related `serverId` to `messageServerId` to:
+- **Clearly indicate purpose**: It's the ID of an external messaging platform
+- **Avoid RLS conflicts**: RLS continues using `server_id` for tenant isolation
+- **Improve maintainability**: Code is self-documenting and semantically clear
+- **Better API design**: Routes like `/api/agents/:agentId/message-servers/:messageServerId/channels` are crystal clear
+
+---
+
+### 4. Performance Optimization: Participant Checking
+
+**Problem**: Checking if an entity is a participant required loading ALL participants into memory and using `.some()` - O(n) complexity.
+
+**Solution**: Added direct database existence checks - O(1) complexity.
+
+**New Methods:**
+- `isRoomParticipant(entityId, roomId)` - Direct DB query
+- `isChannelParticipant(entityId, channelId)` - Direct DB query
+
+**Benefits:**
+- **Constant time complexity** - O(1) instead of O(n)
+- **Lower memory usage** - No loading all participants
+- **Better scalability** - Handles rooms with 1000+ participants
+- **Database indexes** - Optimized queries
+
+**Implementation:**
+
+```typescript
+// OLD: O(n) - Load all participants into memory
+async isParticipant(entityId: UUID, roomId: UUID): Promise<boolean> {
+  const participants = await this.getParticipantsForRoom(roomId);
+  return participants.some(p => p === entityId);
+}
+
+// NEW: O(1) - Direct database existence check
+async isRoomParticipant(entityId: UUID, roomId: UUID): Promise<boolean> {
+  return this.withEntityContext(null, async (tx) => {
+    const result = await tx
+      .select({ exists: sql<number>`1` })
+      .from(participantTable)
+      .where(
+        and(
+          eq(participantTable.roomId, roomId),
+          eq(participantTable.entityId, entityId)
+        )
+      )
+      .limit(1);
+    return result.length > 0;
+  });
+}
+```
+
+**Impact on Authorization Checks:**
+
+Before:
+```typescript
+// Load 1000 participants into memory
+const participants = await runtime.getParticipantsForRoom(roomId);
+if (!participants.includes(entityId)) {
+  return sendError(res, 403, 'FORBIDDEN', 'Not a participant');
+}
+```
+
+After:
+```typescript
+// Single indexed DB query
+if (!(await runtime.isRoomParticipant(entityId, roomId))) {
+  return sendError(res, 403, 'FORBIDDEN', 'Not a participant');
+}
+```
+
+---
+
+### 5. Timeline Action Spans Fix
+
+**Problem**: The Timeline tab showed run summaries with action counts (e.g., "11 spans") but didn't display individual action details (REPLY, GET_TOKEN_CRYPTOSCORE, etc.). Only model calls (TEXT_LARGE, TEXT_EMBEDDING) were visible.
+
+**Root Cause**:
+
+ElizaOS creates two types of logs for actions:
+- `action_event`: Logged when action STARTS (contains `runId` of the action, NO `parentRunId`)
+- `action`: Logged when action COMPLETES (contains `runId` of the action AND `parentRunId` pointing to main run)
+
+**Example from database:**
+
+```sql
+-- Main run
+runId: c29cc856-4ee0-435b-a5ca-b81f76f7ef43
+
+-- Action completion log (type: 'action')
+runId: 03286e8f-6eff-4c48-b0b9-e92cf2c52d0a  -- action's run
+parentRunId: c29cc856-4ee0-435b-a5ca-b81f76f7ef43  -- main run ✅
+
+-- Action start log (type: 'action_event')
+runId: 03286e8f-6eff-4c48-b0b9-e92cf2c52d0a  -- action's run
+parentRunId: NULL  -- ❌ no link to main run
+```
+
+**The Filter Problem:**
+
+The original filter in `runs.ts` only matched logs where:
+```typescript
+body.runId === runId || body.parentRunId === runId
+```
+
+For main run `c29cc856...`:
+- ✅ `action` logs matched (via `parentRunId`)
+- ❌ `action_event` logs didn't match (neither `runId` nor `parentRunId` matched)
+
+**Frontend Behavior:**
+
+The frontend (`eliza-span-adapter.ts`) requires BOTH events:
+- `ACTION_STARTED` (from `action_event` logs) → **creates** the action span
+- `ACTION_COMPLETED` (from `action` logs) → **updates** the existing span
+
+Without `ACTION_STARTED` events:
+- Action spans never created
+- `ACTION_COMPLETED` events try to update non-existent spans
+- Actions invisible in timeline UI
+
+**Solution:**
+
+Modified the filter logic in [`runs.ts:439-466`](/Users/stanislasandujar/Projects/elizaos/eliza/packages/server/src/api/agents/runs.ts#L439-L466):
+
+```typescript
+// Step 1: Find directly related logs (run_event, action, etc.)
+const directlyRelated = logs.filter((l) => {
+  const body = l.body as { runId?: UUID; parentRunId?: UUID };
+  return body.runId === runId || body.parentRunId === runId;
+});
+
+// Step 2: Extract action runIds from matched action completion logs
+const actionRunIds = new Set(
+  directlyRelated
+    .filter((l) => l.type === 'action')
+    .map((l) => (l.body as { runId?: UUID }).runId)
+    .filter((id): id is UUID => !!id)
+);
+
+// Step 3: Include action_event logs that share runId with matched actions
+const related = logs.filter((l) => {
+  const body = l.body as { runId?: UUID; parentRunId?: UUID };
+
+  // Include if directly related to main run
+  if (body.runId === runId || body.parentRunId === runId) {
+    return true;
+  }
+
+  // Also include action_event logs matching action runIds
+  if (l.type === 'action_event' && body.runId && actionRunIds.has(body.runId)) {
+    return true;
+  }
+
+  return false;
+});
+```
+
+**How it Works:**
+
+1. **First pass**: Find all logs directly related to the main run
+   - Includes `action` completion logs (via `parentRunId`)
+   - Includes `run_event`, model calls, etc.
+
+2. **Extract action IDs**: Collect all `runId` values from the matched `action` logs
+   - These are the action-specific run IDs
+
+3. **Second pass**: Also include `action_event` logs that share those action run IDs
+   - Even though they don't link to the main run via `parentRunId`
+   - They're identified by matching the action's `runId`
+
+**Result:**
+
+Now the API returns complete action data:
+- `ACTION_STARTED` events (from `action_event` logs)
+- `ACTION_COMPLETED` events (from `action` logs)
+
+Frontend can now:
+- Create action spans on `ACTION_STARTED`
+- Update them on `ACTION_COMPLETED`
+- Display actions in timeline alongside model calls
+
+**Files Modified:**
+- [`packages/server/src/api/agents/runs.ts`](/Users/stanislasandujar/Projects/elizaos/eliza/packages/server/src/api/agents/runs.ts#L439-L466)
+
+**Impact:**
+- ✅ Timeline now shows ALL spans (actions + model calls)
+- ✅ Action details visible (REPLY, GET_TOKEN_CRYPTOSCORE, etc.)
+- ✅ Accurate span counts match displayed spans
+- ✅ Complete observability for debugging agent behavior
+
+---
+
+### 6. RLS Security for Junction Table
+
+**Problem Identified**: Without RLS on `message_server_agents`, Server A could see the existence of Discord/Telegram servers linked to Server B's agents.
+
+**Solution**: The RLS system automatically adds isolation to the junction table:
+
+- Adds `server_id UUID DEFAULT current_server_id()` column
+- Creates `server_isolation_policy` for complete isolation
+- Server A cannot see or modify Server B's message server associations
+
+---
+
+## Test Coverage
+
+### All Tests Passing ✅
+
+**RLS Tests**: 77 tests pass, 0 fail, 173 expect() calls
+
+**Participant Tests**: 11 tests pass, 0 fail, 27 expect() calls
+- 5 tests in `participant.test.ts` (3 new for `isRoomParticipant`)
+- 6 tests in `messaging.test.ts` (2 new for `isChannelParticipant`)
+
+**Timeline Tests**: Integration tests verify action spans display correctly
+- Run detail API returns both `ACTION_STARTED` and `ACTION_COMPLETED` events
+- Frontend renders action spans with correct names and status
+- Span counts match displayed spans
+
+### Test Files
+
+**Unit Tests - Entity RLS** (`entity-rls.test.ts`)
+- Column detection priority (`roomId` > `entityId` > `authorId`)
+- Policy generation (STRICT vs PERMISSIVE modes)
+- Isolation behavior logic
+
+**Integration Tests - Entity RLS** (`rls-entity.test.ts`)
+- Entity isolation (Alice, Bob, Charlie)
+- Participant-based access control (room membership)
+- Combined Server RLS + Entity RLS (double isolation)
+
+**Integration Tests - message_server_agents** (`rls-message-server-agents.test.ts`)
+- Isolation: Server A sees only its 2 associations, Server B sees only its 1
+- Auto-population: `server_id` automatically set via `DEFAULT current_server_id()`
+- Query blocking: Server A queries Server B's message server → 0 results
+- Modification blocking: Server B tries to delete Server A's association → blocked
+- JOIN protection: Cross-server JOINs filtered correctly
+- Schema validation: Policy and DEFAULT constraint verified
+
+**Room Integration Tests** (5/5 passing)
+- Added test: `should map messageServerId to serverId for backward compatibility`
+- Verifies both fields are populated correctly
+
+**Timeline Integration Tests**
+- Verifies `action_event` logs included in run details
+- Confirms `ACTION_STARTED` events generated
+- Validates action spans display in frontend
+
+---
+
+## Breaking Changes
+
+**None**. All changes are fully backward compatible.
+
+---
+
+## Benefits
+
+### Code Clarity
+- **Developers immediately understand what `messageServerId` refers to**
+- **Self-documenting code**: No additional comments needed
+- **Clear method names**: `isChannelParticipant()` vs generic checks
+
+### Security
+- **Three-layer security**: Server RLS + Entity RLS + Application Authorization
+- **Complete RLS isolation** for both Server-level and Entity-level data
+- **Fail-closed** security model (deny access on errors)
+- **Database-enforced** isolation (can't be bypassed by application bugs)
+- **Zero Configuration**: RLS policies apply automatically to all tables
+
+### Developer Experience
+- **Reduced Bugs**: No more confusion between RLS `server_id` and messaging `serverId`
+- **Better Onboarding**: New developers don't need to guess which "server" is referenced
+- **Future-Proof**: Clear naming prevents similar ambiguities in future development
+- **Backward Compatible**: Existing code continues to work
+- **Type Safety**: TypeScript guides migration with deprecation warnings
+
+### Performance
+- **O(1) participant checks**: Constant time instead of linear
+- **Lower memory usage**: No loading all participants
+- **Database optimization**: Indexed queries for fast lookups
+- **Scalable**: Handles rooms with thousands of participants
+
+### Observability
+- **Complete timeline visibility**: All actions and model calls displayed
+- **Accurate span counts**: Numbers match displayed spans
+- **Better debugging**: See exactly what actions executed and when
+- **Production monitoring**: Full observability for agent behavior analysis
+
+### Testing
+- **Comprehensive Testing**: 88+ total tests ensure complete coverage
+- **All tests passing**: 0 failures, 200+ assertions
+- **Integration tests**: Real database scenarios
+- **Performance tests**: Verify optimization improvements
+- **Security tests**: RLS isolation, unauthorized access prevention
+
+---
+
+## Database Migration
+
+### Automatic Migration System
+
+The migration system automatically handles:
+
+1. **Table rename**: `server_agents` → `message_server_agents`
+2. **Column rename**: `server_id` → `message_server_id` in junction table
+3. **RLS automatic application**:
+   - Adds `server_id` column with `DEFAULT current_server_id()` to all tables
+   - Creates indexes for performance
+   - Applies isolation policies (both server-level and entity-level)
+   - Handles backfill for existing data
+
+**Developer experience:**
+- **Zero configuration required** - just update and restart
+- **No manual SQL scripts** - everything is automated
+- **Idempotent and safe** - can be run multiple times without issues
+
+---
+
+## RLS Architecture Details
+
+### Three-Layer Security Model
+
+**Layer 1: Server RLS (Multi-Tenant Isolation)**
+- Isolates data between different ElizaOS server instances
+- Uses `server_id` for isolation
+- Context set via `application_name` connection parameter
+
+**Layer 2: Entity RLS (User Privacy Isolation)**
+- Isolates data between different entities within a server
+- Uses `entityId`, `authorId`, or joins via `participants` table
+- Context set via `app.entity_id` transaction-local variable
+- Provides DM privacy and multi-user isolation
+
+**Layer 3: Application Layer**
+- Authorization checks (participant validation)
+- Business logic enforcement
+
+**All three layers stack** - a user can only see data from their server AND their accessible entities AND that they have permission to access.
+
+### Excluded Tables (with rationale)
+
+**Entity RLS Exclusions:**
+- `users` - Authentication table (no entity isolation needed)
+- `entity_mappings` - Cross-platform entity mapping
+- `drizzle_migrations`, `__drizzle_migrations` - Migration tracking
+- `agents` - Shared across entities
+- `owners` - RLS management table
+
+All other tables receive RLS automatically based on their column structure.
+
+---
+
+## Configuration
+
+### Environment Variables
+
+```bash
+# Layer 1: Server RLS (Multi-tenant isolation)
+ENABLE_RLS_ISOLATION=true                  # Enable Row Level Security
+RLS_OWNER_ID=my-server-uuid               # Server instance ID for multi-tenant isolation
+
+# Layer 2: Entity RLS (User privacy isolation)
+ENABLE_DATA_ISOLATION=true                # Enable entity-level data isolation
+
+# Database
+POSTGRES_URL=postgresql://user:password@localhost:5432/eliza
+```
+
+---
+
+## API Changes
+
+### Backward Compatibility
+
+All API changes maintain backward compatibility:
+
+**Database Adapter Methods:**
+- ✅ New methods added: `isRoomParticipant()`, `isChannelParticipant()`
+- ✅ Existing methods unchanged
+- ✅ `serverId` field still populated (maps to `messageServerId`)
+
+**API Endpoints:**
+- ✅ All existing endpoints continue to work
+- ✅ Run detail endpoint now includes `action_event` logs
+- ✅ No breaking changes to request/response formats
+
+**TypeScript:**
+- ✅ `serverId` marked as deprecated (still works)
+- ✅ Migration path via TypeScript warnings
+- ✅ Type safety preserved
+
+---
+
+## Summary
+
+This PR delivers a complete security, performance, and observability overhaul:
+
+- **Entity-Level RLS**: Automatic data isolation at the database level
+- **Semantic Clarity**: Clear naming eliminates confusion
+- **Performance Optimization**: O(1) participant checking
+- **Timeline Fix**: Complete action visibility in observability UI
+- **100% Backward Compatible**: Zero breaking changes
+- **Fully Tested**: 88+ tests, 0 failures
+- **Production Ready**: Auto-migration, fail-closed security
+
+**Impact:**
+- 🔒 **Stronger security** with three-layer isolation (Server RLS + Entity RLS + Authorization)
+- 📖 **Clearer code** with semantic naming
+- 🚀 **Better performance** with optimized queries
+- 👁️ **Complete observability** with action spans in timelines
+- 🛡️ **Database-enforced** security that can't be bypassed
+- 🔧 **Developer-friendly** zero-config automatic migrations
+
+**Testing:**
+- ✅ 77 RLS tests passing
+- ✅ 11 participant optimization tests passing
+- ✅ Timeline integration tests passing
+- ✅ All existing tests passing
+- ✅ 0 failures
+6:T8a1,<!-- CURSOR_SUMMARY -->
+> [!NOTE]
+> Aligns server tests and routers with new ElizaOS interfaces, clarifies plugin auto-injection behavior, and deflakes/modernizes middleware, loader, socket, and utility tests.
+> 
+> - **Server/API alignment**:
+>   - Update `agentExistsMiddleware`, Socket.IO router, Jobs and Agent Runs routers to use `ElizaOS` getters instead of agent maps.
+>   - Adjust message flow and log streaming tests to new event/filter semantics.
+> - **Plugin loading behavior**:
+>   - Clarify that server auto-injects `sql` plugin; bootstrap injection handled at character level; ensure deduping and order expectations.
+> - **Test refactors/deflakes**:
+>   - Replace heavy `mock.module` with spies and lightweight mocks; remove brittle fs mocks.
+>   - Skip flaky/integration suites causing interference (version, DB ops, message bus, agent runs, some jobs tests).
+> - **Utilities and middleware**:
+>   - Update tests for `authMiddleware`, validation, security headers, rate limits.
+>   - Adjust `sanitizeFilename` expectations and `resolvePgliteDir` behavior; strengthen path handling assertions.
+> - **Misc**:
+>   - Minor type/interface tweaks (e.g., runtime methods) and improved express server boot/teardown in tests.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit a988400e95a3efe7e9366332d18e83a99429c2f2. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+* **Bug Fixes**
+  * Improved plugin loading flexibility: server now recognizes both short and full bootstrap plugin identifiers during initialization.
+  * Enhanced SQL plugin auto-injection and plugin deduplication logic.
+
+* **Refactor**
+  * Removed internal loader APIs: `tryLoadFile` and `loadCharacterTryPath` functions are no longer available.
+  * Updated core routing infrastructure for improved agent management.
+  * Simplified test infrastructure by reducing mock dependencies and improving test reliability across environments.
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->7:T903,<!-- CURSOR_SUMMARY -->
+> [!NOTE]
+> Adds dynamic slash command registration and modal handling, enables sending attachments in DMs/channels, and improves message/interaction processing with new exports.
+> 
+> - **Discord Service**:
+>   - Introduces dynamic slash command system: `SLASH_COMMAND`/`MODAL_SUBMIT` events, `DiscordSlashCommand` type, `slashCommands` store, and runtime event `DISCORD_REGISTER_COMMANDS` to register/update app and guild commands.
+>   - Enhances interaction handling: ensures connections for interactions and emits unified events (no automatic defer to allow ephemeral replies).
+>   - Makes `clientReadyPromise` public/nullable; refines client init and logging.
+> - **Messaging**:
+>   - Enables sending attachments in DMs and channels by converting `Media` to `AttachmentBuilder` and passing to `sendMessageInChunks`.
+>   - Improves reply reference resolution via `fetchReference`; refines permission checks and structured logging.
+> - **Utils**:
+>   - Widens `sendMessageInChunks` `files` type to accept `AttachmentBuilder`; attaches files on last chunk; safer component handling.
+> - **Voice**:
+>   - Updates callback signature in voice response handler.
+> - **Exports**:
+>   - Re-exports `DISCORD_SERVICE_NAME`, `DiscordService`, and `IDiscordService` from `index`.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit 7fd4add1cc73f5c5b8780dd073aa16fe663d4029. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+* **New Features**
+  * Added slash command registration and handling capabilities
+  * Introduced modal submission support for enhanced interactions
+  * Added client readiness detection for better initialization tracking
+  * Implemented channel permission management and access controls
+
+* **Improvements**
+  * Enhanced attachment handling in messages
+  * Improved message reference resolution and context tracking
+  * Better error handling and diagnostic logging during startup and runtime
+
+* **Refactor**
+  * Updated event types and payload structures for interactions
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->8:T74e,<!-- CURSOR_SUMMARY -->
+> [!NOTE]
+> Adds name normalization and enhanced dependency resolution to handle both scoped package names and short names, with deduped queuing and comprehensive tests.
+> 
+> - **Core (`packages/core/src/plugin.ts`)**
+>   - Add `normalizePluginName` to extract short names from scoped packages.
+>   - Enhance `resolvePluginDependencies` with a lookup map supporting both scoped (`@scope/plugin-x`) and short (`x`) names; use canonical names for cycle tracking and final ordering.
+>   - Add `queueDependency` and update `resolvePluginsImpl` to queue normalized dependencies and avoid duplicates.
+>   - Minor log message tweak in browser warning.
+> - **Tests (`packages/core/src/__tests__/plugin.test.ts`)**
+>   - Add tests for `normalizePluginName` and resolving dependencies using scoped, short, and mixed names, including testDependencies and complex chains.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit 5ea3546d4aa38128a1d5825ec8138012a7c72796. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+* **New Features**
+  * Added `normalizePluginName()` utility to standardize plugin identifiers across scoped and non-scoped naming conventions.
+  * Added `resolvePluginDependencies()` function to resolve plugin dependencies with improved ordering and support for mixed naming conventions.
+
+* **Tests**
+  * Expanded test coverage for new plugin utilities, including scoped/non-scoped packages, complex dependency chains, and missing dependency handling.
+
+<sub>✏️ Tip: You can customize this high-level summary in your review settings.</sub>
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->9:T5d4,Small PR exposing available docs as state value for easy prompt binding. 
+
+<!-- CURSOR_SUMMARY -->
+---
+
+> [!NOTE]
+> Enhances the documents provider to return formatted available documents (with count) via new `values` fields, updates error/empty handling, bumps version to 1.5.15, and refreshes dependencies.
+> 
+> - **Provider (`src/documents-provider.ts`)**:
+>   - Add new `values` fields: `documentsCount`, `availableDocuments`; keep `documents` (concise list).
+>   - Generate formatted document list with metadata and a header (`documentsText`).
+>   - Update all return paths (normal/empty/error/no-service) to include the new fields.
+> - **Release**:
+>   - Bump version to `1.5.15` in `package.json`.
+> - **Dependencies**:
+>   - Refresh lockfile with numerous package updates and additions (e.g., `unpdf`).
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit 8ec1f18eec19354f5f695e101d3c7d063c7f9f8e. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+## Summary by CodeRabbit
+
+* **Chores**
+  * Version bumped to 1.5.15.
+
+* **New Features**
+  * Provider now returns richer document metadata: consistent document counts, formatted available-documents text, and stable handling when the knowledge service is unavailable.
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->a:T6eb,- Replace langchain dependency with @langchain/textsplitters in @elizaos/core
+- Update import from 'langchain/text_splitter' to '@langchain/textsplitters'
+- Remove outdated langchain resolutions from plugin starter packages
+- Add comprehensive test coverage for splitChunks functionality
+- All 89 tests passing with new LangChain v1 integration
+
+This addresses the deprecation of LangChain v0.3 by migrating to the
+modular @langchain/textsplitters package which is part of the LangChain v1
+ecosystem. The migration maintains full backward compatibility while
+reducing bundle size and future-proofing the codebase.
+
+Fixes #6145
+
+https://github.com/elizaOS/eliza/issues/6145#event-20943795877
+
+<!-- CURSOR_SUMMARY -->
+---
+
+> [!NOTE]
+> Migrates core from langchain/text_splitter to @langchain/textsplitters v1, updates deps, removes plugin langchain resolutions, and expands splitChunks tests.
+> 
+> - **Core (@elizaos/core)**
+>   - **Dependencies**: Add `@langchain/textsplitters@^1.0.0`; remove `langchain`.
+>   - **Code**: Switch import in `src/utils.ts` to `@langchain/textsplitters` and use `RecursiveCharacterTextSplitter` in `splitChunks`.
+>   - **Tests**: Expand `splitChunks` coverage in `src/__tests__/utils.test.ts` (empty input, overlap behavior, large chunk sizes, v1 splitter validation).
+> - **Plugins**
+>   - **Starter templates**: Remove `langchain`-related `resolutions/overrides`; retain `zod` resolution only in `packages/plugin-quick-starter` and `packages/plugin-starter`.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit fa89f69859ea02c64bbab119021ab889174a52d5. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->b:T11b1,# Relates to
+
+Fixes excessive vertical spacing in AI-generated markdown responses in the ElizaOS client UI.
+
+# Risks
+
+**Low Risk**
+
+- Only CSS changes affecting markdown content rendering
+- Uses well-supported CSS features (Chrome 58+, Firefox 37+, Safari 11.1+, Edge 79+)
+- No breaking changes to functionality
+- Fully backward compatible
+- Simple rollback (revert commit)
+
+**Affected areas:**
+- Client UI markdown rendering (packages/client)
+- AI response display formatting
+
+# Background
+
+## What does this PR do?
+
+Fixes excessive vertical spacing in AI-generated markdown responses caused by Streamdown's wrapper `<div>` elements. Uses CSS `display: contents` to collapse wrapper spacing while preserving all content and functionality.
+
+**Key improvements:**
+- Bullet gaps: 24.5px → 2px (-91%)
+- List item gaps: 30.5px → 8px (-73%)
+- Header-to-bullets: 28.5px → 4px (-83%)
+- List-to-paragraph: 145.5px → 16px (-89%)
+- **Total spacing error eliminated: 178.5px → 0px**
+
+## What kind of change is this?
+
+- ✅ Bug fixes (non-breaking change which fixes an issue)
+- ✅ Improvements (misc. changes to existing features)
+
+# Documentation changes needed?
+
+- ✅ My changes do not require a change to the project documentation.
+
+The changes are internal CSS improvements with no API or configuration changes.
+
+# Testing
+
+## Where should a reviewer start?
+
+1. Review the CSS changes in `packages/client/src/index.css` (lines 184-278)
+2. Review the component update in `packages/client/src/components/ai-elements/response.tsx` (line 12)
+3. Test the visual improvements in the running client
+
+## Detailed testing steps
+
+### Automated Testing
+- ✅ Playwright browser automation with pixel-perfect measurements
+- ✅ Computed style verification
+- ✅ DOM structure inspection
+- ✅ All spacing measurements achieved targets with 0.0px error
+
+### Manual Testing Instructions
+
+1. Checkout this branch:
+   ```bash
+   git checkout fix/markdown-spacing-compact
+   ```
+
+2. Install dependencies and start client:
+   ```bash
+   bun install
+   cd packages/client && bun run dev
+   ```
+
+3. Open browser to client UI (http://localhost:5173)
+
+4. Start a chat with any agent
+
+5. Ask a question that generates nested lists, for example:
+   - "Explain the key features of this system"
+   - "Create a list view with example data showing nested workflow progress"
+
+6. Verify:
+   - ✅ Compact, readable spacing between list items
+   - ✅ Tight spacing (4px) between headers and their following lists
+   - ✅ No overlapping text
+   - ✅ Proper visual hierarchy maintained
+   - ✅ No console errors
+   - ✅ Smooth scrolling works correctly
+
+### Tested Scenarios
+- ✅ Complex nested lists (numbered and bulleted)
+- ✅ Mixed content (paragraphs, lists, headings)
+- ✅ Scrolling and overflow behavior
+- ✅ Accessibility (screen reader, keyboard navigation)
+- ✅ No layout breakage in any scenario
+
+## Screenshots
+
+### Before
+<img width="3840" height="2080" alt="before" src="https://github.com/user-attachments/assets/459f89bf-c623-4ad4-aa36-ce4a0f997033" />
+*Excessive spacing between elements, particularly noticeable in nested lists*
+
+### After
+<img width="3840" height="2080" alt="after" src="https://github.com/user-attachments/assets/f4addcb5-5dab-45fb-8e0f-e5dda4885d11" />
+*Compact, readable spacing matching design targets and Claude web interface*
+
+# Technical Details
+
+## Files Changed
+- `packages/client/src/index.css` (+109 lines)
+- `packages/client/src/components/ai-elements/response.tsx` (1 line modified)
+
+## Key Technical Approach
+
+Uses CSS `display: contents` to make Streamdown's wrapper divs "transparent" to layout:
+
+```css
+.markdown-content > div {
+  display: contents !important;
+}
+```
+
+This removes wrapper divs from the box tree while preserving DOM structure and semantics, eliminating the spacing contribution from Tailwind's `space-y-4` class.
+
+## Browser Compatibility
+
+| Browser | Version | Status |
+|---------|---------|--------|
+| Chrome | 58+ (May 2017) | ✅ Supported |
+| Firefox | 37+ (March 2015) | ✅ Supported |
+| Safari | 11.1+ (March 2018) | ✅ Supported |
+| Edge | 79+ (January 2020) | ✅ Supported |
+
+Covers >95% of modern browser users.
+
+---
+
+**PR Title:**
+```
+fix(client): Fix excessive spacing in markdown rendered content
+```
+
+**Branch details:**
+- Base branch: `develop`
+- Compare branch: `fix/markdown-spacing-compact` (from gaiaaiagent/GAIA)c:T1899,# Relates to
+
+Improves OpenRouter integration in ElizaOS CLI by adding native embedding support, eliminating the need for users to configure a separate embedding provider when using OpenRouter.
+
+# Risks
+
+**Low Risk** - Well-contained changes following existing patterns
+
+- **User Impact**: No breaking changes. Existing OpenRouter configurations continue to work unchanged.
+- **Test Coverage**: Unit tests updated to reflect new behavior (embedding support enabled for OpenRouter)
+- **Configuration**: Follows the same pattern as existing providers (OpenAI, Google, Ollama) for both interactive and non-interactive modes
+- **Validation**: Uses existing `isValidOpenRouterKey` function to validate API key format (`sk-or-` prefix)
+
+# Background
+
+## What does this PR do?
+
+This PR adds comprehensive OpenRouter support for embeddings in the ElizaOS CLI:
+
+1. **Updates `hasEmbeddingSupport`** to include `'openrouter'` as a model with built-in embedding support
+2. **Adds OpenRouter to `getAvailableEmbeddingModels`** as a fallback option when the primary AI model doesn't support embeddings (e.g., Claude)
+3. **Implements setup configuration** in both `setupAIModelConfig` and `setupEmbeddingModelConfig` to handle:
+   - Interactive mode: Prompts users for OpenRouter API key
+   - Non-interactive mode: Writes placeholder configuration with helpful comments
+4. **Updates unit tests** to reflect that OpenRouter now has embedding support
+
+**Technical Details:**
+- Adds OpenRouter configuration with `OPENROUTER_API_KEY`, `OPENROUTER_EMBEDDING_MODEL`, and `OPENROUTER_EMBEDDING_DIMENSIONS`
+- Leverages OpenRouter's unified API access to multiple embedding models (including OpenAI's text-embedding-3-small)
+- Reuses existing `promptAndStoreOpenRouterKey` helper function from `get-config.ts`
+
+## What kind of change is this?
+
+- [x] Features (non-breaking change which adds functionality)
+- [x] Improvements (misc. changes to existing features)
+- [x] Updates (test updates to reflect new behavior)
+
+## Why are we doing this? Any context or related work?
+
+**Problem:**
+- ElizaOS requires embeddings for agent memory, semantic search, and knowledge base functionality
+- OpenRouter was only available as an AI text generation provider, not for embeddings
+- Users selecting OpenRouter for AI had to configure a second provider (OpenAI, Google, or Ollama) solely for embeddings
+
+**Solution:**
+- OpenRouter provides access to multiple embedding models through its unified API
+- This PR enables users to use a single OpenRouter API key for both text generation and embeddings
+- Reduces configuration complexity and API key management overhead
+
+# Documentation changes needed?
+
+- [x] My changes require a change to the project documentation.
+- [x] Documentation partially exists: The `.env` template in `packages/cli/src/utils/get-config.ts` already includes OpenRouter environment variables (lines 79-82)
+
+**Recommended documentation updates:**
+1. Add OpenRouter to the list of recommended providers supporting both AI + embeddings in README
+2. Document the three OpenRouter environment variables with example values:
+   - `OPENROUTER_API_KEY=sk-or-v1-...`
+   - `OPENROUTER_EMBEDDING_MODEL=openai/text-embedding-3-small`
+   - `OPENROUTER_EMBEDDING_DIMENSIONS=1536`
+3. Optional: Add migration note for existing users who can now simplify their configuration
+
+# Testing
+
+## Where should a reviewer start?
+
+**Review Priority:**
+
+1. **Core logic changes** - `packages/cli/src/commands/create/utils/selection.ts`
+   - Line 50: `hasEmbeddingSupport` now includes `'openrouter'`
+   - Lines 140-144: OpenRouter added to `getAvailableEmbeddingModels`
+
+2. **Configuration setup** - `packages/cli/src/commands/create/actions/setup.ts`
+   - Lines 113-136: `setupAIModelConfig` OpenRouter case
+   - Lines 288-362: `setupEmbeddingModelConfig` OpenRouter case
+
+3. **Test updates** - `packages/cli/tests/unit/utils/selection.test.ts`
+   - Line 20: OpenRouter added to models with embedding support
+   - Lines 71-72: Correctly categorizes OpenRouter as having embeddings
+
+## Detailed testing steps
+
+### 1. Unit Tests ✅
+
+```bash
+cd packages/cli
+bun run test tests/unit/utils/selection.test.ts
+```
+
+**Expected:** All tests pass
+- ✅ `hasEmbeddingSupport('openrouter')` returns `true`
+- ✅ OpenRouter correctly identified as model with embedding support
+
+### 2. Interactive Mode - OpenRouter as Primary AI
+
+```bash
+elizaos create test-openrouter-primary
+# Select: OpenRouter as AI model
+# Expected: Should NOT be prompted for embedding model
+```
+
+**Verify:**
+- `.env` contains `OPENROUTER_API_KEY=`
+- User is prompted for OpenRouter API key interactively
+- No separate embedding model configuration is added
+
+### 3. Interactive Mode - OpenRouter as Embedding Fallback
+
+```bash
+elizaos create test-claude-openrouter
+# Select: Claude as AI model
+# Select: OpenRouter as embedding model
+```
+
+**Verify:**
+- `.env` contains `ANTHROPIC_API_KEY=`
+- `.env` contains `OPENROUTER_API_KEY=`
+- `.env` contains `OPENROUTER_EMBEDDING_MODEL=` and `OPENROUTER_EMBEDDING_DIMENSIONS=`
+
+### 4. Non-Interactive Mode
+
+```bash
+elizaos create test-noninteractive --ai-model openrouter --non-interactive
+```
+
+**Verify:**
+- `.env` created with placeholder: `OPENROUTER_API_KEY=your_openrouter_api_key_here`
+- Comment included: `# Get your API key from: https://openrouter.ai/keys`
+- Default embedding model and dimensions added
+
+### 5. Regression Testing - Other Providers
+
+```bash
+# Verify other providers still work correctly
+elizaos create test-openai --ai-model openai --non-interactive
+elizaos create test-ollama --ai-model local --non-interactive
+elizaos create test-google --ai-model google --non-interactive
+```
+
+**Expected:** All providers create projects successfully with correct `.env` configurations
+
+### 6. Optional: E2E Testing with Real API Key
+
+```bash
+# With a real OpenRouter API key
+export OPENROUTER_API_KEY=sk-or-v1-xxx...
+export OPENROUTER_EMBEDDING_MODEL=openai/text-embedding-3-small
+export OPENROUTER_EMBEDDING_DIMENSIONS=1536
+cd packages/cli
+bun run test:e2e
+```
+
+## Discord username
+
+<!-- If applicable, add your Discord username here for contributor role -->
+neysixxd:T59c,- Add ownerId field to Agent interface in core types
+- Update agentTable schema to use camelCase alias for owner_id column
+- Update RLS code to use camelCase ownerId property
+- Add integration tests for creating and updating agents with ownerId
+- Ensures TypeScript uses camelCase while maintaining snake_case in database
+
+This change improves type safety and follows JavaScript/TypeScript naming
+conventions while maintaining backward compatibility with the database schema.
+
+<!-- CURSOR_SUMMARY -->
+---
+
+> [!NOTE]
+> Adds `ownerId` to `Agent`, maps DB `owner_id` to camelCase, updates RLS usage, and adds integration tests for create/update flows.
+> 
+> - **Core Types**:
+>   - Add optional `ownerId` to `Agent` in `packages/core/src/types/agent.ts`.
+> - **Plugin SQL**:
+>   - Schema: Map DB column `owner_id` to camelCase `ownerId` in `packages/plugin-sql/src/schema/agent.ts`.
+>   - RLS: Use `agent.ownerId` and update assignment writes via `{ ownerId: ownerId }` in `packages/plugin-sql/src/rls.ts`.
+> - **Tests**:
+>   - Integration: Add tests for creating, retrieving, and updating `ownerId` in `packages/plugin-sql/src/__tests__/integration/agent.test.ts`.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit 46979963e8affc64545144b66a38379f1116ad3d. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->e:Tfd0,<!-- Use this template by filling in information and copying and pasting relevant items out of the HTML comments. -->
+
+# Relates to
+
+Relates to elizaOS/eliza#6095 and https://github.com/elizaOS/eliza/pull/6111 - Unified messaging API
+
+We have to wait https://github.com/elizaOS/eliza/pull/6111 to be merged and released 1.6.4 a least before merging this one.
+
+Depends on: https://github.com/elizaOS/eliza/pull/6111
+
+# Risks
+
+**Low risk**
+
+This change is non-breaking and fully backward compatible:
+- Uses unified API when available via `runtime.elizaOS.sendMessage()`
+- Falls back to `messageService.handleMessage()` for standalone mode
+- Includes logging to track which path is used
+- Well-tested with live Discord bot
+
+Potential areas affected:
+- Message processing flow (now uses unified API)
+- Discord message handling (improved error handling and cleanup)
+- Service initialization (cleaner code, removed unnecessary wrapper)
+
+# Background
+
+## What does this PR do?
+
+This PR integrates the new unified messaging API (`elizaOS.sendMessage()`) from elizaOS/eliza#6095, allowing the Discord plugin to use the standardized messaging entry point.
+
+**Key changes:**
+- **messages.ts**: Refactored `handleMessage()` to use `elizaOS.sendMessage()` when available
+- Added fallback to `messageService.handleMessage()` for standalone mode
+- Added debug logging to track which messaging path is used
+- **service.ts**: Cleaned up Discord client initialization and improved error handling
+- Updated `@elizaos/core` dependency to `^1.6.4`
+
+**Benefits:**
+- Standardized messaging across all platforms
+- Automatic field auto-filling (id, agentId, createdAt)
+- Better connection management via `ensureConnection`
+- Support for SYNC/ASYNC modes with callbacks
+- Reduced code duplication
+
+## What kind of change is this?
+
+- [x] Features (non-breaking change which adds functionality)
+- [x] Improvements (misc. changes to existing features)
+- [x] Updates (new versions of included code)
+
+## Why are we doing this?
+
+The unified messaging API provides a single, standardized entry point for all message processing. Instead of each plugin calling `messageService.handleMessage()` directly, they can now use `elizaOS.sendMessage()` which provides:
+
+- Auto-filling of required fields
+- Connection verification before processing
+- Support for SYNC/ASYNC modes
+- Consistent error handling
+- Better observability
+
+This improves maintainability and ensures all platforms benefit from future enhancements to the unified API.
+
+# Testing
+
+## Where should a reviewer start?
+
+1. Review the main change: `src/messages.ts` lines 331-345 - unified API integration
+2. Check service improvements: `src/service.ts` - cleaner initialization
+3. Verify logging: Debug logs show which path is used
+4. Check dependencies: `package.json` - updated core version
+
+**Test scenario:**
+```
+User: @Bot What's up?
+Bot: Fine, and you ?
+```
+
+Logs show:
+```
+Info [Discord] Using unified messaging API
+Info [MessageService] Message received from <user> in room <room>
+Debug [MessageService] Processing message: ...
+```
+
+## Deployment instructions
+
+1. Ensure `@elizaos/core` is updated to `^1.6.4` or later (includes unified API runtime reference)
+2. Rebuild plugin: `bun run build`
+3. Standard deployment process
+
+## Special note
+
+Later we will remove the fallback and clean many lines of code on discord-plugin
+
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+## Summary by CodeRabbit
+
+* **New Features**
+  * Channel management: allow/disallow channels and view allowed channel list.
+  * Fetch text channel members with optional caching.
+
+* **Improvements**
+  * Unified messaging path used when available, with fallback to previous path.
+  * More robust connection and message handling with clearer logging.
+
+* **Chores**
+  * Bumped version to 1.3.3.
+  * Updated core dependency to a newer compatible release.
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->f:T711,- Document TEXT_EMBEDDING model type in README
+- Add embedding configuration parameters to README examples
+- Update package.json agentConfig with embedding parameters
+- Remove outdated note about embeddings not being implemented
+
+<!-- CURSOR_SUMMARY -->
+---
+
+> [!NOTE]
+> Documents TEXT_EMBEDDING support and adds embedding model/dimension config parameters in README and agentConfig.
+> 
+> - **README**:
+>   - Add `TEXT_EMBEDDING` as a provided model and describe configurable dimensions (256–3072).
+>   - Include `OPENROUTER_EMBEDDING_MODEL` and `OPENROUTER_EMBEDDING_DIMENSIONS` in settings and `.env` examples, plus fallbacks `EMBEDDING_MODEL` and `EMBEDDING_DIMENSIONS`.
+>   - Document new config options for embedding model and dimensions; remove outdated note about embeddings not implemented.
+> - **package.json (agentConfig)**:
+>   - Add parameters: `OPENROUTER_EMBEDDING_MODEL`, `EMBEDDING_MODEL`, `OPENROUTER_EMBEDDING_DIMENSIONS`, `EMBEDDING_DIMENSIONS` with defaults.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit ea8e47253bf9c88a97facbb78c4050cfced52225. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+* **Documentation**
+  * Updated configuration documentation with embedding-related settings.
+
+* **New Features**
+  * Added configurable embedding model selection parameters.
+  * Added embedding dimensions configuration options.
+  * Embedding support now documented as an implemented feature.
+
+<sub>✏️ Tip: You can customize this high-level summary in your review settings.</sub>
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->10:T602,Add a guard to the DM response handler to prevent sending empty messages to Discord.
+
+---
+<a href="https://cursor.com/background-agent?bcId=bc-5e41e093-31a5-4d05-b576-27f780c37ec0"><picture><source media="(prefers-color-scheme: dark)" srcset="https://cursor.com/open-in-cursor-dark.svg"><source media="(prefers-color-scheme: light)" srcset="https://cursor.com/open-in-cursor-light.svg"><img alt="Open in Cursor" src="https://cursor.com/open-in-cursor.svg"></picture></a>&nbsp;<a href="https://cursor.com/agents?id=bc-5e41e093-31a5-4d05-b576-27f780c37ec0"><picture><source media="(prefers-color-scheme: dark)" srcset="https://cursor.com/open-in-web-dark.svg"><source media="(prefers-color-scheme: light)" srcset="https://cursor.com/open-in-web-light.svg"><img alt="Open in Web" src="https://cursor.com/open-in-web.svg"></picture></a>
+
+<!-- CURSOR_SUMMARY -->
+---
+
+> [!NOTE]
+> Prevents sending empty Discord DMs by checking for non-whitespace text or attachments before sending.
+> 
+> - **Discord Messaging (`src/messages.ts`)**:
+>   - **DM handling**: Add guard to skip sending when both `content.text` is empty/whitespace and no attachments; log a warning and return early.
+>   - Normalize text handling by using `textContent = content.text ?? ''` for DM `content` field.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit 54c15c3279b662c1903a913b8136a172b9de7edc. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->11:T7c3,<!-- Use this template by filling in information and copying and pasting relevant items out of the HTML comments. -->
+
+<!-- This risks section must be filled out before the final review and merge. -->
+
+# Risks
+
+Low
+
+## What does this PR do?
+
+- Fixes old links in `README.md`
+
+## What kind of change is this?
+
+Improvements (misc. changes to existing features)
+
+
+<!-- This "Why" section is most relevant if there are no linked issues explaining why. If there is a related issue, it might make sense to skip this why section. -->
+## Why are we doing this? Any context or related work?
+Following code standards and links accessibility. Redirects could be unreachable in the future
+
+# Documentation changes needed?
+
+
+My changes do not require a change to the project documentation.
+
+
+<!-- Please show how you tested the PR. This will really help if the PR needs to be retested and probably help the PR get merged quicker. -->
+
+# Testing
+
+manually in the code
+
+## Where should a reviewer start?
+
+## Detailed testing steps
+
+<!--
+None: Automated tests are acceptable.
+-->
+
+<!--
+- As [anon/admin], go to [link]
+  - [do action]
+  - verify [result]
+-->
+
+<!-- If there is a UI change, please include before and after screenshots or videos. This will speed up PRs being merged. It is extra nice to annotate screenshots with arrows or boxes pointing out the differences. -->
+<!--
+## Screenshots
+### Before
+### After
+-->
+
+<!-- If there is anything about the deployment, please make a note. -->
+<!--
+# Deploy Notes
+-->
+
+<!--  Copy and paste command line output. -->
+<!--
+## Database changes
+-->
+
+<!--  Please specify deploy instructions if there is something more than the automated steps. -->
+<!--
+## Deployment instructions
+-->
+
+<!-- If you are on Discord, please join https://discord.gg/ai16z and state your Discord username here for the contributor role and join us in #development-feed -->
+<!--
+## Discord username
+
+-->
+12:T18fb,Bumps the npm_and_yarn group with 1 update in the /packages/core directory: [glob](https://github.com/isaacs/node-glob).
+
+Updates `glob` from 11.0.3 to 11.1.0
+<details>
+<summary>Changelog</summary>
+<p><em>Sourced from <a href="https://github.com/isaacs/node-glob/blob/main/changelog.md">glob's changelog</a>.</em></p>
+<blockquote>
+<h1>changeglob</h1>
+<h2>12</h2>
+<ul>
+<li>Remove the unsafe <code>--shell</code> option. The <code>--shell</code> option is now
+ONLY supported on known shells where the behavior can be
+implemented safely.</li>
+</ul>
+<h2>11.1</h2>
+<p><a href="https://github.com/isaacs/node-glob/security/advisories/GHSA-5j98-mcp5-4vw2">GHSA-5j98-mcp5-4vw2</a></p>
+<ul>
+<li>Add the <code>--shell</code> option for the command line, with a warning
+that this is unsafe. (It will be removed in v12.)</li>
+<li>Add the <code>--cmd-arg</code>/<code>-g</code> as a way to <em>safely</em> add positional
+arguments to the command provided to the CLI tool.</li>
+<li>Detect commands with space or quote characters on known shells,
+and pass positional arguments to them safely, avoiding
+<code>shell:true</code> execution.</li>
+</ul>
+<h2>11.0</h2>
+<ul>
+<li>Drop support for node before v20</li>
+</ul>
+<h2>10.4</h2>
+<ul>
+<li>Add <code>includeChildMatches: false</code> option</li>
+<li>Export the <code>Ignore</code> class</li>
+</ul>
+<h2>10.3</h2>
+<ul>
+<li>Add <code>--default -p</code> flag to provide a default pattern</li>
+<li>exclude symbolic links to directories when <code>follow</code> and <code>nodir</code>
+are both set</li>
+</ul>
+<h2>10.2</h2>
+<ul>
+<li>Add glob cli</li>
+</ul>
+<h2>10.1</h2>
+<ul>
+<li>Return <code>'.'</code> instead of the empty string <code>''</code> when the current
+working directory is returned as a match.</li>
+<li>Add <code>posix: true</code> option to return <code>/</code> delimited paths, even on
+Windows.</li>
+</ul>
+<h2>10.0.0</h2>
+<ul>
+<li>No default exports, only named exports</li>
+</ul>
+<!-- raw HTML omitted -->
+</blockquote>
+<p>... (truncated)</p>
+</details>
+<details>
+<summary>Commits</summary>
+<ul>
+<li><a href="https://github.com/isaacs/node-glob/commit/2551fb51440d402fa2120457bf460e546ee9964d"><code>2551fb5</code></a> 11.1.0</li>
+<li><a href="https://github.com/isaacs/node-glob/commit/47473c046b91c67269df7a66eab782a6c2716146"><code>47473c0</code></a> bin: Do not expose filenames to shell expansion</li>
+<li><a href="https://github.com/isaacs/node-glob/commit/bc33fe1c6a47abd497703d79ad96036e7891ff62"><code>bc33fe1</code></a> skip tilde test on systems that lack tilde expansion</li>
+<li><a href="https://github.com/isaacs/node-glob/commit/59bf9ca211bda5636c4fe9e32d41530c90a4f30d"><code>59bf9ca</code></a> fix notes</li>
+<li><a href="https://github.com/isaacs/node-glob/commit/dde4fa66c87e24b37bb5be28ed10c6e12019edac"><code>dde4fa6</code></a> docs(README): add #anchor and improve <code>note</code>s</li>
+<li><a href="https://github.com/isaacs/node-glob/commit/0559b0ed13c0f8147cd2ac9d48bb49684caaf20e"><code>0559b0e</code></a> docs: add better links to path-scurry docs</li>
+<li><a href="https://github.com/isaacs/node-glob/commit/c9773c249b4b9ed6b2447222c226f9d20c6ce916"><code>c9773c2</code></a> fix: correct typos in <code>README.md</code></li>
+<li><a href="https://github.com/isaacs/node-glob/commit/13e68eadbc4f0aacd9d6ffbcb4b28a34d5d8512c"><code>13e68ea</code></a> Fix punctuation in traversal function documentation</li>
+<li><a href="https://github.com/isaacs/node-glob/commit/1527e2b8107e95122ab6e9b6f6312f121693d53d"><code>1527e2b</code></a> fix repo url</li>
+<li><a href="https://github.com/isaacs/node-glob/commit/7e190e8776a7fa66fba40827de5f9effd1c52f9d"><code>7e190e8</code></a> fix typo <code>maths</code> → <code>paths</code></li>
+<li>Additional commits viewable in <a href="https://github.com/isaacs/node-glob/compare/v11.0.3...v11.1.0">compare view</a></li>
+</ul>
+</details>
+<br />
+
+
+[![Dependabot compatibility score](https://dependabot-badges.githubapp.com/badges/compatibility_score?dependency-name=glob&package-manager=npm_and_yarn&previous-version=11.0.3&new-version=11.1.0)](https://docs.github.com/en/github/managing-security-vulnerabilities/about-dependabot-security-updates#about-compatibility-scores)
+
+Dependabot will resolve any conflicts with this PR as long as you don't alter it yourself. You can also trigger a rebase manually by commenting `@dependabot rebase`.
+
+[//]: # (dependabot-automerge-start)
+[//]: # (dependabot-automerge-end)
+
+---
+
+<details>
+<summary>Dependabot commands and options</summary>
+<br />
+
+You can trigger Dependabot actions by commenting on this PR:
+- `@dependabot rebase` will rebase this PR
+- `@dependabot recreate` will recreate this PR, overwriting any edits that have been made to it
+- `@dependabot merge` will merge this PR after your CI passes on it
+- `@dependabot squash and merge` will squash and merge this PR after your CI passes on it
+- `@dependabot cancel merge` will cancel a previously requested merge and block automerging
+- `@dependabot reopen` will reopen this PR if it is closed
+- `@dependabot close` will close this PR and stop Dependabot recreating it. You can achieve the same result by closing it manually
+- `@dependabot show <dependency name> ignore conditions` will show all of the ignore conditions of the specified dependency
+- `@dependabot ignore <dependency name> major version` will close this group update PR and stop Dependabot creating any more for the specific dependency's major version (unless you unignore this specific dependency's major version or upgrade to it yourself)
+- `@dependabot ignore <dependency name> minor version` will close this group update PR and stop Dependabot creating any more for the specific dependency's minor version (unless you unignore this specific dependency's minor version or upgrade to it yourself)
+- `@dependabot ignore <dependency name>` will close this group update PR and stop Dependabot creating any more for the specific dependency (unless you unignore this specific dependency or upgrade to it yourself)
+- `@dependabot unignore <dependency name>` will remove all of the ignore conditions of the specified dependency
+- `@dependabot unignore <dependency name> <ignore condition>` will remove the ignore condition of the specified dependency and ignore conditions
+You can disable automated security fix PRs for this repo from the [Security Alerts page](https://github.com/elizaOS/eliza/network/alerts).
+
+</details>13:T14a1,# Overall Project Weekly Summary (Nov 16 - 22, 2025)
+
+## Executive Summary
+This week, the project focused on strengthening its foundations by modernizing core dependencies while actively engaging with our community to address critical feedback and guide future development. Key efforts improved platform stability and made our plugin ecosystem more accessible for developers, reinforcing our commitment to a modular and collaborative framework.
+
+### Key Strategic Initiatives & Outcomes
+
+**Strengthening the Platform's Foundation**
+*To ensure the long-term stability and maintainability of the ElizaOS framework, we proactively address technical debt and modernize core components.*
+- The core system was migrated away from an outdated and deprecated dependency (`LangChain v0.3`), resolving a significant technical debt item and enhancing the stability of the entire platform ([elizaos/eliza](https://github.com/elizaos/eliza)).
+
+**Enhancing Developer Experience and Usability**
+*To empower our community to build powerful and adaptable AI agents, we are continuously improving the tools and documentation for our modular architecture.*
+- In the knowledge plugin, we simplified the process of using document context in prompts by making the list of available documents directly accessible as a state value ([elizaos-plugins/plugin-knowledge](https://github.com/elizaos-plugins/plugin-knowledge)).
+- We published comprehensive documentation and examples for the text embedding feature in the OpenRouter plugin, making this powerful capability more accessible to all developers ([elizaos-plugins/plugin-openrouter](https://github.com/elizaos-plugins/plugin-openrouter)).
+
+**Actively Engaging with Community Feedback**
+*Our progress is driven by open collaboration, and we prioritize responding to user needs to ensure the project evolves in a direction that serves our community.*
+- We began triaging a high-priority user report regarding migration issues, demonstrating our commitment to addressing critical problems quickly ([elizaos/eliza](https://github.com/elizaos/eliza)).
+- We captured valuable feature requests for new integrations like the DeepSeek API and support for Farcaster/Base applications, which will help inform our future roadmap ([elizaos/eliza](https://github.com/elizaos/eliza)).
+
+### Cross-Repository Coordination
+
+**Shared Dependencies**
+The modernization of a core dependency in [elizaos/eliza](https://github.com/elizaos/eliza) required coordinated updates across plugin starter packages. This foundational work ensures that as the core platform evolves, the entire ecosystem of plugins remains stable and compatible, reflecting our modular design philosophy.
+
+**Community-Driven Integration**
+A community discussion about integrating the DeepSeek API ([#6156](https://github.com/elizaos/eliza/issues/6156)) highlighted the composable nature of our ecosystem. The conversation, spanning both the core [elizaos/eliza](https://github.com/elizaos/eliza) and [elizaos-plugins/plugin-knowledge](https://github.com/elizaos-plugins/plugin-knowledge) repositories, pointed to solutions involving `plugin-openrouter`, showcasing how different components of ElizaOS can be combined to extend functionality.
+
+## Repository Spotlights
+
+### elizaos/eliza
+- **Modernized Core Dependencies:** Migrated from the deprecated `langchain` v0.3 to `@langchain/textsplitters`, resolving a long-standing stability concern and closing issue [#6145](https://github.com/elizaos/eliza/issues/6145) via PR [#6152](https://github.com/elizaos/eliza/pull/6152).
+- **Triaged Critical Community Issues:** Began investigating a high-priority migration issue reported by a user, covering snapshot eligibility and wallet connection problems ([#6158](https://github.com/elizaos/eliza/issues/6158)).
+- **Captured New Feature Requests:** The community proposed several valuable enhancements, including DeepSeek API integration ([#6156](https://github.com/elizaos/eliza/issues/6156)), support for Farcaster and Base ([#6161](https://github.com/elizaos/eliza/issues/6161)), and a UI improvement for clickable addresses ([#6160](https://github.com/elizaos/eliza/issues/6160)).
+- **Improved Documentation:** Corrected outdated links in the CLI documentation to improve user experience ([#6050](https://github.com/elizaos/eliza/pull/6050)).
+
+### elizaos-plugins/plugin-knowledge
+- **Improved Document Accessibility:** Merged a feature that exposes the list of available documents as a state value, making it significantly easier for developers to bind document context into prompts ([#47](https://github.com/elizaos-plugins/plugin-knowledge/pull/47)).
+- **Fostered Community Collaboration:** An active discussion on using the Deepseek API ([#6156](https://github.com/elizaos-plugins/plugin-knowledge/issues/6156)) saw community members guiding a user toward potential solutions using other plugins, demonstrating a healthy, collaborative ecosystem.
+
+### elizaos-plugins/plugin-openrouter
+- **Enhanced Text Embedding Documentation:** Formalized the documentation for the `TEXT_EMBEDDING` model type by updating the README with comprehensive details and configuration examples, making the feature fully documented and easier to use ([#19](https://github.com/elizaos-plugins/plugin-openrouter/pull/19)).0:{"buildId":"US8XLB_zHXYj_PVAECGcd","rsc":["$","$1","c",{"children":[["$","div",null,{"className":"container mx-auto px-6 py-8 md:px-8","children":["$","div",null,{"className":"mx-auto max-w-4xl","children":[["$","div",null,{"className":"mb-4 flex flex-col justify-between sm:flex-row","children":[["$","$L2",null,{"currentInterval":"week","currentDate":"2025-11-16"}],["$","$L3",null,{"metrics":{"date":"2025-11-16","interval":{"intervalStart":"$D2025-11-16T00:00:00.000Z","intervalEnd":"$D2025-11-23T00:00:00.000Z","intervalType":"week"},"pullRequests":{"new":10,"merged":11,"total":16},"issues":{"new":6,"closed":5,"total":10},"activeContributors":18,"codeChanges":{"additions":5627,"deletions":8209,"files":114,"commitCount":144},"topContributors":[{"username":"standujar","avatarUrl":"https://avatars.githubusercontent.com/u/16385918?u=718bdcd1585be8447bdfffb8c11ce249baa7532d&v=4","totalScore":115.15835800199321,"prScore":99.38035800199322,"issueScore":0,"reviewScore":15,"commentScore":0.7779999999999999,"summary":null},{"username":"odilitime","avatarUrl":"https://avatars.githubusercontent.com/u/16395496?u=c9bac48e632aae594a0d85aaf9e9c9c69b674d8b&v=4","totalScore":98.01259391847285,"prScore":88.11259391847284,"issueScore":0,"reviewScore":9.5,"commentScore":0.4,"summary":null},{"username":"0xbbjoker","avatarUrl":"https://avatars.githubusercontent.com/u/54844437?u=90fe1762420de6ad493a1c1582f1f70c0d87d8e2&v=4","totalScore":92.5518788239393,"prScore":67.8518788239393,"issueScore":0,"reviewScore":24.5,"commentScore":0.2,"summary":null},{"username":"lalalune","avatarUrl":"https://avatars.githubusercontent.com/u/18633264?u=e2e906c3712c2506ebfa98df01c2cfdc50050b30&v=4","totalScore":49.7477738965761,"prScore":49.7477738965761,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":null},{"username":"LinuxIsCool","avatarUrl":"https://avatars.githubusercontent.com/u/31582215?u=b8eb5d3849bf877a3a0b686cf1632aca92e744ae&v=4","totalScore":39.88213122712422,"prScore":39.682131227124216,"issueScore":0,"reviewScore":0,"commentScore":0.2,"summary":null},{"username":"borisudovicic","avatarUrl":"https://avatars.githubusercontent.com/u/31806472?u=c0478c34097551ba98aaa71edb33af0885a72d69&v=4","totalScore":8.2,"prScore":0,"issueScore":8.2,"reviewScore":0,"commentScore":0,"summary":null},{"username":"skurzyp","avatarUrl":"https://avatars.githubusercontent.com/u/98319381?v=4","totalScore":5,"prScore":0,"issueScore":0,"reviewScore":5,"commentScore":0,"summary":null},{"username":"ChristopherTrimboli","avatarUrl":"https://avatars.githubusercontent.com/u/27584221?u=de148a498b5af814e037c2975112fadd09df743f&v=4","totalScore":5,"prScore":0,"issueScore":0,"reviewScore":5,"commentScore":0,"summary":null},{"username":"devbrett90-prog","avatarUrl":"https://avatars.githubusercontent.com/u/241853504?v=4","totalScore":4.5,"prScore":0,"issueScore":0,"reviewScore":4.5,"commentScore":0,"summary":null},{"username":"TommyVeit","avatarUrl":"https://avatars.githubusercontent.com/u/244845549?v=4","totalScore":4,"prScore":0,"issueScore":4,"reviewScore":0,"commentScore":0,"summary":null},{"username":"870171594","avatarUrl":"https://avatars.githubusercontent.com/u/216127669?u=d4669261a63be8c0bcb69c4e497ed51ecc07776e&v=4","totalScore":4,"prScore":0,"issueScore":4,"reviewScore":0,"commentScore":0,"summary":null},{"username":"nguyennk92","avatarUrl":"https://avatars.githubusercontent.com/u/30664183?u=d6e579cd25d50bc8e9ec4928d95909d759b841db&v=4","totalScore":0.4,"prScore":0,"issueScore":0,"reviewScore":0,"commentScore":0.4,"summary":null},{"username":"otaku-x402","avatarUrl":"https://avatars.githubusercontent.com/u/242004857?u=1325b26d380eec4a0b8d84e8e249c523eebd28dc&v=4","totalScore":0.2,"prScore":0,"issueScore":0,"reviewScore":0,"commentScore":0.2,"summary":null},{"username":"letmehateu","avatarUrl":"https://avatars.githubusercontent.com/u/133153661?u=2217cec1ebd7bf22a8e4e3ace28b3183720dd444&v=4","totalScore":0.2,"prScore":0,"issueScore":0,"reviewScore":0,"commentScore":0.2,"summary":null}],"focusAreas":[{"area":"server","count":52},{"area":"src/actions","count":12},{"area":"src","count":10},{"area":"core","count":9},{"area":"docs","count":8},{"area":"cli","count":5},{"area":"__tests__","count":3},{"area":".github/workflows","count":1},{"area":"app","count":1},{"area":"components/brand","count":1}],"topIssues":[{"id":"I_kwDOMT5cIs7YjZ7G","title":"can i use deepseek api?","author":"870171594","number":6156,"repository":"elizaos/eliza","body":"**Is your feature request related to a problem? Please describe.**\n\n<!-- A clear and concise description of what the problem is. Ex. I'm always frustrated when [...] -->\n\n**Describe the solution you'd like**\n\n<!-- A clear and concise description of what you want to happen. -->\n\n**Describe alternatives you've considered**\n\n<!-- A clear and concise description of any alternative solutions or features you've considered. -->\n\n**Additional context**\n\n<!-- Add any other context or screenshots about the feature request here. -->\n","createdAt":"2025-11-17T12:36:09Z","closedAt":"2025-12-08T13:17:30Z","state":"CLOSED","commentCount":1},{"id":"I_kwDOMT5cIs7NzHXv","title":"Migrate All Dependencies and Plugins to Zod v4","author":"borisudovicic","number":5999,"repository":"elizaos/eliza","body":"We need to migrate the Eliza monorepo and all plugins from Zod v3 to Zod v4.\n\n* Stan has already initiated \\~20–25 PRs across referenced plugins to bump dependencies (core, bootstrap, langchain/ai/vercel, etc.) to the latest compatible Zod v4 versions.\n* Some plugins currently have mismatched peer dependencies; migration only works if all packages are upgraded consistently.\n* Newer versions of the AI SDK also rely on Zod v4, so all LLM plugins must be updated to the latest ai-sdk.\n\nThis migration is a blocking dependency upgrade: partial migration causes runtime and type errors. We need a coordinated effort to upgrade and test the full set of \\~40 plugins.\n\nAcceptance Criteria:\n\n* Update package.json in all monorepo packages to depend on zod@^4.\n* Update all plugins (bootstrap, sql, LLM plugins, etc.) to use Zod v4 schemas.\n* Resolve peer dependency mismatches across packages.\n* Upgrade all AI SDK–based packages to versions that use Zod v4.","createdAt":"2025-09-25T09:15:09Z","closedAt":"2025-11-20T17:14:17Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7V2FT1","title":"Container Billing Logic","author":"borisudovicic","number":6124,"repository":"elizaos/eliza","body":"* Add **monthly cron** to deduct container costs (\\~$25–35 per user).\n* If cron fails → **pause container**, retain for one week, send email → delete after grace period.","createdAt":"2025-11-04T18:13:32Z","closedAt":"2025-11-20T17:14:21Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7XzOLe","title":"Deprecation of Langchain v0.3 - migrate to langchian-classic or bump version to v1","author":"skurzyp","number":6145,"repository":"elizaos/eliza","body":"**Is your feature request related to a problem? Please describe.**\nElizaOS currently uses LangChain v0.3, which is now outdated. The latest release is LangChain v1, and the previous functionality with the same API has been moved to a separate package called langchain-classic. Since LangChain v0.3 and v1 are incompatible, we cannot easily upgrade the LangChain version in our SDK, as ElizaOS depends on the older v0.3 release.\n\n**Describe the solution you'd like**\nbumping `langchain` version to v1\n\n**Describe alternatives you've considered**\nmigtration to `langchain-classic`\n\n**Additional context**\n","createdAt":"2025-11-13T10:16:57Z","closedAt":"2025-11-17T18:18:24Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7YJ3C6","title":"Figma UI implementation on cloud","author":"samarth30","number":6153,"repository":"elizaos/eliza","body":"","createdAt":"2025-11-14T17:13:07Z","closedAt":"2025-11-20T17:14:31Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7ZOm4N","title":"Add Farcaster + Base app support","author":"borisudovicic","number":6161,"repository":"elizaos/eliza","body":"","createdAt":"2025-11-19T21:28:09Z","closedAt":"2026-04-12T18:51:11Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7ZMI5z","title":"Addresses (account + transaction) should be hyperlinks","author":"borisudovicic","number":6160,"repository":"elizaos/eliza","body":"","createdAt":"2025-11-19T18:02:27Z","closedAt":"2026-04-12T18:53:50Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7Y_Y8y","title":"Snapshot Eligibility Issue + Tangem Wallet Connection Not Supported (Discord Support Compromised)","author":"TommyVeit","number":6158,"repository":"elizaos/eliza","body":"$4","createdAt":"2025-11-19T00:20:30Z","closedAt":"2025-11-20T12:36:52Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7ZfVzc","title":"PnL Cards","author":"borisudovicic","number":6163,"repository":"elizaos/eliza","body":"Example:<br>\n\n![image.png](https://uploads.linear.app/186bdefa-3633-464a-80cd-6e86fe765a5c/7e4a5785-30ea-4d5f-864e-ac079d3f01d1/d07719e3-e1ce-420a-8dee-0f0e32adbc01?signature=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJwYXRoIjoiLzE4NmJkZWZhLTM2MzMtNDY0YS04MGNkLTZlODZmZTc2NWE1Yy83ZTRhNTc4NS0zMGVhLTRkNWYtODY0ZS1hYzA3OWQzZjAxZDEvZDA3NzE5ZTMtZTFjZS00MjBhLThkZWUtMGYwZTMyYWRiYzAxIiwiaWF0IjoxNzYzNjY5MTM0LCJleHAiOjE3OTUyMzk2OTR9.WHmhRWwFozujyDrKftT697A6gyD1GxFCCj4XFr9Iq1Q \"=302.09999999999997x\")","createdAt":"2025-11-20T20:05:09Z","closedAt":"2026-04-12T18:53:47Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7ZVzBU","title":"Buttons (Yes + No)","author":"borisudovicic","number":6162,"repository":"elizaos/eliza","body":"","createdAt":"2025-11-20T09:37:48Z","closedAt":"2026-04-12T18:53:49Z","state":"CLOSED","commentCount":0}],"topPullRequests":[{"id":"PR_kwDOMT5cIs607dMZ","title":"feat: Entity-level RLS & Security Improvements","author":"standujar","number":6167,"body":"$5","repository":"elizaos/eliza","createdAt":"2025-11-22T01:44:49Z","mergedAt":"2025-11-27T09:14:36Z","additions":6118,"deletions":2157},{"id":"PR_kwDOMT5cIs6xzKBP","title":"fix: align server tests with ElizaOS API changes","author":"odilitime","number":6135,"body":"$6","repository":"elizaos/eliza","createdAt":"2025-11-06T04:07:48Z","mergedAt":"2025-11-20T23:02:50Z","additions":4294,"deletions":4383},{"id":"PR_kwDOOtXZkc6wwBNq","title":"Discord slash commands interface, modal interaction enhancements, attachment fixes","author":"odilitime","number":23,"body":"$7","repository":"elizaos-plugins/plugin-discord","createdAt":"2025-10-31T04:21:47Z","mergedAt":"2025-11-21T06:41:42Z","additions":683,"deletions":345},{"id":"PR_kwDOMT5cIs60tivJ","title":"feat: improve accepted formats for plugin names in plugin dependencies","author":"odilitime","number":6164,"body":"$8","repository":"elizaos/eliza","createdAt":"2025-11-20T23:01:34Z","mergedAt":"2025-11-21T03:35:46Z","additions":614,"deletions":73},{"id":"PR_kwDOMT5cIs60v4ix","title":"fix: topP support for anthropic PR","author":"odilitime","number":6166,"body":"<!-- CURSOR_SUMMARY -->\n> [!NOTE]\n> Introduce `topP` as a configurable model parameter (defaults and per-model-type) and pass-through in runtime-generated params.\n> \n> - **Core Runtime (`packages/core/src/runtime.ts`)**\n>   - Extend model settings resolution to include `TOP_P` with default and model-specific fallbacks; make `legacyKey` optional.\n>   - Populate `modelSettings.topP` when available.\n> - **Types (`packages/core/src/types/model.ts`)**\n>   - Add `MODEL_SETTINGS` keys for `DEFAULT_TOP_P`, `TEXT_SMALL_TOP_P`, `TEXT_LARGE_TOP_P`, `OBJECT_SMALL_TOP_P`, `OBJECT_LARGE_TOP_P`.\n>   - Extend `GenerateTextParams` with optional `topP`; note provider capability differences in docs.\n> \n> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit de266adf45a5bd6b11d34a2e872aff882f7a63d2. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>\n<!-- /CURSOR_SUMMARY -->","repository":"elizaos/eliza","createdAt":"2025-11-21T04:44:59Z","mergedAt":"2025-11-25T23:33:04Z","additions":358,"deletions":8},{"id":"PR_kwDOMT5cIs60u0ti","title":"fix(server): update MessageBusService integration tests","author":"standujar","number":6165,"body":"# Relates to\r\n\r\nUpdates to MessageBusService integration tests following architecture changes\r\n\r\n# Risks\r\n\r\nLow - Test-only changes, no production code modified\r\n\r\n# Background\r\n\r\n## What does this PR do?\r\n\r\nUpdates MessageBusService integration tests to align with the current architecture:\r\n- Removes checks for `MESSAGE_RECEIVED` event (no longer emitted)\r\n- Updates tests to verify message validation flow passes before downstream processing\r\n- Removes redundant Metadata Propagation tests (covered by Message Handling tests)\r\n\r\n## What kind of change is this?\r\n\r\nBug fixes (non-breaking change which fixes an issue)\r\n\r\n# Documentation changes needed?\r\n\r\nMy changes do not require a change to the project documentation.\r\n\r\n# Testing\r\n\r\n## Where should a reviewer start?\r\n\r\n`packages/server/src/__tests__/integration/message-bus-service.test.ts`\r\n\r\n## Detailed testing steps\r\n\r\n```bash\r\ncd packages/server\r\nbun test src/__tests__/integration/message-bus-service.test.ts\r\n```\r\n\r\nExpected: 12 pass, 0 fail\r\n","repository":"elizaos/eliza","createdAt":"2025-11-21T01:53:34Z","mergedAt":"2025-11-21T12:12:30Z","additions":303,"deletions":529},{"id":"PR_kwDOOu4gVs6z1XpV","title":"feat: expose available docs as state value","author":"0xbbjoker","number":47,"body":"$9","repository":"elizaos-plugins/plugin-knowledge","createdAt":"2025-11-17T11:23:34Z","mergedAt":"2025-11-17T16:40:30Z","additions":221,"deletions":208},{"id":"PR_kwDOMT5cIs6zfDfx","title":"fix: migrate from LangChain v0.3 to @langchain/textsplitters v1.0","author":"0xbbjoker","number":6152,"body":"$a","repository":"elizaos/eliza","createdAt":"2025-11-14T15:47:47Z","mergedAt":"2025-11-17T18:18:23Z","additions":160,"deletions":94},{"id":"PR_kwDOMT5cIs60Z-75","title":"fix: markdown spacing compact","author":"LinuxIsCool","number":6159,"body":"$b","repository":"elizaos/eliza","createdAt":"2025-11-19T17:17:48Z","mergedAt":"2025-12-01T09:35:13Z","additions":106,"deletions":1},{"id":"PR_kwDOMT5cIs6yxEIL","title":"fix: Add openrouter embedding option in CLI","author":"Neysixx","number":6142,"body":"$c","repository":"elizaos/eliza","createdAt":"2025-11-11T14:06:17Z","mergedAt":"2025-11-20T14:56:52Z","additions":79,"deletions":4},{"id":"PR_kwDOMT5cIs6zOMHD","title":"feat(plugin-sql): add ownerId field to Agent with camelCase mapping","author":"0xbbjoker","number":6147,"body":"$d","repository":"elizaos/eliza","createdAt":"2025-11-13T12:51:40Z","mergedAt":null,"additions":77,"deletions":4},{"id":"PR_kwDOP6BTDM60mMPB","title":"Frontpage fixes","author":"lalalune","number":65,"body":"This PR removes the video, adds some grid and color for that v0 vibe","repository":"elizaos/cloud","createdAt":"2025-11-20T13:32:07Z","mergedAt":"2025-11-21T18:07:23Z","additions":60,"deletions":2474},{"id":"PR_kwDOOtXZkc6xNPtm","title":"feat: integrate unified messaging API","author":"standujar","number":24,"body":"$e","repository":"elizaos-plugins/plugin-discord","createdAt":"2025-11-03T14:56:35Z","mergedAt":"2025-11-20T21:56:11Z","additions":50,"deletions":39},{"id":"PR_kwDOOiniuM60b_Vn","title":"docs: add documentation for text embedding functionality","author":"0xbbjoker","number":19,"body":"$f","repository":"elizaos-plugins/plugin-openrouter","createdAt":"2025-11-19T20:21:05Z","mergedAt":"2025-11-19T21:51:16Z","additions":44,"deletions":3},{"id":"PR_kwDOMT5cIs6zH89E","title":"feat: Socketio server add auth token","author":"nguyennk92","number":6144,"body":"# Risks\r\n\r\nLow\r\n\r\n# Background\r\n\r\n## What does this PR do?\r\n\r\nAdd env ELIZA_SOCKETIO_AUTH_TOKEN behave similar to ELIZA_SERVER_AUTH_TOKEN\r\n\r\n## What kind of change is this?\r\nImprovements (misc. changes to existing features)\r\n\r\n## Why are we doing this? Any context or related work?\r\nAdd a layer of security\r\n","repository":"elizaos/eliza","createdAt":"2025-11-13T03:41:16Z","mergedAt":null,"additions":38,"deletions":1},{"id":"PR_kwDOOtXZkc60wxMn","title":"Prevent sending empty discord messages","author":"odilitime","number":25,"body":"$10","repository":"elizaos-plugins/plugin-discord","createdAt":"2025-11-21T06:46:51Z","mergedAt":null,"additions":8,"deletions":1},{"id":"PR_kwDOMT5cIs6sqP2s","title":"docs: fix old links to actual","author":"letmehateu","number":6050,"body":"$11","repository":"elizaos/eliza","createdAt":"2025-10-08T09:31:20Z","mergedAt":"2025-11-16T12:51:11Z","additions":3,"deletions":3},{"id":"PR_kwDOMT5cIs6z6-8G","title":"chore(deps): bump glob from 11.0.3 to 11.1.0 in /packages/core in the npm_and_yarn group across 1 directory","author":"dependabot","number":6157,"body":"$12","repository":"elizaos/eliza","createdAt":"2025-11-17T18:38:08Z","mergedAt":null,"additions":1,"deletions":1}],"detailedContributorSummaries":{}},"summaryContent":"$13","className":"self-end sm:self-start"}]]}],"$L14","$L15","$L16"]}]}],["$L17","$L18","$L19"],"$L1a"]}],"loading":null,"isPartial":false}
+14:["$","div",null,{"className":"mb-6","children":["$","div",null,{"className":"flex items-center justify-between","children":[[["$","$L1b",null,{"href":"/summary/week/2025-11-09","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left mr-2 h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"children":"Previous"}],false],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$L1b",null,{"href":"/summary/week/2025-11-09","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Previous"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]],["$","div",null,{"className":"flex flex-col items-center","children":[["$","div",null,{"className":"text-sm font-medium text-gray-500","children":["Weekly"," Summary"]}],["$","time",null,{"dateTime":"2025-11-16","className":"text-md font-bold","children":"Nov 16 - 22, 2025"}]]}],[["$","$L1b",null,{"href":"/summary/week/2025-11-23","children":[false,["$","span",null,{"children":"Next"}],["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right ml-2 h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}]],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$L1b",null,{"href":"/summary/week/2025-11-23","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Next"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]]]}]}]
+1d:T74f,Hi ElizaOS team,
+
+I’m trying to complete the AI16Z → ElizaOS migration, but I’m running into two major issues and Discord support has become unreliable due to impersonators. I need help from the real development team to determine the correct path.
+
+My situation:
+
+• I purchased AI16Z tokens on Oct 26 using my Phantom wallet.  
+• I then moved them to my Tangem wallet for safety.  
+• On Nov 11 (snapshot date), the tokens were held inside my Tangem wallet.  
+• The migration portal shows my Phantom wallet as “0 eligible” (expected since Phantom didn’t hold them during snapshot).  
+• I cannot connect my Tangem wallet to the migration portal because WalletConnect does not support Tangem.  
+• My Tangem wallet was created using key cards only, so I do not have a seed phrase to export into Phantom.
+
+The Discord server is currently compromised — multiple impersonators posing as support are entering tickets and attempting to direct users to send tokens manually. Because of this, I cannot rely on Discord support or email responses that appear to be spoofed.
+
+What I need from the real team:
+
+1. Confirmation of whether Tangem-held tokens during the snapshot are eligible for migration.  
+2. Whether a manual backend whitelist update is possible so my Phantom wallet can perform migration safely.  
+3. If not, what the official and safe method is for users whose eligible snapshot wallet cannot connect to the portal (Tangem case).  
+4. Any announcements regarding potential whitelist updates or support for non-exportable wallets.
+
+I have NOT sent my tokens anywhere and I have NOT interacted with any unofficial links. My tokens are safe. I’m only seeking official guidance from the verifiable team here on GitHub.
+
+Thank you — I appreciate your time. I prefer to resolve this safely through GitHub to avoid Discord impersonation issues.1e:T4f7c,## Summary
+
+This PR implements four major improvements to ElizaOS's security, data architecture, and observability:
+
+1. **Entity-Level Row Level Security (RLS)** - PostgreSQL RLS policies for entity-based data isolation
+2. **Semantic Clarity Refactoring** - Renames `serverId` to `messageServerId` for clarity
+3. **Performance Optimization** - Efficient participant checking methods (`isRoomParticipant`, `isChannelParticipant`)
+4. **Timeline Action Spans Fix** - Correct inclusion of `action_event` logs in run timelines
+
+All changes maintain full backward compatibility with existing deployments and plugins.
+
+---
+
+## Table of Contents
+
+1. [Architecture Overview](#architecture-overview)
+   - [Entity-Level RLS](#1-entity-level-row-level-security-rls)
+   - [Semantic Clarity](#2-semantic-clarity-serverid-vs-messageserverid)
+   - [Performance Optimization](#3-performance-optimization-participant-checking)
+   - [Timeline Action Spans Fix](#4-timeline-action-spans-fix)
+2. [Test Coverage](#test-coverage)
+3. [Database Migration](#database-migration)
+4. [Configuration](#configuration)
+
+---
+
+## Architecture Overview
+
+### 1. Entity-Level Row Level Security (RLS)
+
+**Problem**: ElizaOS needed fine-grained access control to isolate data by entity (users, agents, bots, etc.) within the same database.
+
+**Solution**: Implemented PostgreSQL RLS policies that automatically filter data based on the current entity context.
+
+**Benefits:**
+- ✅ **Data Isolation**: Each entity only sees its own data
+- ✅ **Automatic Enforcement**: RLS is enforced at the database level, preventing accidental data leaks
+- ✅ **Performance**: Database-level filtering is more efficient than application-level checks
+- ✅ **Security**: Even if application code has bugs, RLS prevents unauthorized access
+
+**Implementation:**
+- Added `current_entity_id()` PostgreSQL function to track current entity context via `app.entity_id` session variable
+- Created `add_entity_isolation()` function to apply RLS policies to tables
+- Two isolation strategies:
+  - **Direct ownership**: Tables with `entityId` or `authorId` columns
+  - **Shared access**: Tables with `roomId` that join to `participants` table
+- Integrated with entity context management in ElizaOS core
+
+**RLS Isolation Strategies:**
+
+The system automatically detects which strategy to use based on table schema:
+
+**Strategy 1: Direct Entity Ownership**
+- Tables: `memories`, `tasks`, `components`
+- Policy: `entityId = current_entity_id()`
+- Effect: Users see only their own records
+
+**Strategy 2: Room-Based Shared Access**
+- Tables: `logs`, `messages` (via `roomId`)
+- Policy: `roomId IN (SELECT roomId FROM participants WHERE entityId = current_entity_id())`
+- Effect: Users see all records in rooms they're a participant in
+- **Key Benefit**: In a room with 3 participants, all 3 can see the same logs/messages
+
+---
+
+### 2. Server-Level Row Level Security (RLS)
+
+**Problem**: ElizaOS needed multi-tenant isolation to prevent data leakage between different server instances (deployments, environments).
+
+**Solution**: Implemented PostgreSQL RLS policies that automatically isolate data by ElizaOS server instance.
+
+Already implemented: #6101
+
+---
+
+### 3. Semantic Clarity: `serverId` vs `messageServerId`
+
+#### Problem Statement
+
+##### Why `serverId` was problematic
+
+The term `serverId` was ambiguous and created confusion in the codebase for multiple reasons:
+
+**1. Semantic Ambiguity**
+
+The name `serverId` doesn't clearly indicate what type of server it refers to. In a distributed system like ElizaOS, "server" could mean:
+- Message servers (Discord, Telegram, Slack)
+- Application servers (ElizaOS instances)
+- Database servers
+- Authentication servers
+
+This ambiguity made code harder to read and maintain.
+
+**2. Conflict with Row Level Security (RLS)**
+
+ElizaOS uses PostgreSQL Row Level Security for multi-tenant isolation. In this context:
+- `server_id` in RLS refers to the **ElizaOS server instance** (for tenant isolation)
+- `serverId` in messaging refers to **external message platforms** (Discord guild, Telegram bot, etc.)
+
+**Key distinction:**
+- ONE ElizaOS server instance (`server_id = "abc-123"`) can connect to MULTIPLE message servers
+  - Discord guilds (`messageServerId = "discord-1"`, `messageServerId = "discord-2"`)
+  - Telegram bots (`messageServerId = "telegram-1"`)
+
+This dual meaning created confusion:
+
+```typescript
+// Which serverId is this? ElizaOS instance or Discord guild?
+const room = await adapter.getRoom({ serverId, roomId });
+
+// Is this filtering by tenant or by Discord server?
+await adapter.getRoomsByServerId(serverId);
+```
+
+**3. Developer Confusion**
+
+When working on features involving both RLS and messaging:
+- Setting RLS policies with `server_id` (tenant isolation)
+- Querying rooms by `serverId` (message platform)
+
+Same name, completely different concepts → bugs and confusion
+
+**4. API Inconsistency**
+
+API routes like `/api/agents/:agentId/servers/:serverId/channels` didn't clearly communicate that `serverId` refers to a messaging platform, not an ElizaOS server.
+
+#### Solution
+
+Rename message-related `serverId` to `messageServerId` to:
+- **Clearly indicate purpose**: It's the ID of an external messaging platform
+- **Avoid RLS conflicts**: RLS continues using `server_id` for tenant isolation
+- **Improve maintainability**: Code is self-documenting and semantically clear
+- **Better API design**: Routes like `/api/agents/:agentId/message-servers/:messageServerId/channels` are crystal clear
+
+---
+
+### 4. Performance Optimization: Participant Checking
+
+**Problem**: Checking if an entity is a participant required loading ALL participants into memory and using `.some()` - O(n) complexity.
+
+**Solution**: Added direct database existence checks - O(1) complexity.
+
+**New Methods:**
+- `isRoomParticipant(entityId, roomId)` - Direct DB query
+- `isChannelParticipant(entityId, channelId)` - Direct DB query
+
+**Benefits:**
+- **Constant time complexity** - O(1) instead of O(n)
+- **Lower memory usage** - No loading all participants
+- **Better scalability** - Handles rooms with 1000+ participants
+- **Database indexes** - Optimized queries
+
+**Implementation:**
+
+```typescript
+// OLD: O(n) - Load all participants into memory
+async isParticipant(entityId: UUID, roomId: UUID): Promise<boolean> {
+  const participants = await this.getParticipantsForRoom(roomId);
+  return participants.some(p => p === entityId);
+}
+
+// NEW: O(1) - Direct database existence check
+async isRoomParticipant(entityId: UUID, roomId: UUID): Promise<boolean> {
+  return this.withEntityContext(null, async (tx) => {
+    const result = await tx
+      .select({ exists: sql<number>`1` })
+      .from(participantTable)
+      .where(
+        and(
+          eq(participantTable.roomId, roomId),
+          eq(participantTable.entityId, entityId)
+        )
+      )
+      .limit(1);
+    return result.length > 0;
+  });
+}
+```
+
+**Impact on Authorization Checks:**
+
+Before:
+```typescript
+// Load 1000 participants into memory
+const participants = await runtime.getParticipantsForRoom(roomId);
+if (!participants.includes(entityId)) {
+  return sendError(res, 403, 'FORBIDDEN', 'Not a participant');
+}
+```
+
+After:
+```typescript
+// Single indexed DB query
+if (!(await runtime.isRoomParticipant(entityId, roomId))) {
+  return sendError(res, 403, 'FORBIDDEN', 'Not a participant');
+}
+```
+
+---
+
+### 5. Timeline Action Spans Fix
+
+**Problem**: The Timeline tab showed run summaries with action counts (e.g., "11 spans") but didn't display individual action details (REPLY, GET_TOKEN_CRYPTOSCORE, etc.). Only model calls (TEXT_LARGE, TEXT_EMBEDDING) were visible.
+
+**Root Cause**:
+
+ElizaOS creates two types of logs for actions:
+- `action_event`: Logged when action STARTS (contains `runId` of the action, NO `parentRunId`)
+- `action`: Logged when action COMPLETES (contains `runId` of the action AND `parentRunId` pointing to main run)
+
+**Example from database:**
+
+```sql
+-- Main run
+runId: c29cc856-4ee0-435b-a5ca-b81f76f7ef43
+
+-- Action completion log (type: 'action')
+runId: 03286e8f-6eff-4c48-b0b9-e92cf2c52d0a  -- action's run
+parentRunId: c29cc856-4ee0-435b-a5ca-b81f76f7ef43  -- main run ✅
+
+-- Action start log (type: 'action_event')
+runId: 03286e8f-6eff-4c48-b0b9-e92cf2c52d0a  -- action's run
+parentRunId: NULL  -- ❌ no link to main run
+```
+
+**The Filter Problem:**
+
+The original filter in `runs.ts` only matched logs where:
+```typescript
+body.runId === runId || body.parentRunId === runId
+```
+
+For main run `c29cc856...`:
+- ✅ `action` logs matched (via `parentRunId`)
+- ❌ `action_event` logs didn't match (neither `runId` nor `parentRunId` matched)
+
+**Frontend Behavior:**
+
+The frontend (`eliza-span-adapter.ts`) requires BOTH events:
+- `ACTION_STARTED` (from `action_event` logs) → **creates** the action span
+- `ACTION_COMPLETED` (from `action` logs) → **updates** the existing span
+
+Without `ACTION_STARTED` events:
+- Action spans never created
+- `ACTION_COMPLETED` events try to update non-existent spans
+- Actions invisible in timeline UI
+
+**Solution:**
+
+Modified the filter logic in [`runs.ts:439-466`](/Users/stanislasandujar/Projects/elizaos/eliza/packages/server/src/api/agents/runs.ts#L439-L466):
+
+```typescript
+// Step 1: Find directly related logs (run_event, action, etc.)
+const directlyRelated = logs.filter((l) => {
+  const body = l.body as { runId?: UUID; parentRunId?: UUID };
+  return body.runId === runId || body.parentRunId === runId;
+});
+
+// Step 2: Extract action runIds from matched action completion logs
+const actionRunIds = new Set(
+  directlyRelated
+    .filter((l) => l.type === 'action')
+    .map((l) => (l.body as { runId?: UUID }).runId)
+    .filter((id): id is UUID => !!id)
+);
+
+// Step 3: Include action_event logs that share runId with matched actions
+const related = logs.filter((l) => {
+  const body = l.body as { runId?: UUID; parentRunId?: UUID };
+
+  // Include if directly related to main run
+  if (body.runId === runId || body.parentRunId === runId) {
+    return true;
+  }
+
+  // Also include action_event logs matching action runIds
+  if (l.type === 'action_event' && body.runId && actionRunIds.has(body.runId)) {
+    return true;
+  }
+
+  return false;
+});
+```
+
+**How it Works:**
+
+1. **First pass**: Find all logs directly related to the main run
+   - Includes `action` completion logs (via `parentRunId`)
+   - Includes `run_event`, model calls, etc.
+
+2. **Extract action IDs**: Collect all `runId` values from the matched `action` logs
+   - These are the action-specific run IDs
+
+3. **Second pass**: Also include `action_event` logs that share those action run IDs
+   - Even though they don't link to the main run via `parentRunId`
+   - They're identified by matching the action's `runId`
+
+**Result:**
+
+Now the API returns complete action data:
+- `ACTION_STARTED` events (from `action_event` logs)
+- `ACTION_COMPLETED` events (from `action` logs)
+
+Frontend can now:
+- Create action spans on `ACTION_STARTED`
+- Update them on `ACTION_COMPLETED`
+- Display actions in timeline alongside model calls
+
+**Files Modified:**
+- [`packages/server/src/api/agents/runs.ts`](/Users/stanislasandujar/Projects/elizaos/eliza/packages/server/src/api/agents/runs.ts#L439-L466)
+
+**Impact:**
+- ✅ Timeline now shows ALL spans (actions + model calls)
+- ✅ Action details visible (REPLY, GET_TOKEN_CRYPTOSCORE, etc.)
+- ✅ Accurate span counts match displayed spans
+- ✅ Complete observability for debugging agent behavior
+
+---
+
+### 6. RLS Security for Junction Table
+
+**Problem Identified**: Without RLS on `message_server_agents`, Server A could see the existence of Discord/Telegram servers linked to Server B's agents.
+
+**Solution**: The RLS system automatically adds isolation to the junction table:
+
+- Adds `server_id UUID DEFAULT current_server_id()` column
+- Creates `server_isolation_policy` for complete isolation
+- Server A cannot see or modify Server B's message server associations
+
+---
+
+## Test Coverage
+
+### All Tests Passing ✅
+
+**RLS Tests**: 77 tests pass, 0 fail, 173 expect() calls
+
+**Participant Tests**: 11 tests pass, 0 fail, 27 expect() calls
+- 5 tests in `participant.test.ts` (3 new for `isRoomParticipant`)
+- 6 tests in `messaging.test.ts` (2 new for `isChannelParticipant`)
+
+**Timeline Tests**: Integration tests verify action spans display correctly
+- Run detail API returns both `ACTION_STARTED` and `ACTION_COMPLETED` events
+- Frontend renders action spans with correct names and status
+- Span counts match displayed spans
+
+### Test Files
+
+**Unit Tests - Entity RLS** (`entity-rls.test.ts`)
+- Column detection priority (`roomId` > `entityId` > `authorId`)
+- Policy generation (STRICT vs PERMISSIVE modes)
+- Isolation behavior logic
+
+**Integration Tests - Entity RLS** (`rls-entity.test.ts`)
+- Entity isolation (Alice, Bob, Charlie)
+- Participant-based access control (room membership)
+- Combined Server RLS + Entity RLS (double isolation)
+
+**Integration Tests - message_server_agents** (`rls-message-server-agents.test.ts`)
+- Isolation: Server A sees only its 2 associations, Server B sees only its 1
+- Auto-population: `server_id` automatically set via `DEFAULT current_server_id()`
+- Query blocking: Server A queries Server B's message server → 0 results
+- Modification blocking: Server B tries to delete Server A's association → blocked
+- JOIN protection: Cross-server JOINs filtered correctly
+- Schema validation: Policy and DEFAULT constraint verified
+
+**Room Integration Tests** (5/5 passing)
+- Added test: `should map messageServerId to serverId for backward compatibility`
+- Verifies both fields are populated correctly
+
+**Timeline Integration Tests**
+- Verifies `action_event` logs included in run details
+- Confirms `ACTION_STARTED` events generated
+- Validates action spans display in frontend
+
+---
+
+## Breaking Changes
+
+**None**. All changes are fully backward compatible.
+
+---
+
+## Benefits
+
+### Code Clarity
+- **Developers immediately understand what `messageServerId` refers to**
+- **Self-documenting code**: No additional comments needed
+- **Clear method names**: `isChannelParticipant()` vs generic checks
+
+### Security
+- **Three-layer security**: Server RLS + Entity RLS + Application Authorization
+- **Complete RLS isolation** for both Server-level and Entity-level data
+- **Fail-closed** security model (deny access on errors)
+- **Database-enforced** isolation (can't be bypassed by application bugs)
+- **Zero Configuration**: RLS policies apply automatically to all tables
+
+### Developer Experience
+- **Reduced Bugs**: No more confusion between RLS `server_id` and messaging `serverId`
+- **Better Onboarding**: New developers don't need to guess which "server" is referenced
+- **Future-Proof**: Clear naming prevents similar ambiguities in future development
+- **Backward Compatible**: Existing code continues to work
+- **Type Safety**: TypeScript guides migration with deprecation warnings
+
+### Performance
+- **O(1) participant checks**: Constant time instead of linear
+- **Lower memory usage**: No loading all participants
+- **Database optimization**: Indexed queries for fast lookups
+- **Scalable**: Handles rooms with thousands of participants
+
+### Observability
+- **Complete timeline visibility**: All actions and model calls displayed
+- **Accurate span counts**: Numbers match displayed spans
+- **Better debugging**: See exactly what actions executed and when
+- **Production monitoring**: Full observability for agent behavior analysis
+
+### Testing
+- **Comprehensive Testing**: 88+ total tests ensure complete coverage
+- **All tests passing**: 0 failures, 200+ assertions
+- **Integration tests**: Real database scenarios
+- **Performance tests**: Verify optimization improvements
+- **Security tests**: RLS isolation, unauthorized access prevention
+
+---
+
+## Database Migration
+
+### Automatic Migration System
+
+The migration system automatically handles:
+
+1. **Table rename**: `server_agents` → `message_server_agents`
+2. **Column rename**: `server_id` → `message_server_id` in junction table
+3. **RLS automatic application**:
+   - Adds `server_id` column with `DEFAULT current_server_id()` to all tables
+   - Creates indexes for performance
+   - Applies isolation policies (both server-level and entity-level)
+   - Handles backfill for existing data
+
+**Developer experience:**
+- **Zero configuration required** - just update and restart
+- **No manual SQL scripts** - everything is automated
+- **Idempotent and safe** - can be run multiple times without issues
+
+---
+
+## RLS Architecture Details
+
+### Three-Layer Security Model
+
+**Layer 1: Server RLS (Multi-Tenant Isolation)**
+- Isolates data between different ElizaOS server instances
+- Uses `server_id` for isolation
+- Context set via `application_name` connection parameter
+
+**Layer 2: Entity RLS (User Privacy Isolation)**
+- Isolates data between different entities within a server
+- Uses `entityId`, `authorId`, or joins via `participants` table
+- Context set via `app.entity_id` transaction-local variable
+- Provides DM privacy and multi-user isolation
+
+**Layer 3: Application Layer**
+- Authorization checks (participant validation)
+- Business logic enforcement
+
+**All three layers stack** - a user can only see data from their server AND their accessible entities AND that they have permission to access.
+
+### Excluded Tables (with rationale)
+
+**Entity RLS Exclusions:**
+- `users` - Authentication table (no entity isolation needed)
+- `entity_mappings` - Cross-platform entity mapping
+- `drizzle_migrations`, `__drizzle_migrations` - Migration tracking
+- `agents` - Shared across entities
+- `owners` - RLS management table
+
+All other tables receive RLS automatically based on their column structure.
+
+---
+
+## Configuration
+
+### Environment Variables
+
+```bash
+# Layer 1: Server RLS (Multi-tenant isolation)
+ENABLE_RLS_ISOLATION=true                  # Enable Row Level Security
+RLS_OWNER_ID=my-server-uuid               # Server instance ID for multi-tenant isolation
+
+# Layer 2: Entity RLS (User privacy isolation)
+ENABLE_DATA_ISOLATION=true                # Enable entity-level data isolation
+
+# Database
+POSTGRES_URL=postgresql://user:password@localhost:5432/eliza
+```
+
+---
+
+## API Changes
+
+### Backward Compatibility
+
+All API changes maintain backward compatibility:
+
+**Database Adapter Methods:**
+- ✅ New methods added: `isRoomParticipant()`, `isChannelParticipant()`
+- ✅ Existing methods unchanged
+- ✅ `serverId` field still populated (maps to `messageServerId`)
+
+**API Endpoints:**
+- ✅ All existing endpoints continue to work
+- ✅ Run detail endpoint now includes `action_event` logs
+- ✅ No breaking changes to request/response formats
+
+**TypeScript:**
+- ✅ `serverId` marked as deprecated (still works)
+- ✅ Migration path via TypeScript warnings
+- ✅ Type safety preserved
+
+---
+
+## Summary
+
+This PR delivers a complete security, performance, and observability overhaul:
+
+- **Entity-Level RLS**: Automatic data isolation at the database level
+- **Semantic Clarity**: Clear naming eliminates confusion
+- **Performance Optimization**: O(1) participant checking
+- **Timeline Fix**: Complete action visibility in observability UI
+- **100% Backward Compatible**: Zero breaking changes
+- **Fully Tested**: 88+ tests, 0 failures
+- **Production Ready**: Auto-migration, fail-closed security
+
+**Impact:**
+- 🔒 **Stronger security** with three-layer isolation (Server RLS + Entity RLS + Authorization)
+- 📖 **Clearer code** with semantic naming
+- 🚀 **Better performance** with optimized queries
+- 👁️ **Complete observability** with action spans in timelines
+- 🛡️ **Database-enforced** security that can't be bypassed
+- 🔧 **Developer-friendly** zero-config automatic migrations
+
+**Testing:**
+- ✅ 77 RLS tests passing
+- ✅ 11 participant optimization tests passing
+- ✅ Timeline integration tests passing
+- ✅ All existing tests passing
+- ✅ 0 failures
+1f:T8a1,<!-- CURSOR_SUMMARY -->
+> [!NOTE]
+> Aligns server tests and routers with new ElizaOS interfaces, clarifies plugin auto-injection behavior, and deflakes/modernizes middleware, loader, socket, and utility tests.
+> 
+> - **Server/API alignment**:
+>   - Update `agentExistsMiddleware`, Socket.IO router, Jobs and Agent Runs routers to use `ElizaOS` getters instead of agent maps.
+>   - Adjust message flow and log streaming tests to new event/filter semantics.
+> - **Plugin loading behavior**:
+>   - Clarify that server auto-injects `sql` plugin; bootstrap injection handled at character level; ensure deduping and order expectations.
+> - **Test refactors/deflakes**:
+>   - Replace heavy `mock.module` with spies and lightweight mocks; remove brittle fs mocks.
+>   - Skip flaky/integration suites causing interference (version, DB ops, message bus, agent runs, some jobs tests).
+> - **Utilities and middleware**:
+>   - Update tests for `authMiddleware`, validation, security headers, rate limits.
+>   - Adjust `sanitizeFilename` expectations and `resolvePgliteDir` behavior; strengthen path handling assertions.
+> - **Misc**:
+>   - Minor type/interface tweaks (e.g., runtime methods) and improved express server boot/teardown in tests.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit a988400e95a3efe7e9366332d18e83a99429c2f2. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+* **Bug Fixes**
+  * Improved plugin loading flexibility: server now recognizes both short and full bootstrap plugin identifiers during initialization.
+  * Enhanced SQL plugin auto-injection and plugin deduplication logic.
+
+* **Refactor**
+  * Removed internal loader APIs: `tryLoadFile` and `loadCharacterTryPath` functions are no longer available.
+  * Updated core routing infrastructure for improved agent management.
+  * Simplified test infrastructure by reducing mock dependencies and improving test reliability across environments.
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->20:T903,<!-- CURSOR_SUMMARY -->
+> [!NOTE]
+> Adds dynamic slash command registration and modal handling, enables sending attachments in DMs/channels, and improves message/interaction processing with new exports.
+> 
+> - **Discord Service**:
+>   - Introduces dynamic slash command system: `SLASH_COMMAND`/`MODAL_SUBMIT` events, `DiscordSlashCommand` type, `slashCommands` store, and runtime event `DISCORD_REGISTER_COMMANDS` to register/update app and guild commands.
+>   - Enhances interaction handling: ensures connections for interactions and emits unified events (no automatic defer to allow ephemeral replies).
+>   - Makes `clientReadyPromise` public/nullable; refines client init and logging.
+> - **Messaging**:
+>   - Enables sending attachments in DMs and channels by converting `Media` to `AttachmentBuilder` and passing to `sendMessageInChunks`.
+>   - Improves reply reference resolution via `fetchReference`; refines permission checks and structured logging.
+> - **Utils**:
+>   - Widens `sendMessageInChunks` `files` type to accept `AttachmentBuilder`; attaches files on last chunk; safer component handling.
+> - **Voice**:
+>   - Updates callback signature in voice response handler.
+> - **Exports**:
+>   - Re-exports `DISCORD_SERVICE_NAME`, `DiscordService`, and `IDiscordService` from `index`.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit 7fd4add1cc73f5c5b8780dd073aa16fe663d4029. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+* **New Features**
+  * Added slash command registration and handling capabilities
+  * Introduced modal submission support for enhanced interactions
+  * Added client readiness detection for better initialization tracking
+  * Implemented channel permission management and access controls
+
+* **Improvements**
+  * Enhanced attachment handling in messages
+  * Improved message reference resolution and context tracking
+  * Better error handling and diagnostic logging during startup and runtime
+
+* **Refactor**
+  * Updated event types and payload structures for interactions
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->21:T74e,<!-- CURSOR_SUMMARY -->
+> [!NOTE]
+> Adds name normalization and enhanced dependency resolution to handle both scoped package names and short names, with deduped queuing and comprehensive tests.
+> 
+> - **Core (`packages/core/src/plugin.ts`)**
+>   - Add `normalizePluginName` to extract short names from scoped packages.
+>   - Enhance `resolvePluginDependencies` with a lookup map supporting both scoped (`@scope/plugin-x`) and short (`x`) names; use canonical names for cycle tracking and final ordering.
+>   - Add `queueDependency` and update `resolvePluginsImpl` to queue normalized dependencies and avoid duplicates.
+>   - Minor log message tweak in browser warning.
+> - **Tests (`packages/core/src/__tests__/plugin.test.ts`)**
+>   - Add tests for `normalizePluginName` and resolving dependencies using scoped, short, and mixed names, including testDependencies and complex chains.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit 5ea3546d4aa38128a1d5825ec8138012a7c72796. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+* **New Features**
+  * Added `normalizePluginName()` utility to standardize plugin identifiers across scoped and non-scoped naming conventions.
+  * Added `resolvePluginDependencies()` function to resolve plugin dependencies with improved ordering and support for mixed naming conventions.
+
+* **Tests**
+  * Expanded test coverage for new plugin utilities, including scoped/non-scoped packages, complex dependency chains, and missing dependency handling.
+
+<sub>✏️ Tip: You can customize this high-level summary in your review settings.</sub>
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->22:T5d4,Small PR exposing available docs as state value for easy prompt binding. 
+
+<!-- CURSOR_SUMMARY -->
+---
+
+> [!NOTE]
+> Enhances the documents provider to return formatted available documents (with count) via new `values` fields, updates error/empty handling, bumps version to 1.5.15, and refreshes dependencies.
+> 
+> - **Provider (`src/documents-provider.ts`)**:
+>   - Add new `values` fields: `documentsCount`, `availableDocuments`; keep `documents` (concise list).
+>   - Generate formatted document list with metadata and a header (`documentsText`).
+>   - Update all return paths (normal/empty/error/no-service) to include the new fields.
+> - **Release**:
+>   - Bump version to `1.5.15` in `package.json`.
+> - **Dependencies**:
+>   - Refresh lockfile with numerous package updates and additions (e.g., `unpdf`).
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit 8ec1f18eec19354f5f695e101d3c7d063c7f9f8e. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+## Summary by CodeRabbit
+
+* **Chores**
+  * Version bumped to 1.5.15.
+
+* **New Features**
+  * Provider now returns richer document metadata: consistent document counts, formatted available-documents text, and stable handling when the knowledge service is unavailable.
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->23:T6eb,- Replace langchain dependency with @langchain/textsplitters in @elizaos/core
+- Update import from 'langchain/text_splitter' to '@langchain/textsplitters'
+- Remove outdated langchain resolutions from plugin starter packages
+- Add comprehensive test coverage for splitChunks functionality
+- All 89 tests passing with new LangChain v1 integration
+
+This addresses the deprecation of LangChain v0.3 by migrating to the
+modular @langchain/textsplitters package which is part of the LangChain v1
+ecosystem. The migration maintains full backward compatibility while
+reducing bundle size and future-proofing the codebase.
+
+Fixes #6145
+
+https://github.com/elizaOS/eliza/issues/6145#event-20943795877
+
+<!-- CURSOR_SUMMARY -->
+---
+
+> [!NOTE]
+> Migrates core from langchain/text_splitter to @langchain/textsplitters v1, updates deps, removes plugin langchain resolutions, and expands splitChunks tests.
+> 
+> - **Core (@elizaos/core)**
+>   - **Dependencies**: Add `@langchain/textsplitters@^1.0.0`; remove `langchain`.
+>   - **Code**: Switch import in `src/utils.ts` to `@langchain/textsplitters` and use `RecursiveCharacterTextSplitter` in `splitChunks`.
+>   - **Tests**: Expand `splitChunks` coverage in `src/__tests__/utils.test.ts` (empty input, overlap behavior, large chunk sizes, v1 splitter validation).
+> - **Plugins**
+>   - **Starter templates**: Remove `langchain`-related `resolutions/overrides`; retain `zod` resolution only in `packages/plugin-quick-starter` and `packages/plugin-starter`.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit fa89f69859ea02c64bbab119021ab889174a52d5. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->24:T11b1,# Relates to
+
+Fixes excessive vertical spacing in AI-generated markdown responses in the ElizaOS client UI.
+
+# Risks
+
+**Low Risk**
+
+- Only CSS changes affecting markdown content rendering
+- Uses well-supported CSS features (Chrome 58+, Firefox 37+, Safari 11.1+, Edge 79+)
+- No breaking changes to functionality
+- Fully backward compatible
+- Simple rollback (revert commit)
+
+**Affected areas:**
+- Client UI markdown rendering (packages/client)
+- AI response display formatting
+
+# Background
+
+## What does this PR do?
+
+Fixes excessive vertical spacing in AI-generated markdown responses caused by Streamdown's wrapper `<div>` elements. Uses CSS `display: contents` to collapse wrapper spacing while preserving all content and functionality.
+
+**Key improvements:**
+- Bullet gaps: 24.5px → 2px (-91%)
+- List item gaps: 30.5px → 8px (-73%)
+- Header-to-bullets: 28.5px → 4px (-83%)
+- List-to-paragraph: 145.5px → 16px (-89%)
+- **Total spacing error eliminated: 178.5px → 0px**
+
+## What kind of change is this?
+
+- ✅ Bug fixes (non-breaking change which fixes an issue)
+- ✅ Improvements (misc. changes to existing features)
+
+# Documentation changes needed?
+
+- ✅ My changes do not require a change to the project documentation.
+
+The changes are internal CSS improvements with no API or configuration changes.
+
+# Testing
+
+## Where should a reviewer start?
+
+1. Review the CSS changes in `packages/client/src/index.css` (lines 184-278)
+2. Review the component update in `packages/client/src/components/ai-elements/response.tsx` (line 12)
+3. Test the visual improvements in the running client
+
+## Detailed testing steps
+
+### Automated Testing
+- ✅ Playwright browser automation with pixel-perfect measurements
+- ✅ Computed style verification
+- ✅ DOM structure inspection
+- ✅ All spacing measurements achieved targets with 0.0px error
+
+### Manual Testing Instructions
+
+1. Checkout this branch:
+   ```bash
+   git checkout fix/markdown-spacing-compact
+   ```
+
+2. Install dependencies and start client:
+   ```bash
+   bun install
+   cd packages/client && bun run dev
+   ```
+
+3. Open browser to client UI (http://localhost:5173)
+
+4. Start a chat with any agent
+
+5. Ask a question that generates nested lists, for example:
+   - "Explain the key features of this system"
+   - "Create a list view with example data showing nested workflow progress"
+
+6. Verify:
+   - ✅ Compact, readable spacing between list items
+   - ✅ Tight spacing (4px) between headers and their following lists
+   - ✅ No overlapping text
+   - ✅ Proper visual hierarchy maintained
+   - ✅ No console errors
+   - ✅ Smooth scrolling works correctly
+
+### Tested Scenarios
+- ✅ Complex nested lists (numbered and bulleted)
+- ✅ Mixed content (paragraphs, lists, headings)
+- ✅ Scrolling and overflow behavior
+- ✅ Accessibility (screen reader, keyboard navigation)
+- ✅ No layout breakage in any scenario
+
+## Screenshots
+
+### Before
+<img width="3840" height="2080" alt="before" src="https://github.com/user-attachments/assets/459f89bf-c623-4ad4-aa36-ce4a0f997033" />
+*Excessive spacing between elements, particularly noticeable in nested lists*
+
+### After
+<img width="3840" height="2080" alt="after" src="https://github.com/user-attachments/assets/f4addcb5-5dab-45fb-8e0f-e5dda4885d11" />
+*Compact, readable spacing matching design targets and Claude web interface*
+
+# Technical Details
+
+## Files Changed
+- `packages/client/src/index.css` (+109 lines)
+- `packages/client/src/components/ai-elements/response.tsx` (1 line modified)
+
+## Key Technical Approach
+
+Uses CSS `display: contents` to make Streamdown's wrapper divs "transparent" to layout:
+
+```css
+.markdown-content > div {
+  display: contents !important;
+}
+```
+
+This removes wrapper divs from the box tree while preserving DOM structure and semantics, eliminating the spacing contribution from Tailwind's `space-y-4` class.
+
+## Browser Compatibility
+
+| Browser | Version | Status |
+|---------|---------|--------|
+| Chrome | 58+ (May 2017) | ✅ Supported |
+| Firefox | 37+ (March 2015) | ✅ Supported |
+| Safari | 11.1+ (March 2018) | ✅ Supported |
+| Edge | 79+ (January 2020) | ✅ Supported |
+
+Covers >95% of modern browser users.
+
+---
+
+**PR Title:**
+```
+fix(client): Fix excessive spacing in markdown rendered content
+```
+
+**Branch details:**
+- Base branch: `develop`
+- Compare branch: `fix/markdown-spacing-compact` (from gaiaaiagent/GAIA)25:T1899,# Relates to
+
+Improves OpenRouter integration in ElizaOS CLI by adding native embedding support, eliminating the need for users to configure a separate embedding provider when using OpenRouter.
+
+# Risks
+
+**Low Risk** - Well-contained changes following existing patterns
+
+- **User Impact**: No breaking changes. Existing OpenRouter configurations continue to work unchanged.
+- **Test Coverage**: Unit tests updated to reflect new behavior (embedding support enabled for OpenRouter)
+- **Configuration**: Follows the same pattern as existing providers (OpenAI, Google, Ollama) for both interactive and non-interactive modes
+- **Validation**: Uses existing `isValidOpenRouterKey` function to validate API key format (`sk-or-` prefix)
+
+# Background
+
+## What does this PR do?
+
+This PR adds comprehensive OpenRouter support for embeddings in the ElizaOS CLI:
+
+1. **Updates `hasEmbeddingSupport`** to include `'openrouter'` as a model with built-in embedding support
+2. **Adds OpenRouter to `getAvailableEmbeddingModels`** as a fallback option when the primary AI model doesn't support embeddings (e.g., Claude)
+3. **Implements setup configuration** in both `setupAIModelConfig` and `setupEmbeddingModelConfig` to handle:
+   - Interactive mode: Prompts users for OpenRouter API key
+   - Non-interactive mode: Writes placeholder configuration with helpful comments
+4. **Updates unit tests** to reflect that OpenRouter now has embedding support
+
+**Technical Details:**
+- Adds OpenRouter configuration with `OPENROUTER_API_KEY`, `OPENROUTER_EMBEDDING_MODEL`, and `OPENROUTER_EMBEDDING_DIMENSIONS`
+- Leverages OpenRouter's unified API access to multiple embedding models (including OpenAI's text-embedding-3-small)
+- Reuses existing `promptAndStoreOpenRouterKey` helper function from `get-config.ts`
+
+## What kind of change is this?
+
+- [x] Features (non-breaking change which adds functionality)
+- [x] Improvements (misc. changes to existing features)
+- [x] Updates (test updates to reflect new behavior)
+
+## Why are we doing this? Any context or related work?
+
+**Problem:**
+- ElizaOS requires embeddings for agent memory, semantic search, and knowledge base functionality
+- OpenRouter was only available as an AI text generation provider, not for embeddings
+- Users selecting OpenRouter for AI had to configure a second provider (OpenAI, Google, or Ollama) solely for embeddings
+
+**Solution:**
+- OpenRouter provides access to multiple embedding models through its unified API
+- This PR enables users to use a single OpenRouter API key for both text generation and embeddings
+- Reduces configuration complexity and API key management overhead
+
+# Documentation changes needed?
+
+- [x] My changes require a change to the project documentation.
+- [x] Documentation partially exists: The `.env` template in `packages/cli/src/utils/get-config.ts` already includes OpenRouter environment variables (lines 79-82)
+
+**Recommended documentation updates:**
+1. Add OpenRouter to the list of recommended providers supporting both AI + embeddings in README
+2. Document the three OpenRouter environment variables with example values:
+   - `OPENROUTER_API_KEY=sk-or-v1-...`
+   - `OPENROUTER_EMBEDDING_MODEL=openai/text-embedding-3-small`
+   - `OPENROUTER_EMBEDDING_DIMENSIONS=1536`
+3. Optional: Add migration note for existing users who can now simplify their configuration
+
+# Testing
+
+## Where should a reviewer start?
+
+**Review Priority:**
+
+1. **Core logic changes** - `packages/cli/src/commands/create/utils/selection.ts`
+   - Line 50: `hasEmbeddingSupport` now includes `'openrouter'`
+   - Lines 140-144: OpenRouter added to `getAvailableEmbeddingModels`
+
+2. **Configuration setup** - `packages/cli/src/commands/create/actions/setup.ts`
+   - Lines 113-136: `setupAIModelConfig` OpenRouter case
+   - Lines 288-362: `setupEmbeddingModelConfig` OpenRouter case
+
+3. **Test updates** - `packages/cli/tests/unit/utils/selection.test.ts`
+   - Line 20: OpenRouter added to models with embedding support
+   - Lines 71-72: Correctly categorizes OpenRouter as having embeddings
+
+## Detailed testing steps
+
+### 1. Unit Tests ✅
+
+```bash
+cd packages/cli
+bun run test tests/unit/utils/selection.test.ts
+```
+
+**Expected:** All tests pass
+- ✅ `hasEmbeddingSupport('openrouter')` returns `true`
+- ✅ OpenRouter correctly identified as model with embedding support
+
+### 2. Interactive Mode - OpenRouter as Primary AI
+
+```bash
+elizaos create test-openrouter-primary
+# Select: OpenRouter as AI model
+# Expected: Should NOT be prompted for embedding model
+```
+
+**Verify:**
+- `.env` contains `OPENROUTER_API_KEY=`
+- User is prompted for OpenRouter API key interactively
+- No separate embedding model configuration is added
+
+### 3. Interactive Mode - OpenRouter as Embedding Fallback
+
+```bash
+elizaos create test-claude-openrouter
+# Select: Claude as AI model
+# Select: OpenRouter as embedding model
+```
+
+**Verify:**
+- `.env` contains `ANTHROPIC_API_KEY=`
+- `.env` contains `OPENROUTER_API_KEY=`
+- `.env` contains `OPENROUTER_EMBEDDING_MODEL=` and `OPENROUTER_EMBEDDING_DIMENSIONS=`
+
+### 4. Non-Interactive Mode
+
+```bash
+elizaos create test-noninteractive --ai-model openrouter --non-interactive
+```
+
+**Verify:**
+- `.env` created with placeholder: `OPENROUTER_API_KEY=your_openrouter_api_key_here`
+- Comment included: `# Get your API key from: https://openrouter.ai/keys`
+- Default embedding model and dimensions added
+
+### 5. Regression Testing - Other Providers
+
+```bash
+# Verify other providers still work correctly
+elizaos create test-openai --ai-model openai --non-interactive
+elizaos create test-ollama --ai-model local --non-interactive
+elizaos create test-google --ai-model google --non-interactive
+```
+
+**Expected:** All providers create projects successfully with correct `.env` configurations
+
+### 6. Optional: E2E Testing with Real API Key
+
+```bash
+# With a real OpenRouter API key
+export OPENROUTER_API_KEY=sk-or-v1-xxx...
+export OPENROUTER_EMBEDDING_MODEL=openai/text-embedding-3-small
+export OPENROUTER_EMBEDDING_DIMENSIONS=1536
+cd packages/cli
+bun run test:e2e
+```
+
+## Discord username
+
+<!-- If applicable, add your Discord username here for contributor role -->
+neysixx26:T59c,- Add ownerId field to Agent interface in core types
+- Update agentTable schema to use camelCase alias for owner_id column
+- Update RLS code to use camelCase ownerId property
+- Add integration tests for creating and updating agents with ownerId
+- Ensures TypeScript uses camelCase while maintaining snake_case in database
+
+This change improves type safety and follows JavaScript/TypeScript naming
+conventions while maintaining backward compatibility with the database schema.
+
+<!-- CURSOR_SUMMARY -->
+---
+
+> [!NOTE]
+> Adds `ownerId` to `Agent`, maps DB `owner_id` to camelCase, updates RLS usage, and adds integration tests for create/update flows.
+> 
+> - **Core Types**:
+>   - Add optional `ownerId` to `Agent` in `packages/core/src/types/agent.ts`.
+> - **Plugin SQL**:
+>   - Schema: Map DB column `owner_id` to camelCase `ownerId` in `packages/plugin-sql/src/schema/agent.ts`.
+>   - RLS: Use `agent.ownerId` and update assignment writes via `{ ownerId: ownerId }` in `packages/plugin-sql/src/rls.ts`.
+> - **Tests**:
+>   - Integration: Add tests for creating, retrieving, and updating `ownerId` in `packages/plugin-sql/src/__tests__/integration/agent.test.ts`.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit 46979963e8affc64545144b66a38379f1116ad3d. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->27:Tfd0,<!-- Use this template by filling in information and copying and pasting relevant items out of the HTML comments. -->
+
+# Relates to
+
+Relates to elizaOS/eliza#6095 and https://github.com/elizaOS/eliza/pull/6111 - Unified messaging API
+
+We have to wait https://github.com/elizaOS/eliza/pull/6111 to be merged and released 1.6.4 a least before merging this one.
+
+Depends on: https://github.com/elizaOS/eliza/pull/6111
+
+# Risks
+
+**Low risk**
+
+This change is non-breaking and fully backward compatible:
+- Uses unified API when available via `runtime.elizaOS.sendMessage()`
+- Falls back to `messageService.handleMessage()` for standalone mode
+- Includes logging to track which path is used
+- Well-tested with live Discord bot
+
+Potential areas affected:
+- Message processing flow (now uses unified API)
+- Discord message handling (improved error handling and cleanup)
+- Service initialization (cleaner code, removed unnecessary wrapper)
+
+# Background
+
+## What does this PR do?
+
+This PR integrates the new unified messaging API (`elizaOS.sendMessage()`) from elizaOS/eliza#6095, allowing the Discord plugin to use the standardized messaging entry point.
+
+**Key changes:**
+- **messages.ts**: Refactored `handleMessage()` to use `elizaOS.sendMessage()` when available
+- Added fallback to `messageService.handleMessage()` for standalone mode
+- Added debug logging to track which messaging path is used
+- **service.ts**: Cleaned up Discord client initialization and improved error handling
+- Updated `@elizaos/core` dependency to `^1.6.4`
+
+**Benefits:**
+- Standardized messaging across all platforms
+- Automatic field auto-filling (id, agentId, createdAt)
+- Better connection management via `ensureConnection`
+- Support for SYNC/ASYNC modes with callbacks
+- Reduced code duplication
+
+## What kind of change is this?
+
+- [x] Features (non-breaking change which adds functionality)
+- [x] Improvements (misc. changes to existing features)
+- [x] Updates (new versions of included code)
+
+## Why are we doing this?
+
+The unified messaging API provides a single, standardized entry point for all message processing. Instead of each plugin calling `messageService.handleMessage()` directly, they can now use `elizaOS.sendMessage()` which provides:
+
+- Auto-filling of required fields
+- Connection verification before processing
+- Support for SYNC/ASYNC modes
+- Consistent error handling
+- Better observability
+
+This improves maintainability and ensures all platforms benefit from future enhancements to the unified API.
+
+# Testing
+
+## Where should a reviewer start?
+
+1. Review the main change: `src/messages.ts` lines 331-345 - unified API integration
+2. Check service improvements: `src/service.ts` - cleaner initialization
+3. Verify logging: Debug logs show which path is used
+4. Check dependencies: `package.json` - updated core version
+
+**Test scenario:**
+```
+User: @Bot What's up?
+Bot: Fine, and you ?
+```
+
+Logs show:
+```
+Info [Discord] Using unified messaging API
+Info [MessageService] Message received from <user> in room <room>
+Debug [MessageService] Processing message: ...
+```
+
+## Deployment instructions
+
+1. Ensure `@elizaos/core` is updated to `^1.6.4` or later (includes unified API runtime reference)
+2. Rebuild plugin: `bun run build`
+3. Standard deployment process
+
+## Special note
+
+Later we will remove the fallback and clean many lines of code on discord-plugin
+
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+## Summary by CodeRabbit
+
+* **New Features**
+  * Channel management: allow/disallow channels and view allowed channel list.
+  * Fetch text channel members with optional caching.
+
+* **Improvements**
+  * Unified messaging path used when available, with fallback to previous path.
+  * More robust connection and message handling with clearer logging.
+
+* **Chores**
+  * Bumped version to 1.3.3.
+  * Updated core dependency to a newer compatible release.
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->28:T711,- Document TEXT_EMBEDDING model type in README
+- Add embedding configuration parameters to README examples
+- Update package.json agentConfig with embedding parameters
+- Remove outdated note about embeddings not being implemented
+
+<!-- CURSOR_SUMMARY -->
+---
+
+> [!NOTE]
+> Documents TEXT_EMBEDDING support and adds embedding model/dimension config parameters in README and agentConfig.
+> 
+> - **README**:
+>   - Add `TEXT_EMBEDDING` as a provided model and describe configurable dimensions (256–3072).
+>   - Include `OPENROUTER_EMBEDDING_MODEL` and `OPENROUTER_EMBEDDING_DIMENSIONS` in settings and `.env` examples, plus fallbacks `EMBEDDING_MODEL` and `EMBEDDING_DIMENSIONS`.
+>   - Document new config options for embedding model and dimensions; remove outdated note about embeddings not implemented.
+> - **package.json (agentConfig)**:
+>   - Add parameters: `OPENROUTER_EMBEDDING_MODEL`, `EMBEDDING_MODEL`, `OPENROUTER_EMBEDDING_DIMENSIONS`, `EMBEDDING_DIMENSIONS` with defaults.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit ea8e47253bf9c88a97facbb78c4050cfced52225. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+* **Documentation**
+  * Updated configuration documentation with embedding-related settings.
+
+* **New Features**
+  * Added configurable embedding model selection parameters.
+  * Added embedding dimensions configuration options.
+  * Embedding support now documented as an implemented feature.
+
+<sub>✏️ Tip: You can customize this high-level summary in your review settings.</sub>
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->29:T602,Add a guard to the DM response handler to prevent sending empty messages to Discord.
+
+---
+<a href="https://cursor.com/background-agent?bcId=bc-5e41e093-31a5-4d05-b576-27f780c37ec0"><picture><source media="(prefers-color-scheme: dark)" srcset="https://cursor.com/open-in-cursor-dark.svg"><source media="(prefers-color-scheme: light)" srcset="https://cursor.com/open-in-cursor-light.svg"><img alt="Open in Cursor" src="https://cursor.com/open-in-cursor.svg"></picture></a>&nbsp;<a href="https://cursor.com/agents?id=bc-5e41e093-31a5-4d05-b576-27f780c37ec0"><picture><source media="(prefers-color-scheme: dark)" srcset="https://cursor.com/open-in-web-dark.svg"><source media="(prefers-color-scheme: light)" srcset="https://cursor.com/open-in-web-light.svg"><img alt="Open in Web" src="https://cursor.com/open-in-web.svg"></picture></a>
+
+<!-- CURSOR_SUMMARY -->
+---
+
+> [!NOTE]
+> Prevents sending empty Discord DMs by checking for non-whitespace text or attachments before sending.
+> 
+> - **Discord Messaging (`src/messages.ts`)**:
+>   - **DM handling**: Add guard to skip sending when both `content.text` is empty/whitespace and no attachments; log a warning and return early.
+>   - Normalize text handling by using `textContent = content.text ?? ''` for DM `content` field.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit 54c15c3279b662c1903a913b8136a172b9de7edc. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->2a:T7c3,<!-- Use this template by filling in information and copying and pasting relevant items out of the HTML comments. -->
+
+<!-- This risks section must be filled out before the final review and merge. -->
+
+# Risks
+
+Low
+
+## What does this PR do?
+
+- Fixes old links in `README.md`
+
+## What kind of change is this?
+
+Improvements (misc. changes to existing features)
+
+
+<!-- This "Why" section is most relevant if there are no linked issues explaining why. If there is a related issue, it might make sense to skip this why section. -->
+## Why are we doing this? Any context or related work?
+Following code standards and links accessibility. Redirects could be unreachable in the future
+
+# Documentation changes needed?
+
+
+My changes do not require a change to the project documentation.
+
+
+<!-- Please show how you tested the PR. This will really help if the PR needs to be retested and probably help the PR get merged quicker. -->
+
+# Testing
+
+manually in the code
+
+## Where should a reviewer start?
+
+## Detailed testing steps
+
+<!--
+None: Automated tests are acceptable.
+-->
+
+<!--
+- As [anon/admin], go to [link]
+  - [do action]
+  - verify [result]
+-->
+
+<!-- If there is a UI change, please include before and after screenshots or videos. This will speed up PRs being merged. It is extra nice to annotate screenshots with arrows or boxes pointing out the differences. -->
+<!--
+## Screenshots
+### Before
+### After
+-->
+
+<!-- If there is anything about the deployment, please make a note. -->
+<!--
+# Deploy Notes
+-->
+
+<!--  Copy and paste command line output. -->
+<!--
+## Database changes
+-->
+
+<!--  Please specify deploy instructions if there is something more than the automated steps. -->
+<!--
+## Deployment instructions
+-->
+
+<!-- If you are on Discord, please join https://discord.gg/ai16z and state your Discord username here for the contributor role and join us in #development-feed -->
+<!--
+## Discord username
+
+-->
+2b:T18fb,Bumps the npm_and_yarn group with 1 update in the /packages/core directory: [glob](https://github.com/isaacs/node-glob).
+
+Updates `glob` from 11.0.3 to 11.1.0
+<details>
+<summary>Changelog</summary>
+<p><em>Sourced from <a href="https://github.com/isaacs/node-glob/blob/main/changelog.md">glob's changelog</a>.</em></p>
+<blockquote>
+<h1>changeglob</h1>
+<h2>12</h2>
+<ul>
+<li>Remove the unsafe <code>--shell</code> option. The <code>--shell</code> option is now
+ONLY supported on known shells where the behavior can be
+implemented safely.</li>
+</ul>
+<h2>11.1</h2>
+<p><a href="https://github.com/isaacs/node-glob/security/advisories/GHSA-5j98-mcp5-4vw2">GHSA-5j98-mcp5-4vw2</a></p>
+<ul>
+<li>Add the <code>--shell</code> option for the command line, with a warning
+that this is unsafe. (It will be removed in v12.)</li>
+<li>Add the <code>--cmd-arg</code>/<code>-g</code> as a way to <em>safely</em> add positional
+arguments to the command provided to the CLI tool.</li>
+<li>Detect commands with space or quote characters on known shells,
+and pass positional arguments to them safely, avoiding
+<code>shell:true</code> execution.</li>
+</ul>
+<h2>11.0</h2>
+<ul>
+<li>Drop support for node before v20</li>
+</ul>
+<h2>10.4</h2>
+<ul>
+<li>Add <code>includeChildMatches: false</code> option</li>
+<li>Export the <code>Ignore</code> class</li>
+</ul>
+<h2>10.3</h2>
+<ul>
+<li>Add <code>--default -p</code> flag to provide a default pattern</li>
+<li>exclude symbolic links to directories when <code>follow</code> and <code>nodir</code>
+are both set</li>
+</ul>
+<h2>10.2</h2>
+<ul>
+<li>Add glob cli</li>
+</ul>
+<h2>10.1</h2>
+<ul>
+<li>Return <code>'.'</code> instead of the empty string <code>''</code> when the current
+working directory is returned as a match.</li>
+<li>Add <code>posix: true</code> option to return <code>/</code> delimited paths, even on
+Windows.</li>
+</ul>
+<h2>10.0.0</h2>
+<ul>
+<li>No default exports, only named exports</li>
+</ul>
+<!-- raw HTML omitted -->
+</blockquote>
+<p>... (truncated)</p>
+</details>
+<details>
+<summary>Commits</summary>
+<ul>
+<li><a href="https://github.com/isaacs/node-glob/commit/2551fb51440d402fa2120457bf460e546ee9964d"><code>2551fb5</code></a> 11.1.0</li>
+<li><a href="https://github.com/isaacs/node-glob/commit/47473c046b91c67269df7a66eab782a6c2716146"><code>47473c0</code></a> bin: Do not expose filenames to shell expansion</li>
+<li><a href="https://github.com/isaacs/node-glob/commit/bc33fe1c6a47abd497703d79ad96036e7891ff62"><code>bc33fe1</code></a> skip tilde test on systems that lack tilde expansion</li>
+<li><a href="https://github.com/isaacs/node-glob/commit/59bf9ca211bda5636c4fe9e32d41530c90a4f30d"><code>59bf9ca</code></a> fix notes</li>
+<li><a href="https://github.com/isaacs/node-glob/commit/dde4fa66c87e24b37bb5be28ed10c6e12019edac"><code>dde4fa6</code></a> docs(README): add #anchor and improve <code>note</code>s</li>
+<li><a href="https://github.com/isaacs/node-glob/commit/0559b0ed13c0f8147cd2ac9d48bb49684caaf20e"><code>0559b0e</code></a> docs: add better links to path-scurry docs</li>
+<li><a href="https://github.com/isaacs/node-glob/commit/c9773c249b4b9ed6b2447222c226f9d20c6ce916"><code>c9773c2</code></a> fix: correct typos in <code>README.md</code></li>
+<li><a href="https://github.com/isaacs/node-glob/commit/13e68eadbc4f0aacd9d6ffbcb4b28a34d5d8512c"><code>13e68ea</code></a> Fix punctuation in traversal function documentation</li>
+<li><a href="https://github.com/isaacs/node-glob/commit/1527e2b8107e95122ab6e9b6f6312f121693d53d"><code>1527e2b</code></a> fix repo url</li>
+<li><a href="https://github.com/isaacs/node-glob/commit/7e190e8776a7fa66fba40827de5f9effd1c52f9d"><code>7e190e8</code></a> fix typo <code>maths</code> → <code>paths</code></li>
+<li>Additional commits viewable in <a href="https://github.com/isaacs/node-glob/compare/v11.0.3...v11.1.0">compare view</a></li>
+</ul>
+</details>
+<br />
+
+
+[![Dependabot compatibility score](https://dependabot-badges.githubapp.com/badges/compatibility_score?dependency-name=glob&package-manager=npm_and_yarn&previous-version=11.0.3&new-version=11.1.0)](https://docs.github.com/en/github/managing-security-vulnerabilities/about-dependabot-security-updates#about-compatibility-scores)
+
+Dependabot will resolve any conflicts with this PR as long as you don't alter it yourself. You can also trigger a rebase manually by commenting `@dependabot rebase`.
+
+[//]: # (dependabot-automerge-start)
+[//]: # (dependabot-automerge-end)
+
+---
+
+<details>
+<summary>Dependabot commands and options</summary>
+<br />
+
+You can trigger Dependabot actions by commenting on this PR:
+- `@dependabot rebase` will rebase this PR
+- `@dependabot recreate` will recreate this PR, overwriting any edits that have been made to it
+- `@dependabot merge` will merge this PR after your CI passes on it
+- `@dependabot squash and merge` will squash and merge this PR after your CI passes on it
+- `@dependabot cancel merge` will cancel a previously requested merge and block automerging
+- `@dependabot reopen` will reopen this PR if it is closed
+- `@dependabot close` will close this PR and stop Dependabot recreating it. You can achieve the same result by closing it manually
+- `@dependabot show <dependency name> ignore conditions` will show all of the ignore conditions of the specified dependency
+- `@dependabot ignore <dependency name> major version` will close this group update PR and stop Dependabot creating any more for the specific dependency's major version (unless you unignore this specific dependency's major version or upgrade to it yourself)
+- `@dependabot ignore <dependency name> minor version` will close this group update PR and stop Dependabot creating any more for the specific dependency's minor version (unless you unignore this specific dependency's minor version or upgrade to it yourself)
+- `@dependabot ignore <dependency name>` will close this group update PR and stop Dependabot creating any more for the specific dependency (unless you unignore this specific dependency or upgrade to it yourself)
+- `@dependabot unignore <dependency name>` will remove all of the ignore conditions of the specified dependency
+- `@dependabot unignore <dependency name> <ignore condition>` will remove the ignore condition of the specified dependency and ignore conditions
+You can disable automated security fix PRs for this repo from the [Security Alerts page](https://github.com/elizaOS/eliza/network/alerts).
+
+</details>15:["$","div",null,{"className":"mb-8 space-y-6","children":[["$","$L1c",null,{"metrics":{"date":"2025-11-16","interval":{"intervalStart":"$D2025-11-16T00:00:00.000Z","intervalEnd":"$D2025-11-23T00:00:00.000Z","intervalType":"week"},"pullRequests":{"new":10,"merged":11,"total":16},"issues":{"new":6,"closed":5,"total":10},"activeContributors":18,"codeChanges":{"additions":5627,"deletions":8209,"files":114,"commitCount":144},"topContributors":[{"username":"standujar","avatarUrl":"https://avatars.githubusercontent.com/u/16385918?u=718bdcd1585be8447bdfffb8c11ce249baa7532d&v=4","totalScore":115.15835800199321,"prScore":99.38035800199322,"issueScore":0,"reviewScore":15,"commentScore":0.7779999999999999,"summary":null},{"username":"odilitime","avatarUrl":"https://avatars.githubusercontent.com/u/16395496?u=c9bac48e632aae594a0d85aaf9e9c9c69b674d8b&v=4","totalScore":98.01259391847285,"prScore":88.11259391847284,"issueScore":0,"reviewScore":9.5,"commentScore":0.4,"summary":null},{"username":"0xbbjoker","avatarUrl":"https://avatars.githubusercontent.com/u/54844437?u=90fe1762420de6ad493a1c1582f1f70c0d87d8e2&v=4","totalScore":92.5518788239393,"prScore":67.8518788239393,"issueScore":0,"reviewScore":24.5,"commentScore":0.2,"summary":null},{"username":"lalalune","avatarUrl":"https://avatars.githubusercontent.com/u/18633264?u=e2e906c3712c2506ebfa98df01c2cfdc50050b30&v=4","totalScore":49.7477738965761,"prScore":49.7477738965761,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":null},{"username":"LinuxIsCool","avatarUrl":"https://avatars.githubusercontent.com/u/31582215?u=b8eb5d3849bf877a3a0b686cf1632aca92e744ae&v=4","totalScore":39.88213122712422,"prScore":39.682131227124216,"issueScore":0,"reviewScore":0,"commentScore":0.2,"summary":null},{"username":"borisudovicic","avatarUrl":"https://avatars.githubusercontent.com/u/31806472?u=c0478c34097551ba98aaa71edb33af0885a72d69&v=4","totalScore":8.2,"prScore":0,"issueScore":8.2,"reviewScore":0,"commentScore":0,"summary":null},{"username":"skurzyp","avatarUrl":"https://avatars.githubusercontent.com/u/98319381?v=4","totalScore":5,"prScore":0,"issueScore":0,"reviewScore":5,"commentScore":0,"summary":null},{"username":"ChristopherTrimboli","avatarUrl":"https://avatars.githubusercontent.com/u/27584221?u=de148a498b5af814e037c2975112fadd09df743f&v=4","totalScore":5,"prScore":0,"issueScore":0,"reviewScore":5,"commentScore":0,"summary":null},{"username":"devbrett90-prog","avatarUrl":"https://avatars.githubusercontent.com/u/241853504?v=4","totalScore":4.5,"prScore":0,"issueScore":0,"reviewScore":4.5,"commentScore":0,"summary":null},{"username":"TommyVeit","avatarUrl":"https://avatars.githubusercontent.com/u/244845549?v=4","totalScore":4,"prScore":0,"issueScore":4,"reviewScore":0,"commentScore":0,"summary":null},{"username":"870171594","avatarUrl":"https://avatars.githubusercontent.com/u/216127669?u=d4669261a63be8c0bcb69c4e497ed51ecc07776e&v=4","totalScore":4,"prScore":0,"issueScore":4,"reviewScore":0,"commentScore":0,"summary":null},{"username":"nguyennk92","avatarUrl":"https://avatars.githubusercontent.com/u/30664183?u=d6e579cd25d50bc8e9ec4928d95909d759b841db&v=4","totalScore":0.4,"prScore":0,"issueScore":0,"reviewScore":0,"commentScore":0.4,"summary":null},{"username":"otaku-x402","avatarUrl":"https://avatars.githubusercontent.com/u/242004857?u=1325b26d380eec4a0b8d84e8e249c523eebd28dc&v=4","totalScore":0.2,"prScore":0,"issueScore":0,"reviewScore":0,"commentScore":0.2,"summary":null},{"username":"letmehateu","avatarUrl":"https://avatars.githubusercontent.com/u/133153661?u=2217cec1ebd7bf22a8e4e3ace28b3183720dd444&v=4","totalScore":0.2,"prScore":0,"issueScore":0,"reviewScore":0,"commentScore":0.2,"summary":null}],"focusAreas":[{"area":"server","count":52},{"area":"src/actions","count":12},{"area":"src","count":10},{"area":"core","count":9},{"area":"docs","count":8},{"area":"cli","count":5},{"area":"__tests__","count":3},{"area":".github/workflows","count":1},{"area":"app","count":1},{"area":"components/brand","count":1}],"topIssues":[{"id":"I_kwDOMT5cIs7YjZ7G","title":"can i use deepseek api?","author":"870171594","number":6156,"repository":"elizaos/eliza","body":"**Is your feature request related to a problem? Please describe.**\n\n<!-- A clear and concise description of what the problem is. Ex. I'm always frustrated when [...] -->\n\n**Describe the solution you'd like**\n\n<!-- A clear and concise description of what you want to happen. -->\n\n**Describe alternatives you've considered**\n\n<!-- A clear and concise description of any alternative solutions or features you've considered. -->\n\n**Additional context**\n\n<!-- Add any other context or screenshots about the feature request here. -->\n","createdAt":"2025-11-17T12:36:09Z","closedAt":"2025-12-08T13:17:30Z","state":"CLOSED","commentCount":1},{"id":"I_kwDOMT5cIs7NzHXv","title":"Migrate All Dependencies and Plugins to Zod v4","author":"borisudovicic","number":5999,"repository":"elizaos/eliza","body":"We need to migrate the Eliza monorepo and all plugins from Zod v3 to Zod v4.\n\n* Stan has already initiated \\~20–25 PRs across referenced plugins to bump dependencies (core, bootstrap, langchain/ai/vercel, etc.) to the latest compatible Zod v4 versions.\n* Some plugins currently have mismatched peer dependencies; migration only works if all packages are upgraded consistently.\n* Newer versions of the AI SDK also rely on Zod v4, so all LLM plugins must be updated to the latest ai-sdk.\n\nThis migration is a blocking dependency upgrade: partial migration causes runtime and type errors. We need a coordinated effort to upgrade and test the full set of \\~40 plugins.\n\nAcceptance Criteria:\n\n* Update package.json in all monorepo packages to depend on zod@^4.\n* Update all plugins (bootstrap, sql, LLM plugins, etc.) to use Zod v4 schemas.\n* Resolve peer dependency mismatches across packages.\n* Upgrade all AI SDK–based packages to versions that use Zod v4.","createdAt":"2025-09-25T09:15:09Z","closedAt":"2025-11-20T17:14:17Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7V2FT1","title":"Container Billing Logic","author":"borisudovicic","number":6124,"repository":"elizaos/eliza","body":"* Add **monthly cron** to deduct container costs (\\~$25–35 per user).\n* If cron fails → **pause container**, retain for one week, send email → delete after grace period.","createdAt":"2025-11-04T18:13:32Z","closedAt":"2025-11-20T17:14:21Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7XzOLe","title":"Deprecation of Langchain v0.3 - migrate to langchian-classic or bump version to v1","author":"skurzyp","number":6145,"repository":"elizaos/eliza","body":"**Is your feature request related to a problem? Please describe.**\nElizaOS currently uses LangChain v0.3, which is now outdated. The latest release is LangChain v1, and the previous functionality with the same API has been moved to a separate package called langchain-classic. Since LangChain v0.3 and v1 are incompatible, we cannot easily upgrade the LangChain version in our SDK, as ElizaOS depends on the older v0.3 release.\n\n**Describe the solution you'd like**\nbumping `langchain` version to v1\n\n**Describe alternatives you've considered**\nmigtration to `langchain-classic`\n\n**Additional context**\n","createdAt":"2025-11-13T10:16:57Z","closedAt":"2025-11-17T18:18:24Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7YJ3C6","title":"Figma UI implementation on cloud","author":"samarth30","number":6153,"repository":"elizaos/eliza","body":"","createdAt":"2025-11-14T17:13:07Z","closedAt":"2025-11-20T17:14:31Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7ZOm4N","title":"Add Farcaster + Base app support","author":"borisudovicic","number":6161,"repository":"elizaos/eliza","body":"","createdAt":"2025-11-19T21:28:09Z","closedAt":"2026-04-12T18:51:11Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7ZMI5z","title":"Addresses (account + transaction) should be hyperlinks","author":"borisudovicic","number":6160,"repository":"elizaos/eliza","body":"","createdAt":"2025-11-19T18:02:27Z","closedAt":"2026-04-12T18:53:50Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7Y_Y8y","title":"Snapshot Eligibility Issue + Tangem Wallet Connection Not Supported (Discord Support Compromised)","author":"TommyVeit","number":6158,"repository":"elizaos/eliza","body":"$1d","createdAt":"2025-11-19T00:20:30Z","closedAt":"2025-11-20T12:36:52Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7ZfVzc","title":"PnL Cards","author":"borisudovicic","number":6163,"repository":"elizaos/eliza","body":"Example:<br>\n\n![image.png](https://uploads.linear.app/186bdefa-3633-464a-80cd-6e86fe765a5c/7e4a5785-30ea-4d5f-864e-ac079d3f01d1/d07719e3-e1ce-420a-8dee-0f0e32adbc01?signature=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJwYXRoIjoiLzE4NmJkZWZhLTM2MzMtNDY0YS04MGNkLTZlODZmZTc2NWE1Yy83ZTRhNTc4NS0zMGVhLTRkNWYtODY0ZS1hYzA3OWQzZjAxZDEvZDA3NzE5ZTMtZTFjZS00MjBhLThkZWUtMGYwZTMyYWRiYzAxIiwiaWF0IjoxNzYzNjY5MTM0LCJleHAiOjE3OTUyMzk2OTR9.WHmhRWwFozujyDrKftT697A6gyD1GxFCCj4XFr9Iq1Q \"=302.09999999999997x\")","createdAt":"2025-11-20T20:05:09Z","closedAt":"2026-04-12T18:53:47Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7ZVzBU","title":"Buttons (Yes + No)","author":"borisudovicic","number":6162,"repository":"elizaos/eliza","body":"","createdAt":"2025-11-20T09:37:48Z","closedAt":"2026-04-12T18:53:49Z","state":"CLOSED","commentCount":0}],"topPullRequests":[{"id":"PR_kwDOMT5cIs607dMZ","title":"feat: Entity-level RLS & Security Improvements","author":"standujar","number":6167,"body":"$1e","repository":"elizaos/eliza","createdAt":"2025-11-22T01:44:49Z","mergedAt":"2025-11-27T09:14:36Z","additions":6118,"deletions":2157},{"id":"PR_kwDOMT5cIs6xzKBP","title":"fix: align server tests with ElizaOS API changes","author":"odilitime","number":6135,"body":"$1f","repository":"elizaos/eliza","createdAt":"2025-11-06T04:07:48Z","mergedAt":"2025-11-20T23:02:50Z","additions":4294,"deletions":4383},{"id":"PR_kwDOOtXZkc6wwBNq","title":"Discord slash commands interface, modal interaction enhancements, attachment fixes","author":"odilitime","number":23,"body":"$20","repository":"elizaos-plugins/plugin-discord","createdAt":"2025-10-31T04:21:47Z","mergedAt":"2025-11-21T06:41:42Z","additions":683,"deletions":345},{"id":"PR_kwDOMT5cIs60tivJ","title":"feat: improve accepted formats for plugin names in plugin dependencies","author":"odilitime","number":6164,"body":"$21","repository":"elizaos/eliza","createdAt":"2025-11-20T23:01:34Z","mergedAt":"2025-11-21T03:35:46Z","additions":614,"deletions":73},{"id":"PR_kwDOMT5cIs60v4ix","title":"fix: topP support for anthropic PR","author":"odilitime","number":6166,"body":"<!-- CURSOR_SUMMARY -->\n> [!NOTE]\n> Introduce `topP` as a configurable model parameter (defaults and per-model-type) and pass-through in runtime-generated params.\n> \n> - **Core Runtime (`packages/core/src/runtime.ts`)**\n>   - Extend model settings resolution to include `TOP_P` with default and model-specific fallbacks; make `legacyKey` optional.\n>   - Populate `modelSettings.topP` when available.\n> - **Types (`packages/core/src/types/model.ts`)**\n>   - Add `MODEL_SETTINGS` keys for `DEFAULT_TOP_P`, `TEXT_SMALL_TOP_P`, `TEXT_LARGE_TOP_P`, `OBJECT_SMALL_TOP_P`, `OBJECT_LARGE_TOP_P`.\n>   - Extend `GenerateTextParams` with optional `topP`; note provider capability differences in docs.\n> \n> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit de266adf45a5bd6b11d34a2e872aff882f7a63d2. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>\n<!-- /CURSOR_SUMMARY -->","repository":"elizaos/eliza","createdAt":"2025-11-21T04:44:59Z","mergedAt":"2025-11-25T23:33:04Z","additions":358,"deletions":8},{"id":"PR_kwDOMT5cIs60u0ti","title":"fix(server): update MessageBusService integration tests","author":"standujar","number":6165,"body":"# Relates to\r\n\r\nUpdates to MessageBusService integration tests following architecture changes\r\n\r\n# Risks\r\n\r\nLow - Test-only changes, no production code modified\r\n\r\n# Background\r\n\r\n## What does this PR do?\r\n\r\nUpdates MessageBusService integration tests to align with the current architecture:\r\n- Removes checks for `MESSAGE_RECEIVED` event (no longer emitted)\r\n- Updates tests to verify message validation flow passes before downstream processing\r\n- Removes redundant Metadata Propagation tests (covered by Message Handling tests)\r\n\r\n## What kind of change is this?\r\n\r\nBug fixes (non-breaking change which fixes an issue)\r\n\r\n# Documentation changes needed?\r\n\r\nMy changes do not require a change to the project documentation.\r\n\r\n# Testing\r\n\r\n## Where should a reviewer start?\r\n\r\n`packages/server/src/__tests__/integration/message-bus-service.test.ts`\r\n\r\n## Detailed testing steps\r\n\r\n```bash\r\ncd packages/server\r\nbun test src/__tests__/integration/message-bus-service.test.ts\r\n```\r\n\r\nExpected: 12 pass, 0 fail\r\n","repository":"elizaos/eliza","createdAt":"2025-11-21T01:53:34Z","mergedAt":"2025-11-21T12:12:30Z","additions":303,"deletions":529},{"id":"PR_kwDOOu4gVs6z1XpV","title":"feat: expose available docs as state value","author":"0xbbjoker","number":47,"body":"$22","repository":"elizaos-plugins/plugin-knowledge","createdAt":"2025-11-17T11:23:34Z","mergedAt":"2025-11-17T16:40:30Z","additions":221,"deletions":208},{"id":"PR_kwDOMT5cIs6zfDfx","title":"fix: migrate from LangChain v0.3 to @langchain/textsplitters v1.0","author":"0xbbjoker","number":6152,"body":"$23","repository":"elizaos/eliza","createdAt":"2025-11-14T15:47:47Z","mergedAt":"2025-11-17T18:18:23Z","additions":160,"deletions":94},{"id":"PR_kwDOMT5cIs60Z-75","title":"fix: markdown spacing compact","author":"LinuxIsCool","number":6159,"body":"$24","repository":"elizaos/eliza","createdAt":"2025-11-19T17:17:48Z","mergedAt":"2025-12-01T09:35:13Z","additions":106,"deletions":1},{"id":"PR_kwDOMT5cIs6yxEIL","title":"fix: Add openrouter embedding option in CLI","author":"Neysixx","number":6142,"body":"$25","repository":"elizaos/eliza","createdAt":"2025-11-11T14:06:17Z","mergedAt":"2025-11-20T14:56:52Z","additions":79,"deletions":4},{"id":"PR_kwDOMT5cIs6zOMHD","title":"feat(plugin-sql): add ownerId field to Agent with camelCase mapping","author":"0xbbjoker","number":6147,"body":"$26","repository":"elizaos/eliza","createdAt":"2025-11-13T12:51:40Z","mergedAt":null,"additions":77,"deletions":4},{"id":"PR_kwDOP6BTDM60mMPB","title":"Frontpage fixes","author":"lalalune","number":65,"body":"This PR removes the video, adds some grid and color for that v0 vibe","repository":"elizaos/cloud","createdAt":"2025-11-20T13:32:07Z","mergedAt":"2025-11-21T18:07:23Z","additions":60,"deletions":2474},{"id":"PR_kwDOOtXZkc6xNPtm","title":"feat: integrate unified messaging API","author":"standujar","number":24,"body":"$27","repository":"elizaos-plugins/plugin-discord","createdAt":"2025-11-03T14:56:35Z","mergedAt":"2025-11-20T21:56:11Z","additions":50,"deletions":39},{"id":"PR_kwDOOiniuM60b_Vn","title":"docs: add documentation for text embedding functionality","author":"0xbbjoker","number":19,"body":"$28","repository":"elizaos-plugins/plugin-openrouter","createdAt":"2025-11-19T20:21:05Z","mergedAt":"2025-11-19T21:51:16Z","additions":44,"deletions":3},{"id":"PR_kwDOMT5cIs6zH89E","title":"feat: Socketio server add auth token","author":"nguyennk92","number":6144,"body":"# Risks\r\n\r\nLow\r\n\r\n# Background\r\n\r\n## What does this PR do?\r\n\r\nAdd env ELIZA_SOCKETIO_AUTH_TOKEN behave similar to ELIZA_SERVER_AUTH_TOKEN\r\n\r\n## What kind of change is this?\r\nImprovements (misc. changes to existing features)\r\n\r\n## Why are we doing this? Any context or related work?\r\nAdd a layer of security\r\n","repository":"elizaos/eliza","createdAt":"2025-11-13T03:41:16Z","mergedAt":null,"additions":38,"deletions":1},{"id":"PR_kwDOOtXZkc60wxMn","title":"Prevent sending empty discord messages","author":"odilitime","number":25,"body":"$29","repository":"elizaos-plugins/plugin-discord","createdAt":"2025-11-21T06:46:51Z","mergedAt":null,"additions":8,"deletions":1},{"id":"PR_kwDOMT5cIs6sqP2s","title":"docs: fix old links to actual","author":"letmehateu","number":6050,"body":"$2a","repository":"elizaos/eliza","createdAt":"2025-10-08T09:31:20Z","mergedAt":"2025-11-16T12:51:11Z","additions":3,"deletions":3},{"id":"PR_kwDOMT5cIs6z6-8G","title":"chore(deps): bump glob from 11.0.3 to 11.1.0 in /packages/core in the npm_and_yarn group across 1 directory","author":"dependabot","number":6157,"body":"$2b","repository":"elizaos/eliza","createdAt":"2025-11-17T18:38:08Z","mergedAt":null,"additions":1,"deletions":1}],"detailedContributorSummaries":{}}}],"$L2c"]}]
+16:["$","div",null,{"className":"prose prose-sm mx-auto mt-8 dark:prose-invert sm:prose lg:prose-lg xl:prose-xl","children":[["$","h2","h2-0",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"Executive Summary","position":{"start":{"line":3,"column":4,"offset":57},"end":{"line":3,"column":21,"offset":74}}}],"position":{"start":{"line":3,"column":1,"offset":54},"end":{"line":3,"column":21,"offset":74}}},"children":"Executive Summary"}],"\n",["$","p","p-0",{"children":"This week, the project focused on strengthening its foundations by modernizing core dependencies while actively engaging with our community to address critical feedback and guide future development. Key efforts improved platform stability and made our plugin ecosystem more accessible for developers, reinforcing our commitment to a modular and collaborative framework."}],"\n",["$","h3","h3-0",{"children":"Key Strategic Initiatives & Outcomes"}],"\n",["$","p","p-1",{"children":[["$","strong","strong-0",{"children":"Strengthening the Platform's Foundation"}],"\n",["$","em","em-0",{"children":"To ensure the long-term stability and maintainability of the ElizaOS framework, we proactively address technical debt and modernize core components."}]]}],"\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["The core system was migrated away from an outdated and deprecated dependency (",["$","code","code-0",{"children":"LangChain v0.3"}],"), resolving a significant technical debt item and enhancing the stability of the entire platform (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza","children":"elizaos/eliza"}],")."]}],"\n"]}],"\n",["$","p","p-2",{"children":[["$","strong","strong-0",{"children":"Enhancing Developer Experience and Usability"}],"\n",["$","em","em-0",{"children":"To empower our community to build powerful and adaptable AI agents, we are continuously improving the tools and documentation for our modular architecture."}]]}],"\n",["$","ul","ul-1",{"children":["\n",["$","li","li-0",{"children":["In the knowledge plugin, we simplified the process of using document context in prompts by making the list of available documents directly accessible as a state value (",["$","a","a-0",{"href":"https://github.com/elizaos-plugins/plugin-knowledge","children":"elizaos-plugins/plugin-knowledge"}],")."]}],"\n",["$","li","li-1",{"children":["We published comprehensive documentation and examples for the text embedding feature in the OpenRouter plugin, making this powerful capability more accessible to all developers (",["$","a","a-0",{"href":"https://github.com/elizaos-plugins/plugin-openrouter","children":"elizaos-plugins/plugin-openrouter"}],")."]}],"\n"]}],"\n",["$","p","p-3",{"children":[["$","strong","strong-0",{"children":"Actively Engaging with Community Feedback"}],"\n",["$","em","em-0",{"children":"Our progress is driven by open collaboration, and we prioritize responding to user needs to ensure the project evolves in a direction that serves our community."}]]}],"\n",["$","ul","ul-2",{"children":["\n",["$","li","li-0",{"children":["We began triaging a high-priority user report regarding migration issues, demonstrating our commitment to addressing critical problems quickly (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza","children":"elizaos/eliza"}],")."]}],"\n",["$","li","li-1",{"children":["We captured valuable feature requests for new integrations like the DeepSeek API and support for Farcaster/Base applications, which will help inform our future roadmap (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza","children":"elizaos/eliza"}],")."]}],"\n"]}],"\n",["$","h3","h3-1",{"children":"Cross-Repository Coordination"}],"\n",["$","p","p-4",{"children":[["$","strong","strong-0",{"children":"Shared Dependencies"}],"\nThe modernization of a core dependency in ","$L2d"," required coordinated updates across plugin starter packages. This foundational work ensures that as the core platform evolves, the entire ecosystem of plugins remains stable and compatible, reflecting our modular design philosophy."]}],"\n","$L2e","\n","$L2f","\n","$L30","\n","$L31","\n","$L32","\n","$L33","\n","$L34","\n","$L35"]}]
+17:["$","script","script-0",{"src":"/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","async":true}]
+18:["$","script","script-1",{"src":"/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","async":true}]
+19:["$","script","script-2",{"src":"/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js","async":true}]
+1a:["$","$L36",null,{"children":["$","$37",null,{"name":"Next.MetadataOutlet","children":"$@38"}]}]
+2c:["$","div",null,{"className":"rounded-lg border bg-card text-card-foreground shadow-sm","children":[["$","div",null,{"className":"flex flex-col space-y-1.5 p-6 py-4","children":["$","div",null,{"className":"tracking-tight text-sm font-medium","children":["$undefined","Code Changes"]}]}],["$","div",null,{"className":"p-6 pt-0","children":["$","div",null,{"className":"grid grid-cols-2 gap-4 md:grid-cols-4","children":[["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-git-commit-vertical h-5 w-5","aria-hidden":"true","children":[["$","path","1holv5",{"d":"M12 3v6"}],["$","circle","1v7zrd",{"cx":"12","cy":"12","r":"3"}],["$","path","a9ows0",{"d":"M12 15v6"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":144}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Commits"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-file-code h-5 w-5","aria-hidden":"true","children":[["$","path","1oefj6",{"d":"M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"}],["$","path","wfsgrz",{"d":"M14 2v5a1 1 0 0 0 1 1h5"}],["$","path","1tg20x",{"d":"M10 12.5 8 15l2 2.5"}],["$","path","yinavb",{"d":"m14 12.5 2 2.5-2 2.5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":114}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Files Changed"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-green-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-up h-5 w-5 text-green-500","aria-hidden":"true","children":[["$","path","hav0vg",{"d":"m5 12 7-7 7 7"}],["$","path","x0mq9r",{"d":"M12 19V5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-green-500","children":"+5,627"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Added"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-red-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-down h-5 w-5 text-red-500","aria-hidden":"true","children":[["$","path","s699le",{"d":"M12 5v14"}],["$","path","1idqje",{"d":"m19 12-7 7-7-7"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-red-500","children":"-8,209"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Deleted"}]]}]]}]]}]}]]}]
+2d:["$","a","a-0",{"href":"https://github.com/elizaos/eliza","children":"elizaos/eliza"}]
+2e:["$","p","p-5",{"children":[["$","strong","strong-0",{"children":"Community-Driven Integration"}],"\nA community discussion about integrating the DeepSeek API (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/6156","children":"#6156"}],") highlighted the composable nature of our ecosystem. The conversation, spanning both the core ",["$","a","a-1",{"href":"https://github.com/elizaos/eliza","children":"elizaos/eliza"}]," and ",["$","a","a-2",{"href":"https://github.com/elizaos-plugins/plugin-knowledge","children":"elizaos-plugins/plugin-knowledge"}]," repositories, pointed to solutions involving ",["$","code","code-0",{"children":"plugin-openrouter"}],", showcasing how different components of ElizaOS can be combined to extend functionality."]}]
+2f:["$","h2","h2-1",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"Repository Spotlights","position":{"start":{"line":30,"column":4,"offset":3226},"end":{"line":30,"column":25,"offset":3247}}}],"position":{"start":{"line":30,"column":1,"offset":3223},"end":{"line":30,"column":25,"offset":3247}}},"children":"Repository Spotlights"}]
+30:["$","h3","h3-2",{"children":"elizaos/eliza"}]
+31:["$","ul","ul-3",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"Modernized Core Dependencies:"}]," Migrated from the deprecated ",["$","code","code-0",{"children":"langchain"}]," v0.3 to ",["$","code","code-1",{"children":"@langchain/textsplitters"}],", resolving a long-standing stability concern and closing issue ",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/6145","children":"#6145"}]," via PR ",["$","a","a-1",{"href":"https://github.com/elizaos/eliza/pull/6152","children":"#6152"}],"."]}],"\n",["$","li","li-1",{"children":[["$","strong","strong-0",{"children":"Triaged Critical Community Issues:"}]," Began investigating a high-priority migration issue reported by a user, covering snapshot eligibility and wallet connection problems (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/6158","children":"#6158"}],")."]}],"\n",["$","li","li-2",{"children":[["$","strong","strong-0",{"children":"Captured New Feature Requests:"}]," The community proposed several valuable enhancements, including DeepSeek API integration (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/6156","children":"#6156"}],"), support for Farcaster and Base (",["$","a","a-1",{"href":"https://github.com/elizaos/eliza/issues/6161","children":"#6161"}],"), and a UI improvement for clickable addresses (",["$","a","a-2",{"href":"https://github.com/elizaos/eliza/issues/6160","children":"#6160"}],")."]}],"\n",["$","li","li-3",{"children":[["$","strong","strong-0",{"children":"Improved Documentation:"}]," Corrected outdated links in the CLI documentation to improve user experience (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/6050","children":"#6050"}],")."]}],"\n"]}]
+32:["$","h3","h3-3",{"children":"elizaos-plugins/plugin-knowledge"}]
+33:["$","ul","ul-4",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"Improved Document Accessibility:"}]," Merged a feature that exposes the list of available documents as a state value, making it significantly easier for developers to bind document context into prompts (",["$","a","a-0",{"href":"https://github.com/elizaos-plugins/plugin-knowledge/pull/47","children":"#47"}],")."]}],"\n",["$","li","li-1",{"children":[["$","strong","strong-0",{"children":"Fostered Community Collaboration:"}]," An active discussion on using the Deepseek API (",["$","a","a-0",{"href":"https://github.com/elizaos-plugins/plugin-knowledge/issues/6156","children":"#6156"}],") saw community members guiding a user toward potential solutions using other plugins, demonstrating a healthy, collaborative ecosystem."]}],"\n"]}]
+34:["$","h3","h3-4",{"children":"elizaos-plugins/plugin-openrouter"}]
+35:["$","ul","ul-5",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"Enhanced Text Embedding Documentation:"}]," Formalized the documentation for the ",["$","code","code-0",{"children":"TEXT_EMBEDDING"}]," model type by updating the README with comprehensive details and configuration examples, making the feature fully documented and easier to use (",["$","a","a-0",{"href":"https://github.com/elizaos-plugins/plugin-openrouter/pull/19","children":"#19"}],")."]}],"\n"]}]
+38:null

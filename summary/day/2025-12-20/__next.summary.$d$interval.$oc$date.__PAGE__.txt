@@ -1,0 +1,338 @@
+1:"$Sreact.fragment"
+2:I[4817319,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"IntervalSelector"]
+3:I[6998365,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"LlmCopyButton"]
+d:I[3642796,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],""]
+e:I[3238488,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"StatCardsDisplay"]
+15:I[4261541,["/eliza-leaderboard/_next/static/chunks/b33bcbdcb3f88354.js","/eliza-leaderboard/_next/static/chunks/8ba59154b6704904.js"],"OutletBoundary"]
+16:"$Sreact.suspense"
+4:T1582,## Overview
+
+This RFC documents our current data pipeline architecture and proposes improvements across several data engineering domains. Looking for team input on priorities and approach.
+
+## Current Architecture
+
+Our pipeline follows a **4-stage modular design**:
+
+```
+GitHub API → [Ingest] → SQLite (raw tables)
+                ↓
+           [Process] → SQLite (scores, tags, badges)
+                ↓
+            [Export] → JSON APIs (leaderboards, stats)
+                ↓
+          [Summarize] → AI summaries (repo, contributor, overall)
+                ↓
+           _data branch → GitHub Pages (static deployment)
+```
+
+### Strengths ✅
+- **Modular design** - Each stage independent, can run in isolation
+- **Sophisticated rate limiting** - Adaptive concurrency, token bucket, primary/secondary limit handling
+- **Data lineage via git** - `_data` branch with sqlite-diffable provides full audit trail
+- **Type safety** - TypeScript strict mode, Zod schemas, Drizzle ORM
+- **Configurable scoring** - Multi-dimensional metrics, per-type caps, tagging system
+- **Fork-friendly** - No hardcoded org values, env var overrides
+
+### Gaps & Risks ⚠️
+
+| Area | Gap | Risk Level |
+|------|-----|------------|
+| Idempotency | Partial updates possible if export fails mid-way | Medium |
+| Data Quality | No freshness alerts, anomaly detection, or reconciliation checks | Medium |
+| Observability | Limited visibility into pipeline health beyond logs | Low |
+| Error Recovery | No dead-letter queue, failures silently skipped in mapStep | Medium |
+| AI Summaries | Silent fallback if OpenRouter API down, no alerts | Low |
+| Scaling | Fixed concurrency, no pagination for large contributor lists | Low (for now) |
+
+---
+
+## Proposed Improvements
+
+### 1. Orchestration
+
+**Current:** GitHub Actions + CLI commands
+
+| Option | Fit | Effort | Notes |
+|--------|-----|--------|-------|
+| **Stay with GitHub Actions** | Good | - | Works, but limited DAG visibility and retry logic |
+| **Dagster** | Excellent | Medium | Asset-based model fits our pipeline, great UI, built-in lineage |
+| **Prefect** | Good | Medium | Python-native, good observability |
+| **Temporal** | Good | High | Best for durable long-running workflows (AI summaries) |
+
+**Recommendation:** Dagster aligns well with our "assets" mental model (raw tables → scores → summaries → JSON APIs). Provides lineage visualization, partial re-execution, and better failure handling.
+
+### 2. Data Quality & Integrity
+
+**Current:** Zod validation, uniqueness constraints, bot filtering
+
+**Proposed additions:**
+- [ ] Add `validate` pipeline stage with assertions:
+  - Row counts shouldn't decrease unexpectedly
+  - Scores within expected ranges (0-1000?)
+  - Freshness check (last ingest < 48 hours)
+  - Raw vs processed count reconciliation
+- [ ] Consider **Great Expectations** or **Soda** for declarative data contracts
+- [ ] Add anomaly detection (unusual spikes in contributors, scores)
+
+### 3. Data Governance
+
+**Current:** Git versioning via sqlite-diffable
+
+**Proposed additions:**
+- [ ] PII scrubbing - Hash or remove emails from commits table
+- [ ] Config versioning - Store scoring config snapshot with each pipeline run
+- [ ] Data catalog - Document table schemas, relationships, refresh cadence
+- [ ] Consider **DataHub** or **OpenMetadata** for lineage visualization (if we scale)
+
+### 4. Observability & Monitoring
+
+**Current:** Console logs only
+
+**Proposed additions:**
+- [ ] Pipeline metrics dashboard showing:
+  - Last successful run timestamp
+  - Duration per stage
+  - Record counts over time
+  - Error rate trends
+- [ ] Alerting on:
+  - Pipeline failures
+  - Data freshness violations (no ingest in 48h)
+  - Anomalous record count changes
+- [ ] GitHub Actions job summary with run statistics
+
+### 5. Architecture Evolution Paths
+
+**Path A: Incremental (Recommended for now)**
+```
+Current → Add data quality checks → Better logging/metrics → Dagster (later)
+```
+
+**Path B: Modern Data Stack**
+```
+SQLite → DuckDB → dbt for transforms → Dagster orchestration
+```
+
+**Path C: Event-Driven (Future, if needed for scale)**
+```
+GitHub Webhooks → Event queue → Real-time processing → Time-series DB
+```
+
+---
+
+## Proposed Priorities
+
+### Phase 1: Quick Wins (1-2 weeks)
+- [ ] Add row count logging after each pipeline stage
+- [ ] Create simple health check endpoint/page
+- [ ] Add dry-run flag to mutating commands
+- [ ] Implement basic freshness alerting
+
+### Phase 2: Data Quality (2-4 weeks)
+- [ ] Implement `validate` stage with core assertions
+- [ ] Add anomaly detection for key metrics
+- [ ] PII audit and scrubbing
+
+### Phase 3: Orchestration Upgrade (4-6 weeks)
+- [ ] Evaluate Dagster vs Temporal POC
+- [ ] Migrate one pipeline stage as proof of concept
+- [ ] Build observability dashboard
+
+---
+
+## Questions for Discussion
+
+1. **Priority:** Which gaps are most painful right now? What should we tackle first?
+2. **Orchestration:** Is the current GitHub Actions setup causing issues? Worth the migration effort?
+3. **Scale:** Are we expecting significant growth in repos/contributors that would change priorities?
+4. **Resources:** Who's interested in working on pipeline infrastructure?
+
+---
+
+## References
+
+- Current pipeline code: `src/lib/pipelines/`
+- Workflows: `.github/workflows/run-pipelines.yml`, `generate-summaries.yml`
+- Config: `config/example.json`
+- [Fundamentals of Data Engineering](https://www.oreilly.com/library/view/fundamentals-of-data/9781098108298/) - Reis & Housley5:T9e2,On December 20, 2025, ElizaOS saw significant progress in the `plugin-openrouter` with the addition of streaming support and comprehensive test coverage, enhancing real-time output capabilities. Concurrently, a new Request for Comments (RFC) was opened across both `plugin-openrouter` and `elizaos.github.io` to discuss and propose improvements to the data pipeline architecture, indicating a strategic focus on core infrastructure enhancements.
+
+## 🚨 Needs Attention
+- **Urgent Discussions**:
+    - `elizaos-plugins/plugin-openrouter` - RFC: Data Pipeline Architecture Improvements ([#187](https://github.com/elizaos-plugins/plugin-openrouter/issues/187)): Discussion is focused on generating an implementation plan and prompts using CodeRabbit's Plan Mode. Input is needed to move forward with the implementation plan.
+    - `elizaos/elizaos.github.io` - Data Pipeline Architecture Discussion ([#187](https://github.com/elizaos/elizaos.github.io/issues/187)): This RFC needs team input on priorities and approaches for enhancing data engineering domains.
+
+## ✅ Completed Work
+- **Plugin Enhancements**:
+    - Added streaming text generation support and comprehensive test coverage for the OpenRouter plugin, improving real-time output capabilities and stability. ([elizaos-plugins/plugin-openrouter#21](https://github.com/elizaos-plugins/plugin-openrouter/pull/21))
+
+## 🏗️ Work in Progress
+- **Active Discussions**:
+    - `elizaos-plugins/plugin-openrouter` - RFC: Data Pipeline Architecture Improvements ([#187](https://github.com/elizaos-plugins/plugin-openrouter/issues/187)): Discussion is ongoing regarding the implementation plan for data pipeline architecture improvements.
+
+## 🐞 Issue Triage
+- **New Issues**:
+    - `elizaos-plugins/plugin-openrouter` - Data Pipeline Architecture Improvements ([#187](https://github.com/elizaos-plugins/plugin-openrouter/issues/187)): A new RFC was opened to document the current data pipeline architecture and propose improvements.
+    - `elizaos/elizaos.github.io` - Data Pipeline Architecture Discussion ([#187](https://github.com/elizaos/elizaos.github.io/issues/187)): A new RFC has been opened to discuss and propose improvements to the existing data pipeline architecture.
+
+## ✨ Contributor Spotlight
+- The contributor to `elizaos-plugins/plugin-openrouter` for Pull Request [#21](https://github.com/elizaos-plugins/plugin-openrouter/pull/21) significantly enhanced the OpenRouter plugin by adding streaming text generation support and comprehensive test coverage.0:{"buildId":"US8XLB_zHXYj_PVAECGcd","rsc":["$","$1","c",{"children":[["$","div",null,{"className":"container mx-auto px-6 py-8 md:px-8","children":["$","div",null,{"className":"mx-auto max-w-4xl","children":[["$","div",null,{"className":"mb-4 flex flex-col justify-between sm:flex-row","children":[["$","$L2",null,{"currentInterval":"day","currentDate":"2025-12-20"}],["$","$L3",null,{"metrics":{"date":"2025-12-20","interval":{"intervalStart":"$D2025-12-20T00:00:00.000Z","intervalEnd":"$D2025-12-21T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":0,"merged":1,"total":1},"issues":{"new":1,"closed":0,"total":1},"activeContributors":5,"codeChanges":{"additions":277,"deletions":384,"files":9,"commitCount":19},"topContributors":[{"username":"madjin","avatarUrl":"https://avatars.githubusercontent.com/u/32600939?u=cdcf89f44c7a50906c7a80d889efa85023af2049&v=4","totalScore":2,"prScore":0,"issueScore":2,"reviewScore":0,"commentScore":0,"summary":"madjin: Initiated a significant architectural discussion by creating \"RFC: Data Pipeline Architecture Improvements\" (elizaos/elizaos.github.io#187), while also contributing to feature work, bug fixes, and other tasks across 21 files with 10 commits, modifying nearly 1000 lines of code."}],"focusAreas":[{"area":"src/utils","count":3},{"area":"src/models","count":2},{"area":"src","count":1},{"area":"src/types","count":1}],"topIssues":[{"id":"I_kwDONNAI987figPq","title":"RFC: Data Pipeline Architecture Improvements","author":"madjin","number":187,"repository":"elizaos/elizaos.github.io","body":"$4","createdAt":"2025-12-20T20:04:10Z","closedAt":null,"state":"OPEN","commentCount":1}],"topPullRequests":[{"id":"PR_kwDOOiniuM63rUNW","title":"feat: add streaming support, remove tools support and complete test s…","author":"standujar","number":21,"body":"**We need to merge this first:** https://github.com/elizaOS/eliza/pull/6212\r\n\r\n* **New Features**\r\n  * Added streaming text generation support for enhanced real-time output.\r\n  * Added comprehensive test coverage for plugin functionality.\r\n\r\n* **Chores**\r\n  * Bumped package version to 1.5.16.\r\n  * Updated @elizaos/core dependency to ^1.6.5.\r\n\r\n* **Refactor**\r\n  * Streamlined text generation handlers for improved efficiency.\r\n  * Enhanced schema handling for object generation operations.\r\n  * Removed tool integration features from text generation models.","repository":"elizaos-plugins/plugin-openrouter","createdAt":"2025-12-08T13:07:56Z","mergedAt":"2025-12-20T18:24:05Z","additions":277,"deletions":384}],"detailedContributorSummaries":{"madjin":"madjin: Initiated a significant architectural discussion by creating \"RFC: Data Pipeline Architecture Improvements\" (elizaos/elizaos.github.io#187), while also contributing to feature work, bug fixes, and other tasks across 21 files with 10 commits, modifying nearly 1000 lines of code."}},"summaryContent":"$5","className":"self-end sm:self-start"}]]}],"$L6","$L7","$L8"]}]}],["$L9","$La","$Lb"],"$Lc"]}],"loading":null,"isPartial":false}
+6:["$","div",null,{"className":"mb-6","children":["$","div",null,{"className":"flex items-center justify-between","children":[[["$","$Ld",null,{"href":"/summary/day/2025-12-19","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left mr-2 h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"children":"Previous"}],false],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$Ld",null,{"href":"/summary/day/2025-12-19","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Previous"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]],["$","div",null,{"className":"flex flex-col items-center","children":[["$","div",null,{"className":"text-sm font-medium text-gray-500","children":["Daily"," Summary"]}],["$","time",null,{"dateTime":"2025-12-20","className":"text-md font-bold","children":"Dec 20, 2025"}]]}],[["$","$Ld",null,{"href":"/summary/day/2025-12-21","children":[false,["$","span",null,{"children":"Next"}],["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right ml-2 h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}]],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$Ld",null,{"href":"/summary/day/2025-12-21","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Next"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]]]}]}]
+f:T1582,## Overview
+
+This RFC documents our current data pipeline architecture and proposes improvements across several data engineering domains. Looking for team input on priorities and approach.
+
+## Current Architecture
+
+Our pipeline follows a **4-stage modular design**:
+
+```
+GitHub API → [Ingest] → SQLite (raw tables)
+                ↓
+           [Process] → SQLite (scores, tags, badges)
+                ↓
+            [Export] → JSON APIs (leaderboards, stats)
+                ↓
+          [Summarize] → AI summaries (repo, contributor, overall)
+                ↓
+           _data branch → GitHub Pages (static deployment)
+```
+
+### Strengths ✅
+- **Modular design** - Each stage independent, can run in isolation
+- **Sophisticated rate limiting** - Adaptive concurrency, token bucket, primary/secondary limit handling
+- **Data lineage via git** - `_data` branch with sqlite-diffable provides full audit trail
+- **Type safety** - TypeScript strict mode, Zod schemas, Drizzle ORM
+- **Configurable scoring** - Multi-dimensional metrics, per-type caps, tagging system
+- **Fork-friendly** - No hardcoded org values, env var overrides
+
+### Gaps & Risks ⚠️
+
+| Area | Gap | Risk Level |
+|------|-----|------------|
+| Idempotency | Partial updates possible if export fails mid-way | Medium |
+| Data Quality | No freshness alerts, anomaly detection, or reconciliation checks | Medium |
+| Observability | Limited visibility into pipeline health beyond logs | Low |
+| Error Recovery | No dead-letter queue, failures silently skipped in mapStep | Medium |
+| AI Summaries | Silent fallback if OpenRouter API down, no alerts | Low |
+| Scaling | Fixed concurrency, no pagination for large contributor lists | Low (for now) |
+
+---
+
+## Proposed Improvements
+
+### 1. Orchestration
+
+**Current:** GitHub Actions + CLI commands
+
+| Option | Fit | Effort | Notes |
+|--------|-----|--------|-------|
+| **Stay with GitHub Actions** | Good | - | Works, but limited DAG visibility and retry logic |
+| **Dagster** | Excellent | Medium | Asset-based model fits our pipeline, great UI, built-in lineage |
+| **Prefect** | Good | Medium | Python-native, good observability |
+| **Temporal** | Good | High | Best for durable long-running workflows (AI summaries) |
+
+**Recommendation:** Dagster aligns well with our "assets" mental model (raw tables → scores → summaries → JSON APIs). Provides lineage visualization, partial re-execution, and better failure handling.
+
+### 2. Data Quality & Integrity
+
+**Current:** Zod validation, uniqueness constraints, bot filtering
+
+**Proposed additions:**
+- [ ] Add `validate` pipeline stage with assertions:
+  - Row counts shouldn't decrease unexpectedly
+  - Scores within expected ranges (0-1000?)
+  - Freshness check (last ingest < 48 hours)
+  - Raw vs processed count reconciliation
+- [ ] Consider **Great Expectations** or **Soda** for declarative data contracts
+- [ ] Add anomaly detection (unusual spikes in contributors, scores)
+
+### 3. Data Governance
+
+**Current:** Git versioning via sqlite-diffable
+
+**Proposed additions:**
+- [ ] PII scrubbing - Hash or remove emails from commits table
+- [ ] Config versioning - Store scoring config snapshot with each pipeline run
+- [ ] Data catalog - Document table schemas, relationships, refresh cadence
+- [ ] Consider **DataHub** or **OpenMetadata** for lineage visualization (if we scale)
+
+### 4. Observability & Monitoring
+
+**Current:** Console logs only
+
+**Proposed additions:**
+- [ ] Pipeline metrics dashboard showing:
+  - Last successful run timestamp
+  - Duration per stage
+  - Record counts over time
+  - Error rate trends
+- [ ] Alerting on:
+  - Pipeline failures
+  - Data freshness violations (no ingest in 48h)
+  - Anomalous record count changes
+- [ ] GitHub Actions job summary with run statistics
+
+### 5. Architecture Evolution Paths
+
+**Path A: Incremental (Recommended for now)**
+```
+Current → Add data quality checks → Better logging/metrics → Dagster (later)
+```
+
+**Path B: Modern Data Stack**
+```
+SQLite → DuckDB → dbt for transforms → Dagster orchestration
+```
+
+**Path C: Event-Driven (Future, if needed for scale)**
+```
+GitHub Webhooks → Event queue → Real-time processing → Time-series DB
+```
+
+---
+
+## Proposed Priorities
+
+### Phase 1: Quick Wins (1-2 weeks)
+- [ ] Add row count logging after each pipeline stage
+- [ ] Create simple health check endpoint/page
+- [ ] Add dry-run flag to mutating commands
+- [ ] Implement basic freshness alerting
+
+### Phase 2: Data Quality (2-4 weeks)
+- [ ] Implement `validate` stage with core assertions
+- [ ] Add anomaly detection for key metrics
+- [ ] PII audit and scrubbing
+
+### Phase 3: Orchestration Upgrade (4-6 weeks)
+- [ ] Evaluate Dagster vs Temporal POC
+- [ ] Migrate one pipeline stage as proof of concept
+- [ ] Build observability dashboard
+
+---
+
+## Questions for Discussion
+
+1. **Priority:** Which gaps are most painful right now? What should we tackle first?
+2. **Orchestration:** Is the current GitHub Actions setup causing issues? Worth the migration effort?
+3. **Scale:** Are we expecting significant growth in repos/contributors that would change priorities?
+4. **Resources:** Who's interested in working on pipeline infrastructure?
+
+---
+
+## References
+
+- Current pipeline code: `src/lib/pipelines/`
+- Workflows: `.github/workflows/run-pipelines.yml`, `generate-summaries.yml`
+- Config: `config/example.json`
+- [Fundamentals of Data Engineering](https://www.oreilly.com/library/view/fundamentals-of-data/9781098108298/) - Reis & Housley7:["$","div",null,{"className":"mb-8 space-y-6","children":[["$","$Le",null,{"metrics":{"date":"2025-12-20","interval":{"intervalStart":"$D2025-12-20T00:00:00.000Z","intervalEnd":"$D2025-12-21T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":0,"merged":1,"total":1},"issues":{"new":1,"closed":0,"total":1},"activeContributors":5,"codeChanges":{"additions":277,"deletions":384,"files":9,"commitCount":19},"topContributors":[{"username":"madjin","avatarUrl":"https://avatars.githubusercontent.com/u/32600939?u=cdcf89f44c7a50906c7a80d889efa85023af2049&v=4","totalScore":2,"prScore":0,"issueScore":2,"reviewScore":0,"commentScore":0,"summary":"madjin: Initiated a significant architectural discussion by creating \"RFC: Data Pipeline Architecture Improvements\" (elizaos/elizaos.github.io#187), while also contributing to feature work, bug fixes, and other tasks across 21 files with 10 commits, modifying nearly 1000 lines of code."}],"focusAreas":[{"area":"src/utils","count":3},{"area":"src/models","count":2},{"area":"src","count":1},{"area":"src/types","count":1}],"topIssues":[{"id":"I_kwDONNAI987figPq","title":"RFC: Data Pipeline Architecture Improvements","author":"madjin","number":187,"repository":"elizaos/elizaos.github.io","body":"$f","createdAt":"2025-12-20T20:04:10Z","closedAt":null,"state":"OPEN","commentCount":1}],"topPullRequests":[{"id":"PR_kwDOOiniuM63rUNW","title":"feat: add streaming support, remove tools support and complete test s…","author":"standujar","number":21,"body":"**We need to merge this first:** https://github.com/elizaOS/eliza/pull/6212\r\n\r\n* **New Features**\r\n  * Added streaming text generation support for enhanced real-time output.\r\n  * Added comprehensive test coverage for plugin functionality.\r\n\r\n* **Chores**\r\n  * Bumped package version to 1.5.16.\r\n  * Updated @elizaos/core dependency to ^1.6.5.\r\n\r\n* **Refactor**\r\n  * Streamlined text generation handlers for improved efficiency.\r\n  * Enhanced schema handling for object generation operations.\r\n  * Removed tool integration features from text generation models.","repository":"elizaos-plugins/plugin-openrouter","createdAt":"2025-12-08T13:07:56Z","mergedAt":"2025-12-20T18:24:05Z","additions":277,"deletions":384}],"detailedContributorSummaries":{"madjin":"madjin: Initiated a significant architectural discussion by creating \"RFC: Data Pipeline Architecture Improvements\" (elizaos/elizaos.github.io#187), while also contributing to feature work, bug fixes, and other tasks across 21 files with 10 commits, modifying nearly 1000 lines of code."}}}],"$L10"]}]
+8:["$","div",null,{"className":"prose prose-sm mx-auto mt-8 dark:prose-invert sm:prose lg:prose-lg xl:prose-xl","children":[["$","p","p-0",{"children":["On December 20, 2025, ElizaOS saw significant progress in the ",["$","code","code-0",{"children":"plugin-openrouter"}]," with the addition of streaming support and comprehensive test coverage, enhancing real-time output capabilities. Concurrently, a new Request for Comments (RFC) was opened across both ",["$","code","code-1",{"children":"plugin-openrouter"}]," and ",["$","code","code-2",{"children":"elizaos.github.io"}]," to discuss and propose improvements to the data pipeline architecture, indicating a strategic focus on core infrastructure enhancements."]}],"\n",["$","h2","h2-0",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"🚨 Needs Attention","position":{"start":{"line":3,"column":4,"offset":450},"end":{"line":3,"column":22,"offset":468}}}],"position":{"start":{"line":3,"column":1,"offset":447},"end":{"line":3,"column":22,"offset":468}}},"children":"🚨 Needs Attention"}],"\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"Urgent Discussions"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","code","code-0",{"children":"elizaos-plugins/plugin-openrouter"}]," - RFC: Data Pipeline Architecture Improvements (",["$","a","a-0",{"href":"https://github.com/elizaos-plugins/plugin-openrouter/issues/187","children":"#187"}],"): Discussion is focused on generating an implementation plan and prompts using CodeRabbit's Plan Mode. Input is needed to move forward with the implementation plan."]}],"\n",["$","li","li-1",{"children":[["$","code","code-0",{"children":"elizaos/elizaos.github.io"}]," - Data Pipeline Architecture Discussion (",["$","a","a-0",{"href":"https://github.com/elizaos/elizaos.github.io/issues/187","children":"#187"}],"): This RFC needs team input on priorities and approaches for enhancing data engineering domains."]}],"\n"]}],"\n"]}],"\n"]}],"\n",["$","h2","h2-1",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"✅ Completed Work","position":{"start":{"line":8,"column":4,"offset":1062},"end":{"line":8,"column":20,"offset":1078}}}],"position":{"start":{"line":8,"column":1,"offset":1059},"end":{"line":8,"column":20,"offset":1078}}},"children":"✅ Completed Work"}],"\n",["$","ul","ul-1",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"Plugin Enhancements"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["Added streaming text generation support and comprehensive test coverage for the OpenRouter plugin, improving real-time output capabilities and stability. (",["$","a","a-0",{"href":"https://github.com/elizaos-plugins/plugin-openrouter/pull/21","children":"elizaos-plugins/plugin-openrouter#21"}],")"]}],"\n"]}],"\n"]}],"\n"]}],"\n",["$","h2","h2-2",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"🏗️ Work in Progress","position":{"start":{"line":12,"column":4,"offset":1373},"end":{"line":12,"column":24,"offset":1393}}}],"position":{"start":{"line":12,"column":1,"offset":1370},"end":{"line":12,"column":24,"offset":1393}}},"children":"🏗️ Work in Progress"}],"\n",["$","ul","ul-2",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"Active Discussions"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","code","code-0",{"children":"elizaos-plugins/plugin-openrouter"}]," - RFC: Data Pipeline Architecture Improvements (",["$","a","a-0",{"href":"https://github.com/elizaos-plugins/plugin-openrouter/issues/187","children":"#187"}],"): Discussion is ongoing regarding the implementation plan for data pipeline architecture improvements."]}],"\n"]}],"\n"]}],"\n"]}],"\n",["$","h2","h2-3",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"🐞 Issue Triage","position":{"start":{"line":16,"column":4,"offset":1689},"end":{"line":16,"column":19,"offset":1704}}}],"position":{"start":{"line":16,"column":1,"offset":1686},"end":{"line":16,"column":19,"offset":1704}}},"children":"🐞 Issue Triage"}],"\n",["$","ul","ul-3",{"children":["\n",["$","li","li-0",{"children":["$L11",":","\n","$L12","\n"]}],"\n"]}],"\n","$L13","\n","$L14"]}]
+9:["$","script","script-0",{"src":"/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","async":true}]
+a:["$","script","script-1",{"src":"/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","async":true}]
+b:["$","script","script-2",{"src":"/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js","async":true}]
+c:["$","$L15",null,{"children":["$","$16",null,{"name":"Next.MetadataOutlet","children":"$@17"}]}]
+10:["$","div",null,{"className":"rounded-lg border bg-card text-card-foreground shadow-sm","children":[["$","div",null,{"className":"flex flex-col space-y-1.5 p-6 py-4","children":["$","div",null,{"className":"tracking-tight text-sm font-medium","children":["$undefined","Code Changes"]}]}],["$","div",null,{"className":"p-6 pt-0","children":["$","div",null,{"className":"grid grid-cols-2 gap-4 md:grid-cols-4","children":[["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-git-commit-vertical h-5 w-5","aria-hidden":"true","children":[["$","path","1holv5",{"d":"M12 3v6"}],["$","circle","1v7zrd",{"cx":"12","cy":"12","r":"3"}],["$","path","a9ows0",{"d":"M12 15v6"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":19}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Commits"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-file-code h-5 w-5","aria-hidden":"true","children":[["$","path","1oefj6",{"d":"M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"}],["$","path","wfsgrz",{"d":"M14 2v5a1 1 0 0 0 1 1h5"}],["$","path","1tg20x",{"d":"M10 12.5 8 15l2 2.5"}],["$","path","yinavb",{"d":"m14 12.5 2 2.5-2 2.5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":9}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Files Changed"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-green-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-up h-5 w-5 text-green-500","aria-hidden":"true","children":[["$","path","hav0vg",{"d":"m5 12 7-7 7 7"}],["$","path","x0mq9r",{"d":"M12 19V5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-green-500","children":"+277"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Added"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-red-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-down h-5 w-5 text-red-500","aria-hidden":"true","children":[["$","path","s699le",{"d":"M12 5v14"}],["$","path","1idqje",{"d":"m19 12-7 7-7-7"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-red-500","children":"-384"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Deleted"}]]}]]}]]}]}]]}]
+11:["$","strong","strong-0",{"children":"New Issues"}]
+12:["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","code","code-0",{"children":"elizaos-plugins/plugin-openrouter"}]," - Data Pipeline Architecture Improvements (",["$","a","a-0",{"href":"https://github.com/elizaos-plugins/plugin-openrouter/issues/187","children":"#187"}],"): A new RFC was opened to document the current data pipeline architecture and propose improvements."]}],"\n",["$","li","li-1",{"children":[["$","code","code-0",{"children":"elizaos/elizaos.github.io"}]," - Data Pipeline Architecture Discussion (",["$","a","a-0",{"href":"https://github.com/elizaos/elizaos.github.io/issues/187","children":"#187"}],"): A new RFC has been opened to discuss and propose improvements to the existing data pipeline architecture."]}],"\n"]}]
+13:["$","h2","h2-4",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"✨ Contributor Spotlight","position":{"start":{"line":21,"column":4,"offset":2231},"end":{"line":21,"column":27,"offset":2254}}}],"position":{"start":{"line":21,"column":1,"offset":2228},"end":{"line":21,"column":27,"offset":2254}}},"children":"✨ Contributor Spotlight"}]
+14:["$","ul","ul-4",{"children":["\n",["$","li","li-0",{"children":["The contributor to ",["$","code","code-0",{"children":"elizaos-plugins/plugin-openrouter"}]," for Pull Request ",["$","a","a-0",{"href":"https://github.com/elizaos-plugins/plugin-openrouter/pull/21","children":"#21"}]," significantly enhanced the OpenRouter plugin by adding streaming text generation support and comprehensive test coverage."]}],"\n"]}]
+17:null

@@ -1,0 +1,1014 @@
+1:"$Sreact.fragment"
+2:I[4817319,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"IntervalSelector"]
+3:I[6998365,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"LlmCopyButton"]
+13:I[3642796,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],""]
+14:I[3238488,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"StatCardsDisplay"]
+2a:I[4261541,["/eliza-leaderboard/_next/static/chunks/b33bcbdcb3f88354.js","/eliza-leaderboard/_next/static/chunks/8ba59154b6704904.js"],"OutletBoundary"]
+2b:"$Sreact.suspense"
+4:T509,Summary\n- Split core settings into Node and browser variants.\n- Node builds now import from `settings.node.ts` (`node:crypto`). Browser keeps `crypto-browserify`.\n- Adjusted `index.node.ts` and `index.browser.ts` exports accordingly.\n\nWhy\n- Recent Actions failures show CLI tests cannot resolve `@elizaos/server` due to a transitive missing polyfill: `crypto-browserify` referenced by `@elizaos/core/dist/node/index.node.js`.\n- This caused server startup to fail in ephemeral test projects, leading to repeated port wait timeouts and cascading "Command timed out" errors on ubuntu/macos.\n\nImpact\n- Node consumers use Node `crypto`; browser builds unchanged.\n- Should allow ephemeral projects in CLI tests to resolve core without requiring browser polyfills in Node context, unblocking ubuntu/macos runs.\n\nFollow-ups\n- If any residual module resolution issues remain, ensure the ephemeral test project still installs `@elizaos/server` before server start.\n- Windows-specific path quoting issues in agent CRUD will be addressed in a separate PR.\n\nReferences\n- Failed run: https://github.com/elizaOS/eliza/actions/runs/17354263640\n- Errors: "ResolveMessage: Cannot find package 'crypto-browserify'..." and "Cannot find module '@elizaos/server'..." seen across ubuntu/macos.5:Tb4f,## 🐛 Fix: NPM Deployment Path Resolution Issue
+
+### Problem
+When the CLI is published to NPM and installed globally (e.g., `bun i -g @elizaos/cli`), it fails with the error:
+```
+Cannot find module '/home/runner/work/eliza/eliza/packages/cli/package.json'
+```
+
+This occurs because the build process in GitHub Actions CI/CD embeds absolute paths from the build machine, which don't exist on users' machines.
+
+### Root Cause
+The CLI was using **build-time path resolution** with `require.resolve('@elizaos/cli/package.json')` which gets hardcoded to the GitHub Actions runner path during the build process.
+
+### Solution
+Changed all path resolution to happen at **runtime** with multiple fallback strategies to handle different installation scenarios:
+- ✅ Global NPM/Bun installations
+- ✅ Local node_modules (as dependency)
+- ✅ Monorepo development
+- ✅ Various package manager locations
+
+### Changes Made
+
+#### 1. **`src/utils/copy-template.ts`**
+- Added `getGlobalNodeModulesPaths()` helper to detect global installation directories
+- Replaced `require.resolve()` with runtime path resolution
+- Added fallback paths for templates and package.json
+
+#### 2. **`src/utils/display-banner.ts`**
+- Implemented multi-strategy version detection:
+  1. Check monorepo context
+  2. Check `ELIZAOS_CLI_VERSION` env var (embedded during build)
+  3. Try multiple package.json locations
+  4. Extract from installation path as fallback
+- Returns `'unknown'` instead of crashing when package.json not found
+
+#### 3. **`build.ts`**
+- Reads version from package.json at build time
+- Embeds version as `process.env.ELIZAOS_CLI_VERSION`
+- Copies package.json to dist/ for runtime access
+
+#### 4. **`package.json`**
+- Added `dist/package.json` to files array for NPM package inclusion
+
+#### 5. **`src/utils/user-environment.ts`**
+- Updated CLI info detection with runtime fallbacks
+- Silent failures (no warnings) as this is expected in some environments
+
+### Testing
+```bash
+# Build and pack
+cd packages/cli
+bun run build
+npm pack
+
+# Test installation
+cd /tmp
+bun i -g ./elizaos-cli-*.tgz
+elizaos create  # Should work without path errors
+```
+
+### Verification
+- [x] No hardcoded `/home/runner` paths in built files
+- [x] Works in monorepo development
+- [x] Works when installed globally via NPM/Bun
+- [x] Works as local dependency
+- [x] Graceful fallbacks when paths not found
+
+### Impact
+- Fixes #[issue-number] - CLI fails when installed from NPM
+- No breaking changes
+- Backward compatible with existing installations
+
+### Related Issues
+This is a critical fix for the v1.5.2 release as it prevents users from using the CLI when installed from NPM.
+
+---
+
+**Note to reviewers:** The key insight is that all path resolution must happen at runtime, not build time, to support the various ways users might install and run the CLI.6:Td31,# Relates to
+
+  TypeScript declarations build optimization.
+
+  # Risks
+
+  **Low risk** - Configuration changes only, no functional code changes.
+
+  # Background
+
+  ## What does this PR do?
+
+  Optimizes the TypeScript build configuration for @elizaos/core package by:
+
+  1. **Removes unused configuration files** - Eliminates dead code
+  2. **Simplifies configuration hierarchy** - Direct inheritance from root config
+  3. **Renames files for clarity** - `tsconfig.build.json` → `tsconfig.declarations.json`
+  4. **Optimizes package structure** - Continues excluding src/ from npm package
+
+  ## What kind of change is this?
+
+  **Improvements** (misc. changes to existing features)
+
+  - Build system optimization
+  - Configuration cleanup
+  - Dead code removal
+
+  ## Why are we doing this?
+
+  The core package had a complex and partially unused TypeScript configuration setup:
+
+  - `tsconfig.browser.json` was not used by build.ts (dead code)
+  - `tsconfig.json` served only as an unnecessary intermediate layer
+  - `tsconfig.build.json` name was ambiguous (could be JS build vs types)
+  - Configuration inheritance chain was unnecessarily complex
+
+  This PR streamlines the setup to only what's actually needed while maintaining the same build output.
+
+  # Documentation changes needed?
+
+  **My changes do not require a change to the project documentation.**
+
+  The build commands and package structure remain identical from the consumer perspective.
+
+  # Testing
+
+  ## Where should a reviewer start?
+
+  1. Verify the build still works: `cd packages/core && bun run build`
+  2. Check that dist/ contains the same .d.ts files as before
+  3. Confirm package.json still excludes src/ from published files
+
+  ## Detailed testing steps
+
+  - Navigate to `packages/core/`
+  - Run `bun run build`
+  - Verify successful completion with TypeScript declarations generated
+  - Check `dist/` contains compiled .d.ts files (not pointer files)
+  - Confirm package size optimization (src/ excluded from npm package)
+  - Validate that conditional exports in package.json work correctly
+
+  ## Before and After
+
+  ### Before (3 config files, complex inheritance)
+  tsconfig.json (intermediate) → extends ../../tsconfig.json
+  tsconfig.browser.json (unused) → extends ./tsconfig.jsontsconfig.build.json → extends ./tsconfig.json → extends ../../tsconfig.json
+
+  ### After (1 config file, direct inheritance)
+  tsconfig.declarations.json → extends ../../tsconfig.json
+
+  **Results:**
+  - Same build output
+  - stop exporting /src
+  - Clearer configuration purpose
+  - No breaking changes for consumers
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+* **Chores**
+  * Switched to compiled TypeScript declaration generation for more reliable typings.
+  * Published package now includes only compiled output, reducing install size.
+  * Simplified TypeScript configuration by relying on root settings and focused declaration entrypoints.
+  * Improved build logs and error handling during type generation.
+
+* **Refactor**
+  * Adjusted type entrypoints to reference compiled declarations without bundling source files.
+
+* **Notes**
+  * No API changes; end-user functionality remains the same.
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->7:T7e3,## Problem
+
+The `elizaos create` command was failing with a module resolution error when the CLI was installed globally:
+
+```
+Cannot find module '/home/runner/work/eliza/eliza/packages/cli/package.json' from '/Users/benjaminberta/.bun/install/global/node_modules/@elizaos/cli/dist/index.js'
+```
+
+This occurred because the `copyTemplate` function was using `require.resolve('@elizaos/cli/package.json')` to locate template files, but this was failing when the CLI was installed globally. The resolver was trying to find a hardcoded path from the build environment instead of the actual installed location.
+
+## Solution
+
+This PR fixes the issue by:
+
+1. **Adding proper error handling** around `require.resolve()` calls
+2. **Implementing fallback strategies** that try multiple template locations:
+   - Direct paths relative to the current module  
+   - Resolved paths from the CLI package (when available)
+   - Fallback paths for different installation scenarios
+
+3. **Making template resolution robust** by:
+   - Wrapping `require.resolve()` in try-catch blocks
+   - Providing multiple fallback locations
+   - Logging debug information when resolution fails
+   - Continuing execution even if some paths fail to resolve
+
+## Changes
+
+- Modified `packages/cli/src/utils/copy-template.ts` to handle module resolution failures gracefully
+- Added fallback mechanisms for template path resolution
+- Maintained backward compatibility with all installation methods
+- Added debug logging for troubleshooting
+
+## Testing
+
+✅ Tested with globally installed CLI
+✅ Verified project creation works correctly
+✅ Confirmed all template files are properly copied and configured
+✅ Maintained compatibility with existing installation methods
+
+## Impact
+
+- Fixes the "Cannot find module" error when using `elizaos create`
+- Improves reliability of the CLI across different installation scenarios
+- No breaking changes - fully backward compatible
+
+Closes the module resolution issue reported by users when creating new ElizaOS projects.8:T9d2,# Registry Update Checklist
+
+Registry:
+- [x] I've made the left side of the colon of JSON entry in index.json match the potential NPM package name
+- [x] I've used github not github.com
+- [x] There is no .git extension
+- [x] It's placed it alphabetically in the list
+- [x] I've dealt with commas properly so the list is still valid JSON
+
+If not an eliza-plugins official repo, i.e. new plugin: 
+
+The plugin repo has:
+- [x] is publically accessible (not a private repo)
+- [x] uses main as it's default branch
+- [x] I have include `elizaos-plugins` in the topics in the GitHub repo settings. If the plugin is related to `AI` or `crypto`, please add those as topics as well.
+- [x] add simple description in github repo
+- [x] follows this convention
+```
+plugin-name/
+├── images/
+│   ├── logo.jpg        # Plugin branding logo
+│   ├── banner.jpg      # Plugin banner image
+├── src/
+│   ├── index.ts        # Main plugin entry point
+│   ├── actions/        # Plugin-specific actions
+│   ├── clients/        # Client implementations
+│   ├── adapters/       # Adapter implementations
+│   └── types.ts        # Type definitions
+│   └── environment.ts  # runtime.getSetting, zod validation
+├── package.json        # Plugin dependencies
+└── README.md          # Plugin documentation
+```
+- [x] an `images/banner.jpg` and `images/logo.jpg` and they
+  - Use clear, high-resolution images
+  - Keep file sizes optimized (< 500KB for logos, < 1MB for banners)
+  - Follow the [elizaOS Brand Guidelines](https://github.com/elizaOS/brandkit)
+  - Include alt text for accessibility
+- [x] package.json has a agentConfig like the following
+```json
+{
+  "name": "@myNpmOrg/plugin-example",
+  "version": "1.0.0",
+  "agentConfig": {
+    "pluginType": "elizaos:plugin:1.0.0",
+    "pluginParameters": {
+      "API_KEY": {
+        "type": "string",
+        "description": "API key for the service"
+      }
+    }
+  }
+}
+```
+
+<!-- If you are on Discord, please join https://discord.gg/elizaOS and state your Discord username here for the contributor role and join us in #development-feed -->
+<!--
+## Discord username
+
+-->
+
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+## Summary by CodeRabbit
+
+* **New Features**
+  * Added a new plugin, "@mascotai/plugin-connections", to the available plugins list.
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->9:Tb0f,# Registry Update Checklist
+
+Registry:
+- [ ] I've made the left side of the colon of JSON entry in index.json match the potential NPM package name
+- [ ] I've used github not github.com
+- [ ] There is no .git extension
+- [ ] It's placed it alphabetically in the list
+- [ ] I've dealt with commas properly so the list is still valid JSON
+
+If not an eliza-plugins official repo, i.e. new plugin: 
+
+The plugin repo has:
+- [ ] is publically accessible (not a private repo)
+- [ ] uses main as it's default branch
+- [ ] I have include `elizaos-plugins` in the topics in the GitHub repo settings. If the plugin is related to `AI` or `crypto`, please add those as topics as well.
+- [ ] add simple description in github repo
+- [ ] follows this convention
+```
+plugin-name/
+├── images/
+│   ├── logo.jpg        # Plugin branding logo
+│   ├── banner.jpg      # Plugin banner image
+├── src/
+│   ├── index.ts        # Main plugin entry point
+│   ├── actions/        # Plugin-specific actions
+│   ├── clients/        # Client implementations
+│   ├── adapters/       # Adapter implementations
+│   └── types.ts        # Type definitions
+│   └── environment.ts  # runtime.getSetting, zod validation
+├── package.json        # Plugin dependencies
+└── README.md          # Plugin documentation
+```
+- [ ] an `images/banner.jpg` and `images/logo.jpg` and they
+  - Use clear, high-resolution images
+  - Keep file sizes optimized (< 500KB for logos, < 1MB for banners)
+  - Follow the [elizaOS Brand Guidelines](https://github.com/elizaOS/brandkit)
+  - Include alt text for accessibility
+- [ ] package.json has a agentConfig like the following
+```json
+{
+  "name": "@myNpmOrg/plugin-example",
+  "version": "1.0.0",
+  "agentConfig": {
+    "pluginType": "elizaos:plugin:1.0.0",
+    "pluginParameters": {
+      "API_KEY": {
+        "type": "string",
+        "description": "API key for the service"
+      }
+    }
+  }
+}
+```
+
+<!-- If you are on Discord, please join https://discord.gg/elizaOS and state your Discord username here for the contributor role and join us in #development-feed -->
+<!--
+## Discord username
+
+-->
+
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+- Chores
+  - Updated the source mapping for the Hedera plugin to the new official repository namespace, ensuring installations and updates pull from the correct location.
+  - Improves reliability of plugin resolution and future updates without altering behavior.
+  - No changes to user workflows, settings, or runtime functionality.
+  - Backward compatibility maintained; existing setups continue to work without action.
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->a:T10d0,### **User description**
+# Add @dexploarer/plugin-vercel-ai-gateway to Registry
+
+## Overview
+Adding the Vercel AI Gateway plugin to the ElizaOS registry. This plugin provides universal access to 100+ AI models through Vercel AI Gateway, OpenRouter, and other gateways.
+
+![Plugin Banner](https://raw.githubusercontent.com/Dexploarer/plugin-vercel-ai-gateway/main/images/banner.jpg)
+
+## Plugin Features
+- **100+ AI Models**: Access to models from OpenAI, Anthropic, Google, Meta, Mistral, Cohere, and AI21
+- **Multiple Gateway Support**: Works with Vercel AI Gateway, OpenRouter, and other compatible gateways
+- **Response Caching**: Built-in caching for improved performance
+- **Automatic Retries**: Robust error handling with retry logic
+- **Model Fallback**: Automatic fallback to alternative models
+- **Usage Telemetry**: Track usage and performance metrics
+
+## Repository Information
+- **Repository**: https://github.com/Dexploarer/plugin-vercel-ai-gateway
+- **Package Name**: @dexploarer/plugin-vercel-ai-gateway
+- **Author**: Dexploarer
+- **License**: MIT
+
+## Registry Update Checklist
+
+### Registry:
+- [x] I've made the left side of the colon of JSON entry in index.json match the potential NPM package name
+- [x] I've used github not github.com
+- [x] There is no .git extension
+- [x] It's placed it alphabetically in the list
+- [x] I've dealt with commas properly so the list is still valid JSON
+
+### Plugin Repository Requirements:
+- [x] Plugin is publicly accessible (not a private repo)
+- [x] Uses main as default branch
+- [x] Includes `elizaos-plugins` in the topics in the GitHub repo settings
+- [x] Has simple description in GitHub repo
+- [x] Follows proper plugin convention with required directories
+- [x] Has `images/banner.jpg` and `images/logo.jpg` with optimized file sizes
+- [x] Package.json has proper agentConfig structure
+
+## Files Changed
+- `index.json`: Added "@dexploarer/plugin-vercel-ai-gateway":"github:Dexploarer/plugin-vercel-ai-gateway"
+
+## Plugin Logo
+![Plugin Logo](https://raw.githubusercontent.com/Dexploarer/plugin-vercel-ai-gateway/main/images/logo.jpg)
+
+This plugin enables ElizaOS agents to seamlessly integrate with multiple AI gateway providers, offering flexibility and reliability in AI model access.
+
+
+
+
+___
+
+### **PR Type**
+Enhancement
+
+
+___
+
+### **Description**
+- Add Vercel AI Gateway plugin to registry
+
+- Enable access to 100+ AI models
+
+- Support multiple gateway providers
+
+- Include caching and retry functionality
+
+
+___
+
+### Diagram Walkthrough
+
+
+```mermaid
+flowchart LR
+  A["ElizaOS Registry"] --> B["Add Plugin Entry"]
+  B --> C["@dexploarer/plugin-vercel-ai-gateway"]
+  C --> D["100+ AI Models Access"]
+  C --> E["Multiple Gateway Support"]
+```
+
+
+
+<details> <summary><h3> File Walkthrough</h3></summary>
+
+<table><thead><tr><th></th><th align="left">Relevant files</th></tr></thead><tbody><tr><td><strong>Enhancement</strong></td><td><table>
+<tr>
+  <td>
+    <details>
+      <summary><strong>index.json</strong><dd><code>Add Vercel AI Gateway plugin entry</code>&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; </dd></summary>
+<hr>
+
+index.json
+
+<ul><li>Add new plugin entry for <code>@dexploarer/plugin-vercel-ai-gateway</code><br> <li> Update JSON formatting with proper comma placement<br> <li> Maintain alphabetical ordering in registry</ul>
+
+
+</details>
+
+
+  </td>
+  <td><a href="https://github.com/Dexploarer/registry/pull/1/files#diff-7aebb122a6ea8a2749d60cb05b7e103c9eae6e2e85e48d2d6cd9e20b63013975">+2/-1</a>&nbsp; &nbsp; &nbsp; </td>
+
+</tr>
+</table></td></tr></tr></tbody></table>
+
+</details>
+
+___
+
+
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+## Summary by CodeRabbit
+
+* **New Features**
+  * Added the Vercel AI Gateway plugin to the public plugin registry, making it available for discovery and installation.
+  * Enables projects to integrate with Vercel’s AI Gateway through the new plugin, expanding available AI integrations.
+  * No changes to existing plugins or behavior; this is a non-breaking addition.
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->b:T1337,Today, ElizaOS significantly expanded its AI model accessibility by integrating Vercel AI Gateway into the plugin registry, offering access to over 100 AI models. Concurrently, core development focused on critical bug fixes, resolving TypeScript declaration issues in the `core` package and addressing CLI deployment path problems to improve stability and developer experience. Ongoing discussions highlight community interest in streaming functionality and persistent challenges with Discord image generation.
+
+## 🚨 Needs Attention
+- **Urgent Discussion**: `elizaos-plugins/registry` and `elizaos/eliza` [#5809](https://github.com/elizaos-plugins/registry/issues/5809) (Image Generation not working in Discord): This issue requires further investigation as image generation works in the web UI but not in Discord, suggesting a specific integration or permission problem.
+- **Urgent Discussion**: `elizaos-plugins/registry` and `elizaos/eliza` [#4720](https://github.com/elizaos-plugins/registry/issues/4720) (V3 Goals) and [#5060](https://github.com/elizaos-plugins/registry/issues/5060) (Add optional Stream responses to handle streaming): Community members have implemented unofficial streaming solutions, indicating a strong need for official support and guidance on integrating streaming capabilities.
+- **Blocked Issue**: `elizaos/eliza` [#5856](https://github.com/elizaos/eliza/issues/5856) (CLI Project Creation Failure): A new issue reports CLI project creation failure due to a "path not found" error, indicating a persistent problem with module resolution during initialization.
+
+## ✅ Completed Work
+### Core Stability & Developer Experience
+- Fixed TypeScript declarations in the `core` npm package to ensure proper type definitions and improve developer experience. [elizaos/eliza#5848](https://github.com/elizaos/eliza/pull/5848)
+- Resolved a critical bug where the CLI failed to find modules when installed globally, making global CLI installations functional. [elizaos/eliza#5852](https://github.com/elizaos/eliza/pull/5852)
+
+### Plugin Registry Expansion & Consistency
+- Expanded the plugin registry by adding a new entry for `plugin-vercel-ai-gateway`, providing access to over 100 AI models. [elizaos-plugins/registry#213](https://github.com/elizaos-plugins/registry/pull/213)
+- Updated `index.json` for `plugin-hedera` to ensure consistency and adherence to registry standards. [elizaos-plugins/registry#212](https://github.com/elizaos-plugins/registry/pull/212)
+
+## 🏗️ Work in Progress
+### New Pull Requests
+- **elizaos/eliza**:
+    - CLI plugin import verification non-fatal: [elizaos/eliza#5855](https://github.com/elizaos/eliza/pull/5855)
+    - CLI module resolution fix in `copyTemplate`: [elizaos/eliza#5853](https://github.com/elizaos/eliza/pull/5853)
+    - Core package Node.js crypto for Node build: [elizaos/eliza#5854](https://github.com/elizaos/eliza/pull/5854)
+    - Resolve build warnings and CSS syntax errors: [elizaos/eliza#5851](https://github.com/elizaos/eliza/pull/5851)
+
+### Active Discussions
+- **elizaos-plugins/registry**:
+    - V3 Goals and Streaming Functionality: Discussion continues on streaming capabilities and their importance for reducing response latency. [elizaos-plugins/registry#4720](https://github.com/elizaos-plugins/registry/issues/4720), [elizaos-plugins/registry#5060](https://github.com/elizaos-plugins/registry/issues/5060)
+    - Discord Image Generation Issues: Further comments confirm image generation works in web UI but not in Discord, suggesting an integration issue. [elizaos-plugins/registry#5809](https://github.com/elizaos-plugins/registry/issues/5809)
+- **elizaos/eliza**:
+    - V3 Goals and Streaming Functionality: Detailed analysis of V3 goals, including database service migration, streaming support, and multi-modality. [elizaos/eliza#4720](https://github.com/elizaos/eliza/issues/4720), [elizaos/eliza#5060](https://github.com/elizaos/eliza/issues/5060)
+    - Discord Image Generation Failure: Active discussion on image generation not working in Discord, with troubleshooting steps provided. [elizaos/eliza#5809](https://github.com/elizaos/eliza/issues/5809)
+
+## 🐞 Issue Triage
+### New Issues
+- **elizaos/eliza**:
+    - CLI Project Creation Failure: A new issue reported regarding the CLI failing to create a new project due to a "path not found" error. [elizaos/eliza#5856](https://github.com/elizaos/eliza/issues/5856)
+
+## ✨ Contributor Spotlight
+- **SyedMuqeetAqib**: Provided an update on implementing streaming support by modifying core files, leveraging existing Eliza AI package capabilities.
+- **LinuxIsCool**: Emphasized the importance of streaming for reducing response latency and inquired about the status of streaming implementation.
+- **harperaa**: Confirmed the specific behavior of the Discord image generation issue, noting it works in the web UI but not in Discord, and provided details on missing logs.0:{"buildId":"US8XLB_zHXYj_PVAECGcd","rsc":["$","$1","c",{"children":[["$","div",null,{"className":"container mx-auto px-6 py-8 md:px-8","children":["$","div",null,{"className":"mx-auto max-w-4xl","children":[["$","div",null,{"className":"mb-4 flex flex-col justify-between sm:flex-row","children":[["$","$L2",null,{"currentInterval":"day","currentDate":"2025-08-31"}],["$","$L3",null,{"metrics":{"date":"2025-08-31","interval":{"intervalStart":"$D2025-08-31T00:00:00.000Z","intervalEnd":"$D2025-09-01T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":5,"merged":4,"total":8},"issues":{"new":1,"closed":0,"total":1},"activeContributors":10,"codeChanges":{"additions":299,"deletions":1062,"files":12,"commitCount":22},"topContributors":[{"username":"wtfsayo","avatarUrl":"https://avatars.githubusercontent.com/u/82053242?u=98209a1f10456f42d4d2fa71db4d5bf4a672cbc3&v=4","totalScore":81.99444893413093,"prScore":81.79444893413093,"issueScore":0,"reviewScore":0,"commentScore":0.2,"summary":"wtfsayo: Focused on critical bug fixes, opening three PRs (elizaos/eliza#5855, elizaos/eliza#5854, elizaos/eliza#5853) to address issues related to plugin import verification, node crypto usage, and module resolution errors, demonstrating a primary focus on bugfix work and code stability."},{"username":"ChristopherTrimboli","avatarUrl":"https://avatars.githubusercontent.com/u/27584221?u=de148a498b5af814e037c2975112fadd09df743f&v=4","totalScore":67.1321876525351,"prScore":57.132187652535094,"issueScore":0,"reviewScore":10,"commentScore":0,"summary":"ChristopherTrimboli: Focused on resolving a critical bug, merging PR elizaos/eliza#5852 to fix a CLI NPM Deployment Path Resolution Issue, which involved modifying 19 files. Their work primarily centered on bug fixes and refactoring."},{"username":"yungalgo","avatarUrl":"https://avatars.githubusercontent.com/u/113615973?u=92e0f29f7e2fbb8ce46ed13c51f692ca803de02d&v=4","totalScore":54.91364053194035,"prScore":54.91364053194035,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"yungalgo: Focused on code quality and maintenance, opening PR elizaos/eliza#5851 to resolve build warnings and CSS syntax errors, and contributing 4 commits with 48 additions and 21 deletions primarily in other work and refactoring across code and config files."},{"username":"MagdiejamesNYC","avatarUrl":"https://avatars.githubusercontent.com/u/44060696?v=4","totalScore":4.2,"prScore":0,"issueScore":4,"reviewScore":0,"commentScore":0.2,"summary":"MagdiejamesNYC: Focused on identifying potential issues, creating one new issue in elizaos/eliza (#5856) to report a \"path not found\" error, and also provided one PR comment."}],"focusAreas":[{"area":"core","count":4},{"area":"cli","count":4}],"topIssues":[{"id":"I_kwDOMT5cIs7I4LpR","title":"path not found","author":"MagdiejamesNYC","number":5856,"repository":"elizaos/eliza","body":"when I try to create a new project I have this error:\n\nCleaning up due to error...\n└  Failed to create Project.\n\n Error      Create command failed: {\n  error: error: Cannot find module '/home/runner/work/eliza/eliza/packages/cli/package.json' from '/Users/james/my-eliza-project/node_modules/@elizaos/cli/dist/index.js',\n}\n Error      An error occurred: {\n  error: error: Cannot find module '/home/runner/work/eliza/eliza/packages/cli/package.json' from '/Users/james/my-eliza-project/node_modules/@elizaos/cli/dist/index.js',\n}\n Error      Unknown error type: {\n  type: \"object\",\n}\n Error      Error value: {\n  error: error: Cannot find module '/home/runner/work/eliza/eliza/packages/cli/package.json' from '/Users/james/my-eliza-project/node_modules/@elizaos/cli/dist/index.js',\n}\n\nthere is not way to do a fresh install. Can you push an update to the package?","createdAt":"2025-08-31T11:35:58Z","closedAt":"2025-09-05T11:43:07Z","state":"CLOSED","commentCount":0}],"topPullRequests":[{"id":"PR_kwDOMT5cIs6mJqE9","title":"fix(cli): make plugin import verification non-fatal; address ubuntu/macos failures (2/n)","author":"wtfsayo","number":5855,"body":"Context\\n- Ubuntu/macOS CLI tests were failing during plugin installation verification (e.g., @elizaos/plugin-bedrock, @elizaos/plugin-elevenlabs) due to dynamic import checks in ephemeral environments.\\n\\nChanges\\n- Do NOT bypass verification globally. Instead, treat verification failures as non-fatal: warn and proceed so tests can continue.\\n- Keep GitHub-based installs unverified (unchanged) because source repos may not be importable immediately in ephemeral contexts.\\n- No changes to user-facing commands; only affects internal install verification behavior.\\n\\nWhy\\n- This preserves correctness: we still attempt to verify and log failures.\\n- Prevents CI flakes where optional verification blocks entire suite.\\n\\nFollow-ups\\n- Windows agent CRUD path quoting will be fixed in a separate PR.\\n- If residual failures remain, we can further narrow verification for specific command contexts only during tests.","repository":"elizaos/eliza","createdAt":"2025-08-31T09:11:30Z","mergedAt":null,"additions":443,"deletions":42},{"id":"PR_kwDOMT5cIs6mJlCT","title":"fix(core): use node crypto in node build; unblock ubuntu/macos CLI tests (1/n)","author":"wtfsayo","number":5854,"body":"$4","repository":"elizaos/eliza","createdAt":"2025-08-31T08:48:04Z","mergedAt":null,"additions":300,"deletions":2},{"id":"PR_kwDOMT5cIs6mJGfu","title":"fix: CLI NPM Deployment Path Resolution Issue","author":"ChristopherTrimboli","number":5852,"body":"$5","repository":"elizaos/eliza","createdAt":"2025-08-31T05:58:59Z","mergedAt":"2025-08-31T15:04:37Z","additions":258,"deletions":95},{"id":"PR_kwDOMT5cIs6mJEfe","title":"fix: resolve build warnings and CSS syntax errors","author":"yungalgo","number":5851,"body":"## Problem\r\nBuild was generating warnings:\r\n- CSS syntax errors from empty `:is()` selectors in webkit scrollbar styles\r\n- Missing asset reference in CLI build  \r\n- Bundle size warnings\r\n\r\n## Solution\r\n- Remove dead reference to non-existent migration guides\r\n- Replace problematic Tailwind arbitrary properties with clean CSS\r\n- Increase bundle size threshold for large ElizaOS chunks\r\n- Disable CSS minification to avoid syntax errors\r\n\r\n## Result\r\n✅ Clean build with zero warnings\r\n✅ Better maintainable scrollbar styling\r\n✅ Faster build times\r\n\r\n**Impact:** Zero functional changes, improved developer experience","repository":"elizaos/eliza","createdAt":"2025-08-31T05:47:25Z","mergedAt":"2025-09-02T20:54:08Z","additions":177,"deletions":96},{"id":"PR_kwDOMT5cIs6mGult","title":"fix(core): fix TypeScript declarations in npm package","author":"standujar","number":5848,"body":"$6","repository":"elizaos/eliza","createdAt":"2025-08-30T13:00:47Z","mergedAt":"2025-08-31T04:05:44Z","additions":39,"deletions":966},{"id":"PR_kwDOMT5cIs6mJM6Y","title":"fix(cli): resolve module resolution error in copyTemplate function","author":"wtfsayo","number":5853,"body":"$7","repository":"elizaos/eliza","createdAt":"2025-08-31T06:40:09Z","mergedAt":null,"additions":23,"deletions":23},{"id":"PR_kwDONkg7v86h_muT","title":"added plugin-connections","author":"yohaiai","number":196,"body":"$8","repository":"elizaos-plugins/registry","createdAt":"2025-08-04T12:29:51Z","mergedAt":null,"additions":2,"deletions":0},{"id":"PR_kwDONkg7v86mA3Ys","title":"feat: update index.json for plugin-hedera","author":"mmalik-al","number":212,"body":"$9","repository":"elizaos-plugins/registry","createdAt":"2025-08-29T15:29:37Z","mergedAt":"2025-08-31T04:49:03Z","additions":1,"deletions":1},{"id":"PR_kwDONkg7v86mFd3w","title":"add plugin-vercel-ai-gateway","author":"Dexploarer","number":213,"body":"$a","repository":"elizaos-plugins/registry","createdAt":"2025-08-30T03:06:10Z","mergedAt":"2025-08-31T05:01:57Z","additions":1,"deletions":0}],"detailedContributorSummaries":{"ChristopherTrimboli":"ChristopherTrimboli: Focused on resolving a critical bug, merging PR elizaos/eliza#5852 to fix a CLI NPM Deployment Path Resolution Issue, which involved modifying 19 files. Their work primarily centered on bug fixes and refactoring.","MagdiejamesNYC":"MagdiejamesNYC: Focused on identifying potential issues, creating one new issue in elizaos/eliza (#5856) to report a \"path not found\" error, and also provided one PR comment.","wtfsayo":"wtfsayo: Focused on critical bug fixes, opening three PRs (elizaos/eliza#5855, elizaos/eliza#5854, elizaos/eliza#5853) to address issues related to plugin import verification, node crypto usage, and module resolution errors, demonstrating a primary focus on bugfix work and code stability.","yungalgo":"yungalgo: Focused on code quality and maintenance, opening PR elizaos/eliza#5851 to resolve build warnings and CSS syntax errors, and contributing 4 commits with 48 additions and 21 deletions primarily in other work and refactoring across code and config files."}},"summaryContent":"$b","className":"self-end sm:self-start"}]]}],"$Lc","$Ld","$Le"]}]}],["$Lf","$L10","$L11"],"$L12"]}],"loading":null,"isPartial":false}
+c:["$","div",null,{"className":"mb-6","children":["$","div",null,{"className":"flex items-center justify-between","children":[[["$","$L13",null,{"href":"/summary/day/2025-08-30","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left mr-2 h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"children":"Previous"}],false],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$L13",null,{"href":"/summary/day/2025-08-30","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Previous"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]],["$","div",null,{"className":"flex flex-col items-center","children":[["$","div",null,{"className":"text-sm font-medium text-gray-500","children":["Daily"," Summary"]}],["$","time",null,{"dateTime":"2025-08-31","className":"text-md font-bold","children":"Aug 31, 2025"}]]}],[["$","$L13",null,{"href":"/summary/day/2025-09-01","children":[false,["$","span",null,{"children":"Next"}],["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right ml-2 h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}]],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$L13",null,{"href":"/summary/day/2025-09-01","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Next"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]]]}]}]
+15:T509,Summary\n- Split core settings into Node and browser variants.\n- Node builds now import from `settings.node.ts` (`node:crypto`). Browser keeps `crypto-browserify`.\n- Adjusted `index.node.ts` and `index.browser.ts` exports accordingly.\n\nWhy\n- Recent Actions failures show CLI tests cannot resolve `@elizaos/server` due to a transitive missing polyfill: `crypto-browserify` referenced by `@elizaos/core/dist/node/index.node.js`.\n- This caused server startup to fail in ephemeral test projects, leading to repeated port wait timeouts and cascading "Command timed out" errors on ubuntu/macos.\n\nImpact\n- Node consumers use Node `crypto`; browser builds unchanged.\n- Should allow ephemeral projects in CLI tests to resolve core without requiring browser polyfills in Node context, unblocking ubuntu/macos runs.\n\nFollow-ups\n- If any residual module resolution issues remain, ensure the ephemeral test project still installs `@elizaos/server` before server start.\n- Windows-specific path quoting issues in agent CRUD will be addressed in a separate PR.\n\nReferences\n- Failed run: https://github.com/elizaOS/eliza/actions/runs/17354263640\n- Errors: "ResolveMessage: Cannot find package 'crypto-browserify'..." and "Cannot find module '@elizaos/server'..." seen across ubuntu/macos.16:Tb4f,## 🐛 Fix: NPM Deployment Path Resolution Issue
+
+### Problem
+When the CLI is published to NPM and installed globally (e.g., `bun i -g @elizaos/cli`), it fails with the error:
+```
+Cannot find module '/home/runner/work/eliza/eliza/packages/cli/package.json'
+```
+
+This occurs because the build process in GitHub Actions CI/CD embeds absolute paths from the build machine, which don't exist on users' machines.
+
+### Root Cause
+The CLI was using **build-time path resolution** with `require.resolve('@elizaos/cli/package.json')` which gets hardcoded to the GitHub Actions runner path during the build process.
+
+### Solution
+Changed all path resolution to happen at **runtime** with multiple fallback strategies to handle different installation scenarios:
+- ✅ Global NPM/Bun installations
+- ✅ Local node_modules (as dependency)
+- ✅ Monorepo development
+- ✅ Various package manager locations
+
+### Changes Made
+
+#### 1. **`src/utils/copy-template.ts`**
+- Added `getGlobalNodeModulesPaths()` helper to detect global installation directories
+- Replaced `require.resolve()` with runtime path resolution
+- Added fallback paths for templates and package.json
+
+#### 2. **`src/utils/display-banner.ts`**
+- Implemented multi-strategy version detection:
+  1. Check monorepo context
+  2. Check `ELIZAOS_CLI_VERSION` env var (embedded during build)
+  3. Try multiple package.json locations
+  4. Extract from installation path as fallback
+- Returns `'unknown'` instead of crashing when package.json not found
+
+#### 3. **`build.ts`**
+- Reads version from package.json at build time
+- Embeds version as `process.env.ELIZAOS_CLI_VERSION`
+- Copies package.json to dist/ for runtime access
+
+#### 4. **`package.json`**
+- Added `dist/package.json` to files array for NPM package inclusion
+
+#### 5. **`src/utils/user-environment.ts`**
+- Updated CLI info detection with runtime fallbacks
+- Silent failures (no warnings) as this is expected in some environments
+
+### Testing
+```bash
+# Build and pack
+cd packages/cli
+bun run build
+npm pack
+
+# Test installation
+cd /tmp
+bun i -g ./elizaos-cli-*.tgz
+elizaos create  # Should work without path errors
+```
+
+### Verification
+- [x] No hardcoded `/home/runner` paths in built files
+- [x] Works in monorepo development
+- [x] Works when installed globally via NPM/Bun
+- [x] Works as local dependency
+- [x] Graceful fallbacks when paths not found
+
+### Impact
+- Fixes #[issue-number] - CLI fails when installed from NPM
+- No breaking changes
+- Backward compatible with existing installations
+
+### Related Issues
+This is a critical fix for the v1.5.2 release as it prevents users from using the CLI when installed from NPM.
+
+---
+
+**Note to reviewers:** The key insight is that all path resolution must happen at runtime, not build time, to support the various ways users might install and run the CLI.17:Td31,# Relates to
+
+  TypeScript declarations build optimization.
+
+  # Risks
+
+  **Low risk** - Configuration changes only, no functional code changes.
+
+  # Background
+
+  ## What does this PR do?
+
+  Optimizes the TypeScript build configuration for @elizaos/core package by:
+
+  1. **Removes unused configuration files** - Eliminates dead code
+  2. **Simplifies configuration hierarchy** - Direct inheritance from root config
+  3. **Renames files for clarity** - `tsconfig.build.json` → `tsconfig.declarations.json`
+  4. **Optimizes package structure** - Continues excluding src/ from npm package
+
+  ## What kind of change is this?
+
+  **Improvements** (misc. changes to existing features)
+
+  - Build system optimization
+  - Configuration cleanup
+  - Dead code removal
+
+  ## Why are we doing this?
+
+  The core package had a complex and partially unused TypeScript configuration setup:
+
+  - `tsconfig.browser.json` was not used by build.ts (dead code)
+  - `tsconfig.json` served only as an unnecessary intermediate layer
+  - `tsconfig.build.json` name was ambiguous (could be JS build vs types)
+  - Configuration inheritance chain was unnecessarily complex
+
+  This PR streamlines the setup to only what's actually needed while maintaining the same build output.
+
+  # Documentation changes needed?
+
+  **My changes do not require a change to the project documentation.**
+
+  The build commands and package structure remain identical from the consumer perspective.
+
+  # Testing
+
+  ## Where should a reviewer start?
+
+  1. Verify the build still works: `cd packages/core && bun run build`
+  2. Check that dist/ contains the same .d.ts files as before
+  3. Confirm package.json still excludes src/ from published files
+
+  ## Detailed testing steps
+
+  - Navigate to `packages/core/`
+  - Run `bun run build`
+  - Verify successful completion with TypeScript declarations generated
+  - Check `dist/` contains compiled .d.ts files (not pointer files)
+  - Confirm package size optimization (src/ excluded from npm package)
+  - Validate that conditional exports in package.json work correctly
+
+  ## Before and After
+
+  ### Before (3 config files, complex inheritance)
+  tsconfig.json (intermediate) → extends ../../tsconfig.json
+  tsconfig.browser.json (unused) → extends ./tsconfig.jsontsconfig.build.json → extends ./tsconfig.json → extends ../../tsconfig.json
+
+  ### After (1 config file, direct inheritance)
+  tsconfig.declarations.json → extends ../../tsconfig.json
+
+  **Results:**
+  - Same build output
+  - stop exporting /src
+  - Clearer configuration purpose
+  - No breaking changes for consumers
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+* **Chores**
+  * Switched to compiled TypeScript declaration generation for more reliable typings.
+  * Published package now includes only compiled output, reducing install size.
+  * Simplified TypeScript configuration by relying on root settings and focused declaration entrypoints.
+  * Improved build logs and error handling during type generation.
+
+* **Refactor**
+  * Adjusted type entrypoints to reference compiled declarations without bundling source files.
+
+* **Notes**
+  * No API changes; end-user functionality remains the same.
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->18:T7e3,## Problem
+
+The `elizaos create` command was failing with a module resolution error when the CLI was installed globally:
+
+```
+Cannot find module '/home/runner/work/eliza/eliza/packages/cli/package.json' from '/Users/benjaminberta/.bun/install/global/node_modules/@elizaos/cli/dist/index.js'
+```
+
+This occurred because the `copyTemplate` function was using `require.resolve('@elizaos/cli/package.json')` to locate template files, but this was failing when the CLI was installed globally. The resolver was trying to find a hardcoded path from the build environment instead of the actual installed location.
+
+## Solution
+
+This PR fixes the issue by:
+
+1. **Adding proper error handling** around `require.resolve()` calls
+2. **Implementing fallback strategies** that try multiple template locations:
+   - Direct paths relative to the current module  
+   - Resolved paths from the CLI package (when available)
+   - Fallback paths for different installation scenarios
+
+3. **Making template resolution robust** by:
+   - Wrapping `require.resolve()` in try-catch blocks
+   - Providing multiple fallback locations
+   - Logging debug information when resolution fails
+   - Continuing execution even if some paths fail to resolve
+
+## Changes
+
+- Modified `packages/cli/src/utils/copy-template.ts` to handle module resolution failures gracefully
+- Added fallback mechanisms for template path resolution
+- Maintained backward compatibility with all installation methods
+- Added debug logging for troubleshooting
+
+## Testing
+
+✅ Tested with globally installed CLI
+✅ Verified project creation works correctly
+✅ Confirmed all template files are properly copied and configured
+✅ Maintained compatibility with existing installation methods
+
+## Impact
+
+- Fixes the "Cannot find module" error when using `elizaos create`
+- Improves reliability of the CLI across different installation scenarios
+- No breaking changes - fully backward compatible
+
+Closes the module resolution issue reported by users when creating new ElizaOS projects.19:T9d2,# Registry Update Checklist
+
+Registry:
+- [x] I've made the left side of the colon of JSON entry in index.json match the potential NPM package name
+- [x] I've used github not github.com
+- [x] There is no .git extension
+- [x] It's placed it alphabetically in the list
+- [x] I've dealt with commas properly so the list is still valid JSON
+
+If not an eliza-plugins official repo, i.e. new plugin: 
+
+The plugin repo has:
+- [x] is publically accessible (not a private repo)
+- [x] uses main as it's default branch
+- [x] I have include `elizaos-plugins` in the topics in the GitHub repo settings. If the plugin is related to `AI` or `crypto`, please add those as topics as well.
+- [x] add simple description in github repo
+- [x] follows this convention
+```
+plugin-name/
+├── images/
+│   ├── logo.jpg        # Plugin branding logo
+│   ├── banner.jpg      # Plugin banner image
+├── src/
+│   ├── index.ts        # Main plugin entry point
+│   ├── actions/        # Plugin-specific actions
+│   ├── clients/        # Client implementations
+│   ├── adapters/       # Adapter implementations
+│   └── types.ts        # Type definitions
+│   └── environment.ts  # runtime.getSetting, zod validation
+├── package.json        # Plugin dependencies
+└── README.md          # Plugin documentation
+```
+- [x] an `images/banner.jpg` and `images/logo.jpg` and they
+  - Use clear, high-resolution images
+  - Keep file sizes optimized (< 500KB for logos, < 1MB for banners)
+  - Follow the [elizaOS Brand Guidelines](https://github.com/elizaOS/brandkit)
+  - Include alt text for accessibility
+- [x] package.json has a agentConfig like the following
+```json
+{
+  "name": "@myNpmOrg/plugin-example",
+  "version": "1.0.0",
+  "agentConfig": {
+    "pluginType": "elizaos:plugin:1.0.0",
+    "pluginParameters": {
+      "API_KEY": {
+        "type": "string",
+        "description": "API key for the service"
+      }
+    }
+  }
+}
+```
+
+<!-- If you are on Discord, please join https://discord.gg/elizaOS and state your Discord username here for the contributor role and join us in #development-feed -->
+<!--
+## Discord username
+
+-->
+
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+## Summary by CodeRabbit
+
+* **New Features**
+  * Added a new plugin, "@mascotai/plugin-connections", to the available plugins list.
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->1a:Tb0f,# Registry Update Checklist
+
+Registry:
+- [ ] I've made the left side of the colon of JSON entry in index.json match the potential NPM package name
+- [ ] I've used github not github.com
+- [ ] There is no .git extension
+- [ ] It's placed it alphabetically in the list
+- [ ] I've dealt with commas properly so the list is still valid JSON
+
+If not an eliza-plugins official repo, i.e. new plugin: 
+
+The plugin repo has:
+- [ ] is publically accessible (not a private repo)
+- [ ] uses main as it's default branch
+- [ ] I have include `elizaos-plugins` in the topics in the GitHub repo settings. If the plugin is related to `AI` or `crypto`, please add those as topics as well.
+- [ ] add simple description in github repo
+- [ ] follows this convention
+```
+plugin-name/
+├── images/
+│   ├── logo.jpg        # Plugin branding logo
+│   ├── banner.jpg      # Plugin banner image
+├── src/
+│   ├── index.ts        # Main plugin entry point
+│   ├── actions/        # Plugin-specific actions
+│   ├── clients/        # Client implementations
+│   ├── adapters/       # Adapter implementations
+│   └── types.ts        # Type definitions
+│   └── environment.ts  # runtime.getSetting, zod validation
+├── package.json        # Plugin dependencies
+└── README.md          # Plugin documentation
+```
+- [ ] an `images/banner.jpg` and `images/logo.jpg` and they
+  - Use clear, high-resolution images
+  - Keep file sizes optimized (< 500KB for logos, < 1MB for banners)
+  - Follow the [elizaOS Brand Guidelines](https://github.com/elizaOS/brandkit)
+  - Include alt text for accessibility
+- [ ] package.json has a agentConfig like the following
+```json
+{
+  "name": "@myNpmOrg/plugin-example",
+  "version": "1.0.0",
+  "agentConfig": {
+    "pluginType": "elizaos:plugin:1.0.0",
+    "pluginParameters": {
+      "API_KEY": {
+        "type": "string",
+        "description": "API key for the service"
+      }
+    }
+  }
+}
+```
+
+<!-- If you are on Discord, please join https://discord.gg/elizaOS and state your Discord username here for the contributor role and join us in #development-feed -->
+<!--
+## Discord username
+
+-->
+
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+- Chores
+  - Updated the source mapping for the Hedera plugin to the new official repository namespace, ensuring installations and updates pull from the correct location.
+  - Improves reliability of plugin resolution and future updates without altering behavior.
+  - No changes to user workflows, settings, or runtime functionality.
+  - Backward compatibility maintained; existing setups continue to work without action.
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->1b:T10d0,### **User description**
+# Add @dexploarer/plugin-vercel-ai-gateway to Registry
+
+## Overview
+Adding the Vercel AI Gateway plugin to the ElizaOS registry. This plugin provides universal access to 100+ AI models through Vercel AI Gateway, OpenRouter, and other gateways.
+
+![Plugin Banner](https://raw.githubusercontent.com/Dexploarer/plugin-vercel-ai-gateway/main/images/banner.jpg)
+
+## Plugin Features
+- **100+ AI Models**: Access to models from OpenAI, Anthropic, Google, Meta, Mistral, Cohere, and AI21
+- **Multiple Gateway Support**: Works with Vercel AI Gateway, OpenRouter, and other compatible gateways
+- **Response Caching**: Built-in caching for improved performance
+- **Automatic Retries**: Robust error handling with retry logic
+- **Model Fallback**: Automatic fallback to alternative models
+- **Usage Telemetry**: Track usage and performance metrics
+
+## Repository Information
+- **Repository**: https://github.com/Dexploarer/plugin-vercel-ai-gateway
+- **Package Name**: @dexploarer/plugin-vercel-ai-gateway
+- **Author**: Dexploarer
+- **License**: MIT
+
+## Registry Update Checklist
+
+### Registry:
+- [x] I've made the left side of the colon of JSON entry in index.json match the potential NPM package name
+- [x] I've used github not github.com
+- [x] There is no .git extension
+- [x] It's placed it alphabetically in the list
+- [x] I've dealt with commas properly so the list is still valid JSON
+
+### Plugin Repository Requirements:
+- [x] Plugin is publicly accessible (not a private repo)
+- [x] Uses main as default branch
+- [x] Includes `elizaos-plugins` in the topics in the GitHub repo settings
+- [x] Has simple description in GitHub repo
+- [x] Follows proper plugin convention with required directories
+- [x] Has `images/banner.jpg` and `images/logo.jpg` with optimized file sizes
+- [x] Package.json has proper agentConfig structure
+
+## Files Changed
+- `index.json`: Added "@dexploarer/plugin-vercel-ai-gateway":"github:Dexploarer/plugin-vercel-ai-gateway"
+
+## Plugin Logo
+![Plugin Logo](https://raw.githubusercontent.com/Dexploarer/plugin-vercel-ai-gateway/main/images/logo.jpg)
+
+This plugin enables ElizaOS agents to seamlessly integrate with multiple AI gateway providers, offering flexibility and reliability in AI model access.
+
+
+
+
+___
+
+### **PR Type**
+Enhancement
+
+
+___
+
+### **Description**
+- Add Vercel AI Gateway plugin to registry
+
+- Enable access to 100+ AI models
+
+- Support multiple gateway providers
+
+- Include caching and retry functionality
+
+
+___
+
+### Diagram Walkthrough
+
+
+```mermaid
+flowchart LR
+  A["ElizaOS Registry"] --> B["Add Plugin Entry"]
+  B --> C["@dexploarer/plugin-vercel-ai-gateway"]
+  C --> D["100+ AI Models Access"]
+  C --> E["Multiple Gateway Support"]
+```
+
+
+
+<details> <summary><h3> File Walkthrough</h3></summary>
+
+<table><thead><tr><th></th><th align="left">Relevant files</th></tr></thead><tbody><tr><td><strong>Enhancement</strong></td><td><table>
+<tr>
+  <td>
+    <details>
+      <summary><strong>index.json</strong><dd><code>Add Vercel AI Gateway plugin entry</code>&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; </dd></summary>
+<hr>
+
+index.json
+
+<ul><li>Add new plugin entry for <code>@dexploarer/plugin-vercel-ai-gateway</code><br> <li> Update JSON formatting with proper comma placement<br> <li> Maintain alphabetical ordering in registry</ul>
+
+
+</details>
+
+
+  </td>
+  <td><a href="https://github.com/Dexploarer/registry/pull/1/files#diff-7aebb122a6ea8a2749d60cb05b7e103c9eae6e2e85e48d2d6cd9e20b63013975">+2/-1</a>&nbsp; &nbsp; &nbsp; </td>
+
+</tr>
+</table></td></tr></tr></tbody></table>
+
+</details>
+
+___
+
+
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+## Summary by CodeRabbit
+
+* **New Features**
+  * Added the Vercel AI Gateway plugin to the public plugin registry, making it available for discovery and installation.
+  * Enables projects to integrate with Vercel’s AI Gateway through the new plugin, expanding available AI integrations.
+  * No changes to existing plugins or behavior; this is a non-breaking addition.
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->d:["$","div",null,{"className":"mb-8 space-y-6","children":[["$","$L14",null,{"metrics":{"date":"2025-08-31","interval":{"intervalStart":"$D2025-08-31T00:00:00.000Z","intervalEnd":"$D2025-09-01T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":5,"merged":4,"total":8},"issues":{"new":1,"closed":0,"total":1},"activeContributors":10,"codeChanges":{"additions":299,"deletions":1062,"files":12,"commitCount":22},"topContributors":[{"username":"wtfsayo","avatarUrl":"https://avatars.githubusercontent.com/u/82053242?u=98209a1f10456f42d4d2fa71db4d5bf4a672cbc3&v=4","totalScore":81.99444893413093,"prScore":81.79444893413093,"issueScore":0,"reviewScore":0,"commentScore":0.2,"summary":"wtfsayo: Focused on critical bug fixes, opening three PRs (elizaos/eliza#5855, elizaos/eliza#5854, elizaos/eliza#5853) to address issues related to plugin import verification, node crypto usage, and module resolution errors, demonstrating a primary focus on bugfix work and code stability."},{"username":"ChristopherTrimboli","avatarUrl":"https://avatars.githubusercontent.com/u/27584221?u=de148a498b5af814e037c2975112fadd09df743f&v=4","totalScore":67.1321876525351,"prScore":57.132187652535094,"issueScore":0,"reviewScore":10,"commentScore":0,"summary":"ChristopherTrimboli: Focused on resolving a critical bug, merging PR elizaos/eliza#5852 to fix a CLI NPM Deployment Path Resolution Issue, which involved modifying 19 files. Their work primarily centered on bug fixes and refactoring."},{"username":"yungalgo","avatarUrl":"https://avatars.githubusercontent.com/u/113615973?u=92e0f29f7e2fbb8ce46ed13c51f692ca803de02d&v=4","totalScore":54.91364053194035,"prScore":54.91364053194035,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"yungalgo: Focused on code quality and maintenance, opening PR elizaos/eliza#5851 to resolve build warnings and CSS syntax errors, and contributing 4 commits with 48 additions and 21 deletions primarily in other work and refactoring across code and config files."},{"username":"MagdiejamesNYC","avatarUrl":"https://avatars.githubusercontent.com/u/44060696?v=4","totalScore":4.2,"prScore":0,"issueScore":4,"reviewScore":0,"commentScore":0.2,"summary":"MagdiejamesNYC: Focused on identifying potential issues, creating one new issue in elizaos/eliza (#5856) to report a \"path not found\" error, and also provided one PR comment."}],"focusAreas":[{"area":"core","count":4},{"area":"cli","count":4}],"topIssues":[{"id":"I_kwDOMT5cIs7I4LpR","title":"path not found","author":"MagdiejamesNYC","number":5856,"repository":"elizaos/eliza","body":"when I try to create a new project I have this error:\n\nCleaning up due to error...\n└  Failed to create Project.\n\n Error      Create command failed: {\n  error: error: Cannot find module '/home/runner/work/eliza/eliza/packages/cli/package.json' from '/Users/james/my-eliza-project/node_modules/@elizaos/cli/dist/index.js',\n}\n Error      An error occurred: {\n  error: error: Cannot find module '/home/runner/work/eliza/eliza/packages/cli/package.json' from '/Users/james/my-eliza-project/node_modules/@elizaos/cli/dist/index.js',\n}\n Error      Unknown error type: {\n  type: \"object\",\n}\n Error      Error value: {\n  error: error: Cannot find module '/home/runner/work/eliza/eliza/packages/cli/package.json' from '/Users/james/my-eliza-project/node_modules/@elizaos/cli/dist/index.js',\n}\n\nthere is not way to do a fresh install. Can you push an update to the package?","createdAt":"2025-08-31T11:35:58Z","closedAt":"2025-09-05T11:43:07Z","state":"CLOSED","commentCount":0}],"topPullRequests":[{"id":"PR_kwDOMT5cIs6mJqE9","title":"fix(cli): make plugin import verification non-fatal; address ubuntu/macos failures (2/n)","author":"wtfsayo","number":5855,"body":"Context\\n- Ubuntu/macOS CLI tests were failing during plugin installation verification (e.g., @elizaos/plugin-bedrock, @elizaos/plugin-elevenlabs) due to dynamic import checks in ephemeral environments.\\n\\nChanges\\n- Do NOT bypass verification globally. Instead, treat verification failures as non-fatal: warn and proceed so tests can continue.\\n- Keep GitHub-based installs unverified (unchanged) because source repos may not be importable immediately in ephemeral contexts.\\n- No changes to user-facing commands; only affects internal install verification behavior.\\n\\nWhy\\n- This preserves correctness: we still attempt to verify and log failures.\\n- Prevents CI flakes where optional verification blocks entire suite.\\n\\nFollow-ups\\n- Windows agent CRUD path quoting will be fixed in a separate PR.\\n- If residual failures remain, we can further narrow verification for specific command contexts only during tests.","repository":"elizaos/eliza","createdAt":"2025-08-31T09:11:30Z","mergedAt":null,"additions":443,"deletions":42},{"id":"PR_kwDOMT5cIs6mJlCT","title":"fix(core): use node crypto in node build; unblock ubuntu/macos CLI tests (1/n)","author":"wtfsayo","number":5854,"body":"$15","repository":"elizaos/eliza","createdAt":"2025-08-31T08:48:04Z","mergedAt":null,"additions":300,"deletions":2},{"id":"PR_kwDOMT5cIs6mJGfu","title":"fix: CLI NPM Deployment Path Resolution Issue","author":"ChristopherTrimboli","number":5852,"body":"$16","repository":"elizaos/eliza","createdAt":"2025-08-31T05:58:59Z","mergedAt":"2025-08-31T15:04:37Z","additions":258,"deletions":95},{"id":"PR_kwDOMT5cIs6mJEfe","title":"fix: resolve build warnings and CSS syntax errors","author":"yungalgo","number":5851,"body":"## Problem\r\nBuild was generating warnings:\r\n- CSS syntax errors from empty `:is()` selectors in webkit scrollbar styles\r\n- Missing asset reference in CLI build  \r\n- Bundle size warnings\r\n\r\n## Solution\r\n- Remove dead reference to non-existent migration guides\r\n- Replace problematic Tailwind arbitrary properties with clean CSS\r\n- Increase bundle size threshold for large ElizaOS chunks\r\n- Disable CSS minification to avoid syntax errors\r\n\r\n## Result\r\n✅ Clean build with zero warnings\r\n✅ Better maintainable scrollbar styling\r\n✅ Faster build times\r\n\r\n**Impact:** Zero functional changes, improved developer experience","repository":"elizaos/eliza","createdAt":"2025-08-31T05:47:25Z","mergedAt":"2025-09-02T20:54:08Z","additions":177,"deletions":96},{"id":"PR_kwDOMT5cIs6mGult","title":"fix(core): fix TypeScript declarations in npm package","author":"standujar","number":5848,"body":"$17","repository":"elizaos/eliza","createdAt":"2025-08-30T13:00:47Z","mergedAt":"2025-08-31T04:05:44Z","additions":39,"deletions":966},{"id":"PR_kwDOMT5cIs6mJM6Y","title":"fix(cli): resolve module resolution error in copyTemplate function","author":"wtfsayo","number":5853,"body":"$18","repository":"elizaos/eliza","createdAt":"2025-08-31T06:40:09Z","mergedAt":null,"additions":23,"deletions":23},{"id":"PR_kwDONkg7v86h_muT","title":"added plugin-connections","author":"yohaiai","number":196,"body":"$19","repository":"elizaos-plugins/registry","createdAt":"2025-08-04T12:29:51Z","mergedAt":null,"additions":2,"deletions":0},{"id":"PR_kwDONkg7v86mA3Ys","title":"feat: update index.json for plugin-hedera","author":"mmalik-al","number":212,"body":"$1a","repository":"elizaos-plugins/registry","createdAt":"2025-08-29T15:29:37Z","mergedAt":"2025-08-31T04:49:03Z","additions":1,"deletions":1},{"id":"PR_kwDONkg7v86mFd3w","title":"add plugin-vercel-ai-gateway","author":"Dexploarer","number":213,"body":"$1b","repository":"elizaos-plugins/registry","createdAt":"2025-08-30T03:06:10Z","mergedAt":"2025-08-31T05:01:57Z","additions":1,"deletions":0}],"detailedContributorSummaries":{"ChristopherTrimboli":"ChristopherTrimboli: Focused on resolving a critical bug, merging PR elizaos/eliza#5852 to fix a CLI NPM Deployment Path Resolution Issue, which involved modifying 19 files. Their work primarily centered on bug fixes and refactoring.","MagdiejamesNYC":"MagdiejamesNYC: Focused on identifying potential issues, creating one new issue in elizaos/eliza (#5856) to report a \"path not found\" error, and also provided one PR comment.","wtfsayo":"wtfsayo: Focused on critical bug fixes, opening three PRs (elizaos/eliza#5855, elizaos/eliza#5854, elizaos/eliza#5853) to address issues related to plugin import verification, node crypto usage, and module resolution errors, demonstrating a primary focus on bugfix work and code stability.","yungalgo":"yungalgo: Focused on code quality and maintenance, opening PR elizaos/eliza#5851 to resolve build warnings and CSS syntax errors, and contributing 4 commits with 48 additions and 21 deletions primarily in other work and refactoring across code and config files."}}}],"$L1c"]}]
+e:["$","div",null,{"className":"prose prose-sm mx-auto mt-8 dark:prose-invert sm:prose lg:prose-lg xl:prose-xl","children":[["$","p","p-0",{"children":["Today, ElizaOS significantly expanded its AI model accessibility by integrating Vercel AI Gateway into the plugin registry, offering access to over 100 AI models. Concurrently, core development focused on critical bug fixes, resolving TypeScript declaration issues in the ",["$","code","code-0",{"children":"core"}]," package and addressing CLI deployment path problems to improve stability and developer experience. Ongoing discussions highlight community interest in streaming functionality and persistent challenges with Discord image generation."]}],"\n",["$","h2","h2-0",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"🚨 Needs Attention","position":{"start":{"line":3,"column":4,"offset":515},"end":{"line":3,"column":22,"offset":533}}}],"position":{"start":{"line":3,"column":1,"offset":512},"end":{"line":3,"column":22,"offset":533}}},"children":"🚨 Needs Attention"}],"\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"Urgent Discussion"}],": ",["$","code","code-0",{"children":"elizaos-plugins/registry"}]," and ",["$","code","code-1",{"children":"elizaos/eliza"}]," ",["$","a","a-0",{"href":"https://github.com/elizaos-plugins/registry/issues/5809","children":"#5809"}]," (Image Generation not working in Discord): This issue requires further investigation as image generation works in the web UI but not in Discord, suggesting a specific integration or permission problem."]}],"\n",["$","li","li-1",{"children":[["$","strong","strong-0",{"children":"Urgent Discussion"}],": ",["$","code","code-0",{"children":"elizaos-plugins/registry"}]," and ",["$","code","code-1",{"children":"elizaos/eliza"}]," ",["$","a","a-0",{"href":"https://github.com/elizaos-plugins/registry/issues/4720","children":"#4720"}]," (V3 Goals) and ",["$","a","a-1",{"href":"https://github.com/elizaos-plugins/registry/issues/5060","children":"#5060"}]," (Add optional Stream responses to handle streaming): Community members have implemented unofficial streaming solutions, indicating a strong need for official support and guidance on integrating streaming capabilities."]}],"\n",["$","li","li-2",{"children":[["$","strong","strong-0",{"children":"Blocked Issue"}],": ",["$","code","code-0",{"children":"elizaos/eliza"}]," ",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/5856","children":"#5856"}]," (CLI Project Creation Failure): A new issue reports CLI project creation failure due to a \"path not found\" error, indicating a persistent problem with module resolution during initialization."]}],"\n"]}],"\n",["$","h2","h2-1",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"✅ Completed Work","position":{"start":{"line":8,"column":4,"offset":1595},"end":{"line":8,"column":20,"offset":1611}}}],"position":{"start":{"line":8,"column":1,"offset":1592},"end":{"line":8,"column":20,"offset":1611}}},"children":"✅ Completed Work"}],"\n",["$","h3","h3-0",{"children":"Core Stability & Developer Experience"}],"\n",["$","ul","ul-1",{"children":["\n",["$","li","li-0",{"children":["Fixed TypeScript declarations in the ",["$","code","code-0",{"children":"core"}]," npm package to ensure proper type definitions and improve developer experience. ",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5848","children":"elizaos/eliza#5848"}]]}],"\n",["$","li","li-1",{"children":["Resolved a critical bug where the CLI failed to find modules when installed globally, making global CLI installations functional. ",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5852","children":"elizaos/eliza#5852"}]]}],"\n"]}],"\n",["$","h3","h3-1",{"children":"Plugin Registry Expansion & Consistency"}],"\n",["$","ul","ul-2",{"children":["\n",["$","li","li-0",{"children":["Expanded the plugin registry by adding a new entry for ","$L1d",", providing access to over 100 AI models. ","$L1e"]}],"\n","$L1f","\n"]}],"\n","$L20","\n","$L21","\n","$L22","\n","$L23","\n","$L24","\n","$L25","\n","$L26","\n","$L27","\n","$L28","\n","$L29"]}]
+f:["$","script","script-0",{"src":"/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","async":true}]
+10:["$","script","script-1",{"src":"/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","async":true}]
+11:["$","script","script-2",{"src":"/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js","async":true}]
+12:["$","$L2a",null,{"children":["$","$2b",null,{"name":"Next.MetadataOutlet","children":"$@2c"}]}]
+1c:["$","div",null,{"className":"rounded-lg border bg-card text-card-foreground shadow-sm","children":[["$","div",null,{"className":"flex flex-col space-y-1.5 p-6 py-4","children":["$","div",null,{"className":"tracking-tight text-sm font-medium","children":["$undefined","Code Changes"]}]}],["$","div",null,{"className":"p-6 pt-0","children":["$","div",null,{"className":"grid grid-cols-2 gap-4 md:grid-cols-4","children":[["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-git-commit-vertical h-5 w-5","aria-hidden":"true","children":[["$","path","1holv5",{"d":"M12 3v6"}],["$","circle","1v7zrd",{"cx":"12","cy":"12","r":"3"}],["$","path","a9ows0",{"d":"M12 15v6"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":22}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Commits"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-file-code h-5 w-5","aria-hidden":"true","children":[["$","path","1oefj6",{"d":"M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"}],["$","path","wfsgrz",{"d":"M14 2v5a1 1 0 0 0 1 1h5"}],["$","path","1tg20x",{"d":"M10 12.5 8 15l2 2.5"}],["$","path","yinavb",{"d":"m14 12.5 2 2.5-2 2.5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":12}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Files Changed"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-green-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-up h-5 w-5 text-green-500","aria-hidden":"true","children":[["$","path","hav0vg",{"d":"m5 12 7-7 7 7"}],["$","path","x0mq9r",{"d":"M12 19V5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-green-500","children":"+299"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Added"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-red-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-down h-5 w-5 text-red-500","aria-hidden":"true","children":[["$","path","s699le",{"d":"M12 5v14"}],["$","path","1idqje",{"d":"m19 12-7 7-7-7"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-red-500","children":"-1,062"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Deleted"}]]}]]}]]}]}]]}]
+1d:["$","code","code-0",{"children":"plugin-vercel-ai-gateway"}]
+1e:["$","a","a-0",{"href":"https://github.com/elizaos-plugins/registry/pull/213","children":"elizaos-plugins/registry#213"}]
+1f:["$","li","li-1",{"children":["Updated ",["$","code","code-0",{"children":"index.json"}]," for ",["$","code","code-1",{"children":"plugin-hedera"}]," to ensure consistency and adherence to registry standards. ",["$","a","a-0",{"href":"https://github.com/elizaos-plugins/registry/pull/212","children":"elizaos-plugins/registry#212"}]]}]
+20:["$","h2","h2-2",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"🏗️ Work in Progress","position":{"start":{"line":17,"column":4,"offset":2488},"end":{"line":17,"column":24,"offset":2508}}}],"position":{"start":{"line":17,"column":1,"offset":2485},"end":{"line":17,"column":24,"offset":2508}}},"children":"🏗️ Work in Progress"}]
+21:["$","h3","h3-2",{"children":"New Pull Requests"}]
+22:["$","ul","ul-3",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"elizaos/eliza"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["CLI plugin import verification non-fatal: ",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5855","children":"elizaos/eliza#5855"}]]}],"\n",["$","li","li-1",{"children":["CLI module resolution fix in ",["$","code","code-0",{"children":"copyTemplate"}],": ",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5853","children":"elizaos/eliza#5853"}]]}],"\n",["$","li","li-2",{"children":["Core package Node.js crypto for Node build: ",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5854","children":"elizaos/eliza#5854"}]]}],"\n",["$","li","li-3",{"children":["Resolve build warnings and CSS syntax errors: ",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5851","children":"elizaos/eliza#5851"}]]}],"\n"]}],"\n"]}],"\n"]}]
+23:["$","h3","h3-3",{"children":"Active Discussions"}]
+24:["$","ul","ul-4",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"elizaos-plugins/registry"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["V3 Goals and Streaming Functionality: Discussion continues on streaming capabilities and their importance for reducing response latency. ",["$","a","a-0",{"href":"https://github.com/elizaos-plugins/registry/issues/4720","children":"elizaos-plugins/registry#4720"}],", ",["$","a","a-1",{"href":"https://github.com/elizaos-plugins/registry/issues/5060","children":"elizaos-plugins/registry#5060"}]]}],"\n",["$","li","li-1",{"children":["Discord Image Generation Issues: Further comments confirm image generation works in web UI but not in Discord, suggesting an integration issue. ",["$","a","a-0",{"href":"https://github.com/elizaos-plugins/registry/issues/5809","children":"elizaos-plugins/registry#5809"}]]}],"\n"]}],"\n"]}],"\n",["$","li","li-1",{"children":[["$","strong","strong-0",{"children":"elizaos/eliza"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["V3 Goals and Streaming Functionality: Detailed analysis of V3 goals, including database service migration, streaming support, and multi-modality. ",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/4720","children":"elizaos/eliza#4720"}],", ",["$","a","a-1",{"href":"https://github.com/elizaos/eliza/issues/5060","children":"elizaos/eliza#5060"}]]}],"\n",["$","li","li-1",{"children":["Discord Image Generation Failure: Active discussion on image generation not working in Discord, with troubleshooting steps provided. ",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/5809","children":"elizaos/eliza#5809"}]]}],"\n"]}],"\n"]}],"\n"]}]
+25:["$","h2","h2-3",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"🐞 Issue Triage","position":{"start":{"line":33,"column":4,"offset":4148},"end":{"line":33,"column":19,"offset":4163}}}],"position":{"start":{"line":33,"column":1,"offset":4145},"end":{"line":33,"column":19,"offset":4163}}},"children":"🐞 Issue Triage"}]
+26:["$","h3","h3-4",{"children":"New Issues"}]
+27:["$","ul","ul-5",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"elizaos/eliza"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["CLI Project Creation Failure: A new issue reported regarding the CLI failing to create a new project due to a \"path not found\" error. ",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/5856","children":"elizaos/eliza#5856"}]]}],"\n"]}],"\n"]}],"\n"]}]
+28:["$","h2","h2-4",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"✨ Contributor Spotlight","position":{"start":{"line":38,"column":4,"offset":4411},"end":{"line":38,"column":27,"offset":4434}}}],"position":{"start":{"line":38,"column":1,"offset":4408},"end":{"line":38,"column":27,"offset":4434}}},"children":"✨ Contributor Spotlight"}]
+29:["$","ul","ul-6",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"SyedMuqeetAqib"}],": Provided an update on implementing streaming support by modifying core files, leveraging existing Eliza AI package capabilities."]}],"\n",["$","li","li-1",{"children":[["$","strong","strong-0",{"children":"LinuxIsCool"}],": Emphasized the importance of streaming for reducing response latency and inquired about the status of streaming implementation."]}],"\n",["$","li","li-2",{"children":[["$","strong","strong-0",{"children":"harperaa"}],": Confirmed the specific behavior of the Discord image generation issue, noting it works in the web UI but not in Discord, and provided details on missing logs."]}],"\n"]}]
+2c:null

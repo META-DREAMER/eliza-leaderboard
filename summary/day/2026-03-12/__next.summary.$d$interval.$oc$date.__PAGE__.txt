@@ -1,0 +1,603 @@
+1:"$Sreact.fragment"
+2:I[4817319,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"IntervalSelector"]
+3:I[6998365,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"LlmCopyButton"]
+e:I[3642796,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],""]
+f:I[3238488,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"StatCardsDisplay"]
+14:I[4261541,["/eliza-leaderboard/_next/static/chunks/b33bcbdcb3f88354.js","/eliza-leaderboard/_next/static/chunks/8ba59154b6704904.js"],"OutletBoundary"]
+15:"$Sreact.suspense"
+4:T5c0,<!-- CURSOR_SUMMARY -->
+> [!NOTE]
+> **High Risk**
+> Touches core runtime model invocation (new `promptSegments`/nested schema JSON handling) and task/memory adapter contracts (`agentIds`, `roomIds`), which can affect scheduling, multi-tenant filtering, and LLM provider behavior across deployments.
+> 
+> **Overview**
+> **Adds prompt-caching hints and expands structured prompt support.** Core generation params now optionally include `promptSegments` (with a concat invariant) and tests cover nested object/array schemas, JSON auto-selection, and required-field validation.
+> 
+> **Aligns adapter/query contracts toward batch-safe APIs.** Updates callers/tests to use plural filters (e.g. `countMemories({ roomIds })`, `getRelationships({ entityIds })`, `getTasks({ agentIds })`) and adjusts mocks accordingly; the Cloud knowledge API is updated to pass `roomIds`.
+> 
+> **Improves DX/docs and example compatibility.** Adds new docs (`TASK_SCHEDULER.md`, `PROMPT_CACHE_HINTS.md`, `DESIGN.md`) and a new `PromptBatcher`/`PromptDispatcher` test suite; cleans up example TypeScript configs with missing typings/shims and minor runtime/example fixes (e.g. plugin typing, buffer casts, Telegram default models).
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit e11d00ebf5ccf119b1bd6448e40b67cd622bedbf. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->5:T2344,## Summary
+
+Adds a full Docker container + Headscale VPN infrastructure layer as an alternative sandbox provider for Milaidy agents. Instead of running agents in Vercel Sandboxes, operators can now deploy agents as Docker containers on remote VPS nodes with optional WireGuard mesh networking via Headscale.
+
+**34 files changed, ~8,200 lines added**
+
+---
+
+## Motivation
+
+Vercel Sandboxes are convenient but limiting: no persistent filesystem, no SSH access, no custom networking, constrained resources. For agents that need a real VPS-like environment (CLI tools, persistent data, inter-agent communication), we need Docker containers on dedicated infrastructure.
+
+This PR introduces a provider abstraction so both backends coexist cleanly, controlled by a single env var.
+
+---
+
+## Architecture
+
+```
+                    MILAIDY_SANDBOX_PROVIDER=docker
+                              │
+User → Eliza Cloud API → SandboxProvider Factory
+                              │
+              ┌───────────────┼───────────────┐
+              ▼                               ▼
+     VercelSandboxProvider          DockerSandboxProvider
+     (existing behavior)                      │
+                                    ┌─────────┼─────────┐
+                                    ▼         ▼         ▼
+                               SSH Client  Node Mgr  Headscale
+                                    │         │         │
+                                    ▼         ▼         ▼
+                              Hetzner VPS  Placement  VPN Mesh
+                              (Docker)     Strategy   (WireGuard)
+```
+
+---
+
+## What's included
+
+### 1. Sandbox Provider Abstraction (`lib/services/sandbox-provider.ts`)
+
+Extracted a `SandboxProvider` interface from the existing Vercel-specific code:
+
+```typescript
+interface SandboxProvider {
+  create(config: SandboxCreateConfig): Promise<SandboxHandle>;
+  stop(sandboxId: string): Promise<void>;
+  checkHealth(healthUrl: string): Promise<boolean>;
+  runCommand?(sandboxId: string, cmd: string): Promise<string>;
+}
+```
+
+Factory function reads `MILAIDY_SANDBOX_PROVIDER` env var (`vercel` | `docker`), defaults to `vercel`. Existing Vercel code extracted into `VercelSandboxProvider` with zero behavior changes.
+
+### 2. Docker SSH Client (`lib/services/docker-ssh.ts`)
+
+SSH client with connection pooling for managing containers on remote nodes:
+- Connection pool with configurable max connections
+- Command execution with timeout support
+- Container lifecycle (create, stop, remove, inspect, logs)
+- Image management (pull, check)
+
+### 3. Docker Sandbox Provider (`lib/services/docker-sandbox-provider.ts`)
+
+Full `SandboxProvider` implementation for Docker:
+- Container creation on remote nodes via SSH
+- Port allocation: bridge (18790-19790), web UI (20000-25000)
+- Health check polling with configurable timeout
+- In-memory container registry with DB backing
+- Optional Headscale VPN integration (graceful degradation if not configured)
+- Metadata passthrough (node_id, container_name, ports, VPN IP, image)
+
+### 4. Node Manager (`lib/services/docker-node-manager.ts`)
+
+Multi-node management with smart placement:
+- Least-loaded allocation strategy
+- Periodic health checks
+- Capacity tracking and reporting
+- Node enable/disable for maintenance
+
+### 5. Headscale VPN Layer
+
+**Client** (`lib/services/headscale-client.ts`):
+- Full REST API client for Headscale control plane
+- Node management, pre-auth key generation, route handling, health checks
+
+**Integration** (`lib/services/headscale-integration.ts`):
+- Container VPN lifecycle: prepare → register → cleanup
+- Ephemeral pre-auth keys per container
+- VPN registration polling (60s timeout)
+- Automatic node cleanup on container stop
+
+### 6. Database Schema (`db/migrations/0034_docker_nodes.sql`)
+
+New `docker_nodes` table:
+```sql
+CREATE TABLE docker_nodes (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  node_id TEXT UNIQUE NOT NULL,
+  hostname TEXT NOT NULL,
+  ssh_port INTEGER DEFAULT 22,
+  capacity INTEGER DEFAULT 8,
+  enabled BOOLEAN DEFAULT true,
+  status TEXT DEFAULT 'unknown',
+  allocated_count INTEGER DEFAULT 0,
+  last_health_check TIMESTAMPTZ,
+  ssh_user TEXT DEFAULT 'root',
+  metadata JSONB DEFAULT '{}'
+);
+```
+
+6 new columns on `milaidy_sandboxes`: `node_id`, `container_name`, `bridge_port`, `web_ui_port`, `headscale_ip`, `docker_image`.
+
+### 7. Admin API Routes (`app/api/v1/admin/`)
+
+7 new route files behind `requireAdmin` auth:
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/admin/docker-nodes` | GET | List all nodes with capacity info |
+| `/admin/docker-nodes` | POST | Register a new node |
+| `/admin/docker-nodes/:id` | GET/PATCH/DELETE | Node CRUD |
+| `/admin/docker-nodes/:id/health-check` | POST | SSH health check |
+| `/admin/docker-containers` | GET | List running containers |
+| `/admin/docker-containers/audit` | POST | Ghost/orphan container audit |
+| `/admin/docker-containers/:id/logs` | GET | Fetch container logs |
+| `/admin/headscale` | GET | Mesh status, nodes, pre-auth keys |
+
+### 8. Admin Infrastructure Dashboard (`components/admin/infrastructure-dashboard.tsx`)
+
+Full admin UI (1,284 lines) with three tabs:
+- **Docker Nodes**: list, add, edit, delete, health check, capacity bars
+- **Containers**: list with status badges, log viewer, ghost audit
+- **Headscale**: mesh status, connected nodes, pre-auth keys, VPN IPs
+
+### 9. Enhanced Container Views
+
+- **`components/containers/milaidy-sandboxes-table.tsx`** (608 lines): New table component showing all sandboxes with provider type, docker metadata, status filtering
+- **`components/containers/docker-logs-viewer.tsx`** (259 lines): Real-time log viewer with auto-scroll, line count, tail controls
+- **`app/dashboard/containers/agents/[id]/page.tsx`** (532 lines): Agent detail page with overview, logs, actions
+- Sidebar updated with infrastructure nav items
+
+### 10. Documentation
+
+- `docs/INTEGRATION_MAP.md` (1,555 lines): Comprehensive mapping of auth, credits, sandbox lifecycle, API surface, and data model between ElizaCloud and milady-cloud
+- `DOCKER_HEADSCALE_PLAN.md`: Original implementation plan
+- `DOCKER_PROVISIONING_SUMMARY.md`: Provisioning flow documentation
+
+---
+
+## Provisioning flow (Docker)
+
+```
+1. Database setup     → Neon DB provisioned (same as Vercel path)
+2. VPN preparation    → Generate Headscale pre-auth key (optional)
+3. Container creation → SSH to least-loaded node, pull image, run container
+4. VPN registration   → Wait for container to join mesh (60s timeout)
+5. Health check       → Poll /health endpoint via provider
+6. State restore      → Push backup via bridge API (if exists)
+7. Persist metadata   → Store docker fields in milaidy_sandboxes
+8. Return handle      → bridgeUrl + healthUrl (VPN IP or node hostname)
+```
+
+---
+
+## Configuration
+
+### Required for Docker provider
+```env
+MILAIDY_SANDBOX_PROVIDER=docker
+MILAIDY_DOCKER_NODES=node1:192.168.1.100:8,node2:192.168.1.101:8
+MILAIDY_SSH_KEY_PATH=/path/to/ssh/key
+MILAIDY_SSH_USER=root
+```
+
+### Optional (Headscale VPN)
+```env
+HEADSCALE_API_KEY=hskey-api-xxx
+HEADSCALE_API_URL=http://headscale:8081
+HEADSCALE_USER=milaidy
+```
+
+### Switching providers
+```env
+# Use Vercel (default, no change needed)
+MILAIDY_SANDBOX_PROVIDER=vercel
+
+# Use Docker
+MILAIDY_SANDBOX_PROVIDER=docker
+```
+
+---
+
+## Testing checklist
+
+- [ ] Provision agent with `MILAIDY_SANDBOX_PROVIDER=vercel` (no regression)
+- [ ] Provision agent with `MILAIDY_SANDBOX_PROVIDER=docker`
+- [ ] Verify docker metadata persisted in DB (node_id, container_name, ports)
+- [ ] Bridge requests work via `/api/v1/milaidy/agents/:id/bridge`
+- [ ] Streaming works via `/api/v1/milaidy/agents/:id/stream`
+- [ ] Snapshot + restore roundtrip
+- [ ] Agent deletion cleans up container + VPN node
+- [ ] Test with Headscale enabled (VPN IPs used for bridge/health URLs)
+- [ ] Test without Headscale (fallback to node hostname)
+- [ ] Admin API: list/add/health-check docker nodes
+- [ ] Admin API: list containers, fetch logs, run audit
+- [ ] Admin API: headscale mesh status
+- [ ] Admin dashboard renders all three tabs
+- [ ] Run migration `0034_docker_nodes.sql` on test DB
+- [ ] `tsc --noEmit` passes (2 pre-existing errors unrelated to this PR)
+
+---
+
+## Pre-existing type errors (not from this PR)
+
+```
+components/admin/admin-metrics-client.tsx — chart data type mismatch
+components/builders/quick-create-dialog.tsx — missing prop
+```
+
+These exist on `main` and are unrelated to this work.
+
+---
+
+## Risk & rollback
+
+- **Zero risk to existing Vercel path**: Provider factory defaults to `vercel`, Docker code is only loaded when explicitly configured
+- **Rollback**: Set `MILAIDY_SANDBOX_PROVIDER=vercel` (or remove the var). Docker code is never imported.
+- **Migration is additive**: New table + new nullable columns, no data modifications
+- **No breaking API changes**: All existing routes work identically6:Ta1f,## Summary
+- Add `elizaos/cloud` repository (default branch: `dev`) to `PIPELINE_REPOS` in pipeline config
+
+## Test plan
+- [ ] Verify pipeline ingestion picks up the new repo
+- [ ] Confirm leaderboard data includes cloud contributors
+
+<!-- greptile_comment -->
+
+<h3>Greptile Summary</h3>
+
+This PR adds `elizaos/cloud` (default branch `dev`) to the `PIPELINE_REPOS` list in `config/example.json`, which is the default pipeline configuration file used by CI/CD. The change is minimal and well-formed.
+
+Key observations:
+- The entry follows the same JSON structure as every other repo in `PIPELINE_REPOS`.
+- The `discoverUntrackedRepos` pipeline explicitly filters out any repo already listed in `PIPELINE_REPOS` (see `trackedRepos` set in `discoverUntrackedRepos.ts`), so `elizaos/cloud` will **not** be double-counted by the `PIPELINE_UNTRACKED_REPOS` auto-discovery scanner.
+- Using `"defaultBranch": "dev"` is intentional and consistent with the PR description; no other repos currently use a `dev` branch, but the pipeline config schema imposes no restrictions on branch names.
+- `elizaos-plugins/plugin-elizaos-cloud` is already tracked separately — the new entry is for the top-level `elizaos/cloud` repo, which is a distinct repository.
+
+<h3>Confidence Score: 5/5</h3>
+
+- This PR is safe to merge — it is a single-line, additive config change with no logic impact.
+- The change is purely additive, touches only the config file, follows the established entry format, and the pipeline correctly deduplicates against the untracked-repos scanner. No functional code is modified.
+- No files require special attention.
+
+<h3>Important Files Changed</h3>
+
+| Filename | Overview |
+|----------|----------|
+| config/example.json | Adds `{ "owner": "elizaos", "name": "cloud", "defaultBranch": "dev" }` to the `PIPELINE_REPOS` array; entry is well-formed and consistent with sibling entries. |
+
+</details>
+
+<h3>Flowchart</h3>
+
+```mermaid
+%%{init: {'theme': 'neutral'}}%%
+flowchart TD
+    A[pipeline.config.ts] -->|reads PIPELINE_CONFIG_FILE| B[config/example.json]
+    B -->|PIPELINE_REPOS| C{discoverUntrackedRepos}
+    B -->|PIPELINE_UNTRACKED_REPOS| C
+    C -->|builds trackedRepos Set| D[elizaos/eliza\nelizaos/cloud ✅ NEW\nelizaos/elizaos.github.io\n...]
+    C -->|scans orgs elizaos + elizaos-plugins| E[All org repos]
+    E -->|filter: NOT in trackedRepos Set| F[Untracked repos only]
+    D -->|explicitly tracked → full pipeline ingestion| G[Leaderboard / Contributor Data]
+    F -->|auto-discovered repos| G
+```
+
+<sub>Last reviewed commit: f3037a5</sub>
+
+<!-- /greptile_comment -->0:{"buildId":"US8XLB_zHXYj_PVAECGcd","rsc":["$","$1","c",{"children":[["$","div",null,{"className":"container mx-auto px-6 py-8 md:px-8","children":["$","div",null,{"className":"mx-auto max-w-4xl","children":[["$","div",null,{"className":"mb-4 flex flex-col justify-between sm:flex-row","children":[["$","$L2",null,{"currentInterval":"day","currentDate":"2026-03-12"}],["$","$L3",null,{"metrics":{"date":"2026-03-12","interval":{"intervalStart":"$D2026-03-12T00:00:00.000Z","intervalEnd":"$D2026-03-13T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":2,"merged":0,"total":2},"issues":{"new":0,"closed":0,"total":0},"activeContributors":2,"codeChanges":{"additions":0,"deletions":0,"files":0,"commitCount":3},"topContributors":[{"username":"odilitime","avatarUrl":"https://avatars.githubusercontent.com/u/16395496?u=c9bac48e632aae594a0d85aaf9e9c9c69b674d8b&v=4","totalScore":53.959773896576095,"prScore":53.959773896576095,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":null},{"username":"standujar","avatarUrl":"https://avatars.githubusercontent.com/u/16385918?u=718bdcd1585be8447bdfffb8c11ce249baa7532d&v=4","totalScore":12.095573590279972,"prScore":12.095573590279972,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":null}],"focusAreas":[],"topIssues":[],"topPullRequests":[{"id":"PR_kwDOMT5cIs7KLyfy","title":"feat: Prompt Batching/Dispatcher, task system upgrade, and prompt caching support","author":"odilitime","number":6575,"body":"$4","repository":"elizaos/eliza","createdAt":"2026-03-12T22:08:12Z","mergedAt":"2026-03-22T21:28:57Z","additions":10537,"deletions":2966},{"id":"PR_kwDOP6BTDM7I-EfH","title":"feat: Docker + Headscale infrastructure layer for Milaidy sandboxes","author":"0xSolace","number":375,"body":"$5","repository":"elizaos/cloud","createdAt":"2026-03-09T06:16:02Z","mergedAt":null,"additions":8453,"deletions":177},{"id":"PR_kwDONNAI987KE29V","title":"chore: add elizaos/cloud to tracked repos","author":"standujar","number":243,"body":"$6","repository":"elizaos/elizaos.github.io","createdAt":"2026-03-12T15:22:30Z","mergedAt":"2026-04-21T18:32:22Z","additions":1,"deletions":0}],"detailedContributorSummaries":{}},"summaryContent":null,"className":"self-end sm:self-start"}]]}],"$L7","$L8","$L9"]}]}],["$La","$Lb","$Lc"],"$Ld"]}],"loading":null,"isPartial":false}
+7:["$","div",null,{"className":"mb-6","children":["$","div",null,{"className":"flex items-center justify-between","children":[[["$","$Le",null,{"href":"/summary/day/2026-03-11","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left mr-2 h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"children":"Previous"}],false],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$Le",null,{"href":"/summary/day/2026-03-11","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Previous"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]],["$","div",null,{"className":"flex flex-col items-center","children":[["$","div",null,{"className":"text-sm font-medium text-gray-500","children":["Daily"," Summary"]}],["$","time",null,{"dateTime":"2026-03-12","className":"text-md font-bold","children":"Mar 12, 2026"}]]}],[["$","$Le",null,{"href":"/summary/day/2026-03-13","children":[false,["$","span",null,{"children":"Next"}],["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right ml-2 h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}]],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$Le",null,{"href":"/summary/day/2026-03-13","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Next"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]]]}]}]
+10:T5c0,<!-- CURSOR_SUMMARY -->
+> [!NOTE]
+> **High Risk**
+> Touches core runtime model invocation (new `promptSegments`/nested schema JSON handling) and task/memory adapter contracts (`agentIds`, `roomIds`), which can affect scheduling, multi-tenant filtering, and LLM provider behavior across deployments.
+> 
+> **Overview**
+> **Adds prompt-caching hints and expands structured prompt support.** Core generation params now optionally include `promptSegments` (with a concat invariant) and tests cover nested object/array schemas, JSON auto-selection, and required-field validation.
+> 
+> **Aligns adapter/query contracts toward batch-safe APIs.** Updates callers/tests to use plural filters (e.g. `countMemories({ roomIds })`, `getRelationships({ entityIds })`, `getTasks({ agentIds })`) and adjusts mocks accordingly; the Cloud knowledge API is updated to pass `roomIds`.
+> 
+> **Improves DX/docs and example compatibility.** Adds new docs (`TASK_SCHEDULER.md`, `PROMPT_CACHE_HINTS.md`, `DESIGN.md`) and a new `PromptBatcher`/`PromptDispatcher` test suite; cleans up example TypeScript configs with missing typings/shims and minor runtime/example fixes (e.g. plugin typing, buffer casts, Telegram default models).
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit e11d00ebf5ccf119b1bd6448e40b67cd622bedbf. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->11:T2344,## Summary
+
+Adds a full Docker container + Headscale VPN infrastructure layer as an alternative sandbox provider for Milaidy agents. Instead of running agents in Vercel Sandboxes, operators can now deploy agents as Docker containers on remote VPS nodes with optional WireGuard mesh networking via Headscale.
+
+**34 files changed, ~8,200 lines added**
+
+---
+
+## Motivation
+
+Vercel Sandboxes are convenient but limiting: no persistent filesystem, no SSH access, no custom networking, constrained resources. For agents that need a real VPS-like environment (CLI tools, persistent data, inter-agent communication), we need Docker containers on dedicated infrastructure.
+
+This PR introduces a provider abstraction so both backends coexist cleanly, controlled by a single env var.
+
+---
+
+## Architecture
+
+```
+                    MILAIDY_SANDBOX_PROVIDER=docker
+                              │
+User → Eliza Cloud API → SandboxProvider Factory
+                              │
+              ┌───────────────┼───────────────┐
+              ▼                               ▼
+     VercelSandboxProvider          DockerSandboxProvider
+     (existing behavior)                      │
+                                    ┌─────────┼─────────┐
+                                    ▼         ▼         ▼
+                               SSH Client  Node Mgr  Headscale
+                                    │         │         │
+                                    ▼         ▼         ▼
+                              Hetzner VPS  Placement  VPN Mesh
+                              (Docker)     Strategy   (WireGuard)
+```
+
+---
+
+## What's included
+
+### 1. Sandbox Provider Abstraction (`lib/services/sandbox-provider.ts`)
+
+Extracted a `SandboxProvider` interface from the existing Vercel-specific code:
+
+```typescript
+interface SandboxProvider {
+  create(config: SandboxCreateConfig): Promise<SandboxHandle>;
+  stop(sandboxId: string): Promise<void>;
+  checkHealth(healthUrl: string): Promise<boolean>;
+  runCommand?(sandboxId: string, cmd: string): Promise<string>;
+}
+```
+
+Factory function reads `MILAIDY_SANDBOX_PROVIDER` env var (`vercel` | `docker`), defaults to `vercel`. Existing Vercel code extracted into `VercelSandboxProvider` with zero behavior changes.
+
+### 2. Docker SSH Client (`lib/services/docker-ssh.ts`)
+
+SSH client with connection pooling for managing containers on remote nodes:
+- Connection pool with configurable max connections
+- Command execution with timeout support
+- Container lifecycle (create, stop, remove, inspect, logs)
+- Image management (pull, check)
+
+### 3. Docker Sandbox Provider (`lib/services/docker-sandbox-provider.ts`)
+
+Full `SandboxProvider` implementation for Docker:
+- Container creation on remote nodes via SSH
+- Port allocation: bridge (18790-19790), web UI (20000-25000)
+- Health check polling with configurable timeout
+- In-memory container registry with DB backing
+- Optional Headscale VPN integration (graceful degradation if not configured)
+- Metadata passthrough (node_id, container_name, ports, VPN IP, image)
+
+### 4. Node Manager (`lib/services/docker-node-manager.ts`)
+
+Multi-node management with smart placement:
+- Least-loaded allocation strategy
+- Periodic health checks
+- Capacity tracking and reporting
+- Node enable/disable for maintenance
+
+### 5. Headscale VPN Layer
+
+**Client** (`lib/services/headscale-client.ts`):
+- Full REST API client for Headscale control plane
+- Node management, pre-auth key generation, route handling, health checks
+
+**Integration** (`lib/services/headscale-integration.ts`):
+- Container VPN lifecycle: prepare → register → cleanup
+- Ephemeral pre-auth keys per container
+- VPN registration polling (60s timeout)
+- Automatic node cleanup on container stop
+
+### 6. Database Schema (`db/migrations/0034_docker_nodes.sql`)
+
+New `docker_nodes` table:
+```sql
+CREATE TABLE docker_nodes (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  node_id TEXT UNIQUE NOT NULL,
+  hostname TEXT NOT NULL,
+  ssh_port INTEGER DEFAULT 22,
+  capacity INTEGER DEFAULT 8,
+  enabled BOOLEAN DEFAULT true,
+  status TEXT DEFAULT 'unknown',
+  allocated_count INTEGER DEFAULT 0,
+  last_health_check TIMESTAMPTZ,
+  ssh_user TEXT DEFAULT 'root',
+  metadata JSONB DEFAULT '{}'
+);
+```
+
+6 new columns on `milaidy_sandboxes`: `node_id`, `container_name`, `bridge_port`, `web_ui_port`, `headscale_ip`, `docker_image`.
+
+### 7. Admin API Routes (`app/api/v1/admin/`)
+
+7 new route files behind `requireAdmin` auth:
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/admin/docker-nodes` | GET | List all nodes with capacity info |
+| `/admin/docker-nodes` | POST | Register a new node |
+| `/admin/docker-nodes/:id` | GET/PATCH/DELETE | Node CRUD |
+| `/admin/docker-nodes/:id/health-check` | POST | SSH health check |
+| `/admin/docker-containers` | GET | List running containers |
+| `/admin/docker-containers/audit` | POST | Ghost/orphan container audit |
+| `/admin/docker-containers/:id/logs` | GET | Fetch container logs |
+| `/admin/headscale` | GET | Mesh status, nodes, pre-auth keys |
+
+### 8. Admin Infrastructure Dashboard (`components/admin/infrastructure-dashboard.tsx`)
+
+Full admin UI (1,284 lines) with three tabs:
+- **Docker Nodes**: list, add, edit, delete, health check, capacity bars
+- **Containers**: list with status badges, log viewer, ghost audit
+- **Headscale**: mesh status, connected nodes, pre-auth keys, VPN IPs
+
+### 9. Enhanced Container Views
+
+- **`components/containers/milaidy-sandboxes-table.tsx`** (608 lines): New table component showing all sandboxes with provider type, docker metadata, status filtering
+- **`components/containers/docker-logs-viewer.tsx`** (259 lines): Real-time log viewer with auto-scroll, line count, tail controls
+- **`app/dashboard/containers/agents/[id]/page.tsx`** (532 lines): Agent detail page with overview, logs, actions
+- Sidebar updated with infrastructure nav items
+
+### 10. Documentation
+
+- `docs/INTEGRATION_MAP.md` (1,555 lines): Comprehensive mapping of auth, credits, sandbox lifecycle, API surface, and data model between ElizaCloud and milady-cloud
+- `DOCKER_HEADSCALE_PLAN.md`: Original implementation plan
+- `DOCKER_PROVISIONING_SUMMARY.md`: Provisioning flow documentation
+
+---
+
+## Provisioning flow (Docker)
+
+```
+1. Database setup     → Neon DB provisioned (same as Vercel path)
+2. VPN preparation    → Generate Headscale pre-auth key (optional)
+3. Container creation → SSH to least-loaded node, pull image, run container
+4. VPN registration   → Wait for container to join mesh (60s timeout)
+5. Health check       → Poll /health endpoint via provider
+6. State restore      → Push backup via bridge API (if exists)
+7. Persist metadata   → Store docker fields in milaidy_sandboxes
+8. Return handle      → bridgeUrl + healthUrl (VPN IP or node hostname)
+```
+
+---
+
+## Configuration
+
+### Required for Docker provider
+```env
+MILAIDY_SANDBOX_PROVIDER=docker
+MILAIDY_DOCKER_NODES=node1:192.168.1.100:8,node2:192.168.1.101:8
+MILAIDY_SSH_KEY_PATH=/path/to/ssh/key
+MILAIDY_SSH_USER=root
+```
+
+### Optional (Headscale VPN)
+```env
+HEADSCALE_API_KEY=hskey-api-xxx
+HEADSCALE_API_URL=http://headscale:8081
+HEADSCALE_USER=milaidy
+```
+
+### Switching providers
+```env
+# Use Vercel (default, no change needed)
+MILAIDY_SANDBOX_PROVIDER=vercel
+
+# Use Docker
+MILAIDY_SANDBOX_PROVIDER=docker
+```
+
+---
+
+## Testing checklist
+
+- [ ] Provision agent with `MILAIDY_SANDBOX_PROVIDER=vercel` (no regression)
+- [ ] Provision agent with `MILAIDY_SANDBOX_PROVIDER=docker`
+- [ ] Verify docker metadata persisted in DB (node_id, container_name, ports)
+- [ ] Bridge requests work via `/api/v1/milaidy/agents/:id/bridge`
+- [ ] Streaming works via `/api/v1/milaidy/agents/:id/stream`
+- [ ] Snapshot + restore roundtrip
+- [ ] Agent deletion cleans up container + VPN node
+- [ ] Test with Headscale enabled (VPN IPs used for bridge/health URLs)
+- [ ] Test without Headscale (fallback to node hostname)
+- [ ] Admin API: list/add/health-check docker nodes
+- [ ] Admin API: list containers, fetch logs, run audit
+- [ ] Admin API: headscale mesh status
+- [ ] Admin dashboard renders all three tabs
+- [ ] Run migration `0034_docker_nodes.sql` on test DB
+- [ ] `tsc --noEmit` passes (2 pre-existing errors unrelated to this PR)
+
+---
+
+## Pre-existing type errors (not from this PR)
+
+```
+components/admin/admin-metrics-client.tsx — chart data type mismatch
+components/builders/quick-create-dialog.tsx — missing prop
+```
+
+These exist on `main` and are unrelated to this work.
+
+---
+
+## Risk & rollback
+
+- **Zero risk to existing Vercel path**: Provider factory defaults to `vercel`, Docker code is only loaded when explicitly configured
+- **Rollback**: Set `MILAIDY_SANDBOX_PROVIDER=vercel` (or remove the var). Docker code is never imported.
+- **Migration is additive**: New table + new nullable columns, no data modifications
+- **No breaking API changes**: All existing routes work identically12:Ta1f,## Summary
+- Add `elizaos/cloud` repository (default branch: `dev`) to `PIPELINE_REPOS` in pipeline config
+
+## Test plan
+- [ ] Verify pipeline ingestion picks up the new repo
+- [ ] Confirm leaderboard data includes cloud contributors
+
+<!-- greptile_comment -->
+
+<h3>Greptile Summary</h3>
+
+This PR adds `elizaos/cloud` (default branch `dev`) to the `PIPELINE_REPOS` list in `config/example.json`, which is the default pipeline configuration file used by CI/CD. The change is minimal and well-formed.
+
+Key observations:
+- The entry follows the same JSON structure as every other repo in `PIPELINE_REPOS`.
+- The `discoverUntrackedRepos` pipeline explicitly filters out any repo already listed in `PIPELINE_REPOS` (see `trackedRepos` set in `discoverUntrackedRepos.ts`), so `elizaos/cloud` will **not** be double-counted by the `PIPELINE_UNTRACKED_REPOS` auto-discovery scanner.
+- Using `"defaultBranch": "dev"` is intentional and consistent with the PR description; no other repos currently use a `dev` branch, but the pipeline config schema imposes no restrictions on branch names.
+- `elizaos-plugins/plugin-elizaos-cloud` is already tracked separately — the new entry is for the top-level `elizaos/cloud` repo, which is a distinct repository.
+
+<h3>Confidence Score: 5/5</h3>
+
+- This PR is safe to merge — it is a single-line, additive config change with no logic impact.
+- The change is purely additive, touches only the config file, follows the established entry format, and the pipeline correctly deduplicates against the untracked-repos scanner. No functional code is modified.
+- No files require special attention.
+
+<h3>Important Files Changed</h3>
+
+| Filename | Overview |
+|----------|----------|
+| config/example.json | Adds `{ "owner": "elizaos", "name": "cloud", "defaultBranch": "dev" }` to the `PIPELINE_REPOS` array; entry is well-formed and consistent with sibling entries. |
+
+</details>
+
+<h3>Flowchart</h3>
+
+```mermaid
+%%{init: {'theme': 'neutral'}}%%
+flowchart TD
+    A[pipeline.config.ts] -->|reads PIPELINE_CONFIG_FILE| B[config/example.json]
+    B -->|PIPELINE_REPOS| C{discoverUntrackedRepos}
+    B -->|PIPELINE_UNTRACKED_REPOS| C
+    C -->|builds trackedRepos Set| D[elizaos/eliza\nelizaos/cloud ✅ NEW\nelizaos/elizaos.github.io\n...]
+    C -->|scans orgs elizaos + elizaos-plugins| E[All org repos]
+    E -->|filter: NOT in trackedRepos Set| F[Untracked repos only]
+    D -->|explicitly tracked → full pipeline ingestion| G[Leaderboard / Contributor Data]
+    F -->|auto-discovered repos| G
+```
+
+<sub>Last reviewed commit: f3037a5</sub>
+
+<!-- /greptile_comment -->8:["$","div",null,{"className":"mb-8 space-y-6","children":[["$","$Lf",null,{"metrics":{"date":"2026-03-12","interval":{"intervalStart":"$D2026-03-12T00:00:00.000Z","intervalEnd":"$D2026-03-13T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":2,"merged":0,"total":2},"issues":{"new":0,"closed":0,"total":0},"activeContributors":2,"codeChanges":{"additions":0,"deletions":0,"files":0,"commitCount":3},"topContributors":[{"username":"odilitime","avatarUrl":"https://avatars.githubusercontent.com/u/16395496?u=c9bac48e632aae594a0d85aaf9e9c9c69b674d8b&v=4","totalScore":53.959773896576095,"prScore":53.959773896576095,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":null},{"username":"standujar","avatarUrl":"https://avatars.githubusercontent.com/u/16385918?u=718bdcd1585be8447bdfffb8c11ce249baa7532d&v=4","totalScore":12.095573590279972,"prScore":12.095573590279972,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":null}],"focusAreas":[],"topIssues":[],"topPullRequests":[{"id":"PR_kwDOMT5cIs7KLyfy","title":"feat: Prompt Batching/Dispatcher, task system upgrade, and prompt caching support","author":"odilitime","number":6575,"body":"$10","repository":"elizaos/eliza","createdAt":"2026-03-12T22:08:12Z","mergedAt":"2026-03-22T21:28:57Z","additions":10537,"deletions":2966},{"id":"PR_kwDOP6BTDM7I-EfH","title":"feat: Docker + Headscale infrastructure layer for Milaidy sandboxes","author":"0xSolace","number":375,"body":"$11","repository":"elizaos/cloud","createdAt":"2026-03-09T06:16:02Z","mergedAt":null,"additions":8453,"deletions":177},{"id":"PR_kwDONNAI987KE29V","title":"chore: add elizaos/cloud to tracked repos","author":"standujar","number":243,"body":"$12","repository":"elizaos/elizaos.github.io","createdAt":"2026-03-12T15:22:30Z","mergedAt":"2026-04-21T18:32:22Z","additions":1,"deletions":0}],"detailedContributorSummaries":{}}}],"$L13"]}]
+9:null
+a:["$","script","script-0",{"src":"/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","async":true}]
+b:["$","script","script-1",{"src":"/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","async":true}]
+c:["$","script","script-2",{"src":"/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js","async":true}]
+d:["$","$L14",null,{"children":["$","$15",null,{"name":"Next.MetadataOutlet","children":"$@16"}]}]
+13:["$","div",null,{"className":"rounded-lg border bg-card text-card-foreground shadow-sm","children":[["$","div",null,{"className":"flex flex-col space-y-1.5 p-6 py-4","children":["$","div",null,{"className":"tracking-tight text-sm font-medium","children":["$undefined","Code Changes"]}]}],["$","div",null,{"className":"p-6 pt-0","children":["$","div",null,{"className":"grid grid-cols-2 gap-4 md:grid-cols-4","children":[["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-git-commit-vertical h-5 w-5","aria-hidden":"true","children":[["$","path","1holv5",{"d":"M12 3v6"}],["$","circle","1v7zrd",{"cx":"12","cy":"12","r":"3"}],["$","path","a9ows0",{"d":"M12 15v6"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":3}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Commits"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-file-code h-5 w-5","aria-hidden":"true","children":[["$","path","1oefj6",{"d":"M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"}],["$","path","wfsgrz",{"d":"M14 2v5a1 1 0 0 0 1 1h5"}],["$","path","1tg20x",{"d":"M10 12.5 8 15l2 2.5"}],["$","path","yinavb",{"d":"m14 12.5 2 2.5-2 2.5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":0}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Files Changed"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-green-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-up h-5 w-5 text-green-500","aria-hidden":"true","children":[["$","path","hav0vg",{"d":"m5 12 7-7 7 7"}],["$","path","x0mq9r",{"d":"M12 19V5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-green-500","children":"+0"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Added"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-red-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-down h-5 w-5 text-red-500","aria-hidden":"true","children":[["$","path","s699le",{"d":"M12 5v14"}],["$","path","1idqje",{"d":"m19 12-7 7-7-7"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-red-500","children":"-0"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Deleted"}]]}]]}]]}]}]]}]
+16:null

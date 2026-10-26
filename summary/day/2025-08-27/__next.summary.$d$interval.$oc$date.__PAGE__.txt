@@ -1,0 +1,808 @@
+1:"$Sreact.fragment"
+2:I[4817319,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"IntervalSelector"]
+3:I[6998365,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"LlmCopyButton"]
+13:I[3642796,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],""]
+14:I[3238488,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"StatCardsDisplay"]
+23:I[4261541,["/eliza-leaderboard/_next/static/chunks/b33bcbdcb3f88354.js","/eliza-leaderboard/_next/static/chunks/8ba59154b6704904.js"],"OutletBoundary"]
+24:"$Sreact.suspense"
+4:T86d,\## Description
+
+\### Summary
+
+Windows CI tests are failing due to incorrect path handling when running \`elizaos agent start\` with the \`--path\` flag. The file path is being malformed, resulting in doubled/concatenated paths with embedded quotes.
+
+\### Error Details
+
+The test command:
+
+\`\`\`bash
+
+elizaos agent start --remote-url http://localhost:3000 --path "D:\\a\\eliza\\eliza\\packages\\cli\\tests\\test-characters\\max.json"
+
+\`\`\`
+
+Results in this malformed path:
+
+\`\`\`
+
+D:\\a\\eliza\\eliza\\packages\\cli\\"D:\\a\\eliza\\eliza\\packages\\cli\\tests\\test-characters\\max.json"
+
+\`\`\`
+
+Error message:
+
+\`\`\`
+
+error: File not found at path: D:\\a\\eliza\\eliza\\packages\\cli\\"D:\\a\\eliza\\eliza\\packages\\cli\\tests\\test-characters\\max.json"
+
+\`\`\`
+
+\### Root Cause
+
+The path resolution in \`packages/cli/src/commands/agent.ts\` (around the \`startAgent\` function) is not properly handling quoted paths on Windows. When \`path.resolve(process.cwd(), options.path)\` is called, it's incorrectly concatenating the current working directory with an already-absolute path.
+
+\### Affected Code
+
+\- File: \`packages/cli/dist/chunk-KKAK7OQA.js\` (compiled from source)
+
+\- Line: Around line 3326 where \`path12.resolve(process.cwd(), options.path)\` is called
+
+\- Source likely in: \`packages/cli/src/commands/agent.ts\` or related agent command files
+
+\### Reproduction
+
+Only occurs on Windows systems when running:
+
+\`\`\`bash
+
+bun test packages/cli/tests/create-commands.test.ts
+
+\`\`\`
+
+\### Proposed Fix
+
+1\. Check if the provided path is already absolute before calling \`path.resolve()\`
+
+2\. Handle Windows path separators and quoted paths correctly
+
+3\. Add unit tests specifically for Windows path scenarios
+
+\### Example Fix
+
+\`\`\`typescript
+
+*// Instead of:*
+
+const filePath = path.resolve(process.cwd(), options.path);
+
+*// Use:*
+
+const inputPath = options.path.replace(/^"|"$/g, ''); *// Remove surrounding quotes*
+
+const filePath = path.isAbsolute(inputPath)
+
+? inputPath
+
+: path.resolve(process.cwd(), inputPath);
+
+\`\`\`
+
+\### Priority
+
+High - Blocking CI/CD pipeline
+
+\### Labels
+
+\- bug
+
+\- windows
+
+\- cli
+
+\- ci-failure5:T8fa,<!-- Use this template by filling in information and copying and pasting relevant items out of the HTML comments. -->
+
+# Relates to
+
+<!-- LINK TO ISSUE OR TICKET -->
+
+<!-- This risks section must be filled out before the final review and merge. -->
+
+# Risks
+
+<!--
+Low, medium, large. List what kind of risks and what could be affected.
+-->
+
+# Background
+
+## What does this PR do?
+
+## What kind of change is this?
+
+<!--
+Bug fixes (non-breaking change which fixes an issue)
+Improvements (misc. changes to existing features)
+Features (non-breaking change which adds functionality)
+Updates (new versions of included code)
+-->
+
+<!-- This "Why" section is most relevant if there are no linked issues explaining why. If there is a related issue, it might make sense to skip this why section. -->
+<!--
+## Why are we doing this? Any context or related work?
+-->
+
+# Documentation changes needed?
+
+<!--
+My changes do not require a change to the project documentation.
+My changes require a change to the project documentation.
+If documentation change is needed: I have updated the documentation accordingly.
+-->
+
+<!-- Please show how you tested the PR. This will really help if the PR needs to be retested and probably help the PR get merged quicker. -->
+
+# Testing
+
+## Where should a reviewer start?
+
+## Detailed testing steps
+
+<!--
+None: Automated tests are acceptable.
+-->
+
+<!--
+- As [anon/admin], go to [link]
+  - [do action]
+  - verify [result]
+-->
+
+<!-- If there is a UI change, please include before and after screenshots or videos. This will speed up PRs being merged. It is extra nice to annotate screenshots with arrows or boxes pointing out the differences. -->
+<!--
+## Screenshots
+### Before
+### After
+-->
+
+<!-- If there is anything about the deployment, please make a note. -->
+<!--
+# Deploy Notes
+-->
+
+<!--  Copy and paste command line output. -->
+<!--
+## Database changes
+-->
+
+<!--  Please specify deploy instructions if there is something more than the automated steps. -->
+<!--
+## Deployment instructions
+-->
+
+<!-- If you are on Discord, please join https://discord.gg/ai16z and state your Discord username here for the contributor role and join us in #development-feed -->
+<!--
+## Discord username
+
+-->
+6:T619,## Summary
+
+This PR fixes failing CI tests in the core packages and cypress component tests identified in the develop branch CI runs.
+
+### Changes Made
+
+#### project-tee-starter tests
+- Updated all references from `tsup.config.ts` to `build.ts` to match the actual build system
+- Fixed test expectations to align with the new build configuration
+- Skipped vite build test as build.ts does not run vite build
+
+#### plugin-dummy-services tests  
+- Implemented missing methods in service classes:
+  - Added `getPools`, `getLpPositionDetails`, `getMarketDataForPools` to DummyLpService
+  - Added `getTokenDetails`, `getTrendingTokens`, `searchTokens`, `getTokensByAddresses` to DummyTokenDataService
+  - Fixed wallet service portfolio structure
+- Added all required properties for test compatibility:
+  - Added `value` property to wallet portfolio assets
+  - Added missing fields like `holders`, `liquidity`, `priceChange24hPercent` to token data
+  - Fixed LP position details structure
+
+#### Cypress tests
+- All component tests were already passing - no changes needed
+- E2E tests require running servers which is expected behavior
+
+### Test Results
+- ✅ project-tee-starter: All 92 tests passing (2 skipped)
+- ✅ plugin-dummy-services: All 43 tests passing 
+- ✅ client cypress component tests: All 294 tests passing
+
+### Notes
+- Ignored Windows CLI CI tests as requested
+- E2E tests were not fixed as they require running servers (client dev server + API server)
+- All fixes maintain backward compatibility
+
+Fixes test failures from CI runs on develop branch.7:T66b,## Summary
+
+This PR fixes issues with the browser build of the core package and improves type definitions.
+
+## Changes
+
+### Build Configuration Updates
+- **Package.json exports**: Updated to use `.node.js` and `.browser.js` suffixes for better clarity
+- **Deno support**: Added `deno` export condition for improved Deno compatibility
+- **Type definitions**: Fixed to re-export from source modules instead of compiled output
+- **Fallback declarations**: Added fallback declaration files for both node and browser builds
+
+### Type Annotation Improvements
+- **entities.ts**: Added explicit type annotation to `results` array
+- **logger.ts**: Added explicit type annotation for `stream` variable
+- **roles.ts**: Added explicit type annotation to `ownerWorlds` array
+
+### Other Changes
+- Added `standalone.ts` to `.gitignore`
+- Minor formatting improvements
+
+## Why These Changes Are Needed
+
+1. **Browser builds were not properly resolving types** - The previous configuration was causing issues when importing the package in browser environments
+2. **Type safety** - The explicit type annotations prevent `any` types from creeping into the codebase
+3. **Module resolution** - The updated export paths and fallback declarations ensure proper module resolution across different environments (Node.js, Browser, Deno)
+
+## Testing
+
+- [ ] Browser build compiles successfully
+- [ ] Type definitions are properly resolved in consuming applications
+- [ ] No regression in Node.js environments
+- [ ] Deno can properly import the module
+
+## Related Issues
+
+Fixes issues with browser builds not properly resolving types and improves overall module resolution.8:Ta06,related commit: https://github.com/elizaOS/eliza/commit/69a77180074633e53ba7dc2f9e28acf7f912238d#diff-883ced4e3fb77567f2861de8747a663ae1623fa5ed434e750885af2857d2944f
+
+issue:
+
+<img width="1226" height="1692" alt="image" src="https://github.com/user-attachments/assets/97feb95c-e401-40d7-a17c-63fead3e6276" />
+
+
+## Summary
+This PR updates the `AgentLog` interface structure in the API client types and fixes the corresponding mapping function in the client package to ensure the action viewer displays correct information.
+
+## Changes Made
+
+### API Client Types (`packages/api-client/src/types/agents.ts`)
+- **Updated `AgentLog` interface**: Changed from a simple log structure to a more comprehensive one that includes:
+  - Optional fields for better flexibility (`id?`, `type?`, `timestamp?`, etc.)
+  - New `body` object containing model information (`modelType`, `modelKey`, `params`, `response`, `usage`)
+  - Support for additional metadata fields with `[key: string]: any`
+
+### Client Package (`packages/client/src/lib/api-type-mappers.ts`)
+- **Fixed `mapApiLogToClient` function**: Updated the mapping logic to work with the new `AgentLog` structure:
+  - Changed `type` mapping from `apiLog.metadata?.type || apiLog.level` to `apiLog?.type || apiLog.body?.modelType`
+  - Updated timestamp handling to use the new structure
+  - Fixed field mappings to match the updated interface
+
+### CLI Package (`packages/cli/package.json`)
+- **Dependency updates**: Added `@elizaos/plugin-anthropic` and reordered dependencies for consistency
+
+## Technical Details
+
+The main issue was that the `AgentLog` interface had evolved to support more detailed model usage information (like token counts, model types, etc.), but the client-side mapping function was still using the old structure. This caused the action viewer to fail to display correct information about agent actions and model usage.
+
+The new structure better supports:
+- Model type identification (`modelType`, `modelKey`)
+- Usage tracking (`prompt_tokens`, `completion_tokens`, `total_tokens`)
+- Flexible metadata storage
+- Better timestamp handling
+
+## Testing
+- [x] API client types compile correctly
+- [x] Client mapping function works with new log structure
+- [x] Action viewer displays correct information
+- [x] No breaking changes to existing functionality
+
+## Breaking Changes
+None - this is a forward-compatible update that enhances the existing functionality.
+
+## Related Issues
+Fixes action viewer display issues caused by outdated `AgentLog` type mapping.9:T5e2,## Problem
+
+When running any ElizaOS CLI command (like `elizaos create`), users see confusing environment warnings:
+
+```
+[ENV] No .env file found in any of the expected locations
+[ENV] ⚠️ OPENAI_API_KEY not found in process.env
+[ENV] Safe env preview: {"NODE_ENV":"<missing>","OPENAI_API_KEY":"<missing>"}
+```
+
+These warnings appear even for commands that don't need environment variables, like `elizaos create` which is setting up a new project that doesn't have a `.env` file yet.
+
+## Root Cause
+
+The issue was in `packages/cli/src/commands/scenario/src/runtime-factory.ts`:
+- The module had a top-level call to `loadEnvironmentVariables()` that executed immediately when the module was imported
+- The CLI's main entry point imports all commands at startup, including the scenario command
+- The scenario command imports `runtime-factory.ts`
+- This caused environment checking to happen for every CLI command, not just when needed
+
+## Solution
+
+Made the environment loading lazy by:
+1. Removing the top-level `loadEnvironmentVariables()` call
+2. Creating an `ensureEnvLoaded()` function that loads environment variables only when first accessed
+3. Updating the code to use `ensureEnvLoaded()` instead of directly accessing `envSettings`
+
+## Testing
+
+Tested both:
+- `elizaos create` - No environment warnings appear ✅
+- `bun run packages/cli/dist/index.js create` - No environment warnings appear ✅
+
+The environment variables are still loaded correctly when actually needed by the scenario command.a:T559,## Summary
+
+Fixes TypeScript compilation errors in the `@elizaos/plugin-bootstrap` package by correcting the parameter order in `logger.error` calls.
+
+## Changes
+
+- Updated `logger.error` calls in `imageGeneration.ts` to use correct signature: object first, message second
+- This resolves the build failures that were preventing the package from compiling
+
+## Testing
+
+- ✅ Build now completes successfully without TypeScript errors
+- ✅ All existing functionality preserved
+
+## Type of Change
+
+- [x] Bug fix (non-breaking change which fixes an issue)
+- [x] Build system or external dependency change
+
+## Files Changed
+
+- `packages/plugin-bootstrap/src/actions/imageGeneration.ts`
+
+## Before/After
+
+**Before (incorrect):**
+```typescript
+logger.error('message', { data: 'value' });
+```
+
+**After (correct):**
+```typescript
+logger.error({ data: 'value' }, 'message');
+```
+
+## Why This Fix Was Needed
+
+The ElizaOS logger interface expects:
+```typescript
+type LogFn = (
+  obj: Record<string, unknown> | string | Error,  // First: object or string
+  msg?: string,                                   // Second: optional message
+  ...args: unknown[]                              // Additional args
+) => void;
+```
+
+The original code was passing the message string first and the object second, causing TypeScript compilation errors.b:Taab,Today, the ElizaOS project saw significant progress in core stability and ecosystem expansion, with multiple bug fixes and build improvements in the `eliza` repository, the addition of a new plugin to the `registry`, and updates to repository tracking on `elizaos.github.io`.
+
+## ✅ Completed Work
+
+### Core Stability and Build Improvements
+- Enhanced event handling by ensuring runtime inclusion in emitted events and introducing an `initPromise` property in `eliza` ([elizaos/eliza#5827](https://github.com/elizaos/eliza/pull/5827)).
+- Improved browser build exports and type definitions for the core package in `eliza`, resolving build issues and enhancing compatibility ([elizaos/eliza#5832](https://github.com/elizaos/eliza/pull/5832)).
+- Corrected `AgentLog` type structure and fixed action viewer mapping in the `eliza` client, addressing display issues ([elizaos/eliza#5834](https://github.com/elizaos/eliza/pull/5834)).
+- Fixed TypeScript compilation errors in the `plugin-bootstrap` package in `eliza` by correcting `logger.error` parameter order in the `imageGeneration` action ([elizaos/eliza#5833](https://github.com/elizaos/eliza/pull/5833)).
+- Made environment loading lazy in the `eliza` CLI to prevent warnings during startup, improving user experience ([elizaos/eliza#5829](https://github.com/elizaos/eliza/pull/5829)).
+
+### Ecosystem Expansion
+- The `@standujar/plugin-composio` plugin was added to the public plugin registry, making it discoverable and available for use ([elizaos-plugins/registry#209](https://github.com/elizaos-plugins/registry/pull/209)).
+
+## 🏗️ Work in Progress
+
+### New Pull Requests
+- **elizaos/eliza**:
+    - [#5836](https://github.com/elizaos/eliza/pull/5836) Main
+    - [#5835](https://github.com/elizaos/eliza/pull/5835) fix: CI test failures in core and cypress tests
+    - [#5828](https://github.com/elizaos/eliza/pull/5828) feat: browser compat core (draft)
+- **elizaos/elizaos.github.io**:
+    - [#151](https://github.com/elizaos/elizaos.github.io/pull/151) Add elizaos/docs repo tracking and claude bot exclusion
+
+## 🐞 Issue Triage
+
+### New Issues
+- **elizaos/eliza**:
+    - [#5830](https://github.com/elizaos/eliza/issues/5830) Proposed analyzing options for MCP Gateway, adding MCP servers, and integrating an x402 layer to enhance agent communication infrastructure.
+    - [#5831](https://github.com/elizaos/eliza/issues/5831) Suggested adding functionality to show actions called and their results directly in the chat UI for better user feedback.
+
+### Closed Issues
+- **elizaos/eliza**:
+    - [#5619](https://github.com/elizaos/eliza/issues/5619) Resolved an issue where Windows CI tests were failing due to incorrect path handling in CLI agent start command tests.0:{"buildId":"US8XLB_zHXYj_PVAECGcd","rsc":["$","$1","c",{"children":[["$","div",null,{"className":"container mx-auto px-6 py-8 md:px-8","children":["$","div",null,{"className":"mx-auto max-w-4xl","children":[["$","div",null,{"className":"mb-4 flex flex-col justify-between sm:flex-row","children":[["$","$L2",null,{"currentInterval":"day","currentDate":"2025-08-27"}],["$","$L3",null,{"metrics":{"date":"2025-08-27","interval":{"intervalStart":"$D2025-08-27T00:00:00.000Z","intervalEnd":"$D2025-08-28T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":11,"merged":8,"total":12},"issues":{"new":2,"closed":1,"total":3},"activeContributors":10,"codeChanges":{"additions":7921,"deletions":728,"files":41,"commitCount":54},"topContributors":[{"username":"wtfsayo","avatarUrl":"https://avatars.githubusercontent.com/u/82053242?u=98209a1f10456f42d4d2fa71db4d5bf4a672cbc3&v=4","totalScore":164.29584003452197,"prScore":163.95584003452197,"issueScore":0,"reviewScore":0,"commentScore":0.33999999999999997,"summary":"wtfsayo: Focused on critical bug fixes and foundational improvements, merging four pull requests including a significant fix for CI test failures in `elizaos/eliza` (PR #5835) and improvements to browser build exports (PR #5832), demonstrating a primary focus on bugfix work across code, tests, and configuration files."},{"username":"tcm390","avatarUrl":"https://avatars.githubusercontent.com/u/60634884?u=c6c41679b8322eaa0c81f72e0b4ed95e80f0ac16&v=4","totalScore":61.99833326769096,"prScore":56.99833326769096,"issueScore":0,"reviewScore":5,"commentScore":0,"summary":"tcm390: Focused on bug fixes, merging two PRs in elizaos/eliza, including a fix for the AgentLog type structure and action view in #5834 and a logger parameter order correction in #5833, demonstrating a primary focus on bugfix work."},{"username":"ChristopherTrimboli","avatarUrl":"https://avatars.githubusercontent.com/u/27584221?u=de148a498b5af814e037c2975112fadd09df743f&v=4","totalScore":59.5437738965761,"prScore":49.5437738965761,"issueScore":0,"reviewScore":10,"commentScore":0,"summary":"ChristopherTrimboli: Focused on significant feature development, merging a large PR in elizaos/eliza (#5828) that introduced browser compatibility core, demonstrating a primary focus on other work and bugfix work. They also provided two approvals on pull requests, contributing to code quality."},{"username":"odilitime","avatarUrl":"https://avatars.githubusercontent.com/u/16395496?u=c9bac48e632aae594a0d85aaf9e9c9c69b674d8b&v=4","totalScore":55.88667839738146,"prScore":55.686678397381456,"issueScore":0,"reviewScore":0,"commentScore":0.2,"summary":"odilitime: Focused on foundational improvements, merging a significant PR in elizaos/eliza (#5827) that introduced `initPromise` and ensured runtime inclusion in emitted events, demonstrating a focus on core system functionality."},{"username":"shiedot","avatarUrl":"https://avatars.githubusercontent.com/u/115964822?v=4","totalScore":40.4257738965761,"prScore":40.4257738965761,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"shiedot: No activity today."},{"username":"standujar","avatarUrl":"https://avatars.githubusercontent.com/u/16385918?u=718bdcd1585be8447bdfffb8c11ce249baa7532d&v=4","totalScore":10,"prScore":0,"issueScore":0,"reviewScore":10,"commentScore":0,"summary":"standujar: No activity today."},{"username":"borisudovicic","avatarUrl":"https://avatars.githubusercontent.com/u/31806472?u=c0478c34097551ba98aaa71edb33af0885a72d69&v=4","totalScore":8,"prScore":0,"issueScore":8,"reviewScore":0,"commentScore":0,"summary":"borisudovicic: Focused on foundational planning and requirements gathering, evidenced by the creation of two new issues: elizaos/eliza#5831 to enhance the chat UI and elizaos/eliza#5830 to analyze and integrate MCP Gateway options."}],"focusAreas":[{"area":"core","count":9},{"area":"plugin-bootstrap","count":8},{"area":"client","count":5},{"area":"plugin-dummy-services","count":4},{"area":"project-tee-starter","count":4},{"area":"project-starter","count":1},{"area":"cli","count":1},{"area":"api-client","count":1},{"area":".github/workflows","count":1}],"topIssues":[{"id":"I_kwDOMT5cIs7BH4Ls","title":"Fix Windows path handling in CLI agent start command tests","author":"linear","number":5619,"repository":"elizaos/eliza","body":"$4","createdAt":"2025-07-17T15:48:27Z","closedAt":"2025-08-27T06:56:37Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7INYr2","title":"Show action called and result in chat UI","author":"borisudovicic","number":5831,"repository":"elizaos/eliza","body":"Examples: \n\n[https://www.prompt-kit.com/docs/tool](https://www.prompt-kit.com/docs/tool) \n\n[https://ai-sdk.dev/elements/components/tool](https://ai-sdk.dev/elements/components/tool)","createdAt":"2025-08-27T11:05:50Z","closedAt":"2025-09-08T15:26:07Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7INMZr","title":"Analyze options for MCP Gateway, Add some MCP servers, add x402 layer","author":"borisudovicic","number":5830,"repository":"elizaos/eliza","body":"","createdAt":"2025-08-27T10:47:46Z","closedAt":"2025-10-07T05:52:33Z","state":"CLOSED","commentCount":0}],"topPullRequests":[{"id":"PR_kwDOMT5cIs6lcZJF","title":"multi step","author":"tcm390","number":5825,"body":"","repository":"elizaos/eliza","createdAt":"2025-08-26T15:57:57Z","mergedAt":"2025-08-27T18:08:53Z","additions":6708,"deletions":187},{"id":"PR_kwDOMT5cIs6lr8nR","title":"Main","author":"shiedot","number":5836,"body":"$5","repository":"elizaos/eliza","createdAt":"2025-08-27T22:25:44Z","mergedAt":null,"additions":5415,"deletions":8676},{"id":"PR_kwDOMT5cIs6li3-n","title":"feat: browser compat core (draft)","author":"ChristopherTrimboli","number":5828,"body":"","repository":"elizaos/eliza","createdAt":"2025-08-27T07:03:03Z","mergedAt":"2025-08-28T21:58:29Z","additions":3394,"deletions":1869},{"id":"PR_kwDOMT5cIs6lqdS3","title":"fix: CI test failures in core and cypress tests","author":"wtfsayo","number":5835,"body":"$6","repository":"elizaos/eliza","createdAt":"2025-08-27T19:10:07Z","mergedAt":"2025-08-27T23:25:41Z","additions":1085,"deletions":470},{"id":"PR_kwDOOtXZkc6lsWxw","title":"Support embeds/forwards, clientReadyPromise, DISCORD_LISTEN_CHANNEL_MESSAGE event","author":"odilitime","number":17,"body":"\n\n<!-- This is an auto-generated comment: release notes by coderabbit.ai -->\n## Summary by CodeRabbit\n\n- New Features\n  - Processed messages now include embed titles/descriptions, referenced-message context (including channel/guild when different), and code blocks extracted as attachments with in-text references.\n  - Configurable listening channels via environment variables; messages from those channels are ingested with metadata, attachments, reply links, timestamps, and source info.\n  - Added public methods to fetch channel members and register send handlers.\n\n- Refactor\n  - Startup now awaits client readiness before processing events; channel filtering centralized during event listener setup and inbound routing.\n\n- Chores\n  - Improved runtime logging and observability for channel configuration, inbound routing, login errors, and non-listening-channel messages.\n<!-- end of auto-generated comment: release notes by coderabbit.ai -->","repository":"elizaos-plugins/plugin-discord","createdAt":"2025-08-27T23:20:40Z","mergedAt":"2025-10-02T12:40:18Z","additions":158,"deletions":18},{"id":"PR_kwDOMT5cIs6lng20","title":"fix: Improve browser build exports and type definitions","author":"wtfsayo","number":5832,"body":"$7","repository":"elizaos/eliza","createdAt":"2025-08-27T14:51:07Z","mergedAt":"2025-08-27T15:04:21Z","additions":57,"deletions":42},{"id":"PR_kwDOMT5cIs6loPan","title":"fix(client): Update AgentLog type structure and fix action viewer mapping","author":"tcm390","number":5834,"body":"$8","repository":"elizaos/eliza","createdAt":"2025-08-27T15:49:30Z","mergedAt":"2025-08-27T17:17:09Z","additions":25,"deletions":12},{"id":"PR_kwDOMT5cIs6lk0fv","title":"fix: make environment loading lazy to prevent warnings during CLI startup","author":"wtfsayo","number":5829,"body":"$9","repository":"elizaos/eliza","createdAt":"2025-08-27T10:32:02Z","mergedAt":"2025-08-27T11:03:51Z","additions":17,"deletions":6},{"id":"PR_kwDOMT5cIs6lnlfG","title":"fix: correct logger.error parameter order in imageGeneration action","author":"tcm390","number":5833,"body":"$a","repository":"elizaos/eliza","createdAt":"2025-08-27T14:55:45Z","mergedAt":"2025-08-27T14:58:56Z","additions":14,"deletions":8},{"id":"PR_kwDOMT5cIs6lhXCG","title":"Feat: initPromise & always include runtime in emitted events","author":"odilitime","number":5827,"body":"# Risks\r\n\r\nLow\r\n\r\n# Background\r\n\r\n## What does this PR do?\r\n\r\n- creates an initPromise property\r\n- ensures runtime is always in emitted events\r\n\r\n## What kind of change is this?\r\n\r\nUpdates (new versions of included code)\r\n\r\n## Why are we doing this? Any context or related work?\r\n\r\nBefore any plugin init() can delete tasks, adapter has to be ready\r\n\r\n# Documentation changes needed?\r\n\r\nMy changes do not require a change to the project documentation.","repository":"elizaos/eliza","createdAt":"2025-08-27T02:31:31Z","mergedAt":"2025-08-27T17:57:09Z","additions":12,"deletions":1},{"id":"PR_kwDONNAI986ljq92","title":"Add elizaos/docs repo tracking and claude bot exclusion","author":"wtfsayo","number":151,"body":"## Summary\n- Add elizaos/docs repository to the tracked repositories list for contributor analytics\n- Add \"claude\" to bot users exclusion list to filter out Claude Code contributions from analytics\n\n## Changes\n- Added `elizaos/docs` repository with `main` as default branch to `repositories` array\n- Added `\"claude\"` to `botUsers` array to exclude Claude Code contributions from scoring\n\n## Test plan\n- [ ] Verify pipeline configuration loads without errors\n- [ ] Run pipeline ingest to test elizaos/docs repository tracking\n- [ ] Confirm claude user contributions are properly filtered out\n\n🤖 Generated with [Claude Code](https://claude.ai/code)","repository":"elizaos/elizaos.github.io","createdAt":"2025-08-27T08:27:02Z","mergedAt":"2025-10-17T04:24:13Z","additions":6,"deletions":0},{"id":"PR_kwDONkg7v86lkt__","title":"Add @standujar/plugin-composio to registry","author":"wtfsayo","number":209,"body":"\n\n<!-- This is an auto-generated comment: release notes by coderabbit.ai -->\n\n## Summary by CodeRabbit\n\n* **New Features**\n  * Added support for the @standujar/plugin-composio plugin in the public plugin registry, making it discoverable and installable through standard workflows. This enhances compatibility and simplifies setup for users adopting the plugin. No existing plugins were modified, ensuring backward compatibility and a seamless experience for current configurations.\n\n<!-- end of auto-generated comment: release notes by coderabbit.ai -->","repository":"elizaos-plugins/registry","createdAt":"2025-08-27T10:19:24Z","mergedAt":"2025-08-27T10:37:26Z","additions":1,"deletions":0}],"detailedContributorSummaries":{"ChristopherTrimboli":"ChristopherTrimboli: Focused on significant feature development, merging a large PR in elizaos/eliza (#5828) that introduced browser compatibility core, demonstrating a primary focus on other work and bugfix work. They also provided two approvals on pull requests, contributing to code quality.","borisudovicic":"borisudovicic: Focused on foundational planning and requirements gathering, evidenced by the creation of two new issues: elizaos/eliza#5831 to enhance the chat UI and elizaos/eliza#5830 to analyze and integrate MCP Gateway options.","odilitime":"odilitime: Focused on foundational improvements, merging a significant PR in elizaos/eliza (#5827) that introduced `initPromise` and ensured runtime inclusion in emitted events, demonstrating a focus on core system functionality.","shiedot":"shiedot: No activity today.","standujar":"standujar: No activity today.","tcm390":"tcm390: Focused on bug fixes, merging two PRs in elizaos/eliza, including a fix for the AgentLog type structure and action view in #5834 and a logger parameter order correction in #5833, demonstrating a primary focus on bugfix work.","wtfsayo":"wtfsayo: Focused on critical bug fixes and foundational improvements, merging four pull requests including a significant fix for CI test failures in `elizaos/eliza` (PR #5835) and improvements to browser build exports (PR #5832), demonstrating a primary focus on bugfix work across code, tests, and configuration files."}},"summaryContent":"$b","className":"self-end sm:self-start"}]]}],"$Lc","$Ld","$Le"]}]}],["$Lf","$L10","$L11"],"$L12"]}],"loading":null,"isPartial":false}
+c:["$","div",null,{"className":"mb-6","children":["$","div",null,{"className":"flex items-center justify-between","children":[[["$","$L13",null,{"href":"/summary/day/2025-08-26","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left mr-2 h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"children":"Previous"}],false],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$L13",null,{"href":"/summary/day/2025-08-26","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Previous"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]],["$","div",null,{"className":"flex flex-col items-center","children":[["$","div",null,{"className":"text-sm font-medium text-gray-500","children":["Daily"," Summary"]}],["$","time",null,{"dateTime":"2025-08-27","className":"text-md font-bold","children":"Aug 27, 2025"}]]}],[["$","$L13",null,{"href":"/summary/day/2025-08-28","children":[false,["$","span",null,{"children":"Next"}],["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right ml-2 h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}]],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$L13",null,{"href":"/summary/day/2025-08-28","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Next"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]]]}]}]
+15:T86d,\## Description
+
+\### Summary
+
+Windows CI tests are failing due to incorrect path handling when running \`elizaos agent start\` with the \`--path\` flag. The file path is being malformed, resulting in doubled/concatenated paths with embedded quotes.
+
+\### Error Details
+
+The test command:
+
+\`\`\`bash
+
+elizaos agent start --remote-url http://localhost:3000 --path "D:\\a\\eliza\\eliza\\packages\\cli\\tests\\test-characters\\max.json"
+
+\`\`\`
+
+Results in this malformed path:
+
+\`\`\`
+
+D:\\a\\eliza\\eliza\\packages\\cli\\"D:\\a\\eliza\\eliza\\packages\\cli\\tests\\test-characters\\max.json"
+
+\`\`\`
+
+Error message:
+
+\`\`\`
+
+error: File not found at path: D:\\a\\eliza\\eliza\\packages\\cli\\"D:\\a\\eliza\\eliza\\packages\\cli\\tests\\test-characters\\max.json"
+
+\`\`\`
+
+\### Root Cause
+
+The path resolution in \`packages/cli/src/commands/agent.ts\` (around the \`startAgent\` function) is not properly handling quoted paths on Windows. When \`path.resolve(process.cwd(), options.path)\` is called, it's incorrectly concatenating the current working directory with an already-absolute path.
+
+\### Affected Code
+
+\- File: \`packages/cli/dist/chunk-KKAK7OQA.js\` (compiled from source)
+
+\- Line: Around line 3326 where \`path12.resolve(process.cwd(), options.path)\` is called
+
+\- Source likely in: \`packages/cli/src/commands/agent.ts\` or related agent command files
+
+\### Reproduction
+
+Only occurs on Windows systems when running:
+
+\`\`\`bash
+
+bun test packages/cli/tests/create-commands.test.ts
+
+\`\`\`
+
+\### Proposed Fix
+
+1\. Check if the provided path is already absolute before calling \`path.resolve()\`
+
+2\. Handle Windows path separators and quoted paths correctly
+
+3\. Add unit tests specifically for Windows path scenarios
+
+\### Example Fix
+
+\`\`\`typescript
+
+*// Instead of:*
+
+const filePath = path.resolve(process.cwd(), options.path);
+
+*// Use:*
+
+const inputPath = options.path.replace(/^"|"$/g, ''); *// Remove surrounding quotes*
+
+const filePath = path.isAbsolute(inputPath)
+
+? inputPath
+
+: path.resolve(process.cwd(), inputPath);
+
+\`\`\`
+
+\### Priority
+
+High - Blocking CI/CD pipeline
+
+\### Labels
+
+\- bug
+
+\- windows
+
+\- cli
+
+\- ci-failure16:T8fa,<!-- Use this template by filling in information and copying and pasting relevant items out of the HTML comments. -->
+
+# Relates to
+
+<!-- LINK TO ISSUE OR TICKET -->
+
+<!-- This risks section must be filled out before the final review and merge. -->
+
+# Risks
+
+<!--
+Low, medium, large. List what kind of risks and what could be affected.
+-->
+
+# Background
+
+## What does this PR do?
+
+## What kind of change is this?
+
+<!--
+Bug fixes (non-breaking change which fixes an issue)
+Improvements (misc. changes to existing features)
+Features (non-breaking change which adds functionality)
+Updates (new versions of included code)
+-->
+
+<!-- This "Why" section is most relevant if there are no linked issues explaining why. If there is a related issue, it might make sense to skip this why section. -->
+<!--
+## Why are we doing this? Any context or related work?
+-->
+
+# Documentation changes needed?
+
+<!--
+My changes do not require a change to the project documentation.
+My changes require a change to the project documentation.
+If documentation change is needed: I have updated the documentation accordingly.
+-->
+
+<!-- Please show how you tested the PR. This will really help if the PR needs to be retested and probably help the PR get merged quicker. -->
+
+# Testing
+
+## Where should a reviewer start?
+
+## Detailed testing steps
+
+<!--
+None: Automated tests are acceptable.
+-->
+
+<!--
+- As [anon/admin], go to [link]
+  - [do action]
+  - verify [result]
+-->
+
+<!-- If there is a UI change, please include before and after screenshots or videos. This will speed up PRs being merged. It is extra nice to annotate screenshots with arrows or boxes pointing out the differences. -->
+<!--
+## Screenshots
+### Before
+### After
+-->
+
+<!-- If there is anything about the deployment, please make a note. -->
+<!--
+# Deploy Notes
+-->
+
+<!--  Copy and paste command line output. -->
+<!--
+## Database changes
+-->
+
+<!--  Please specify deploy instructions if there is something more than the automated steps. -->
+<!--
+## Deployment instructions
+-->
+
+<!-- If you are on Discord, please join https://discord.gg/ai16z and state your Discord username here for the contributor role and join us in #development-feed -->
+<!--
+## Discord username
+
+-->
+17:T619,## Summary
+
+This PR fixes failing CI tests in the core packages and cypress component tests identified in the develop branch CI runs.
+
+### Changes Made
+
+#### project-tee-starter tests
+- Updated all references from `tsup.config.ts` to `build.ts` to match the actual build system
+- Fixed test expectations to align with the new build configuration
+- Skipped vite build test as build.ts does not run vite build
+
+#### plugin-dummy-services tests  
+- Implemented missing methods in service classes:
+  - Added `getPools`, `getLpPositionDetails`, `getMarketDataForPools` to DummyLpService
+  - Added `getTokenDetails`, `getTrendingTokens`, `searchTokens`, `getTokensByAddresses` to DummyTokenDataService
+  - Fixed wallet service portfolio structure
+- Added all required properties for test compatibility:
+  - Added `value` property to wallet portfolio assets
+  - Added missing fields like `holders`, `liquidity`, `priceChange24hPercent` to token data
+  - Fixed LP position details structure
+
+#### Cypress tests
+- All component tests were already passing - no changes needed
+- E2E tests require running servers which is expected behavior
+
+### Test Results
+- ✅ project-tee-starter: All 92 tests passing (2 skipped)
+- ✅ plugin-dummy-services: All 43 tests passing 
+- ✅ client cypress component tests: All 294 tests passing
+
+### Notes
+- Ignored Windows CLI CI tests as requested
+- E2E tests were not fixed as they require running servers (client dev server + API server)
+- All fixes maintain backward compatibility
+
+Fixes test failures from CI runs on develop branch.18:T66b,## Summary
+
+This PR fixes issues with the browser build of the core package and improves type definitions.
+
+## Changes
+
+### Build Configuration Updates
+- **Package.json exports**: Updated to use `.node.js` and `.browser.js` suffixes for better clarity
+- **Deno support**: Added `deno` export condition for improved Deno compatibility
+- **Type definitions**: Fixed to re-export from source modules instead of compiled output
+- **Fallback declarations**: Added fallback declaration files for both node and browser builds
+
+### Type Annotation Improvements
+- **entities.ts**: Added explicit type annotation to `results` array
+- **logger.ts**: Added explicit type annotation for `stream` variable
+- **roles.ts**: Added explicit type annotation to `ownerWorlds` array
+
+### Other Changes
+- Added `standalone.ts` to `.gitignore`
+- Minor formatting improvements
+
+## Why These Changes Are Needed
+
+1. **Browser builds were not properly resolving types** - The previous configuration was causing issues when importing the package in browser environments
+2. **Type safety** - The explicit type annotations prevent `any` types from creeping into the codebase
+3. **Module resolution** - The updated export paths and fallback declarations ensure proper module resolution across different environments (Node.js, Browser, Deno)
+
+## Testing
+
+- [ ] Browser build compiles successfully
+- [ ] Type definitions are properly resolved in consuming applications
+- [ ] No regression in Node.js environments
+- [ ] Deno can properly import the module
+
+## Related Issues
+
+Fixes issues with browser builds not properly resolving types and improves overall module resolution.19:Ta06,related commit: https://github.com/elizaOS/eliza/commit/69a77180074633e53ba7dc2f9e28acf7f912238d#diff-883ced4e3fb77567f2861de8747a663ae1623fa5ed434e750885af2857d2944f
+
+issue:
+
+<img width="1226" height="1692" alt="image" src="https://github.com/user-attachments/assets/97feb95c-e401-40d7-a17c-63fead3e6276" />
+
+
+## Summary
+This PR updates the `AgentLog` interface structure in the API client types and fixes the corresponding mapping function in the client package to ensure the action viewer displays correct information.
+
+## Changes Made
+
+### API Client Types (`packages/api-client/src/types/agents.ts`)
+- **Updated `AgentLog` interface**: Changed from a simple log structure to a more comprehensive one that includes:
+  - Optional fields for better flexibility (`id?`, `type?`, `timestamp?`, etc.)
+  - New `body` object containing model information (`modelType`, `modelKey`, `params`, `response`, `usage`)
+  - Support for additional metadata fields with `[key: string]: any`
+
+### Client Package (`packages/client/src/lib/api-type-mappers.ts`)
+- **Fixed `mapApiLogToClient` function**: Updated the mapping logic to work with the new `AgentLog` structure:
+  - Changed `type` mapping from `apiLog.metadata?.type || apiLog.level` to `apiLog?.type || apiLog.body?.modelType`
+  - Updated timestamp handling to use the new structure
+  - Fixed field mappings to match the updated interface
+
+### CLI Package (`packages/cli/package.json`)
+- **Dependency updates**: Added `@elizaos/plugin-anthropic` and reordered dependencies for consistency
+
+## Technical Details
+
+The main issue was that the `AgentLog` interface had evolved to support more detailed model usage information (like token counts, model types, etc.), but the client-side mapping function was still using the old structure. This caused the action viewer to fail to display correct information about agent actions and model usage.
+
+The new structure better supports:
+- Model type identification (`modelType`, `modelKey`)
+- Usage tracking (`prompt_tokens`, `completion_tokens`, `total_tokens`)
+- Flexible metadata storage
+- Better timestamp handling
+
+## Testing
+- [x] API client types compile correctly
+- [x] Client mapping function works with new log structure
+- [x] Action viewer displays correct information
+- [x] No breaking changes to existing functionality
+
+## Breaking Changes
+None - this is a forward-compatible update that enhances the existing functionality.
+
+## Related Issues
+Fixes action viewer display issues caused by outdated `AgentLog` type mapping.1a:T5e2,## Problem
+
+When running any ElizaOS CLI command (like `elizaos create`), users see confusing environment warnings:
+
+```
+[ENV] No .env file found in any of the expected locations
+[ENV] ⚠️ OPENAI_API_KEY not found in process.env
+[ENV] Safe env preview: {"NODE_ENV":"<missing>","OPENAI_API_KEY":"<missing>"}
+```
+
+These warnings appear even for commands that don't need environment variables, like `elizaos create` which is setting up a new project that doesn't have a `.env` file yet.
+
+## Root Cause
+
+The issue was in `packages/cli/src/commands/scenario/src/runtime-factory.ts`:
+- The module had a top-level call to `loadEnvironmentVariables()` that executed immediately when the module was imported
+- The CLI's main entry point imports all commands at startup, including the scenario command
+- The scenario command imports `runtime-factory.ts`
+- This caused environment checking to happen for every CLI command, not just when needed
+
+## Solution
+
+Made the environment loading lazy by:
+1. Removing the top-level `loadEnvironmentVariables()` call
+2. Creating an `ensureEnvLoaded()` function that loads environment variables only when first accessed
+3. Updating the code to use `ensureEnvLoaded()` instead of directly accessing `envSettings`
+
+## Testing
+
+Tested both:
+- `elizaos create` - No environment warnings appear ✅
+- `bun run packages/cli/dist/index.js create` - No environment warnings appear ✅
+
+The environment variables are still loaded correctly when actually needed by the scenario command.1b:T559,## Summary
+
+Fixes TypeScript compilation errors in the `@elizaos/plugin-bootstrap` package by correcting the parameter order in `logger.error` calls.
+
+## Changes
+
+- Updated `logger.error` calls in `imageGeneration.ts` to use correct signature: object first, message second
+- This resolves the build failures that were preventing the package from compiling
+
+## Testing
+
+- ✅ Build now completes successfully without TypeScript errors
+- ✅ All existing functionality preserved
+
+## Type of Change
+
+- [x] Bug fix (non-breaking change which fixes an issue)
+- [x] Build system or external dependency change
+
+## Files Changed
+
+- `packages/plugin-bootstrap/src/actions/imageGeneration.ts`
+
+## Before/After
+
+**Before (incorrect):**
+```typescript
+logger.error('message', { data: 'value' });
+```
+
+**After (correct):**
+```typescript
+logger.error({ data: 'value' }, 'message');
+```
+
+## Why This Fix Was Needed
+
+The ElizaOS logger interface expects:
+```typescript
+type LogFn = (
+  obj: Record<string, unknown> | string | Error,  // First: object or string
+  msg?: string,                                   // Second: optional message
+  ...args: unknown[]                              // Additional args
+) => void;
+```
+
+The original code was passing the message string first and the object second, causing TypeScript compilation errors.d:["$","div",null,{"className":"mb-8 space-y-6","children":[["$","$L14",null,{"metrics":{"date":"2025-08-27","interval":{"intervalStart":"$D2025-08-27T00:00:00.000Z","intervalEnd":"$D2025-08-28T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":11,"merged":8,"total":12},"issues":{"new":2,"closed":1,"total":3},"activeContributors":10,"codeChanges":{"additions":7921,"deletions":728,"files":41,"commitCount":54},"topContributors":[{"username":"wtfsayo","avatarUrl":"https://avatars.githubusercontent.com/u/82053242?u=98209a1f10456f42d4d2fa71db4d5bf4a672cbc3&v=4","totalScore":164.29584003452197,"prScore":163.95584003452197,"issueScore":0,"reviewScore":0,"commentScore":0.33999999999999997,"summary":"wtfsayo: Focused on critical bug fixes and foundational improvements, merging four pull requests including a significant fix for CI test failures in `elizaos/eliza` (PR #5835) and improvements to browser build exports (PR #5832), demonstrating a primary focus on bugfix work across code, tests, and configuration files."},{"username":"tcm390","avatarUrl":"https://avatars.githubusercontent.com/u/60634884?u=c6c41679b8322eaa0c81f72e0b4ed95e80f0ac16&v=4","totalScore":61.99833326769096,"prScore":56.99833326769096,"issueScore":0,"reviewScore":5,"commentScore":0,"summary":"tcm390: Focused on bug fixes, merging two PRs in elizaos/eliza, including a fix for the AgentLog type structure and action view in #5834 and a logger parameter order correction in #5833, demonstrating a primary focus on bugfix work."},{"username":"ChristopherTrimboli","avatarUrl":"https://avatars.githubusercontent.com/u/27584221?u=de148a498b5af814e037c2975112fadd09df743f&v=4","totalScore":59.5437738965761,"prScore":49.5437738965761,"issueScore":0,"reviewScore":10,"commentScore":0,"summary":"ChristopherTrimboli: Focused on significant feature development, merging a large PR in elizaos/eliza (#5828) that introduced browser compatibility core, demonstrating a primary focus on other work and bugfix work. They also provided two approvals on pull requests, contributing to code quality."},{"username":"odilitime","avatarUrl":"https://avatars.githubusercontent.com/u/16395496?u=c9bac48e632aae594a0d85aaf9e9c9c69b674d8b&v=4","totalScore":55.88667839738146,"prScore":55.686678397381456,"issueScore":0,"reviewScore":0,"commentScore":0.2,"summary":"odilitime: Focused on foundational improvements, merging a significant PR in elizaos/eliza (#5827) that introduced `initPromise` and ensured runtime inclusion in emitted events, demonstrating a focus on core system functionality."},{"username":"shiedot","avatarUrl":"https://avatars.githubusercontent.com/u/115964822?v=4","totalScore":40.4257738965761,"prScore":40.4257738965761,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"shiedot: No activity today."},{"username":"standujar","avatarUrl":"https://avatars.githubusercontent.com/u/16385918?u=718bdcd1585be8447bdfffb8c11ce249baa7532d&v=4","totalScore":10,"prScore":0,"issueScore":0,"reviewScore":10,"commentScore":0,"summary":"standujar: No activity today."},{"username":"borisudovicic","avatarUrl":"https://avatars.githubusercontent.com/u/31806472?u=c0478c34097551ba98aaa71edb33af0885a72d69&v=4","totalScore":8,"prScore":0,"issueScore":8,"reviewScore":0,"commentScore":0,"summary":"borisudovicic: Focused on foundational planning and requirements gathering, evidenced by the creation of two new issues: elizaos/eliza#5831 to enhance the chat UI and elizaos/eliza#5830 to analyze and integrate MCP Gateway options."}],"focusAreas":[{"area":"core","count":9},{"area":"plugin-bootstrap","count":8},{"area":"client","count":5},{"area":"plugin-dummy-services","count":4},{"area":"project-tee-starter","count":4},{"area":"project-starter","count":1},{"area":"cli","count":1},{"area":"api-client","count":1},{"area":".github/workflows","count":1}],"topIssues":[{"id":"I_kwDOMT5cIs7BH4Ls","title":"Fix Windows path handling in CLI agent start command tests","author":"linear","number":5619,"repository":"elizaos/eliza","body":"$15","createdAt":"2025-07-17T15:48:27Z","closedAt":"2025-08-27T06:56:37Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7INYr2","title":"Show action called and result in chat UI","author":"borisudovicic","number":5831,"repository":"elizaos/eliza","body":"Examples: \n\n[https://www.prompt-kit.com/docs/tool](https://www.prompt-kit.com/docs/tool) \n\n[https://ai-sdk.dev/elements/components/tool](https://ai-sdk.dev/elements/components/tool)","createdAt":"2025-08-27T11:05:50Z","closedAt":"2025-09-08T15:26:07Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7INMZr","title":"Analyze options for MCP Gateway, Add some MCP servers, add x402 layer","author":"borisudovicic","number":5830,"repository":"elizaos/eliza","body":"","createdAt":"2025-08-27T10:47:46Z","closedAt":"2025-10-07T05:52:33Z","state":"CLOSED","commentCount":0}],"topPullRequests":[{"id":"PR_kwDOMT5cIs6lcZJF","title":"multi step","author":"tcm390","number":5825,"body":"","repository":"elizaos/eliza","createdAt":"2025-08-26T15:57:57Z","mergedAt":"2025-08-27T18:08:53Z","additions":6708,"deletions":187},{"id":"PR_kwDOMT5cIs6lr8nR","title":"Main","author":"shiedot","number":5836,"body":"$16","repository":"elizaos/eliza","createdAt":"2025-08-27T22:25:44Z","mergedAt":null,"additions":5415,"deletions":8676},{"id":"PR_kwDOMT5cIs6li3-n","title":"feat: browser compat core (draft)","author":"ChristopherTrimboli","number":5828,"body":"","repository":"elizaos/eliza","createdAt":"2025-08-27T07:03:03Z","mergedAt":"2025-08-28T21:58:29Z","additions":3394,"deletions":1869},{"id":"PR_kwDOMT5cIs6lqdS3","title":"fix: CI test failures in core and cypress tests","author":"wtfsayo","number":5835,"body":"$17","repository":"elizaos/eliza","createdAt":"2025-08-27T19:10:07Z","mergedAt":"2025-08-27T23:25:41Z","additions":1085,"deletions":470},{"id":"PR_kwDOOtXZkc6lsWxw","title":"Support embeds/forwards, clientReadyPromise, DISCORD_LISTEN_CHANNEL_MESSAGE event","author":"odilitime","number":17,"body":"\n\n<!-- This is an auto-generated comment: release notes by coderabbit.ai -->\n## Summary by CodeRabbit\n\n- New Features\n  - Processed messages now include embed titles/descriptions, referenced-message context (including channel/guild when different), and code blocks extracted as attachments with in-text references.\n  - Configurable listening channels via environment variables; messages from those channels are ingested with metadata, attachments, reply links, timestamps, and source info.\n  - Added public methods to fetch channel members and register send handlers.\n\n- Refactor\n  - Startup now awaits client readiness before processing events; channel filtering centralized during event listener setup and inbound routing.\n\n- Chores\n  - Improved runtime logging and observability for channel configuration, inbound routing, login errors, and non-listening-channel messages.\n<!-- end of auto-generated comment: release notes by coderabbit.ai -->","repository":"elizaos-plugins/plugin-discord","createdAt":"2025-08-27T23:20:40Z","mergedAt":"2025-10-02T12:40:18Z","additions":158,"deletions":18},{"id":"PR_kwDOMT5cIs6lng20","title":"fix: Improve browser build exports and type definitions","author":"wtfsayo","number":5832,"body":"$18","repository":"elizaos/eliza","createdAt":"2025-08-27T14:51:07Z","mergedAt":"2025-08-27T15:04:21Z","additions":57,"deletions":42},{"id":"PR_kwDOMT5cIs6loPan","title":"fix(client): Update AgentLog type structure and fix action viewer mapping","author":"tcm390","number":5834,"body":"$19","repository":"elizaos/eliza","createdAt":"2025-08-27T15:49:30Z","mergedAt":"2025-08-27T17:17:09Z","additions":25,"deletions":12},{"id":"PR_kwDOMT5cIs6lk0fv","title":"fix: make environment loading lazy to prevent warnings during CLI startup","author":"wtfsayo","number":5829,"body":"$1a","repository":"elizaos/eliza","createdAt":"2025-08-27T10:32:02Z","mergedAt":"2025-08-27T11:03:51Z","additions":17,"deletions":6},{"id":"PR_kwDOMT5cIs6lnlfG","title":"fix: correct logger.error parameter order in imageGeneration action","author":"tcm390","number":5833,"body":"$1b","repository":"elizaos/eliza","createdAt":"2025-08-27T14:55:45Z","mergedAt":"2025-08-27T14:58:56Z","additions":14,"deletions":8},{"id":"PR_kwDOMT5cIs6lhXCG","title":"Feat: initPromise & always include runtime in emitted events","author":"odilitime","number":5827,"body":"# Risks\r\n\r\nLow\r\n\r\n# Background\r\n\r\n## What does this PR do?\r\n\r\n- creates an initPromise property\r\n- ensures runtime is always in emitted events\r\n\r\n## What kind of change is this?\r\n\r\nUpdates (new versions of included code)\r\n\r\n## Why are we doing this? Any context or related work?\r\n\r\nBefore any plugin init() can delete tasks, adapter has to be ready\r\n\r\n# Documentation changes needed?\r\n\r\nMy changes do not require a change to the project documentation.","repository":"elizaos/eliza","createdAt":"2025-08-27T02:31:31Z","mergedAt":"2025-08-27T17:57:09Z","additions":12,"deletions":1},{"id":"PR_kwDONNAI986ljq92","title":"Add elizaos/docs repo tracking and claude bot exclusion","author":"wtfsayo","number":151,"body":"## Summary\n- Add elizaos/docs repository to the tracked repositories list for contributor analytics\n- Add \"claude\" to bot users exclusion list to filter out Claude Code contributions from analytics\n\n## Changes\n- Added `elizaos/docs` repository with `main` as default branch to `repositories` array\n- Added `\"claude\"` to `botUsers` array to exclude Claude Code contributions from scoring\n\n## Test plan\n- [ ] Verify pipeline configuration loads without errors\n- [ ] Run pipeline ingest to test elizaos/docs repository tracking\n- [ ] Confirm claude user contributions are properly filtered out\n\n🤖 Generated with [Claude Code](https://claude.ai/code)","repository":"elizaos/elizaos.github.io","createdAt":"2025-08-27T08:27:02Z","mergedAt":"2025-10-17T04:24:13Z","additions":6,"deletions":0},{"id":"PR_kwDONkg7v86lkt__","title":"Add @standujar/plugin-composio to registry","author":"wtfsayo","number":209,"body":"\n\n<!-- This is an auto-generated comment: release notes by coderabbit.ai -->\n\n## Summary by CodeRabbit\n\n* **New Features**\n  * Added support for the @standujar/plugin-composio plugin in the public plugin registry, making it discoverable and installable through standard workflows. This enhances compatibility and simplifies setup for users adopting the plugin. No existing plugins were modified, ensuring backward compatibility and a seamless experience for current configurations.\n\n<!-- end of auto-generated comment: release notes by coderabbit.ai -->","repository":"elizaos-plugins/registry","createdAt":"2025-08-27T10:19:24Z","mergedAt":"2025-08-27T10:37:26Z","additions":1,"deletions":0}],"detailedContributorSummaries":{"ChristopherTrimboli":"ChristopherTrimboli: Focused on significant feature development, merging a large PR in elizaos/eliza (#5828) that introduced browser compatibility core, demonstrating a primary focus on other work and bugfix work. They also provided two approvals on pull requests, contributing to code quality.","borisudovicic":"borisudovicic: Focused on foundational planning and requirements gathering, evidenced by the creation of two new issues: elizaos/eliza#5831 to enhance the chat UI and elizaos/eliza#5830 to analyze and integrate MCP Gateway options.","odilitime":"odilitime: Focused on foundational improvements, merging a significant PR in elizaos/eliza (#5827) that introduced `initPromise` and ensured runtime inclusion in emitted events, demonstrating a focus on core system functionality.","shiedot":"shiedot: No activity today.","standujar":"standujar: No activity today.","tcm390":"tcm390: Focused on bug fixes, merging two PRs in elizaos/eliza, including a fix for the AgentLog type structure and action view in #5834 and a logger parameter order correction in #5833, demonstrating a primary focus on bugfix work.","wtfsayo":"wtfsayo: Focused on critical bug fixes and foundational improvements, merging four pull requests including a significant fix for CI test failures in `elizaos/eliza` (PR #5835) and improvements to browser build exports (PR #5832), demonstrating a primary focus on bugfix work across code, tests, and configuration files."}}}],"$L1c"]}]
+e:["$","div",null,{"className":"prose prose-sm mx-auto mt-8 dark:prose-invert sm:prose lg:prose-lg xl:prose-xl","children":[["$","p","p-0",{"children":["Today, the ElizaOS project saw significant progress in core stability and ecosystem expansion, with multiple bug fixes and build improvements in the ",["$","code","code-0",{"children":"eliza"}]," repository, the addition of a new plugin to the ",["$","code","code-1",{"children":"registry"}],", and updates to repository tracking on ",["$","code","code-2",{"children":"elizaos.github.io"}],"."]}],"\n",["$","h2","h2-0",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"✅ Completed Work","position":{"start":{"line":3,"column":4,"offset":280},"end":{"line":3,"column":20,"offset":296}}}],"position":{"start":{"line":3,"column":1,"offset":277},"end":{"line":3,"column":20,"offset":296}}},"children":"✅ Completed Work"}],"\n",["$","h3","h3-0",{"children":"Core Stability and Build Improvements"}],"\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["Enhanced event handling by ensuring runtime inclusion in emitted events and introducing an ",["$","code","code-0",{"children":"initPromise"}]," property in ",["$","code","code-1",{"children":"eliza"}]," (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5827","children":"elizaos/eliza#5827"}],")."]}],"\n",["$","li","li-1",{"children":["Improved browser build exports and type definitions for the core package in ",["$","code","code-0",{"children":"eliza"}],", resolving build issues and enhancing compatibility (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5832","children":"elizaos/eliza#5832"}],")."]}],"\n",["$","li","li-2",{"children":["Corrected ",["$","code","code-0",{"children":"AgentLog"}]," type structure and fixed action viewer mapping in the ",["$","code","code-1",{"children":"eliza"}]," client, addressing display issues (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5834","children":"elizaos/eliza#5834"}],")."]}],"\n",["$","li","li-3",{"children":["Fixed TypeScript compilation errors in the ",["$","code","code-0",{"children":"plugin-bootstrap"}]," package in ",["$","code","code-1",{"children":"eliza"}]," by correcting ",["$","code","code-2",{"children":"logger.error"}]," parameter order in the ",["$","code","code-3",{"children":"imageGeneration"}]," action (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5833","children":"elizaos/eliza#5833"}],")."]}],"\n",["$","li","li-4",{"children":["Made environment loading lazy in the ",["$","code","code-0",{"children":"eliza"}]," CLI to prevent warnings during startup, improving user experience (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5829","children":"elizaos/eliza#5829"}],")."]}],"\n"]}],"\n",["$","h3","h3-1",{"children":"Ecosystem Expansion"}],"\n",["$","ul","ul-1",{"children":["\n",["$","li","li-0",{"children":["The ",["$","code","code-0",{"children":"@standujar/plugin-composio"}]," plugin was added to the public plugin registry, making it discoverable and available for use (",["$","a","a-0",{"href":"https://github.com/elizaos-plugins/registry/pull/209","children":"elizaos-plugins/registry#209"}],")."]}],"\n"]}],"\n",["$","h2","h2-1",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"🏗️ Work in Progress","position":{"start":{"line":15,"column":4,"offset":1582},"end":{"line":15,"column":24,"offset":1602}}}],"position":{"start":{"line":15,"column":1,"offset":1579},"end":{"line":15,"column":24,"offset":1602}}},"children":"🏗️ Work in Progress"}],"\n",["$","h3","h3-2",{"children":"New Pull Requests"}],"\n",["$","ul","ul-2",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"elizaos/eliza"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5836","children":"#5836"}]," Main"]}],"\n",["$","li","li-1",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5835","children":"#5835"}]," fix: CI test failures in core and cypress tests"]}],"\n",["$","li","li-2",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5828","children":"#5828"}]," feat: browser compat core (draft)"]}],"\n"]}],"\n"]}],"\n","$L1d","\n"]}],"\n","$L1e","\n","$L1f","\n","$L20","\n","$L21","\n","$L22"]}]
+f:["$","script","script-0",{"src":"/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","async":true}]
+10:["$","script","script-1",{"src":"/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","async":true}]
+11:["$","script","script-2",{"src":"/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js","async":true}]
+12:["$","$L23",null,{"children":["$","$24",null,{"name":"Next.MetadataOutlet","children":"$@25"}]}]
+1c:["$","div",null,{"className":"rounded-lg border bg-card text-card-foreground shadow-sm","children":[["$","div",null,{"className":"flex flex-col space-y-1.5 p-6 py-4","children":["$","div",null,{"className":"tracking-tight text-sm font-medium","children":["$undefined","Code Changes"]}]}],["$","div",null,{"className":"p-6 pt-0","children":["$","div",null,{"className":"grid grid-cols-2 gap-4 md:grid-cols-4","children":[["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-git-commit-vertical h-5 w-5","aria-hidden":"true","children":[["$","path","1holv5",{"d":"M12 3v6"}],["$","circle","1v7zrd",{"cx":"12","cy":"12","r":"3"}],["$","path","a9ows0",{"d":"M12 15v6"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":54}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Commits"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-file-code h-5 w-5","aria-hidden":"true","children":[["$","path","1oefj6",{"d":"M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"}],["$","path","wfsgrz",{"d":"M14 2v5a1 1 0 0 0 1 1h5"}],["$","path","1tg20x",{"d":"M10 12.5 8 15l2 2.5"}],["$","path","yinavb",{"d":"m14 12.5 2 2.5-2 2.5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":41}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Files Changed"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-green-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-up h-5 w-5 text-green-500","aria-hidden":"true","children":[["$","path","hav0vg",{"d":"m5 12 7-7 7 7"}],["$","path","x0mq9r",{"d":"M12 19V5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-green-500","children":"+7,921"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Added"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-red-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-down h-5 w-5 text-red-500","aria-hidden":"true","children":[["$","path","s699le",{"d":"M12 5v14"}],["$","path","1idqje",{"d":"m19 12-7 7-7-7"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-red-500","children":"-728"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Deleted"}]]}]]}]]}]}]]}]
+1d:["$","li","li-1",{"children":[["$","strong","strong-0",{"children":"elizaos/elizaos.github.io"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/elizaos.github.io/pull/151","children":"#151"}]," Add elizaos/docs repo tracking and claude bot exclusion"]}],"\n"]}],"\n"]}]
+1e:["$","h2","h2-2",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"🐞 Issue Triage","position":{"start":{"line":25,"column":4,"offset":2069},"end":{"line":25,"column":19,"offset":2084}}}],"position":{"start":{"line":25,"column":1,"offset":2066},"end":{"line":25,"column":19,"offset":2084}}},"children":"🐞 Issue Triage"}]
+1f:["$","h3","h3-3",{"children":"New Issues"}]
+20:["$","ul","ul-3",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"elizaos/eliza"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/5830","children":"#5830"}]," Proposed analyzing options for MCP Gateway, adding MCP servers, and integrating an x402 layer to enhance agent communication infrastructure."]}],"\n",["$","li","li-1",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/5831","children":"#5831"}]," Suggested adding functionality to show actions called and their results directly in the chat UI for better user feedback."]}],"\n"]}],"\n"]}],"\n"]}]
+21:["$","h3","h3-4",{"children":"Closed Issues"}]
+22:["$","ul","ul-4",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"elizaos/eliza"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/5619","children":"#5619"}]," Resolved an issue where Windows CI tests were failing due to incorrect path handling in CLI agent start command tests."]}],"\n"]}],"\n"]}],"\n"]}]
+25:null

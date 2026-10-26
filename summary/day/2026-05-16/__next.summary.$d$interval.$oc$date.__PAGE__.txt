@@ -1,0 +1,675 @@
+1:"$Sreact.fragment"
+2:I[4817319,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"IntervalSelector"]
+3:I[6998365,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"LlmCopyButton"]
+f:I[3642796,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],""]
+10:I[3238488,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"StatCardsDisplay"]
+17:I[4261541,["/eliza-leaderboard/_next/static/chunks/b33bcbdcb3f88354.js","/eliza-leaderboard/_next/static/chunks/8ba59154b6704904.js"],"OutletBoundary"]
+18:"$Sreact.suspense"
+4:T36db,# RFC: add `openvino` (CPU/GPU/NPU) as a `LocalRuntimeKernel` for Intel hardware
+
+## Tl;dr
+
+Wire the upstream `ggml-openvino` backend (now in `elizaOS/llama.cpp` now in Shaw's `milady/main` via his upstream-merge commit `79079c25e` (2026-05-12) and the eliza-side scaffold in [#7634](https://github.com/elizaOS/eliza/pull/7634)) into the `LocalRuntimeKernel` slot in `packages/shared/src/local-inference/types.ts`. Surface it through the recommender so Intel users on Lunar Lake / Meteor Lake / Arrow Lake / Panther Lake hosts can route inference onto the on-die NPU (or iGPU) without leaving the existing GGUF / `~/.eliza/local-inference/models/` / `llama-server` plumbing.
+
+## Why now
+
+> **Update 2026-05-13:** the Whisper-on-NPU killer-app framing in this section is now measured — Whisper-base.en INT8 = 49.8× realtime on Lunar Lake NPU, driving an end-to-end voice agent at 2.5-3.4 sec TTFA. See the "Whisper-NPU measurement" update at the bottom of this issue for numbers and repro.
+
+Pre-April 8 2026, OpenVINO and `llama.cpp` were two separate ecosystems with no GGUF interop and no shared runtime — putting NPU support into Eliza would have meant a 1-3 month engineering project. Post that date, mainline `ggml-org/llama.cpp` has a self-contained `ggml/src/ggml-openvino/` directory that compiles into the same `libggml-openvino.so` via `-DGGML_OPENVINO=ON` and selects device at runtime via `GGML_OPENVINO_DEVICE={CPU,GPU,NPU,GPU.0,GPU.1}`. Shaw merged the same backend into `milady/main` himself (commit `79079c25e`); eliza PR [#7634](https://github.com/elizaOS/eliza/pull/7634) wires a `linux-x64-openvino` target into `build-llama-cpp-dflash.mjs`.
+
+This RFC is the next step: surface that capability through Eliza's local-inference layer the same way `cuda`/`vulkan`/`metal`/`cpu` are surfaced today.
+
+## What this unlocks
+
+Hardware coverage:
+
+- Intel Lunar Lake (Core Ultra 7 258V class, ~48 TOPS NPU, Arc 140V iGPU, AVX-VNNI CPU) — every Copilot+ laptop shipping today
+- Intel Meteor Lake (~11 TOPS NPU) — ~30M devices shipped 2023-2025
+- Intel Arrow Lake (desktop chips, late 2024-2025)
+- Intel Panther Lake (~50+ TOPS NPU, late 2025-2026)
+
+The NPU specifically is **not reachable** through any of the existing runtime kernels (`vulkan`, `sycl`, `cuda`, `metal`, `cpu`). OpenVINO is the only llama.cpp path that targets it.
+
+Power efficiency: on Lunar Lake, the NPU draws ~2-3 W vs ~15-25 W for the iGPU. Running on battery, a voice-agent loop that lives on the NPU is **4-5× the battery life** of the same workload on the iGPU.
+
+Concurrent workloads: NPU runs while iGPU is gaming / video encoding / WebGL. Real pipelining for the voice agent — Whisper on NPU + body on iGPU + TTS on CPU all in flight simultaneously.
+
+## Hardware bench (Intel Core Ultra 7 258V, Lunar Lake, OpenVINO 2026.1.0)
+
+Llama-3.1-8B-Instruct Q4_K_M, single-prompt warm-load chat completion, `-c 2048 -ngl 99`:
+
+| Device | Decode tg | Prompt eval pp | Output | Notes |
+|---|---|---|---|---|
+| OpenVINO CPU (8B) | 3.89 t/s | 40.7 t/s | coherent | 8-core CPU, AVX-VNNI |
+| OpenVINO GPU (8B) | aborted on init | — | — | Intel Compute Runtime missing built-ins (`built_ins.cpp:42`); needs `apt install intel-opencl-icd` + `libigc2` + `libigdfcl2` on the host (the `intel-opencl-icd` deb alone is insufficient — it depends on the full Intel Compute Runtime stack at runtime, which is not extractable cleanly without sudo) |
+| OpenVINO NPU (8B) | crashed mid-prompt | — | — | Llama-3.1-8B exceeds the NPU plugin's per-graph memory budget on Lunar Lake (server processed 61-token prompt then died silently). Likely needs an NPU-specific OpenVINO INT4 weight-only quant; the GGUF Q4_K_M dequant→FP16→NPU path is too memory-heavy for this NPU class |
+| OpenVINO NPU (1B) | **2.07 t/s** | 72.2 t/s | coherent | Lunar Lake AI Boost 48 TOPS — Llama-3.2-1B-Instruct Q4_K_M, 77 tokens generated. Output coherent, but the NPU is **slower than the CPU** for autoregressive LLM tg — confirms NPU is well-tuned for fixed-graph CNN/audio workloads (Whisper), not the QKV/RoPE/SwiGLU hot path of token-by-token decode |
+| Vulkan iGPU (8B, W4-B kernels) | 5.7 t/s | 172 t/s | coherent | the existing baseline for this host |
+| Vulkan iGPU (3B, W4-B kernels) | **20.0 t/s** ⭐ | 285.9 t/s | coherent | **the practical winner** — Llama-3.2-3B-Instruct Q4_K_M; uses Shaw's existing W4-B Vulkan kernels (turbo3/qjl/polarquant for any tier with those quants; plain Q4_K_M here) |
+| Vulkan iGPU (3B body + 1B drafter, spec-decode) | 6.9 t/s | 137 t/s | coherent | low draft acceptance (31.8%) — overhead of running drafter + verifying outweighs the savings on this body/drafter ratio. NOT recommended |
+
+## Honest takeaways from the bench
+
+1. **The OpenVINO backend integration works end-to-end on Lunar Lake.** CPU, GPU (with full Intel Compute Runtime installed), and NPU devices are all discoverable and runnable through `GGML_OPENVINO_DEVICE`. The cherry-picked backend in `elizaOS/llama.cpp#1` is a real, working scaffold.
+
+2. **The NPU is NOT a speed win for autoregressive LLM tg today.** Llama-3.2-1B Q4_K_M on the Lunar Lake NPU clocked 2.07 t/s — slower than the CPU on the same model class. The NPU is optimized for static graphs and fixed-shape ops (CNN classifiers, audio encoders, diffusion), not the per-token KV-cache update of an autoregressive LM. Larger models (Llama-3.1-8B) outright crash on the NPU plugin due to memory budget.
+
+3. **Whisper-on-NPU remains the real product win.** Voice-agent ASR is exactly the workload the Lunar Lake NPU was designed for. That's the follow-up — not Llama bodies.
+
+4. **Smaller bodies on Vulkan/Shaw kernels beat NPU/iGPU OpenVINO for chat.** The honest fastest config we found for this hardware is **Llama-3.2-3B-Instruct Q4_K_M on Vulkan iGPU (the existing W4-B target)** — 20 t/s tg, 285 t/s pp, coherent output, ~2.4 GB iGPU memory used of 23.7 GB available. Tool-calling works. The OpenVINO/NPU path doesn't compete on this workload.
+
+5. **The right place to surface OpenVINO in the Eliza catalog**: as the **voice-agent ASR runtime** + an **opt-in inference path for users without iGPU** (Intel desktops without Arc, headless CPU-only servers, etc.). NOT as the recommended default for LLM tg on Lunar Lake laptops with iGPUs.
+
+Reference cost on the same host: plain Vulkan iGPU with Shaw's turbo3/qjl/polarquant kernels via the existing `linux-x64-vulkan` target gives 5.7 t/s tg / 172 t/s pp on Llama-3.1-8B Q4_K_M, and **20 t/s tg / 285 t/s pp on Llama-3.2-3B Q4_K_M** — both significantly faster than every OpenVINO device on the same hardware.
+
+## Concrete proposal
+
+### 1. Type extension
+
+In `packages/shared/src/local-inference/types.ts`:
+
+```diff
+ export type LocalRuntimeKernel =
+   | "cpu"
+   | "cuda"
+   | "metal"
+   | "vulkan"
+   | "rocm"
++  | "openvino"
+   ;
+```
+
+Optionally split into `openvino-cpu`, `openvino-gpu`, `openvino-npu` if the recommender needs to differentiate, but a single `openvino` slot + a runtime `device` sub-selector keeps the kernel matrix simpler. The latter is what the upstream backend does (`GGML_OPENVINO_DEVICE=...` env var, not three separate libraries).
+
+### 2. Hardware probe
+
+In `packages/app-core/src/services/local-inference/hardware.ts`, add a `detectOpenVinoDevices()` that:
+
+- Linux: probes for `/dev/dri/renderD*` (iGPU) and `/dev/accel/accel*` (NPU). Existence + readable permissions means the device is wireable.
+- Windows: probes for Intel Graphics Driver registry keys + the Neural Compute Engine registration.
+- macOS: skip (Intel Macs lack the NCE; Apple Silicon has its own thing).
+
+Result: `{ cpu: true|false, gpu: 0..n, npu: true|false }`. Empty NPU + no GPU → kernel slot is unavailable, fall back to existing recommender.
+
+### 3. Recommender wiring
+
+In `packages/app-core/src/services/local-inference/recommendation.ts`:
+
+- When a user is on a host with `npu` available, surface the existing tiers (`eliza-1-0_8b`, `eliza-1-2b`, `eliza-1-9b`, `eliza-1-27b`) with an additional `runtime: "openvino"` slot.
+- Prefer NPU > iGPU > CPU when the kernel is `openvino` (the NPU is faster *and* more power-efficient on every Intel host where it exists).
+- Battery-aware routing as a v2: when AC unplugged, prefer NPU over iGPU even if iGPU is faster.
+
+### 4. Runtime spawn plumbing
+
+In `packages/app-core/src/services/local-inference/backend.ts`:
+
+- When the active `LocalRuntimeKernel` is `openvino`, spawn `llama-server` with `GGML_OPENVINO_DEVICE` in the env, value picked by the device sub-selector (NPU / GPU / CPU).
+- Pre-flight check: confirm `libggml-openvino.so` is in the bin dir before claiming the kernel is available.
+- LD_LIBRARY_PATH includes the OpenVINO Runtime install dir.
+
+### 5. Catalog support
+
+Mark which tiers are OpenVINO-eligible. Q4_K_M / Q4_0 / Q4_1 / Q4_K / Q8_0 / FP16 are natively supported. Q5_K / Q6_K runtime-convert with a startup cost. Anything that requires a Shaw custom kernel (QJL1_256, Q4_POLAR, TBQ3) is **not** OpenVINO-eligible — flag in `kernelCaps.unsupported: ["openvino"]` to keep the recommender from routing those tiers through this path.
+
+### 6. Voice agent: Whisper on NPU
+
+Separate but related: the canonical NPU-on-laptop success story is Whisper-on-NPU at ~1 W. The OpenVINO backend covers Whisper too. The voice agent pipeline (`packages/app-core/src/services/local-inference/voice/transcriber.ts`) could route Whisper inference through the same OpenVINO path. Out of scope for this RFC, but it's the real product win.
+
+## Costs / maintenance
+
+- The `ggml-openvino/` directory is upstream-maintained — we follow ggml-org's PRs the same way we do for ggml-cuda / ggml-vulkan.
+- OpenCL + Level Zero runtime dependencies need to ship in install docs / a one-shot installer. The Eliza catalog could include a "install OpenVINO" CTA in the model picker when an Intel host is detected and the kernel is missing.
+- The W4-B custom kernels do not have OpenVINO ports today. Tiers that depend on them stay on Vulkan / CUDA / Metal / CPU. The RFC does not change that.
+
+## Out of scope
+
+- AMD XDNA NPU support — similar story (separate runtime kernel, ROCm-based, different probe). Independent RFC.
+- Qualcomm Hexagon NPU support — same.
+- A real W4-B kernel port to OpenVINO. Needs Intel-paid contributor (or a community contributor with an NPU dev box). Unblocked by this RFC.
+- Power-aware routing (battery → NPU). v2.
+
+## Links
+
+- Plan doc with full execution log: `/tmp/openvino-npu-integration-plan.md`
+- [elizaOS/llama.cpp#1](https://github.com/elizaOS/llama.cpp/pull/1) — cherry-pick of the OpenVINO backend
+- [elizaOS/eliza#7632](https://github.com/elizaOS/eliza/pull/7632) — `linux-x64-openvino` build target + submodule bump
+- [elizaOS/eliza#7628](https://github.com/elizaOS/eliza/pull/7628) — sibling `linux-x64-sycl` target (parallel Intel iGPU/CPU path, no NPU coverage)
+
+
+## Update 2026-05-13 — interaction with #7635 (SWA + DFlash gate)
+
+Subsequent testing on `Qwen3.6-27B + spiritbuun/Qwen3.6-27B-DFlash-GGUF` through the same OpenVINO build surfaced [#7635](https://github.com/elizaOS/eliza/issues/7635): `common_speculative_is_compat: the target context does not support partial sequence removal` — DFlash is silently disabled for any SWA-based body, regardless of which backend (Vulkan / OpenVINO-iGPU / OpenVINO-NPU) it's running on. That means:
+
+- The OpenVINO/NPU path is still real (the bench numbers in this RFC stand for non-spec-decode workloads — Whisper ASR is the canonical win)
+- But **OpenVINO/NPU + 27B-class DFlash for chat-tg is double-blocked** today: the NPU plugin can't fit the 8B+ body, and the SWA gate would block DFlash even if it did
+- Practical chat-tg on Lunar Lake unified-memory: still **Vulkan iGPU + Shaw W4-B kernels + smaller body** (Llama-3.2-3B @ 20 t/s, Llama-3.1-8B @ 5.7 t/s — clean numbers, 71 °C, no contention)
+
+The right framing remains: surface OpenVINO as the **voice-agent ASR runtime + CPU-only fallback**, not the primary autoregressive chat runtime on Intel hardware.
+
+## Update 2026-05-13 — Whisper-NPU measurement (the killer-app claim, now measured)
+
+The "Voice agent: Whisper on NPU" item at the bottom of the Concrete proposal section was forward-looking when first filed. It's now measured.
+
+Setup:
+
+- OpenVINO 2026.1.0 Runtime tarball
+- Intel pre-converted `whisper-base.en-int8-ov/` IR (81 MB, INT8)
+- `openvino_genai.WhisperPipeline(device="NPU")`
+- 10.4 second LibriSpeech-style English clip
+- Cool laptop, fresh process, no contention
+
+Result: **210 ms avg generation time = 49.8× realtime** on the NPU. CPU and GPU comparisons on the same setup:
+
+| Device | Avg gen | RTF | Notes |
+|---|---|---|---|
+| CPU (OpenVINO) | 349 ms | 29.9× | 8-core, AVX-VNNI |
+| GPU (OpenVINO) | 267 ms | 39.1× | Arc 140V via Intel Compute Runtime |
+| **NPU (OpenVINO)** | **210 ms** | **49.8×** | **AI Boost 48 TOPS — winner** |
+
+End-to-end voice agent (Whisper-NPU + Llama-Vulkan + Kokoro-CPU, concurrent pipelining, phrase-chunked TTS streaming):
+
+| LLM body | TTFA | Sustained tg | Notes |
+|---|---|---|---|
+| Llama-3.2-1B Q4_K_M | 2.54 s | 32.4 t/s | best TTFA — 1B quality is the tradeoff |
+| Llama-3.2-3B Q4_K_M | 3.36 s | 18.0 t/s | recommended balance for usable assistant quality |
+| Llama-3.1-8B Q4_K_M | 3.32 s | 9.7 t/s | LLM is slow enough that Kokoro catches up |
+
+This is the practical voice-agent UX target on Lunar Lake **today, without sudo, without upstream maintainer action**. The forward-looking "ChatGPT voice mode on laptop" framing in the original RFC is no longer aspirational — the gap to 1.5 s TTFA requires only landing [elizaOS/llama.cpp#3](https://github.com/elizaOS/llama.cpp/pull/3) (SWA spec-decode probe) and a one-shot host install of `intel-opencl-icd` / `libigc2` / `libigdfcl2`.
+
+This update reinforces the RFC's core proposal: **surface OpenVINO as the voice-agent ASR runtime** in the recommender. The NPU is the right place for Whisper. The autoregressive LLM body stays on Vulkan iGPU + Shaw W4-B kernels for the foreseeable future.
+
+5:T6ad,## 🚀 Supercharge your agent's DeFi routing with Unified Agent Router
+
+Hi! I came across **elizaOS/eliza** and noticed it performs DeFi operations. I wanted to share a tool that could significantly improve route quality and save gas for your users.
+
+### What is it?
+
+**[Unified Agent Router](https://github.com/lucascordone-spec/unified-agent-router)** is an MCP server that aggregates **1inch** and **Rango Exchange** simultaneously, always returning the best available route for any swap or bridge operation.
+
+### Why it matters for your agent
+
+Instead of relying on a single DEX aggregator (which may not always have the best price), your agent would:
+- ✅ Query **1inch + Rango** in parallel with a single tool call
+- ✅ Automatically select the **best price** after gas costs
+- ✅ Get **transaction-ready calldata** — no extra steps
+- ✅ Support **10+ EVM chains** including Arbitrum, Base, Optimism, Polygon, Ethereum
+
+### Integration (takes ~2 minutes)
+
+**Option A — MCP (works with Claude, Cursor, any MCP client):**
+```bash
+npx @smithery/cli install @lucascordone-spec/unified-agent-router --client claude
+```
+
+**Option B — ElizaOS plugin:**
+```typescript
+// Your agent gets a new tool: get_best_route
+// Call it with: fromChainId, toChainId, fromToken, toToken, amount
+```
+
+### Links
+- 🔗 GitHub: https://github.com/lucascordone-spec/unified-agent-router
+- 🛠️ Smithery: https://smithery.ai/server/@lucascordone-spec/unified-agent-router
+
+Happy to answer any questions or help with integration. Would this be useful for your project?
+
+---
+*This is an automated outreach from the Unified Agent Router project. If this is not relevant to your project, feel free to close this issue.*6:T1a20,Same template as before. Fill it in exactly like this:
+
+---
+
+**Title:**
+```
+feat: add plugin-ezpath — pay-per-request DEX meta-router for Base mainnet
+```
+
+**Relates to:** *(leave blank)*
+
+**Risks:** Low — adds new plugin directory only, zero changes to existing files
+
+**What does this PR do?**
+```
+Adds @elizaos/plugin-ezpath — a connector plugin giving Eliza agents access to EZ-Path, a pay-per-request DEX meta-router on Base mainnet. Races 0x, ParaSwap, Aerodrome, and Uniswap V3 concurrently and returns the highest buyAmount for any ERC-20 swap. Payment handled automatically via X402 / EIP-3009 USDC TransferWithAuthorization — no API key, no subscription, no allowance required. Supports basic ($0.03), resilient ($0.10), and institutional ($0.50) execution tiers.
+```
+
+**What kind of change is this?** Features (non-breaking change which adds functionality)
+
+**Documentation changes needed?** My changes do not require a change to the project documentation.
+
+**Where should a reviewer start?** `plugins/plugin-ezpath/src/index.ts`
+
+**Detailed testing steps:**
+```
+1. Add plugin to agent runtime with EZPATH_WALLET_PRIVATE_KEY set to a Base wallet holding USDC
+2. Send: "What's the best rate to swap 1 USDC for WETH on Base?"
+
+Expected output:
+EZ-Path quote received.
+tier=basic | winner=0x | mode=direct
+price=0.000449 buyToken per sellToken
+buyAmount=449123456789012
+sources=Native_V2 (100%)
+settlement_tx=0xf6c89ddf...
+
+Live endpoint: https://ezpath.myezverse.xyz (60/60 validation checks passing)
+```
+
+**Discord username:** `ezverse.eth`
+
+<!-- greptile_comment -->
+
+<h3>Greptile Summary</h3>
+
+This PR adds `@elizaos/plugin-ezpath`, a new connector plugin that lets Eliza agents fetch DEX swap quotes on Base mainnet by automatically negotiating X402 USDC micro-payments via EIP-3009 `TransferWithAuthorization`. The plugin is self-contained and touches no existing files, but several correctness and security issues need attention before it should be merged.
+
+- **Tier configuration bug**: `QuoteParamsSchema` applies `.default(\"basic\")` to the `tier` field, so `params.tier` is always a non-null string and the `params.tier ?? tier` fallback in the handler never reaches the `EZPATH_TIER` runtime setting — agents configured with `resilient` or `institutional` silently receive `basic` quotes.
+- **Unvalidated payment destination**: The EIP-3009 authorization's `to` address is taken verbatim from the `X-402-Address` 402 response header with no allowlist or cross-check; a spoofed response can redirect USDC payments to an attacker-controlled address.
+- **Over-broad action trigger**: `validate()` matches on common words and will activate — and spend USDC — on many non-swap messages.
+
+<h3>Confidence Score: 2/5</h3>
+
+Not safe to merge: the action can spend USDC on unrelated messages, the runtime tier setting is silently ignored, and the payment destination is accepted from an unvalidated HTTP response header.
+
+The payment destination for every signed USDC transfer comes from a server-controlled HTTP header with no validation, the agent's configured execution tier is never actually used due to the Zod default, and the keyword-based trigger is broad enough to fire on everyday conversation. All three issues affect the core payment and routing path introduced by this PR.
+
+src/client.ts (unvalidated toll address) and src/actions/getQuote.ts (tier default bug and over-broad validate) need the most attention before merging.
+
+<details open><summary><h3>Security Review</h3></summary>
+
+- **Unvalidated payment destination** (`src/client.ts`): The EIP-3009 `TransferWithAuthorization` is signed with `to` set to whatever address appears in the `X-402-Address` header of the 402 probe. No comparison against a known-good or configured address is performed. A DNS/BGP-level attacker or a compromised server could substitute an attacker-controlled address and cause the agent to authorize a USDC transfer to that address on every quote request.
+- **Private key in runtime settings**: `EZPATH_WALLET_PRIVATE_KEY` is held in agent runtime settings as a plain string, directly controlling a live Base wallet with USDC.
+</details>
+
+<h3>Important Files Changed</h3>
+
+| Filename | Overview |
+|----------|----------|
+| plugins/plugin-ezpath/src/client.ts | Core X402 payment client: signs EIP-3009 USDC TransferWithAuthorization and retries with payment. Toll address is taken unvalidated from the 402 response header, creating a fund-redirection risk if the endpoint is compromised or spoofed. |
+| plugins/plugin-ezpath/src/actions/getQuote.ts | Action handler for GET_SWAP_QUOTE: two bugs — the Zod default makes the runtime EZPATH_TIER setting unreachable, and the validate keywords are broad enough to fire the action (and spend USDC) on unrelated messages. |
+| plugins/plugin-ezpath/src/index.ts | Plugin barrel: exports client types and registers the single GET_SWAP_QUOTE action. No issues. |
+| plugins/plugin-ezpath/package.json | Standard plugin manifest; pins viem and zod as runtime deps, uses workspace peer for @elizaos/core. No critical issues. |
+| plugins/plugin-ezpath/tsconfig.json | TypeScript config with strict: false, weakening type safety for a plugin that handles private keys and payment signing. |
+| plugins/plugin-ezpath/__tests__/plugin.test.ts | Covers plugin shape and happy-path / error-path X402 negotiation with mocked fetch. Tests are well-structured but do not cover the over-broad validate trigger or the tier fallback logic. |
+
+</details>
+
+<h3>Sequence Diagram</h3>
+
+```mermaid
+sequenceDiagram
+    participant U as User Message
+    participant A as GET_SWAP_QUOTE Action
+    participant LLM as LLM (param extraction)
+    participant C as getQuote() client
+    participant API as EZ-Path API
+
+    U->>A: message containing quote keywords
+    A->>A: validate() keyword match
+    A->>LLM: generateObject(QuoteParamsSchema)
+    LLM-->>A: sellToken, buyToken, sellAmount, tier
+    A->>C: getQuote params + privateKey
+    C->>API: GET /api/v1/quote (no payment)
+    API-->>C: 402 Payment Required + toll address + tier pricing
+    C->>C: Sign EIP-3009 TransferWithAuthorization
+    C->>API: GET /api/v1/quote + X-Payment header
+    API-->>C: 200 OK with quote body + settlement tx header
+    C-->>A: QuoteResult
+    A-->>U: Formatted quote response
+```
+
+<sub>Reviews (1): Last reviewed commit: ["feat: add plugin-ezpath DEX meta-router ..."](https://github.com/elizaos/eliza/commit/1aad4fb133a2506a0dc48ccc2d11b5c95544ed23) | [Re-trigger Greptile](https://app.greptile.com/api/retrigger?id=32414858)</sub>
+
+> Greptile also left **6 inline comments** on this PR.
+
+<!-- /greptile_comment -->7:T7df,# Overall Project Summary (May 16, 2026)
+
+Development on May 16 focused on advancing local inference capabilities through OpenVINO hardware validation and addressing compatibility challenges for M-RoPE model architectures. The team successfully integrated backend foundations for Intel hardware while continuing to investigate performance bottlenecks for high-parameter models on Lunar Lake iGPUs.
+
+## 🚨 Needs Attention
+- **Blocked Issues/PRs**: [elizaos/eliza#7638](https://github.com/elizaos/eliza/issues/7638) — Performance issues with Qwen2.5-14B on Lunar Lake iGPUs remain unresolved, requiring deeper kernel-selection tuning in `ggml-vulkan`.
+
+## ✅ Completed Work
+**Local Inference & Hardware Validation**
+*   Successfully integrated the OpenVINO runtime backend foundation and ASR-side wiring, completing the scope for the current phase ([elizaos/eliza#7633](https://github.com/elizaos/eliza/issues/7633)).
+*   Verified a mitigation patch for M-RoPE model architectures to prevent speculative decoding acceptance collapse, ensuring stable fallback to body-only inference ([elizaos/eliza#7631](https://github.com/elizaos/eliza/issues/7631)).
+
+## 🏗️ Work in Progress
+**New Pull Requests**
+*   **elizaos/eliza**:
+    *   [#7756](https://github.com/elizaos/eliza/pull/7756): feat: add native macOS Swift shell.
+    *   [#7735](https://github.com/elizaos/eliza/pull/7735): feat: add plugin-ezpath — pay-per-request DEX meta-router for Base mainnet.
+
+**Active Discussions**
+*   [elizaos/eliza#7631](https://github.com/elizaos/eliza/issues/7631): Ongoing monitoring of speculative decoding compatibility with M-RoPE models.
+*   [elizaos/eliza#7638](https://github.com/elizaos/eliza/issues/7638): Investigation into Vulkan bandwidth efficiency and performance cliffs on Lunar Lake hardware.
+
+## 🐞 Issue Triage
+**Closed Issues**
+*   **elizaos/eliza**: [OpenVINO Runtime Integration](https://github.com/elizaos/eliza/issues/7633) — RFC closed following successful backend and ASR wiring integration.0:{"buildId":"US8XLB_zHXYj_PVAECGcd","rsc":["$","$1","c",{"children":[["$","div",null,{"className":"container mx-auto px-6 py-8 md:px-8","children":["$","div",null,{"className":"mx-auto max-w-4xl","children":[["$","div",null,{"className":"mb-4 flex flex-col justify-between sm:flex-row","children":[["$","$L2",null,{"currentInterval":"day","currentDate":"2026-05-16"}],["$","$L3",null,{"metrics":{"date":"2026-05-16","interval":{"intervalStart":"$D2026-05-16T00:00:00.000Z","intervalEnd":"$D2026-05-17T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":2,"merged":0,"total":2},"issues":{"new":1,"closed":2,"total":2},"activeContributors":4,"codeChanges":{"additions":0,"deletions":0,"files":0,"commitCount":7},"topContributors":[{"username":"infiniteezverse","avatarUrl":"https://avatars.githubusercontent.com/u/175495935?u=2718a0ed681d6fd243a4a32d69049bdd43ab1a87&v=4","totalScore":40.1324294058288,"prScore":39.9324294058288,"issueScore":0,"reviewScore":0,"commentScore":0.2,"summary":"infiniteezverse: Focused on expanding ecosystem capabilities by opening PR #7735 in elizaos/eliza to introduce plugin-ezpath, a pay-per-request DEX meta-router. This feature work involved a substantial addition of 653 lines across code, tests, configuration, and documentation."},{"username":"Dexploarer","avatarUrl":"https://avatars.githubusercontent.com/u/211557447?u=21a243d61cc1f87574328ae07fc64d7d7577b53d&v=4","totalScore":35.2117738965761,"prScore":35.2117738965761,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"Dexploarer: Focused on expanding platform capabilities by opening PR #7756 in elizaos/eliza to implement a native macOS Swift shell. This effort involved extensive codebase modifications across 3,747 files, reflecting a primary focus on feature development and broad architectural adjustments."},{"username":"greptile-apps","avatarUrl":"https://avatars.githubusercontent.com/in/867647?v=4","totalScore":4.5,"prScore":0,"issueScore":0,"reviewScore":4.5,"commentScore":0,"summary":"greptile-apps: No activity today."},{"username":"lucascordone-spec","avatarUrl":"https://avatars.githubusercontent.com/u/248399312?u=2e30f388da9163b05fc22f64815434f2e8eef7a1&v=4","totalScore":4.1,"prScore":0,"issueScore":4.1,"reviewScore":0,"commentScore":0,"summary":null}],"focusAreas":[],"topIssues":[{"id":"I_kwDOMT5cIs8AAAABCEBTMA","title":"RFC: add openvino (CPU/GPU/NPU) runtime kernel for Intel hardware — bench numbers + scaffolding ready","author":"NubsCarson","number":7633,"repository":"elizaos/eliza","body":"$4","createdAt":"2026-05-12T23:42:42Z","closedAt":"2026-05-16T15:49:01Z","state":"CLOSED","commentCount":3},{"id":"I_kwDOMT5cIs8AAAABCdUExQ","title":"[Tool Suggestion] Unified DeFi Router — better swap/bridge routes for your agent","author":"lucascordone-spec","number":7748,"repository":"elizaos/eliza","body":"$5","createdAt":"2026-05-16T12:51:29Z","closedAt":"2026-05-16T15:39:17Z","state":"CLOSED","commentCount":0}],"topPullRequests":[{"id":"PR_kwDOMT5cIs7cRjG9","title":"feat: add native macOS Swift shell","author":"Dexploarer","number":7756,"body":"## Summary\n- add a separate SwiftUI macOS shell under packages/app-core/platforms/macos\n- surface elizaOS runtime, chat, plugins/apps, LifeOps, health, browser, cloud, release, settings, diagnostics, and menu bar dashboards\n- align renderer handoffs with existing elizaOS routes, including appWindow=1#/apps/<slug>, shell surface tabs, and browser browse handoff\n\n## Validation\n- swift test\n- ./script/build_and_run.sh --verify\n- live app inspection of Dashboard, Plugins app catalog, Console renderer fallback, Settings Appearance, and app-catalog handoff","repository":"elizaos/eliza","createdAt":"2026-05-16T21:12:51Z","mergedAt":null,"additions":7303,"deletions":0},{"id":"PR_kwDOMT5cIs7cH9I8","title":"feat: add plugin-ezpath — pay-per-request DEX meta-router for Base mainnet","author":"infiniteezverse","number":7735,"body":"$6","repository":"elizaos/eliza","createdAt":"2026-05-16T01:37:20Z","mergedAt":null,"additions":653,"deletions":0}],"detailedContributorSummaries":{"Dexploarer":"Dexploarer: Focused on expanding platform capabilities by opening PR #7756 in elizaos/eliza to implement a native macOS Swift shell. This effort involved extensive codebase modifications across 3,747 files, reflecting a primary focus on feature development and broad architectural adjustments.","greptile-apps":"greptile-apps: No activity today.","infiniteezverse":"infiniteezverse: Focused on expanding ecosystem capabilities by opening PR #7735 in elizaos/eliza to introduce plugin-ezpath, a pay-per-request DEX meta-router. This feature work involved a substantial addition of 653 lines across code, tests, configuration, and documentation."}},"summaryContent":"$7","className":"self-end sm:self-start"}]]}],"$L8","$L9","$La"]}]}],["$Lb","$Lc","$Ld"],"$Le"]}],"loading":null,"isPartial":false}
+8:["$","div",null,{"className":"mb-6","children":["$","div",null,{"className":"flex items-center justify-between","children":[[["$","$Lf",null,{"href":"/summary/day/2026-05-15","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left mr-2 h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"children":"Previous"}],false],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$Lf",null,{"href":"/summary/day/2026-05-15","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Previous"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]],["$","div",null,{"className":"flex flex-col items-center","children":[["$","div",null,{"className":"text-sm font-medium text-gray-500","children":["Daily"," Summary"]}],["$","time",null,{"dateTime":"2026-05-16","className":"text-md font-bold","children":"May 16, 2026"}]]}],[["$","$Lf",null,{"href":"/summary/day/2026-05-17","children":[false,["$","span",null,{"children":"Next"}],["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right ml-2 h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}]],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$Lf",null,{"href":"/summary/day/2026-05-17","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Next"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]]]}]}]
+11:T36db,# RFC: add `openvino` (CPU/GPU/NPU) as a `LocalRuntimeKernel` for Intel hardware
+
+## Tl;dr
+
+Wire the upstream `ggml-openvino` backend (now in `elizaOS/llama.cpp` now in Shaw's `milady/main` via his upstream-merge commit `79079c25e` (2026-05-12) and the eliza-side scaffold in [#7634](https://github.com/elizaOS/eliza/pull/7634)) into the `LocalRuntimeKernel` slot in `packages/shared/src/local-inference/types.ts`. Surface it through the recommender so Intel users on Lunar Lake / Meteor Lake / Arrow Lake / Panther Lake hosts can route inference onto the on-die NPU (or iGPU) without leaving the existing GGUF / `~/.eliza/local-inference/models/` / `llama-server` plumbing.
+
+## Why now
+
+> **Update 2026-05-13:** the Whisper-on-NPU killer-app framing in this section is now measured — Whisper-base.en INT8 = 49.8× realtime on Lunar Lake NPU, driving an end-to-end voice agent at 2.5-3.4 sec TTFA. See the "Whisper-NPU measurement" update at the bottom of this issue for numbers and repro.
+
+Pre-April 8 2026, OpenVINO and `llama.cpp` were two separate ecosystems with no GGUF interop and no shared runtime — putting NPU support into Eliza would have meant a 1-3 month engineering project. Post that date, mainline `ggml-org/llama.cpp` has a self-contained `ggml/src/ggml-openvino/` directory that compiles into the same `libggml-openvino.so` via `-DGGML_OPENVINO=ON` and selects device at runtime via `GGML_OPENVINO_DEVICE={CPU,GPU,NPU,GPU.0,GPU.1}`. Shaw merged the same backend into `milady/main` himself (commit `79079c25e`); eliza PR [#7634](https://github.com/elizaOS/eliza/pull/7634) wires a `linux-x64-openvino` target into `build-llama-cpp-dflash.mjs`.
+
+This RFC is the next step: surface that capability through Eliza's local-inference layer the same way `cuda`/`vulkan`/`metal`/`cpu` are surfaced today.
+
+## What this unlocks
+
+Hardware coverage:
+
+- Intel Lunar Lake (Core Ultra 7 258V class, ~48 TOPS NPU, Arc 140V iGPU, AVX-VNNI CPU) — every Copilot+ laptop shipping today
+- Intel Meteor Lake (~11 TOPS NPU) — ~30M devices shipped 2023-2025
+- Intel Arrow Lake (desktop chips, late 2024-2025)
+- Intel Panther Lake (~50+ TOPS NPU, late 2025-2026)
+
+The NPU specifically is **not reachable** through any of the existing runtime kernels (`vulkan`, `sycl`, `cuda`, `metal`, `cpu`). OpenVINO is the only llama.cpp path that targets it.
+
+Power efficiency: on Lunar Lake, the NPU draws ~2-3 W vs ~15-25 W for the iGPU. Running on battery, a voice-agent loop that lives on the NPU is **4-5× the battery life** of the same workload on the iGPU.
+
+Concurrent workloads: NPU runs while iGPU is gaming / video encoding / WebGL. Real pipelining for the voice agent — Whisper on NPU + body on iGPU + TTS on CPU all in flight simultaneously.
+
+## Hardware bench (Intel Core Ultra 7 258V, Lunar Lake, OpenVINO 2026.1.0)
+
+Llama-3.1-8B-Instruct Q4_K_M, single-prompt warm-load chat completion, `-c 2048 -ngl 99`:
+
+| Device | Decode tg | Prompt eval pp | Output | Notes |
+|---|---|---|---|---|
+| OpenVINO CPU (8B) | 3.89 t/s | 40.7 t/s | coherent | 8-core CPU, AVX-VNNI |
+| OpenVINO GPU (8B) | aborted on init | — | — | Intel Compute Runtime missing built-ins (`built_ins.cpp:42`); needs `apt install intel-opencl-icd` + `libigc2` + `libigdfcl2` on the host (the `intel-opencl-icd` deb alone is insufficient — it depends on the full Intel Compute Runtime stack at runtime, which is not extractable cleanly without sudo) |
+| OpenVINO NPU (8B) | crashed mid-prompt | — | — | Llama-3.1-8B exceeds the NPU plugin's per-graph memory budget on Lunar Lake (server processed 61-token prompt then died silently). Likely needs an NPU-specific OpenVINO INT4 weight-only quant; the GGUF Q4_K_M dequant→FP16→NPU path is too memory-heavy for this NPU class |
+| OpenVINO NPU (1B) | **2.07 t/s** | 72.2 t/s | coherent | Lunar Lake AI Boost 48 TOPS — Llama-3.2-1B-Instruct Q4_K_M, 77 tokens generated. Output coherent, but the NPU is **slower than the CPU** for autoregressive LLM tg — confirms NPU is well-tuned for fixed-graph CNN/audio workloads (Whisper), not the QKV/RoPE/SwiGLU hot path of token-by-token decode |
+| Vulkan iGPU (8B, W4-B kernels) | 5.7 t/s | 172 t/s | coherent | the existing baseline for this host |
+| Vulkan iGPU (3B, W4-B kernels) | **20.0 t/s** ⭐ | 285.9 t/s | coherent | **the practical winner** — Llama-3.2-3B-Instruct Q4_K_M; uses Shaw's existing W4-B Vulkan kernels (turbo3/qjl/polarquant for any tier with those quants; plain Q4_K_M here) |
+| Vulkan iGPU (3B body + 1B drafter, spec-decode) | 6.9 t/s | 137 t/s | coherent | low draft acceptance (31.8%) — overhead of running drafter + verifying outweighs the savings on this body/drafter ratio. NOT recommended |
+
+## Honest takeaways from the bench
+
+1. **The OpenVINO backend integration works end-to-end on Lunar Lake.** CPU, GPU (with full Intel Compute Runtime installed), and NPU devices are all discoverable and runnable through `GGML_OPENVINO_DEVICE`. The cherry-picked backend in `elizaOS/llama.cpp#1` is a real, working scaffold.
+
+2. **The NPU is NOT a speed win for autoregressive LLM tg today.** Llama-3.2-1B Q4_K_M on the Lunar Lake NPU clocked 2.07 t/s — slower than the CPU on the same model class. The NPU is optimized for static graphs and fixed-shape ops (CNN classifiers, audio encoders, diffusion), not the per-token KV-cache update of an autoregressive LM. Larger models (Llama-3.1-8B) outright crash on the NPU plugin due to memory budget.
+
+3. **Whisper-on-NPU remains the real product win.** Voice-agent ASR is exactly the workload the Lunar Lake NPU was designed for. That's the follow-up — not Llama bodies.
+
+4. **Smaller bodies on Vulkan/Shaw kernels beat NPU/iGPU OpenVINO for chat.** The honest fastest config we found for this hardware is **Llama-3.2-3B-Instruct Q4_K_M on Vulkan iGPU (the existing W4-B target)** — 20 t/s tg, 285 t/s pp, coherent output, ~2.4 GB iGPU memory used of 23.7 GB available. Tool-calling works. The OpenVINO/NPU path doesn't compete on this workload.
+
+5. **The right place to surface OpenVINO in the Eliza catalog**: as the **voice-agent ASR runtime** + an **opt-in inference path for users without iGPU** (Intel desktops without Arc, headless CPU-only servers, etc.). NOT as the recommended default for LLM tg on Lunar Lake laptops with iGPUs.
+
+Reference cost on the same host: plain Vulkan iGPU with Shaw's turbo3/qjl/polarquant kernels via the existing `linux-x64-vulkan` target gives 5.7 t/s tg / 172 t/s pp on Llama-3.1-8B Q4_K_M, and **20 t/s tg / 285 t/s pp on Llama-3.2-3B Q4_K_M** — both significantly faster than every OpenVINO device on the same hardware.
+
+## Concrete proposal
+
+### 1. Type extension
+
+In `packages/shared/src/local-inference/types.ts`:
+
+```diff
+ export type LocalRuntimeKernel =
+   | "cpu"
+   | "cuda"
+   | "metal"
+   | "vulkan"
+   | "rocm"
++  | "openvino"
+   ;
+```
+
+Optionally split into `openvino-cpu`, `openvino-gpu`, `openvino-npu` if the recommender needs to differentiate, but a single `openvino` slot + a runtime `device` sub-selector keeps the kernel matrix simpler. The latter is what the upstream backend does (`GGML_OPENVINO_DEVICE=...` env var, not three separate libraries).
+
+### 2. Hardware probe
+
+In `packages/app-core/src/services/local-inference/hardware.ts`, add a `detectOpenVinoDevices()` that:
+
+- Linux: probes for `/dev/dri/renderD*` (iGPU) and `/dev/accel/accel*` (NPU). Existence + readable permissions means the device is wireable.
+- Windows: probes for Intel Graphics Driver registry keys + the Neural Compute Engine registration.
+- macOS: skip (Intel Macs lack the NCE; Apple Silicon has its own thing).
+
+Result: `{ cpu: true|false, gpu: 0..n, npu: true|false }`. Empty NPU + no GPU → kernel slot is unavailable, fall back to existing recommender.
+
+### 3. Recommender wiring
+
+In `packages/app-core/src/services/local-inference/recommendation.ts`:
+
+- When a user is on a host with `npu` available, surface the existing tiers (`eliza-1-0_8b`, `eliza-1-2b`, `eliza-1-9b`, `eliza-1-27b`) with an additional `runtime: "openvino"` slot.
+- Prefer NPU > iGPU > CPU when the kernel is `openvino` (the NPU is faster *and* more power-efficient on every Intel host where it exists).
+- Battery-aware routing as a v2: when AC unplugged, prefer NPU over iGPU even if iGPU is faster.
+
+### 4. Runtime spawn plumbing
+
+In `packages/app-core/src/services/local-inference/backend.ts`:
+
+- When the active `LocalRuntimeKernel` is `openvino`, spawn `llama-server` with `GGML_OPENVINO_DEVICE` in the env, value picked by the device sub-selector (NPU / GPU / CPU).
+- Pre-flight check: confirm `libggml-openvino.so` is in the bin dir before claiming the kernel is available.
+- LD_LIBRARY_PATH includes the OpenVINO Runtime install dir.
+
+### 5. Catalog support
+
+Mark which tiers are OpenVINO-eligible. Q4_K_M / Q4_0 / Q4_1 / Q4_K / Q8_0 / FP16 are natively supported. Q5_K / Q6_K runtime-convert with a startup cost. Anything that requires a Shaw custom kernel (QJL1_256, Q4_POLAR, TBQ3) is **not** OpenVINO-eligible — flag in `kernelCaps.unsupported: ["openvino"]` to keep the recommender from routing those tiers through this path.
+
+### 6. Voice agent: Whisper on NPU
+
+Separate but related: the canonical NPU-on-laptop success story is Whisper-on-NPU at ~1 W. The OpenVINO backend covers Whisper too. The voice agent pipeline (`packages/app-core/src/services/local-inference/voice/transcriber.ts`) could route Whisper inference through the same OpenVINO path. Out of scope for this RFC, but it's the real product win.
+
+## Costs / maintenance
+
+- The `ggml-openvino/` directory is upstream-maintained — we follow ggml-org's PRs the same way we do for ggml-cuda / ggml-vulkan.
+- OpenCL + Level Zero runtime dependencies need to ship in install docs / a one-shot installer. The Eliza catalog could include a "install OpenVINO" CTA in the model picker when an Intel host is detected and the kernel is missing.
+- The W4-B custom kernels do not have OpenVINO ports today. Tiers that depend on them stay on Vulkan / CUDA / Metal / CPU. The RFC does not change that.
+
+## Out of scope
+
+- AMD XDNA NPU support — similar story (separate runtime kernel, ROCm-based, different probe). Independent RFC.
+- Qualcomm Hexagon NPU support — same.
+- A real W4-B kernel port to OpenVINO. Needs Intel-paid contributor (or a community contributor with an NPU dev box). Unblocked by this RFC.
+- Power-aware routing (battery → NPU). v2.
+
+## Links
+
+- Plan doc with full execution log: `/tmp/openvino-npu-integration-plan.md`
+- [elizaOS/llama.cpp#1](https://github.com/elizaOS/llama.cpp/pull/1) — cherry-pick of the OpenVINO backend
+- [elizaOS/eliza#7632](https://github.com/elizaOS/eliza/pull/7632) — `linux-x64-openvino` build target + submodule bump
+- [elizaOS/eliza#7628](https://github.com/elizaOS/eliza/pull/7628) — sibling `linux-x64-sycl` target (parallel Intel iGPU/CPU path, no NPU coverage)
+
+
+## Update 2026-05-13 — interaction with #7635 (SWA + DFlash gate)
+
+Subsequent testing on `Qwen3.6-27B + spiritbuun/Qwen3.6-27B-DFlash-GGUF` through the same OpenVINO build surfaced [#7635](https://github.com/elizaOS/eliza/issues/7635): `common_speculative_is_compat: the target context does not support partial sequence removal` — DFlash is silently disabled for any SWA-based body, regardless of which backend (Vulkan / OpenVINO-iGPU / OpenVINO-NPU) it's running on. That means:
+
+- The OpenVINO/NPU path is still real (the bench numbers in this RFC stand for non-spec-decode workloads — Whisper ASR is the canonical win)
+- But **OpenVINO/NPU + 27B-class DFlash for chat-tg is double-blocked** today: the NPU plugin can't fit the 8B+ body, and the SWA gate would block DFlash even if it did
+- Practical chat-tg on Lunar Lake unified-memory: still **Vulkan iGPU + Shaw W4-B kernels + smaller body** (Llama-3.2-3B @ 20 t/s, Llama-3.1-8B @ 5.7 t/s — clean numbers, 71 °C, no contention)
+
+The right framing remains: surface OpenVINO as the **voice-agent ASR runtime + CPU-only fallback**, not the primary autoregressive chat runtime on Intel hardware.
+
+## Update 2026-05-13 — Whisper-NPU measurement (the killer-app claim, now measured)
+
+The "Voice agent: Whisper on NPU" item at the bottom of the Concrete proposal section was forward-looking when first filed. It's now measured.
+
+Setup:
+
+- OpenVINO 2026.1.0 Runtime tarball
+- Intel pre-converted `whisper-base.en-int8-ov/` IR (81 MB, INT8)
+- `openvino_genai.WhisperPipeline(device="NPU")`
+- 10.4 second LibriSpeech-style English clip
+- Cool laptop, fresh process, no contention
+
+Result: **210 ms avg generation time = 49.8× realtime** on the NPU. CPU and GPU comparisons on the same setup:
+
+| Device | Avg gen | RTF | Notes |
+|---|---|---|---|
+| CPU (OpenVINO) | 349 ms | 29.9× | 8-core, AVX-VNNI |
+| GPU (OpenVINO) | 267 ms | 39.1× | Arc 140V via Intel Compute Runtime |
+| **NPU (OpenVINO)** | **210 ms** | **49.8×** | **AI Boost 48 TOPS — winner** |
+
+End-to-end voice agent (Whisper-NPU + Llama-Vulkan + Kokoro-CPU, concurrent pipelining, phrase-chunked TTS streaming):
+
+| LLM body | TTFA | Sustained tg | Notes |
+|---|---|---|---|
+| Llama-3.2-1B Q4_K_M | 2.54 s | 32.4 t/s | best TTFA — 1B quality is the tradeoff |
+| Llama-3.2-3B Q4_K_M | 3.36 s | 18.0 t/s | recommended balance for usable assistant quality |
+| Llama-3.1-8B Q4_K_M | 3.32 s | 9.7 t/s | LLM is slow enough that Kokoro catches up |
+
+This is the practical voice-agent UX target on Lunar Lake **today, without sudo, without upstream maintainer action**. The forward-looking "ChatGPT voice mode on laptop" framing in the original RFC is no longer aspirational — the gap to 1.5 s TTFA requires only landing [elizaOS/llama.cpp#3](https://github.com/elizaOS/llama.cpp/pull/3) (SWA spec-decode probe) and a one-shot host install of `intel-opencl-icd` / `libigc2` / `libigdfcl2`.
+
+This update reinforces the RFC's core proposal: **surface OpenVINO as the voice-agent ASR runtime** in the recommender. The NPU is the right place for Whisper. The autoregressive LLM body stays on Vulkan iGPU + Shaw W4-B kernels for the foreseeable future.
+
+12:T6ad,## 🚀 Supercharge your agent's DeFi routing with Unified Agent Router
+
+Hi! I came across **elizaOS/eliza** and noticed it performs DeFi operations. I wanted to share a tool that could significantly improve route quality and save gas for your users.
+
+### What is it?
+
+**[Unified Agent Router](https://github.com/lucascordone-spec/unified-agent-router)** is an MCP server that aggregates **1inch** and **Rango Exchange** simultaneously, always returning the best available route for any swap or bridge operation.
+
+### Why it matters for your agent
+
+Instead of relying on a single DEX aggregator (which may not always have the best price), your agent would:
+- ✅ Query **1inch + Rango** in parallel with a single tool call
+- ✅ Automatically select the **best price** after gas costs
+- ✅ Get **transaction-ready calldata** — no extra steps
+- ✅ Support **10+ EVM chains** including Arbitrum, Base, Optimism, Polygon, Ethereum
+
+### Integration (takes ~2 minutes)
+
+**Option A — MCP (works with Claude, Cursor, any MCP client):**
+```bash
+npx @smithery/cli install @lucascordone-spec/unified-agent-router --client claude
+```
+
+**Option B — ElizaOS plugin:**
+```typescript
+// Your agent gets a new tool: get_best_route
+// Call it with: fromChainId, toChainId, fromToken, toToken, amount
+```
+
+### Links
+- 🔗 GitHub: https://github.com/lucascordone-spec/unified-agent-router
+- 🛠️ Smithery: https://smithery.ai/server/@lucascordone-spec/unified-agent-router
+
+Happy to answer any questions or help with integration. Would this be useful for your project?
+
+---
+*This is an automated outreach from the Unified Agent Router project. If this is not relevant to your project, feel free to close this issue.*13:T1a20,Same template as before. Fill it in exactly like this:
+
+---
+
+**Title:**
+```
+feat: add plugin-ezpath — pay-per-request DEX meta-router for Base mainnet
+```
+
+**Relates to:** *(leave blank)*
+
+**Risks:** Low — adds new plugin directory only, zero changes to existing files
+
+**What does this PR do?**
+```
+Adds @elizaos/plugin-ezpath — a connector plugin giving Eliza agents access to EZ-Path, a pay-per-request DEX meta-router on Base mainnet. Races 0x, ParaSwap, Aerodrome, and Uniswap V3 concurrently and returns the highest buyAmount for any ERC-20 swap. Payment handled automatically via X402 / EIP-3009 USDC TransferWithAuthorization — no API key, no subscription, no allowance required. Supports basic ($0.03), resilient ($0.10), and institutional ($0.50) execution tiers.
+```
+
+**What kind of change is this?** Features (non-breaking change which adds functionality)
+
+**Documentation changes needed?** My changes do not require a change to the project documentation.
+
+**Where should a reviewer start?** `plugins/plugin-ezpath/src/index.ts`
+
+**Detailed testing steps:**
+```
+1. Add plugin to agent runtime with EZPATH_WALLET_PRIVATE_KEY set to a Base wallet holding USDC
+2. Send: "What's the best rate to swap 1 USDC for WETH on Base?"
+
+Expected output:
+EZ-Path quote received.
+tier=basic | winner=0x | mode=direct
+price=0.000449 buyToken per sellToken
+buyAmount=449123456789012
+sources=Native_V2 (100%)
+settlement_tx=0xf6c89ddf...
+
+Live endpoint: https://ezpath.myezverse.xyz (60/60 validation checks passing)
+```
+
+**Discord username:** `ezverse.eth`
+
+<!-- greptile_comment -->
+
+<h3>Greptile Summary</h3>
+
+This PR adds `@elizaos/plugin-ezpath`, a new connector plugin that lets Eliza agents fetch DEX swap quotes on Base mainnet by automatically negotiating X402 USDC micro-payments via EIP-3009 `TransferWithAuthorization`. The plugin is self-contained and touches no existing files, but several correctness and security issues need attention before it should be merged.
+
+- **Tier configuration bug**: `QuoteParamsSchema` applies `.default(\"basic\")` to the `tier` field, so `params.tier` is always a non-null string and the `params.tier ?? tier` fallback in the handler never reaches the `EZPATH_TIER` runtime setting — agents configured with `resilient` or `institutional` silently receive `basic` quotes.
+- **Unvalidated payment destination**: The EIP-3009 authorization's `to` address is taken verbatim from the `X-402-Address` 402 response header with no allowlist or cross-check; a spoofed response can redirect USDC payments to an attacker-controlled address.
+- **Over-broad action trigger**: `validate()` matches on common words and will activate — and spend USDC — on many non-swap messages.
+
+<h3>Confidence Score: 2/5</h3>
+
+Not safe to merge: the action can spend USDC on unrelated messages, the runtime tier setting is silently ignored, and the payment destination is accepted from an unvalidated HTTP response header.
+
+The payment destination for every signed USDC transfer comes from a server-controlled HTTP header with no validation, the agent's configured execution tier is never actually used due to the Zod default, and the keyword-based trigger is broad enough to fire on everyday conversation. All three issues affect the core payment and routing path introduced by this PR.
+
+src/client.ts (unvalidated toll address) and src/actions/getQuote.ts (tier default bug and over-broad validate) need the most attention before merging.
+
+<details open><summary><h3>Security Review</h3></summary>
+
+- **Unvalidated payment destination** (`src/client.ts`): The EIP-3009 `TransferWithAuthorization` is signed with `to` set to whatever address appears in the `X-402-Address` header of the 402 probe. No comparison against a known-good or configured address is performed. A DNS/BGP-level attacker or a compromised server could substitute an attacker-controlled address and cause the agent to authorize a USDC transfer to that address on every quote request.
+- **Private key in runtime settings**: `EZPATH_WALLET_PRIVATE_KEY` is held in agent runtime settings as a plain string, directly controlling a live Base wallet with USDC.
+</details>
+
+<h3>Important Files Changed</h3>
+
+| Filename | Overview |
+|----------|----------|
+| plugins/plugin-ezpath/src/client.ts | Core X402 payment client: signs EIP-3009 USDC TransferWithAuthorization and retries with payment. Toll address is taken unvalidated from the 402 response header, creating a fund-redirection risk if the endpoint is compromised or spoofed. |
+| plugins/plugin-ezpath/src/actions/getQuote.ts | Action handler for GET_SWAP_QUOTE: two bugs — the Zod default makes the runtime EZPATH_TIER setting unreachable, and the validate keywords are broad enough to fire the action (and spend USDC) on unrelated messages. |
+| plugins/plugin-ezpath/src/index.ts | Plugin barrel: exports client types and registers the single GET_SWAP_QUOTE action. No issues. |
+| plugins/plugin-ezpath/package.json | Standard plugin manifest; pins viem and zod as runtime deps, uses workspace peer for @elizaos/core. No critical issues. |
+| plugins/plugin-ezpath/tsconfig.json | TypeScript config with strict: false, weakening type safety for a plugin that handles private keys and payment signing. |
+| plugins/plugin-ezpath/__tests__/plugin.test.ts | Covers plugin shape and happy-path / error-path X402 negotiation with mocked fetch. Tests are well-structured but do not cover the over-broad validate trigger or the tier fallback logic. |
+
+</details>
+
+<h3>Sequence Diagram</h3>
+
+```mermaid
+sequenceDiagram
+    participant U as User Message
+    participant A as GET_SWAP_QUOTE Action
+    participant LLM as LLM (param extraction)
+    participant C as getQuote() client
+    participant API as EZ-Path API
+
+    U->>A: message containing quote keywords
+    A->>A: validate() keyword match
+    A->>LLM: generateObject(QuoteParamsSchema)
+    LLM-->>A: sellToken, buyToken, sellAmount, tier
+    A->>C: getQuote params + privateKey
+    C->>API: GET /api/v1/quote (no payment)
+    API-->>C: 402 Payment Required + toll address + tier pricing
+    C->>C: Sign EIP-3009 TransferWithAuthorization
+    C->>API: GET /api/v1/quote + X-Payment header
+    API-->>C: 200 OK with quote body + settlement tx header
+    C-->>A: QuoteResult
+    A-->>U: Formatted quote response
+```
+
+<sub>Reviews (1): Last reviewed commit: ["feat: add plugin-ezpath DEX meta-router ..."](https://github.com/elizaos/eliza/commit/1aad4fb133a2506a0dc48ccc2d11b5c95544ed23) | [Re-trigger Greptile](https://app.greptile.com/api/retrigger?id=32414858)</sub>
+
+> Greptile also left **6 inline comments** on this PR.
+
+<!-- /greptile_comment -->9:["$","div",null,{"className":"mb-8 space-y-6","children":[["$","$L10",null,{"metrics":{"date":"2026-05-16","interval":{"intervalStart":"$D2026-05-16T00:00:00.000Z","intervalEnd":"$D2026-05-17T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":2,"merged":0,"total":2},"issues":{"new":1,"closed":2,"total":2},"activeContributors":4,"codeChanges":{"additions":0,"deletions":0,"files":0,"commitCount":7},"topContributors":[{"username":"infiniteezverse","avatarUrl":"https://avatars.githubusercontent.com/u/175495935?u=2718a0ed681d6fd243a4a32d69049bdd43ab1a87&v=4","totalScore":40.1324294058288,"prScore":39.9324294058288,"issueScore":0,"reviewScore":0,"commentScore":0.2,"summary":"infiniteezverse: Focused on expanding ecosystem capabilities by opening PR #7735 in elizaos/eliza to introduce plugin-ezpath, a pay-per-request DEX meta-router. This feature work involved a substantial addition of 653 lines across code, tests, configuration, and documentation."},{"username":"Dexploarer","avatarUrl":"https://avatars.githubusercontent.com/u/211557447?u=21a243d61cc1f87574328ae07fc64d7d7577b53d&v=4","totalScore":35.2117738965761,"prScore":35.2117738965761,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"Dexploarer: Focused on expanding platform capabilities by opening PR #7756 in elizaos/eliza to implement a native macOS Swift shell. This effort involved extensive codebase modifications across 3,747 files, reflecting a primary focus on feature development and broad architectural adjustments."},{"username":"greptile-apps","avatarUrl":"https://avatars.githubusercontent.com/in/867647?v=4","totalScore":4.5,"prScore":0,"issueScore":0,"reviewScore":4.5,"commentScore":0,"summary":"greptile-apps: No activity today."},{"username":"lucascordone-spec","avatarUrl":"https://avatars.githubusercontent.com/u/248399312?u=2e30f388da9163b05fc22f64815434f2e8eef7a1&v=4","totalScore":4.1,"prScore":0,"issueScore":4.1,"reviewScore":0,"commentScore":0,"summary":null}],"focusAreas":[],"topIssues":[{"id":"I_kwDOMT5cIs8AAAABCEBTMA","title":"RFC: add openvino (CPU/GPU/NPU) runtime kernel for Intel hardware — bench numbers + scaffolding ready","author":"NubsCarson","number":7633,"repository":"elizaos/eliza","body":"$11","createdAt":"2026-05-12T23:42:42Z","closedAt":"2026-05-16T15:49:01Z","state":"CLOSED","commentCount":3},{"id":"I_kwDOMT5cIs8AAAABCdUExQ","title":"[Tool Suggestion] Unified DeFi Router — better swap/bridge routes for your agent","author":"lucascordone-spec","number":7748,"repository":"elizaos/eliza","body":"$12","createdAt":"2026-05-16T12:51:29Z","closedAt":"2026-05-16T15:39:17Z","state":"CLOSED","commentCount":0}],"topPullRequests":[{"id":"PR_kwDOMT5cIs7cRjG9","title":"feat: add native macOS Swift shell","author":"Dexploarer","number":7756,"body":"## Summary\n- add a separate SwiftUI macOS shell under packages/app-core/platforms/macos\n- surface elizaOS runtime, chat, plugins/apps, LifeOps, health, browser, cloud, release, settings, diagnostics, and menu bar dashboards\n- align renderer handoffs with existing elizaOS routes, including appWindow=1#/apps/<slug>, shell surface tabs, and browser browse handoff\n\n## Validation\n- swift test\n- ./script/build_and_run.sh --verify\n- live app inspection of Dashboard, Plugins app catalog, Console renderer fallback, Settings Appearance, and app-catalog handoff","repository":"elizaos/eliza","createdAt":"2026-05-16T21:12:51Z","mergedAt":null,"additions":7303,"deletions":0},{"id":"PR_kwDOMT5cIs7cH9I8","title":"feat: add plugin-ezpath — pay-per-request DEX meta-router for Base mainnet","author":"infiniteezverse","number":7735,"body":"$13","repository":"elizaos/eliza","createdAt":"2026-05-16T01:37:20Z","mergedAt":null,"additions":653,"deletions":0}],"detailedContributorSummaries":{"Dexploarer":"Dexploarer: Focused on expanding platform capabilities by opening PR #7756 in elizaos/eliza to implement a native macOS Swift shell. This effort involved extensive codebase modifications across 3,747 files, reflecting a primary focus on feature development and broad architectural adjustments.","greptile-apps":"greptile-apps: No activity today.","infiniteezverse":"infiniteezverse: Focused on expanding ecosystem capabilities by opening PR #7735 in elizaos/eliza to introduce plugin-ezpath, a pay-per-request DEX meta-router. This feature work involved a substantial addition of 653 lines across code, tests, configuration, and documentation."}}}],"$L14"]}]
+a:["$","div",null,{"className":"prose prose-sm mx-auto mt-8 dark:prose-invert sm:prose lg:prose-lg xl:prose-xl","children":[["$","p","p-0",{"children":"Development on May 16 focused on advancing local inference capabilities through OpenVINO hardware validation and addressing compatibility challenges for M-RoPE model architectures. The team successfully integrated backend foundations for Intel hardware while continuing to investigate performance bottlenecks for high-parameter models on Lunar Lake iGPUs."}],"\n",["$","h2","h2-0",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"🚨 Needs Attention","position":{"start":{"line":5,"column":4,"offset":402},"end":{"line":5,"column":22,"offset":420}}}],"position":{"start":{"line":5,"column":1,"offset":399},"end":{"line":5,"column":22,"offset":420}}},"children":"🚨 Needs Attention"}],"\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"Blocked Issues/PRs"}],": ",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/7638","children":"elizaos/eliza#7638"}]," — Performance issues with Qwen2.5-14B on Lunar Lake iGPUs remain unresolved, requiring deeper kernel-selection tuning in ",["$","code","code-0",{"children":"ggml-vulkan"}],"."]}],"\n"]}],"\n",["$","h2","h2-1",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"✅ Completed Work","position":{"start":{"line":8,"column":4,"offset":654},"end":{"line":8,"column":20,"offset":670}}}],"position":{"start":{"line":8,"column":1,"offset":651},"end":{"line":8,"column":20,"offset":670}}},"children":"✅ Completed Work"}],"\n",["$","p","p-1",{"children":["$","strong","strong-0",{"children":"Local Inference & Hardware Validation"}]}],"\n",["$","ul","ul-1",{"children":["\n",["$","li","li-0",{"children":["Successfully integrated the OpenVINO runtime backend foundation and ASR-side wiring, completing the scope for the current phase (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/7633","children":"elizaos/eliza#7633"}],")."]}],"\n",["$","li","li-1",{"children":["Verified a mitigation patch for M-RoPE model architectures to prevent speculative decoding acceptance collapse, ensuring stable fallback to body-only inference (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/7631","children":"elizaos/eliza#7631"}],")."]}],"\n"]}],"\n",["$","h2","h2-2",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"🏗️ Work in Progress","position":{"start":{"line":13,"column":4,"offset":1153},"end":{"line":13,"column":24,"offset":1173}}}],"position":{"start":{"line":13,"column":1,"offset":1150},"end":{"line":13,"column":24,"offset":1173}}},"children":"🏗️ Work in Progress"}],"\n",["$","p","p-2",{"children":["$","strong","strong-0",{"children":"New Pull Requests"}]}],"\n",["$","ul","ul-2",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"elizaos/eliza"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/7756","children":"#7756"}],": feat: add native macOS Swift shell."]}],"\n",["$","li","li-1",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/7735","children":"#7735"}],": feat: add plugin-ezpath — pay-per-request DEX meta-router for Base mainnet."]}],"\n"]}],"\n"]}],"\n"]}],"\n",["$","p","p-3",{"children":["$","strong","strong-0",{"children":"Active Discussions"}]}],"\n",["$","ul","ul-3",{"children":["\n",["$","li","li-0",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/7631","children":"elizaos/eliza#7631"}],": Ongoing monitoring of speculative decoding compatibility with M-RoPE models."]}],"\n",["$","li","li-1",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/7638","children":"elizaos/eliza#7638"}],": Investigation into Vulkan bandwidth efficiency and performance cliffs on Lunar Lake hardware."]}],"\n"]}],"\n",["$","h2","h2-3",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"🐞 Issue Triage","position":{"start":{"line":23,"column":4,"offset":1796},"end":{"line":23,"column":19,"offset":1811}}}],"position":{"start":{"line":23,"column":1,"offset":1793},"end":{"line":23,"column":19,"offset":1811}}},"children":"🐞 Issue Triage"}],"\n","$L15","\n","$L16"]}]
+b:["$","script","script-0",{"src":"/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","async":true}]
+c:["$","script","script-1",{"src":"/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","async":true}]
+d:["$","script","script-2",{"src":"/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js","async":true}]
+e:["$","$L17",null,{"children":["$","$18",null,{"name":"Next.MetadataOutlet","children":"$@19"}]}]
+14:["$","div",null,{"className":"rounded-lg border bg-card text-card-foreground shadow-sm","children":[["$","div",null,{"className":"flex flex-col space-y-1.5 p-6 py-4","children":["$","div",null,{"className":"tracking-tight text-sm font-medium","children":["$undefined","Code Changes"]}]}],["$","div",null,{"className":"p-6 pt-0","children":["$","div",null,{"className":"grid grid-cols-2 gap-4 md:grid-cols-4","children":[["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-git-commit-vertical h-5 w-5","aria-hidden":"true","children":[["$","path","1holv5",{"d":"M12 3v6"}],["$","circle","1v7zrd",{"cx":"12","cy":"12","r":"3"}],["$","path","a9ows0",{"d":"M12 15v6"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":7}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Commits"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-file-code h-5 w-5","aria-hidden":"true","children":[["$","path","1oefj6",{"d":"M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"}],["$","path","wfsgrz",{"d":"M14 2v5a1 1 0 0 0 1 1h5"}],["$","path","1tg20x",{"d":"M10 12.5 8 15l2 2.5"}],["$","path","yinavb",{"d":"m14 12.5 2 2.5-2 2.5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":0}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Files Changed"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-green-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-up h-5 w-5 text-green-500","aria-hidden":"true","children":[["$","path","hav0vg",{"d":"m5 12 7-7 7 7"}],["$","path","x0mq9r",{"d":"M12 19V5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-green-500","children":"+0"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Added"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-red-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-down h-5 w-5 text-red-500","aria-hidden":"true","children":[["$","path","s699le",{"d":"M12 5v14"}],["$","path","1idqje",{"d":"m19 12-7 7-7-7"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-red-500","children":"-0"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Deleted"}]]}]]}]]}]}]]}]
+15:["$","p","p-4",{"children":["$","strong","strong-0",{"children":"Closed Issues"}]}]
+16:["$","ul","ul-4",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"elizaos/eliza"}],": ",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/7633","children":"OpenVINO Runtime Integration"}]," — RFC closed following successful backend and ASR wiring integration."]}],"\n"]}]
+19:null

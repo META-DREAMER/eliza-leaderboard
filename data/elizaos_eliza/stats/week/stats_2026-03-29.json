@@ -1,0 +1,343 @@
+{
+  "interval": {
+    "intervalStart": "2026-03-29T00:00:00.000Z",
+    "intervalEnd": "2026-04-05T00:00:00.000Z",
+    "intervalType": "week"
+  },
+  "repository": "elizaos/eliza",
+  "overview": "From 2026-03-29 to 2026-04-05, elizaos/eliza had 4 new PRs (0 merged), 4 new issues, and 12 active contributors.",
+  "topIssues": [
+    {
+      "id": "I_kwDOMT5cIs75fdZO",
+      "title": "Plugin: MAXIA AI Marketplace — swap, GPU rental & AI services for ElizaOS agents",
+      "author": "majorelalexis-stack",
+      "number": 6700,
+      "repository": "elizaos/eliza",
+      "body": "## What\n\n  A `plugin-maxia` that lets any ElizaOS agent access the [MAXIA](https://maxiaworld.app) AI-to-AI marketplace natively\n  — buy/sell AI services, swap tokens across 7 chains, and rent GPUs.\n\n  ## Why\n\n  ElizaOS agents currently lack a unified marketplace to transact with other AI agents. MAXIA is a live AI-to-AI\n  marketplace on 14 blockchains with on-chain USDC escrow (Solana + Base), 65 token swaps, and GPU rental via Akash\n  Network.\n\n  ## Plugin capabilities\n\n  - **AI Services** — discover, buy, and sell AI services (text, code, audit, data analysis) with USDC escrow protection\n  - **Token Swap** — swap 65 tokens across 7 chains (Jupiter on Solana, 0x on 6 EVM chains)\n  - **GPU Rental** — rent A100/H100/RTX GPUs via Akash Network (15-40% cheaper than AWS)\n  - **Wallet Analytics** — portfolio tracking, PnL, DeFi yield scanning\n  - **Price Oracle** — real-time prices from Pyth Network SSE (<1s latency)\n  - **AIP Protocol** — signed intent envelopes (ed25519) for secure agent-to-agent transactions\n\n  ## Integration approach\n\n  The plugin would wrap MAXIA's 559 REST API endpoints + 46 MCP tools as ElizaOS actions and providers:\n\n  ```typescript\n  // Example actions\n  MAXIA_SWAP        // swap tokens across 7 chains\n  MAXIA_BUY_SERVICE // purchase an AI service with escrow\n  MAXIA_RENT_GPU    // rent GPU compute\n  MAXIA_GET_PRICE   // real-time token price\n  MAXIA_DISCOVER    // find AI services on marketplace\n\n  Status\n\n  MAXIA is live in production with deployed smart contracts:\n  - Solana escrow: 8ADNmAPDxuRvJPBp8dL9rq5jpcGtqAEx4JyZd1rXwBUY\n  - Base escrow: 0xBd31bB973183F8476d0C4cF57a92e648b130510C\n\n  We're happy to build and maintain the plugin. Looking for feedback on the approach before submitting a PR.\n\n  Related Problem\n\n  ElizaOS agents that need to purchase compute, trade tokens, or use AI services must integrate each provider separately\n   (Jupiter, Akash, individual AI APIs). A marketplace plugin would give agents one-stop access through a single\n  interface, with built-in escrow protection for trustless agent-to-agent commerce.",
+      "createdAt": "2026-04-01T10:14:24Z",
+      "closedAt": null,
+      "state": "OPEN",
+      "commentCount": 1
+    },
+    {
+      "id": "I_kwDOMT5cIs76bfyb",
+      "title": "elizaos create fails with \"Bun's postinstall script was not run\" on macOS",
+      "author": "dirtybits",
+      "number": 6704,
+      "repository": "elizaos/eliza",
+      "body": "## Description\n\nRunning `elizaos create <project-name>` fails at the build step on macOS with:\n\n```\n$ bun run build.ts\nError: Bun's postinstall script was not run.\n\nThis occurs when using --ignore-scripts during installation, or when using a\npackage manager like pnpm that does not run postinstall scripts by default.\n\nTo fix this, run the postinstall script manually:\n  cd node_modules/bun && node install.js\n\nOr reinstall bun without the --ignore-scripts flag.\nerror: script \"build\" exited with code 1\n```\n\nThe CLI then cleans up the project directory and exits, leaving nothing behind.\n\n## Root Cause\n\n`@elizaos/cli` and `@elizaos/plugin-bootstrap` both list `\"bun\": \"^1.3.4\"` as a **runtime dependency**. When a new project installs these packages, the `bun` npm package becomes a transitive dependency.\n\nThe `bun` npm package has a `postinstall` script (`node install.js`) that:\n1. Looks for `node_modules/@oven/bun-darwin-aarch64/bin/bun` (on Apple Silicon)\n2. Copies it to `node_modules/bun/bin/bun.exe`\n\nHowever, **bun the package manager intentionally skips extracting its own 60MB binary** from `@oven/bun-darwin-aarch64` into node_modules (it's already installed system-wide). This leaves `node_modules/@oven/bun-darwin-aarch64/bin/` empty.\n\nWhen `install.js` runs, it can't find the binary and exits silently. `node_modules/bun/bin/` is left with Windows `.exe` stubs. When `bun run build.ts` executes, bun detects the stubs and throws the error above.\n\n## Steps to Reproduce\n\n1. Install bun via `curl -fsSL https://bun.sh/install | bash`\n2. Install elizaos CLI: `bun install -g @elizaos/cli`\n3. Run: `elizaos create my-first-agent`\n4. Follow prompts (any database/model choice)\n5. Observe failure at build step\n\n## Environment\n\n- macOS (Apple Silicon / darwin-aarch64)\n- bun 1.3.11\n- @elizaos/cli 1.7.2\n\n## Fix\n\nThe `bun` npm package should be removed from the runtime dependencies of `@elizaos/cli` and `@elizaos/plugin-bootstrap`. It is only needed as a devDependency for types (`@types/bun`). The bun runtime is already available system-wide when users install elizaos via bun.\n\n```diff\n# In @elizaos/cli and @elizaos/plugin-bootstrap package.json:\n- \"dependencies\": {\n-   \"bun\": \"^1.3.4\",\n+ \"devDependencies\": {\n+   \"@types/bun\": \"^1.x.x\",\n```\n\n## Workaround\n\nUntil fixed, users can create projects manually:\n\n```bash\ncp -r ~/.bun/install/global/node_modules/@elizaos/cli/templates/project-starter ~/my-first-agent\ncd ~/my-first-agent\nbun install\ncp ~/.bun/bin/bun node_modules/@oven/bun-darwin-aarch64/bin/bun\nchmod +x node_modules/@oven/bun-darwin-aarch64/bin/bun\nnode node_modules/bun/install.js\nbun run build.ts\n```",
+      "createdAt": "2026-04-03T17:36:56Z",
+      "closedAt": null,
+      "state": "OPEN",
+      "commentCount": 0
+    },
+    {
+      "id": "I_kwDOMT5cIs76q52a",
+      "title": "Plugin proposal: @sint/eliza-plugin — capability token enforcement for Eliza agent tool calls",
+      "author": "pshkv",
+      "number": 6707,
+      "repository": "elizaos/eliza",
+      "body": "## Context\n\nEliza agents execute tool calls — blockchain transactions, Twitter posts, file operations, and increasingly physical actions (robots, drones, IoT). Today there's no formal authorization layer between \"the LLM decided to call this tool\" and \"the tool executes.\"\n\nThe existing `GuardrailsService` and plugin system handle some of this, but without:\n- Cryptographic proof of authorization (who issued permission for this specific action)\n- Irreversibility-aware approval flows (on-chain transaction ≠ camera read)\n- Behavioral drift detection (agent acting anomalously → escalate before next action)\n- Physical constraint enforcement (for Eliza agents controlling robots)\n\n## Proposed: `@sint/eliza-plugin`\n\nA thin wrapper around [SINT Protocol](https://github.com/pshkv/sint-protocol) that intercepts Eliza tool calls:\n\n```typescript\n// eliza.config.ts\nimport { SintPlugin } from \"@sint/eliza-plugin\";\n\nexport default {\n  plugins: [\n    new SintPlugin({\n      resolveToken: (toolName, agentId) => tokenStore.get(`${agentId}:${toolName}`),\n      tierRules: [\n        // Blockchain transactions require human review\n        { resourcePattern: \"solana://*\", actions: [\"transfer\", \"swap\"], baseTier: \"T3_commit\" },\n        // Social posts need operator approval\n        { resourcePattern: \"twitter://*\", actions: [\"post\", \"retweet\"], baseTier: \"T2_act\" },\n        // Read-only ops auto-allow\n        { resourcePattern: \"twitter://*\", actions: [\"search\", \"read\"], baseTier: \"T0_observe\" },\n      ],\n      emitLedgerEvent: (event) => evidenceLedger.write(event),\n    })\n  ]\n}\n```\n\n## What this adds to Eliza\n\n| Feature | Benefit |\n|---|---|\n| Ed25519 capability tokens | Cryptographic proof of who authorized each tool call |\n| Tier-based approval (`T2_act`, `T3_commit`) | On-chain transactions pause for human sign-off |\n| CSML behavioral drift | Agent acting anomalously → auto-escalate before next action |\n| Rate limiting | Per-tool sliding window enforcement |\n| Evidence ledger | Hash-chained audit trail, TEE-attested |\n| Physical constraint enforcement | For Eliza agents controlling robots/drones |\n\n## Connection to #6688 (AgentID)\n\n@haroldmalikfrimpong-ops is proposing behavioral fingerprinting in #6688 — SINT's `AvatarRegistry` already does this via the CSML metric. If AgentID and SINT use compatible schemas, agents could port behavioral history across both systems.\n\n## Implementation\n\nThis would be a thin bridge — ~200 lines wrapping `@sint/gate-policy-gateway`. The hard part (policy engine, evidence ledger, approval flow) is already in SINT Protocol (950 tests).\n\nFull repo: https://github.com/pshkv/sint-protocol  \nWould the Eliza core team be open to this as a community plugin? Happy to build it.",
+      "createdAt": "2026-04-04T18:32:12Z",
+      "closedAt": null,
+      "state": "OPEN",
+      "commentCount": 0
+    },
+    {
+      "id": "I_kwDOMT5cIs76qj66",
+      "title": "Plugin: SafeAgent — Token safety checks before trading (honeypot, scam, rug pull detection)",
+      "author": "CryptoGenesisSecurity",
+      "number": 6706,
+      "repository": "elizaos/eliza",
+      "body": "## Plugin: @elizaos/plugin-safeagent\n\n**Repo**: https://github.com/CryptoGenesisSecurity/plugin-safeagent\n\n### Problem\nElizaOS agents trading crypto have limited pre-trade safety checks. `plugin-base-signals` only covers Base L2. No comprehensive multi-chain token safety exists in the ElizaOS ecosystem.\n\n### Solution\nSafeAgent plugin provides two actions:\n\n**1. CHECK_TOKEN_SAFETY** — Full safety scan on demand\n```\nUser: \"Is 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913 safe on base?\"\nAgent: 🟢 Token Safety Report — USDC (USDC) — Score: 90/100 — SAFE\n```\n\n**2. PRE_TRADE_SAFETY_CHECK** — Auto-blocks dangerous trades\n- Score < 40: **TRADE BLOCKED** (likely scam)\n- Score 40-70: **CAUTION** (reduce position)\n- Score > 70: proceed normally\n\n### Detection\n- Honeypot simulation (real DEX swap test on UniV2, V3, Aerodrome)\n- 17 scam pattern checks on source code\n- LP lock verification (Unicrypt, TeamFinance, PinkSale)\n- Owner analysis (renounced, privileged functions)\n- 6 EVM chains: Base, Ethereum, Arbitrum, Optimism, Polygon, BSC\n- Sub-second response (<1s cached, <1.5s fresh)\n\n### Standard\nImplements the **ERC Token Safety Score** — an open standard for on-chain token safety scoring.\n- Live oracle on Optimism: `0x3B8A6D696f2104A9aC617bB91e6811f489498047`\n- MCP SSE: `https://cryptogenesis.duckdns.org/mcp/sse`\n\n### Installation\n```bash\nnpm install CryptoGenesisSecurity/plugin-safeagent\n```\n\n```typescript\nimport safeAgentPlugin from \"@elizaos/plugin-safeagent\";\nconst agent = new AgentRuntime({ plugins: [safeAgentPlugin] });\n```\n\n### vs plugin-base-signals\n| Feature | plugin-base-signals | plugin-safeagent |\n|---------|-------------------|-----------------|\n| Chains | Base only | 6 EVM chains |\n| Honeypot sim | GoPlus API | Direct DEX swap simulation |\n| Scam patterns | Basic | 17 patterns |\n| LP lock check | No | Yes (5 lockers) |\n| On-chain oracle | No | Yes (Optimism) |\n| Response time | Variable | <1s (cached) |\n\nHappy to contribute this to the official elizaos-plugins registry.",
+      "createdAt": "2026-04-04T17:50:59Z",
+      "closedAt": null,
+      "state": "OPEN",
+      "commentCount": 0
+    }
+  ],
+  "topPRs": [
+    {
+      "id": "PR_kwDOMT5cIs7Pdfjt",
+      "title": "feat: add plugin-mnemopay — economic memory for AI agents",
+      "author": "t49qnsx7qt-kpanks",
+      "number": 6701,
+      "body": "## Summary\n\nAdds **plugin-mnemopay**, a new plugin that gives Eliza agents economic memory. Agents can remember payment outcomes, learn from settlements and refunds, and build reputation over time — making them smarter about financial interactions.\n\nThis is powered by [MnemoPay](https://github.com/t49qnsx7qt-kpanks/mnemopay-sdk) (`@mnemopay/sdk`), a TypeScript SDK for AI agent economic memory.\n\n### Why this matters\n\nStandard AI agents treat every financial interaction as a blank slate. With MnemoPay, agents:\n- **Remember** which providers delivered quality work and which didn't\n- **Learn** from payment disputes and successful settlements\n- **Build reputation** through consistent positive outcomes (capped at 2.0)\n- **Make informed decisions** by recalling past financial experiences before acting\n\n### Plugin components\n\n| Component | Name | Purpose |\n|-----------|------|---------|\n| **Service** | `MnemoPayService` | Manages the MnemoPayLite engine lifecycle |\n| **Actions** | `REMEMBER_OUTCOME` | Store a payment/interaction outcome in economic memory |\n| | `CHARGE_PAYMENT` | Create an escrow payment (wallet debit) |\n| | `SETTLE_PAYMENT` | Confirm delivery, reinforce reputation (+delta) |\n| | `REFUND_PAYMENT` | Reverse payment, dock reputation (-delta) |\n| | `RECALL_MEMORIES` | Query past financial experiences |\n| **Provider** | `MnemoPayProvider` | Injects wallet balance, reputation, recent transactions, and relevant memories into conversation context |\n| **Evaluator** | `MnemoPayEvaluator` | Auto-tracks financial outcomes after every agent response (passive learning loop) |\n\n### Architecture decisions\n\n- Follows the exact same patterns as `advanced-memory` and `basic-capabilities` plugins\n- Service extends `Service` base class with static `start()` factory\n- Actions return `ActionResult` with `success` field\n- Provider returns `ProviderResult` with `text`, `values`, and `data`\n- Evaluator uses `alwaysRun: true` for passive financial outcome detection\n- Built-in lightweight engine included — no external dependency required at runtime\n- Configurable via `MNEMOPAY_AGENT_ID` and `MNEMOPAY_REPUTATION_DELTA` env vars\n\n### Usage\n\n```typescript\nimport { createMnemoPayPlugin } from \"./plugin-mnemopay\";\n\nconst agent: ProjectAgent = {\n  character: myCharacter,\n  plugins: [createMnemoPayPlugin()],\n};\n```\n\n## Test plan\n\n- [ ] Verify `MnemoPayService` initializes correctly with default and custom config\n- [ ] Test each action (REMEMBER_OUTCOME, CHARGE_PAYMENT, SETTLE_PAYMENT, REFUND_PAYMENT, RECALL_MEMORIES) with valid and invalid inputs\n- [ ] Verify provider injects correct context (wallet, reputation, recent txs, relevant memories)\n- [ ] Verify evaluator auto-tracks financial keywords and stores with correct importance/tags\n- [ ] Confirm plugin registers correctly via `createMnemoPayPlugin()` factory\n- [ ] Test settle/refund reputation bounds (0.0 to 2.0)\n- [ ] Verify graceful degradation when service is not available\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\n<!-- greptile_comment -->\n\n<h3>Greptile Summary</h3>\n\nThis PR adds `plugin-mnemopay`, a new Eliza plugin that gives agents \\\"economic memory\\\" — tracking payment charges, settlements, refunds, reputation, and past financial interactions. The plugin follows the standard Eliza plugin shape (Service + Actions + Provider + Evaluator) and the code structure is clean and readable.\n\nHowever, there are several significant issues that should be resolved before merging:\n\n- **No state persistence** — the core `MnemoPayLiteEngine` stores all memories, transactions, and reputation in plain in-memory JavaScript structures. Every agent restart wipes the slate clean, which directly defeats the plugin's stated purpose of building reputation and memory over time.\n- **NaN reputation corruption** — if `MNEMOPAY_REPUTATION_DELTA` is set to any non-numeric string, `Number.parseFloat()` silently returns `NaN`, permanently corrupting the reputation score.\n- **Unsafe null casts in action handlers** — every `validate()` checks `if (!service) return false`, but every `handler()` casts the same `getService()` call without a null guard, creating a latent null dereference across all 5 actions and the evaluator.\n- **Ambiguous action validation** — both `RECALL_MEMORIES` and `REMEMBER_OUTCOME` match the keyword \\\"remember\\\", causing both actions to fire on messages like \\\"Remember that Provider X is excellent.\\\"\n- **Unbounded memory growth** — `this.memories.push(entry)` has no eviction policy; the evaluator fires on very common financial keywords after every agent response.\n- **Dead interface field** — `MnemoPayConfig.initialBalance` is declared in `types.ts` but never read by the engine or service initializer.\n- **No tests** — the test plan in the PR description is entirely unchecked; no test files are included in the changeset.\n\n<h3>Confidence Score: 1/5</h3>\n\nNot safe to merge — the plugin's core value proposition (persistent economic memory) is unimplemented, and there are several logic bugs that will silently corrupt state or cause null-dereference crashes.\n\nThe fundamental design flaw (all state is ephemeral in-memory) means the plugin cannot fulfill its stated purpose in any real deployment. Combined with the NaN-corruption bug for misconfigured reputation delta, unsafe null dereferences in every action handler, and absence of any tests, the PR needs substantial rework.\n\nmnemopay-service.ts requires the most attention (persistence, NaN guard, memory eviction). All action handler files need null-safety fixes. recall-memories.ts needs its validate keyword set de-conflicted from remember-outcome.ts.\n\n<h3>Important Files Changed</h3>\n\n\n\n\n| Filename | Overview |\n|----------|----------|\n| packages/typescript/src/plugin-mnemopay/services/mnemopay-service.ts | Core engine stores all memory, transactions, and reputation in plain JS objects — no persistence; missing NaN guard for reputationDelta and no memory eviction cap. |\n| packages/typescript/src/plugin-mnemopay/actions/charge-payment.ts | Unsafe null cast of service in handler body, and overly broad amount extraction regex that can match non-payment numbers. |\n| packages/typescript/src/plugin-mnemopay/actions/recall-memories.ts | Validate keyword \"remember\" conflicts with REMEMBER_OUTCOME action; unsafe service cast in handler. |\n| packages/typescript/src/plugin-mnemopay/evaluators/mnemopay-evaluator.ts | Passive financial keyword detection is broadly correct; unsafe service cast in handler; combined with unbounded memory growth, every turn with words like \"cost\" or \"fee\" writes a memory entry. |\n| packages/typescript/src/plugin-mnemopay/providers/mnemopay-provider.ts | Cleanly injects wallet/reputation/recent-tx context; graceful degradation when service is absent; non-critical recall failures are swallowed appropriately. |\n| packages/typescript/src/plugin-mnemopay/types.ts | MnemoPayConfig.initialBalance is declared but never consumed by the engine or service initializer — dead interface field. |\n| packages/typescript/src/plugin-mnemopay/index.ts | Plugin registration and re-exports are clean and follow the expected Plugin interface pattern. |\n\n</details>\n\n\n\n<h3>Sequence Diagram</h3>\n\n```mermaid\nsequenceDiagram\n    participant User\n    participant Action\n    participant MnemoPayService\n    participant MnemoPayLiteEngine\n    participant Provider\n    participant Evaluator\n\n    Note over MnemoPayLiteEngine: In-memory only — no persistence\n\n    User->>Action: \"Charge $50 for design task\"\n    Action->>MnemoPayService: getEngine()\n    MnemoPayService->>MnemoPayLiteEngine: charge(50, \"design task\")\n    MnemoPayLiteEngine-->>Action: txId = \"tx_agent_1_1_...\"\n    Action-->>User: \"Payment charged. TX: tx_agent_1_1_...\"\n\n    User->>Action: \"Settle payment tx_agent_1_1_...\"\n    Action->>MnemoPayLiteEngine: settle(txId)\n    MnemoPayLiteEngine->>MnemoPayLiteEngine: reputation = min(2.0, rep + delta)\n    MnemoPayLiteEngine-->>Action: settled tx\n    Action-->>User: \"Settled. Reputation: 1.05\"\n\n    Note over Evaluator: alwaysRun — fires after every response\n    Evaluator->>MnemoPayLiteEngine: remember(\"[Auto-tracked] ...\", {importance, tags})\n    MnemoPayLiteEngine->>MnemoPayLiteEngine: memories.push(entry) — unbounded!\n\n    User->>Provider: (next conversation turn)\n    Provider->>MnemoPayLiteEngine: balance() + getRecentTransactions(5)\n    Provider->>MnemoPayLiteEngine: recall(messageText, 3)\n    MnemoPayLiteEngine-->>Provider: memories + balance\n    Provider-->>User: Economic memory context injected into prompt\n```\n\n<!-- greptile_failed_comments -->\n<details><summary><h3>Comments Outside Diff (1)</h3></summary>\n\n1. `packages/typescript/src/plugin-mnemopay/actions/charge-payment.ts`, line 162-165 ([link](https://github.com/elizaos/eliza/blob/fad58e46328b453c6bfa5bc21dd58c5c7726c938/packages/typescript/src/plugin-mnemopay/actions/charge-payment.ts#L162-L165)) \n\n   <a href=\"#\"><img alt=\"P1\" src=\"https://greptile-static-assets.s3.amazonaws.com/badges/p1.svg?v=7\" align=\"top\"></a> **Unsafe cast without null check in handlers — potential null dereference**\n\n   Every action's `validate()` defensively checks `if (!service) return false`, but the corresponding `handler()` immediately casts the result without any null guard. If the service is not registered, `runtime.getService(\"mnemopay\")` returns `null`, and `service.getEngine()` throws a `TypeError`. The same pattern appears in `settle-payment.ts`, `refund-payment.ts`, `remember-outcome.ts`, `recall-memories.ts`, and `mnemopay-evaluator.ts`.\n\n   Each handler should guard against this:\n   ```typescript\n   const service = runtime.getService(\"mnemopay\") as MnemoPayService | null;\n   if (!service) {\n       return { success: false, text: \"MnemoPayService is not available\" };\n   }\n   const engine = service.getEngine();\n   ```\n\n</details>\n\n<!-- /greptile_failed_comments -->\n\n<sub>Reviews (1): Last reviewed commit: [\"feat: add plugin-mnemopay for AI agent e...\"](https://github.com/elizaos/eliza/commit/fad58e46328b453c6bfa5bc21dd58c5c7726c938) | [Re-trigger Greptile](https://app.greptile.com/api/retrigger?id=27129917)</sub>\n\n> Greptile also left **7 inline comments** on this PR.\n\n<sub>(2/5) Greptile learns from your feedback when you react with thumbs up/down!</sub>\n\n<!-- /greptile_comment -->\n---\n\n## Live Demo\n\n**Try it now:** [https://t49qnsx7qt-kpanks.github.io/mnemopay-demo/](https://t49qnsx7qt-kpanks.github.io/mnemopay-demo/)\n\n### The Feedback Loop in 30 Seconds\n\n```\nRound 1: Agent has NO memory. Picks randomly.\n  -> Hired Alice $80. Fast but buggy.\n  -> Settled. Reputation: 0.51 | Memories: 1\n\nRound 2: Agent tries Bob.\n  -> Hired Bob $120. Perfect quality, on time.\n  -> Settled. Reputation: 0.52 | Memories: 2\n\nRound 3: Agent tries Carol.\n  -> Hired Carol $95. Missed deadline by 3 days.\n  -> REFUNDED. Reputation: 0.52 | Memories: 3\n\n=== Agent recalls before Round 4 ===\n\n  1. [score: 0.900] Carol missed deadline — refund (high importance, decaying)\n  2. [score: 0.750] Bob: perfect quality, on time (reinforced by settle)\n  3. [score: 0.600] Alice: fast but buggy (neutral)\n\nResult: Agent now picks Bob. No LLM needed for this insight.\nsettle() reinforced the memory. refund() flagged the failure.\nThis IS the MnemoPay feedback loop.\n```\n\n### How it works\n\n```\nPayment succeeds → settle() → memories that led to decision get +0.05 importance\nPayment fails    → refund() → agent reputation docked -0.05\n                 → high-importance failure memory stored\nOver time        → agent consistently picks best value providers\n```\n\n### 5-line integration\n\n```typescript\nimport { MnemoPay } from '@mnemopay/sdk';\n\nconst agent = MnemoPay.quick('my-agent');\nawait agent.remember('Bob delivers perfect code');\nconst tx = await agent.charge(120, 'landing page');\nawait agent.settle(tx.id); // memories reinforced, reputation +0.01\n```",
+      "repository": "elizaos/eliza",
+      "createdAt": "2026-04-02T06:20:04Z",
+      "mergedAt": null,
+      "additions": 1644,
+      "deletions": 0
+    },
+    {
+      "id": "PR_kwDOMT5cIs7PtrTB",
+      "title": "feat: add agent/ like starter in develop",
+      "author": "odilitime",
+      "number": 6702,
+      "body": "just something to boot up the repo\n\n<!-- CURSOR_SUMMARY -->\n---\n\n> [!NOTE]\n> **Medium Risk**\n> Medium risk because it introduces a new `agent` workspace and changes core runtime-composition APIs (`loadCharacters` accepts file paths/options; `createRuntimes` adds `checkShouldRespond`), which could affect downstream hosts; plus substantial dependency/lockfile churn from adding plugin submodules and local plugin workspaces.\n> \n> **Overview**\n> Adds a new `agent/` workspace providing a stdin/stdout REPL harness around `@elizaos/core`, including a default character, CLI flags (`--character`, `--log-level`), and a SQL-backed runtime setup via `@elizaos/plugin-sql`’s `createDatabaseAdapter`.\n> \n> Introduces a plugin-submodule local-dev workflow: `.gitmodules` now tracks `plugin-sql`, `plugin-ollama`, and `plugin-local-ai`, root workspaces include their `typescript/` packages, and new scripts (`scripts/dev.mjs`, `scripts/plugin-submodules-dev.mjs`, `plugin-submodules:restore`) automate linking/restoring submodules and workspace dependency rewrites.\n> \n> Extends `@elizaos/core` runtime composition by letting `loadCharacters` accept JSON file paths (with optional `cwd` for relative resolution) and by threading a new `checkShouldRespond` option through `createRuntimes`/`AgentRuntime`; adds tests covering file-path loading behavior. Updates root scripts to start/dev via the new agent harness and adjusts dependencies to use local `workspace:*` plugin builds, with corresponding `bun.lock` updates.\n> \n> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit b05d1ecbca04804f5267dad5c77b4f7ef27f0f81. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>\n<!-- /CURSOR_SUMMARY -->\n\n<!-- greptile_comment -->\n\n<h3>Greptile Summary</h3>\n\nThis PR introduces a developer harness (`agent/`) for booting up the elizaOS repo locally — a stdin/stdout REPL that loads a character, connects to a PGLite database via `@elizaos/plugin-sql`, and routes user input through `runtime.messageService`. It also adds three git submodules (`plugin-sql`, `plugin-ollama`, `plugin-local-ai`) under `plugins/`, a suite of workspace-management scripts (`dev.mjs`, `plugin-submodules-dev.mjs`, `fix-workspace-deps.mjs`), and new `runtime-composition` helpers (`loadCharacters`, `createRuntimes`, `getBasicCapabilitiesSettings`, `mergeSettingsInto`) with tests in `packages/typescript`.\n\n**Key issues found:**\n- The root `package.json` was committed with the plugin submodule workspace entries (`plugins/plugin-sql/typescript`, etc.) still present — according to the `plugin-submodules-dev.mjs` workflow these should be stripped before committing (`bun run plugin-submodules:restore`). On a fresh clone without submodules checked out, bun will encounter missing workspace directories.\n- `agent/package.json` declares these plugins as `workspace:*` but `bun.lock` records them as the `alpha` registry dist-tag, indicating the lockfile was generated before the workspace paths resolved — the two are out of sync.\n- In `agent/typescript/index.ts`, if `runtime.messageService` is not ready the code calls `break`, which permanently exits the REPL loop rather than skipping the current message with `continue`.\n- The `line === undefined || line === null` guard on line 279 is unreachable dead code — `readline/promises` either resolves to a `string` or throws, and the throw path is already handled by the inner try/catch above it.\n- A single `sqlAdapter` is constructed from the first (primary) character's settings and shared across all characters in `createRuntimes`; multi-character configs with different DB settings will silently use the primary character's database.\n\n<h3>Confidence Score: 2/5</h3>\n\nNot safe to merge as-is — the committed `package.json` and `bun.lock` are in an inconsistent state that will break fresh clones and CI installs.\n\nTwo P1 infrastructure issues: (1) the root `package.json` has submodule workspace entries that should have been stripped before committing, and (2) `agent/package.json` declares `workspace:*` for the submodule plugins while `bun.lock` records them as `alpha` registry deps — the lockfile and package manifest disagree. Together these will cause `bun install` failures or wrong resolutions on any machine that doesn't have the submodules initialised. The `messageService` break-vs-continue issue is also a behavioural bug in the harness itself.\n\n`package.json` (committed with submodule workspace paths), `agent/package.json` + `bun.lock` (workspace:* vs alpha mismatch), `agent/typescript/index.ts` (messageService break + unreachable null check).\n\n<h3>Important Files Changed</h3>\n\n| Filename | Overview |\n|----------|----------|\n| agent/typescript/index.ts | New stdin/stdout REPL harness for @elizaos/core; has an unreachable null check on `line`, a breaking `messageService` guard that kills the session permanently, and a single shared adapter for all characters. |\n| agent/package.json | New workspace package for the harness; lists submodule plugins as `workspace:*` but bun.lock records them as the `alpha` registry tag — the lockfile was not regenerated after the workspace references were added. |\n| package.json | Root package.json committed with plugin submodule workspace paths already added; these should normally be stripped before committing (via `plugin-submodules:restore`) since submodules are not checked out on a fresh clone. |\n| scripts/dev.mjs | New root dev script that inits submodules, runs install if needed, builds plugin dist/ if missing, then starts the agent harness in watch mode — logic is clean and idempotent. |\n| scripts/plugin-submodules-dev.mjs | New script managing submodule linking/unlinking and workspace entries; dev/restore modes are well-structured and idempotent, though the restore step was not run before committing this PR. |\n| packages/typescript/src/__tests__/runtime-composition.test.ts | New unit tests for `getBasicCapabilitiesSettings`, `mergeSettingsInto`, `loadCharacters`, and `createRuntimes`; well-structured coverage for the runtime-composition module. |\n| packages/typescript/src/runtime-composition.ts | New exported `loadCharacters`, `getBasicCapabilitiesSettings`, `mergeSettingsInto`, and `createRuntimes` helpers for runtime host composition — well-documented with clear WHY comments. |\n\n</details>\n\n<h3>Flowchart</h3>\n\n```mermaid\n%%{init: {'theme': 'neutral'}}%%\nflowchart TD\n    A[bun run dev] --> B[scripts/dev.mjs]\n    B --> C[plugin-submodules-dev.mjs]\n    C --> D{submodules present?}\n    D -- No --> E[git submodule update --init]\n    D -- Yes --> F[skip]\n    E --> G[ensureWorkspaces: add plugins to package.json]\n    F --> G\n    G --> H[removeSelfDependencies]\n    H --> I[fix-workspace-deps.mjs]\n    I --> J{bun install needed?}\n    J -- Yes --> K[bun install]\n    J -- No --> L[skip]\n    K --> M[build plugin dist/ if missing]\n    L --> M\n    M --> N[bun run --cwd agent dev]\n    N --> O[agent/typescript/index.ts]\n    O --> P[parseHarnessArgs]\n    P --> Q[loadCharacters]\n    Q --> R[mergeHarnessSqlPlugins]\n    R --> S[createDatabaseAdapter from primary character]\n    S --> T[createRuntimes with shared adapter]\n    T --> U[runtime.ensureConnection]\n    U --> V[stdin REPL loop]\n    V -- user input --> W[runtime.messageService.handleMessage]\n    W -- response --> X[stdout output]\n    X --> V\n    V -- exit/Ctrl+D --> Y[runtime.stop]\n```\n\n<sub>Reviews (1): Last reviewed commit: [\"feat(dev): submodule plugins, idempotent...\"](https://github.com/elizaos/eliza/commit/b05d1ecbca04804f5267dad5c77b4f7ef27f0f81) | [Re-trigger Greptile](https://app.greptile.com/api/retrigger?id=27242938)</sub>\n\n> Greptile also left **6 inline comments** on this PR.\n\n<!-- /greptile_comment -->\n\n<!-- This is an auto-generated comment: release notes by coderabbit.ai -->\n\n## Summary by CodeRabbit\n\n* **New Features**\n  * Added a local development agent harness with interactive REPL for testing runtimes.\n  * Added support for loading character definitions from JSON files.\n  * Enhanced plugin management with development workflow scripts.\n\n* **Chores**\n  * Added agent package configuration supporting TypeScript, Python, and Rust.\n  * Updated workspace structure to integrate optional plugins.\n  * Updated plugin submodule references.\n\n<!-- end of auto-generated comment: release notes by coderabbit.ai -->",
+      "repository": "elizaos/eliza",
+      "createdAt": "2026-04-03T03:14:37Z",
+      "mergedAt": null,
+      "additions": 944,
+      "deletions": 3283
+    },
+    {
+      "id": "PR_kwDOMT5cIs7OhlRZ",
+      "title": "fix(elizaos): use actual CLI version when rewriting workspace:* deps in scaffolded projects",
+      "author": "ninglinLiu",
+      "number": 6698,
+      "body": "## Problem\r\n\r\n`elizaos create` calls `fixPackageJson` to replace `workspace:*` references\r\nin a scaffolded project's `package.json`. The replacement was hardcoded to\r\n`\"^1.0.0\"` which is already behind the current release (`2.0.0-alpha.109`)\r\nand will grow more stale with every release.\r\n\r\nUsers scaffolding TypeScript examples that depend on elizaos packages receive\r\nan incorrect (stale) semver range, causing `bun install` / `npm install` to\r\nresolve the wrong version.\r\n\r\n## Fix\r\n\r\nRead the version from the CLI's own `package.json` at runtime — the same\r\napproach already used in `commands/version.ts`.\r\n\r\n## Changes\r\n\r\n- `packages/elizaos/src/commands/create.ts`: add `getCliVersion()` helper,\r\n  replace hardcoded `\"^1.0.0\"` with `` `^${getCliVersion()}` ``, export\r\n  `fixPackageJson` for testability\r\n- `packages/elizaos/src/__tests__/create.test.ts`: 5 new unit tests\r\n\r\n## Testing\r\n\r\n```bash\r\ncd packages/elizaos\r\nbun test   # 22 tests pass (17 pre-existing + 5 new)\n\n<!-- greptile_comment -->\n\n<h3>Greptile Summary</h3>\n\nThis PR fixes a stale hardcoded `\"^1.0.0\"` semver range in `elizaos create` by reading the actual installed CLI version from `package.json` at runtime, ensuring scaffolded projects always get the correct version of elizaOS dependencies.\n\n**Key changes:**\n- Adds `getCliVersion()` helper in `create.ts` that resolves the CLI's `package.json` via `__dirname` (the same path strategy used in `version.ts`)\n- Replaces the hardcoded `\"^1.0.0\"` with `` `^${getCliVersion()}` `` in the `workspace:*` substitution loop\n- Exports `fixPackageJson` so it can be unit-tested\n- Adds 5 well-targeted unit tests covering the new behaviour as well as existing edge cases (devDeps/peerDeps, non-workspace values, `private` flag removal, missing file)\n\nThe fix is correct and the path resolution (`__dirname + ../../package.json`) resolves to the package root both from source (`src/commands/`) and from the compiled output (`dist/commands/`). Two minor style observations are noted inline: `getCliVersion()` lacks the error-handling fallback present in the sibling `version.ts`, and the version is re-read from disk on each `workspace:*` entry rather than once per `fixPackageJson` call.\n\n<h3>Confidence Score: 5/5</h3>\n\nSafe to merge — the core fix is correct and all remaining findings are minor P2 style suggestions.\n\nBoth changed files are well-implemented: the version resolution path is correct for source and dist layouts, and the new tests give good coverage. The only open items are a missing error-handling fallback (a robustness suggestion matching `version.ts` style) and a trivial per-iteration file read, neither of which affect correctness in normal usage.\n\nNo files require special attention.\n\n<h3>Important Files Changed</h3>\n\n\n\n\n| Filename | Overview |\n|----------|----------|\n| packages/elizaos/src/commands/create.ts | Adds `getCliVersion()` to read the CLI's own `package.json` at runtime and uses it to replace `workspace:*` dependencies; `fixPackageJson` is also exported for testability. Two minor style issues: missing fallback error handling (unlike `version.ts`) and the version is re-read from disk per dep entry instead of once. |\n| packages/elizaos/src/__tests__/create.test.ts | New test file with 5 unit tests covering workspace:* replacement, devDeps/peerDeps, non-workspace dep preservation, private flag removal, and no-op on missing file. Good coverage for the new behaviour. |\n\n</details>\n\n\n\n<h3>Sequence Diagram</h3>\n\n```mermaid\nsequenceDiagram\n    participant User\n    participant CLI as elizaos create\n    participant copy as copyExample()\n    participant fix as fixPackageJson()\n    participant ver as getCliVersion()\n    participant pkg as CLI package.json\n\n    User->>CLI: elizaos create\n    CLI->>copy: copyExample(name, lang, dest)\n    copy->>fix: fixPackageJson(dest/package.json)\n    fix->>ver: getCliVersion()\n    ver->>pkg: fs.readFileSync(__dirname/../../package.json)\n    pkg-->>ver: { version: \"2.0.0-alpha.109\" }\n    ver-->>fix: \"2.0.0-alpha.109\"\n    fix->>fix: replace workspace:* → ^2.0.0-alpha.109\n    fix->>fix: delete pkg.private\n    fix-->>copy: done\n    copy-->>CLI: done\n    CLI-->>User: Project scaffolded with correct version\n```\n\n<!-- greptile_failed_comments -->\n<details><summary><h3>Comments Outside Diff (1)</h3></summary>\n\n1. `packages/elizaos/src/commands/create.ts`, line 114-123 ([link](https://github.com/elizaos/eliza/blob/c4d1d3b333c00448015372371c0cb83856c256b1/packages/elizaos/src/commands/create.ts#L114-L123)) \n\n   <a href=\"#\"><img alt=\"P2\" src=\"https://greptile-static-assets.s3.amazonaws.com/badges/p2.svg?v=7\" align=\"top\"></a> **`getCliVersion()` invoked on every `workspace:*` entry**\n\n   `getCliVersion()` reads and parses `package.json` from disk on each loop iteration. For a scaffolded project with several `workspace:*` deps across `dependencies`, `devDependencies`, and `peerDependencies`, this means multiple redundant file-system reads. The version can be resolved once before the loop:\n\n   ```typescript\n   export function fixPackageJson(filePath: string): void {\n     if (!fs.existsSync(filePath)) return;\n\n     const content = fs.readFileSync(filePath, \"utf-8\");\n     const pkg = JSON.parse(content) as Record<string, unknown>;\n     const cliVersion = getCliVersion(); // resolve once\n\n     const fixDeps = (deps: Record<string, string> | undefined) => {\n       if (!deps) return;\n       for (const [key, value] of Object.entries(deps)) {\n         if (value === \"workspace:*\") {\n           deps[key] = `^${cliVersion}`;\n         }\n       }\n     };\n     // ...\n   }\n   ```\n\n</details>\n\n<!-- /greptile_failed_comments -->\n\n<sub>Reviews (1): Last reviewed commit: [\"fix(elizaos): replace hardcoded ^1.0.0 w...\"](https://github.com/elizaos/eliza/commit/c4d1d3b333c00448015372371c0cb83856c256b1) | [Re-trigger Greptile](https://app.greptile.com/api/retrigger?id=26742149)</sub>\n\n> Greptile also left **1 inline comment** on this PR.\n\n<!-- /greptile_comment -->",
+      "repository": "elizaos/eliza",
+      "createdAt": "2026-03-30T07:55:23Z",
+      "mergedAt": null,
+      "additions": 135,
+      "deletions": 3
+    },
+    {
+      "id": "PR_kwDOMT5cIs7OWCDn",
+      "title": "chore(deps): bump cryptography from 46.0.5 to 46.0.6 in /packages/python in the uv group across 1 directory",
+      "author": "dependabot",
+      "number": 6696,
+      "body": "Bumps the uv group with 1 update in the /packages/python directory: [cryptography](https://github.com/pyca/cryptography).\n\nUpdates `cryptography` from 46.0.5 to 46.0.6\n<details>\n<summary>Changelog</summary>\n<p><em>Sourced from <a href=\"https://github.com/pyca/cryptography/blob/main/CHANGELOG.rst\">cryptography's changelog</a>.</em></p>\n<blockquote>\n<p>46.0.6 - 2026-03-25</p>\n<pre><code>\n* **SECURITY ISSUE**: Fixed a bug where name constraints were not applied\n  to peer names during verification when the leaf certificate contains a\n  wildcard DNS SAN. Ordinary X.509 topologies are not affected by this bug,\n  including those used by the Web PKI. Credit to **Oleh Konko (1seal)** for\n  reporting the issue. **CVE-2026-34073**\n<p>.. _v46-0-5:<br />\n</code></pre></p>\n</blockquote>\n</details>\n<details>\n<summary>Commits</summary>\n<ul>\n<li><a href=\"https://github.com/pyca/cryptography/commit/91d728897bdad30cd5c79a2b23e207f1f050d587\"><code>91d7288</code></a> Cherry-pick <a href=\"https://redirect.github.com/pyca/cryptography/issues/14542\">#14542</a> (<a href=\"https://redirect.github.com/pyca/cryptography/issues/14543\">#14543</a>)</li>\n<li>See full diff in <a href=\"https://github.com/pyca/cryptography/compare/46.0.5...46.0.6\">compare view</a></li>\n</ul>\n</details>\n<br />\n\n\n[![Dependabot compatibility score](https://dependabot-badges.githubapp.com/badges/compatibility_score?dependency-name=cryptography&package-manager=uv&previous-version=46.0.5&new-version=46.0.6)](https://docs.github.com/en/github/managing-security-vulnerabilities/about-dependabot-security-updates#about-compatibility-scores)\n\nDependabot will resolve any conflicts with this PR as long as you don't alter it yourself. You can also trigger a rebase manually by commenting `@dependabot rebase`.\n\n[//]: # (dependabot-automerge-start)\n[//]: # (dependabot-automerge-end)\n\n---\n\n<details>\n<summary>Dependabot commands and options</summary>\n<br />\n\nYou can trigger Dependabot actions by commenting on this PR:\n- `@dependabot rebase` will rebase this PR\n- `@dependabot recreate` will recreate this PR, overwriting any edits that have been made to it\n- `@dependabot show <dependency name> ignore conditions` will show all of the ignore conditions of the specified dependency\n- `@dependabot ignore <dependency name> major version` will close this group update PR and stop Dependabot creating any more for the specific dependency's major version (unless you unignore this specific dependency's major version or upgrade to it yourself)\n- `@dependabot ignore <dependency name> minor version` will close this group update PR and stop Dependabot creating any more for the specific dependency's minor version (unless you unignore this specific dependency's minor version or upgrade to it yourself)\n- `@dependabot ignore <dependency name>` will close this group update PR and stop Dependabot creating any more for the specific dependency (unless you unignore this specific dependency or upgrade to it yourself)\n- `@dependabot unignore <dependency name>` will remove all of the ignore conditions of the specified dependency\n- `@dependabot unignore <dependency name> <ignore condition>` will remove the ignore condition of the specified dependency and ignore conditions\nYou can disable automated security fix PRs for this repo from the [Security Alerts page](https://github.com/elizaOS/eliza/network/alerts).\n\n</details>",
+      "repository": "elizaos/eliza",
+      "createdAt": "2026-03-29T04:37:02Z",
+      "mergedAt": null,
+      "additions": 51,
+      "deletions": 51
+    }
+  ],
+  "codeChanges": {
+    "additions": 0,
+    "deletions": 0,
+    "files": 0,
+    "commitCount": 7
+  },
+  "completedItems": [],
+  "topContributors": [
+    {
+      "username": "t49qnsx7qt-kpanks",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/263812192?v=4",
+      "totalScore": 44.2837738965761,
+      "prScore": 43.5437738965761,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0.74,
+      "summary": "t49qnsx7qt-kpanks: Focused on expanding agent capabilities and system stability, notably opening PR #6701 in elizaos/eliza to introduce the plugin-mnemopay feature for economic memory. They demonstrated significant effort through 1,680 lines of code changes across 21 files, balancing new feature development with a primary focus on bugfix work."
+    },
+    {
+      "username": "odilitime",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/16395496?u=c9bac48e632aae594a0d85aaf9e9c9c69b674d8b&v=4",
+      "totalScore": 43.5437738965761,
+      "prScore": 43.5437738965761,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "odilitime: Focused on expanding the project's starter capabilities by opening PR #6702 in elizaos/eliza, which introduces a new agent-like starter structure. This feature work involved significant development effort, resulting in 1,479 total line changes across 25 files. Their contributions this week were dedicated entirely to feature implementation, with a primary emphasis on code and configuration updates."
+    },
+    {
+      "username": "greptile-apps",
+      "avatarUrl": "https://avatars.githubusercontent.com/in/867647?v=4",
+      "totalScore": 40.5,
+      "prScore": 0,
+      "issueScore": 0,
+      "reviewScore": 40.5,
+      "commentScore": 0,
+      "summary": "greptile-apps: No activity this week."
+    },
+    {
+      "username": "Dexploarer",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/211557447?u=21a243d61cc1f87574328ae07fc64d7d7577b53d&v=4",
+      "totalScore": 39.17433124488516,
+      "prScore": 39.17433124488516,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "Dexploarer: Focused on strengthening supply chain security and expanding ecosystem capabilities, opening PRs to pin axios to version 1.7.8 in elizaos-plugins/plugin-autocoder (#3) and elizaos-plugins/plugin-coingecko (#2) while adding new plugins to the registry via elizaos-plugins/registry (#328). Their work this week centered on configuration management, balancing critical security hardening with the integration of new feature sets."
+    },
+    {
+      "username": "ninglinLiu",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/224592858?v=4",
+      "totalScore": 23.93447393313069,
+      "prScore": 23.93447393313069,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "ninglinLiu: Focused on improving CLI reliability by addressing workspace versioning logic in elizaos/eliza#6698. This work involved a targeted bugfix across two files, contributing 135 additions and 3 deletions to both the codebase and test suite. Their efforts this week were dedicated entirely to bugfix work."
+    },
+    {
+      "username": "LamboPoewert",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/91011698?u=a8b0456dbd9d3e15b0fee96b4cf2813a5e15022c&v=4",
+      "totalScore": 18.846573590279974,
+      "prScore": 14.346573590279972,
+      "issueScore": 0,
+      "reviewScore": 4.5,
+      "commentScore": 0,
+      "summary": "LamboPoewert: Focused on expanding the ecosystem through the submission of PR #331 to elizaos-plugins/registry, which introduces the @madeonsol/plugin-madeonsol. Their work this week involved 2 commits and minor configuration adjustments, balancing bugfix efforts with plugin integration."
+    },
+    {
+      "username": "vjshaw",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/32026795?u=560997afe490518ad82db11a1a2d4b812d85854d&v=4",
+      "totalScore": 14.780879734614027,
+      "prScore": 14.780879734614027,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "vjshaw: Focused on expanding the ecosystem's capabilities by opening PR #326 in elizaos-plugins/registry to integrate the @elizaos/plugin-nulucre for wallet reputation scoring. This work centers on enhancing plugin functionality and data-driven wallet analysis."
+    },
+    {
+      "username": "twzrd-sol",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/33047129?u=29ae3734fadc4e599f005f1db496e01a4ea6fe5f&v=4",
+      "totalScore": 14.693147180559945,
+      "prScore": 14.693147180559945,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "twzrd-sol: Focused on expanding ecosystem capabilities by initiating the integration of AI model velocity signals into the elizaos-plugins/registry repository via PR #32. This contribution centers on feature development through configuration updates to support new plugin functionality."
+    },
+    {
+      "username": "axnetfun",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/269182264?v=4",
+      "totalScore": 14.693147180559945,
+      "prScore": 14.693147180559945,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "axnetfun: Focused on expanding the ecosystem by initiating the integration of @axnetfun/plugin-axnet into the registry via PR #324. This work involved a balanced effort between feature implementation and bug fixes, resulting in 2 commits across configuration files."
+    },
+    {
+      "username": "0xSolace",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/257989456?u=e0d4e0c6385403319241eb46ba647b49083d4a05&v=4",
+      "totalScore": 14.693147180559945,
+      "prScore": 14.693147180559945,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "0xSolace: Focused on expanding ecosystem capabilities by initiating the integration of a new plugin, as seen in the open PR for elizaos-plugins/registry#329. This work involved a targeted configuration update to support the @elizaos/plugin-bsc-memes feature. Their activity this week was centered entirely on feature development within project configuration files."
+    },
+    {
+      "username": "AICre8dev",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/194568078?v=4",
+      "totalScore": 14.346573590279972,
+      "prScore": 14.346573590279972,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "AICre8dev: Focused on expanding ecosystem integrations by opening PR #327 in elizaos-plugins/registry to introduce the vybes.fun plugin. This work centers on enhancing plugin functionality within the registry."
+    },
+    {
+      "username": "goatgaucho",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/253565951?v=4",
+      "totalScore": 13.808573590279972,
+      "prScore": 13.808573590279972,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "goatgaucho: Focused on expanding ecosystem integrations by opening PR #332 in elizaos-plugins/registry to add the @trustlayer/plugin-elizaos. This contribution involved a targeted configuration update, representing the entirety of their activity for the week."
+    },
+    {
+      "username": "MoonSoon69",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/193276852?u=ae4dfec2ee87ce58e61ddf50d465a8df6618dd8e&v=4",
+      "totalScore": 8.956573590279971,
+      "prScore": 8.756573590279972,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0.2,
+      "summary": "MoonSoon69: Focused on expanding ecosystem capabilities by opening a pull request to integrate the swap API into the registry (elizaos-plugins/registry#330). Their activity this week was centered on plugin development and registry management."
+    },
+    {
+      "username": "majorelalexis-stack",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/266517750?v=4",
+      "totalScore": 2.44,
+      "prScore": 0,
+      "issueScore": 2.1,
+      "reviewScore": 0,
+      "commentScore": 0.33999999999999997,
+      "summary": "majorelalexis-stack: Focused on expanding the ecosystem's capabilities by initiating the integration of the MAXIA AI Marketplace via issue #6700 in elizaos/eliza. They further contributed to project discussions through three issue comments, maintaining engagement with the community's development roadmap."
+    },
+    {
+      "username": "pshkv",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/32749662?u=e47550332e8047fdf647b65102974ffda56c2c79&v=4",
+      "totalScore": 2.2,
+      "prScore": 0,
+      "issueScore": 2,
+      "reviewScore": 0,
+      "commentScore": 0.2,
+      "summary": "pshkv: Focused on expanding the ecosystem's capabilities by initiating a new plugin proposal in elizaos/eliza (#6707). They also engaged in community discussions by providing feedback on an existing issue."
+    },
+    {
+      "username": "edcet",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/94407827?v=4",
+      "totalScore": 2,
+      "prScore": 0,
+      "issueScore": 2,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "edcet: Focused on project maintenance and environment stability by identifying a critical issue in elizaos-plugins/plugin-ollama (#22) regarding a failing postinstall script. This contribution highlights a focus on improving installation reliability and developer experience within the Ollama plugin."
+    },
+    {
+      "username": "dirtybits",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/28834908?u=b8dc1929987e56622b91adf842c1499c4196210d&v=4",
+      "totalScore": 2,
+      "prScore": 0,
+      "issueScore": 2,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "dirtybits: Focused on project stability by identifying a critical installation issue in elizaos/eliza (#6704) regarding Bun's postinstall script. This contribution highlights a focus on improving the developer experience and environment setup for the project."
+    },
+    {
+      "username": "CryptoGenesisSecurity",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/83247083?u=8c9172a589d1dc3ecb7359ec620a0170f68e84e2&v=4",
+      "totalScore": 2,
+      "prScore": 0,
+      "issueScore": 2,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "CryptoGenesisSecurity: Focused on enhancing trading security by initiating the development of a new safety plugin in elizaos/eliza (#6706) to implement token safety checks. This effort represents their primary contribution for the week, centering on proactive risk mitigation within the ecosystem."
+    },
+    {
+      "username": "jonathanbulkeley",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/258885064?v=4",
+      "totalScore": 0.4,
+      "prScore": 0,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0.4,
+      "summary": null
+    },
+    {
+      "username": "x402-index",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/265478515?u=46272d5bd16354a72bd802f7987cf1d4a602dea2&v=4",
+      "totalScore": 0.33999999999999997,
+      "prScore": 0,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0.33999999999999997,
+      "summary": null
+    },
+    {
+      "username": "up2itnow0822",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/220628848?u=122901ce09c43502713fd75c969aea3a88d5127b&v=4",
+      "totalScore": 0.2,
+      "prScore": 0,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0.2,
+      "summary": null
+    },
+    {
+      "username": "suitandclaw",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/260769788?v=4",
+      "totalScore": 0.2,
+      "prScore": 0,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0.2,
+      "summary": null
+    }
+  ],
+  "newPRs": 4,
+  "mergedPRs": 0,
+  "newIssues": 4,
+  "closedIssues": 0,
+  "activeContributors": 12
+}

@@ -1,0 +1,881 @@
+1:"$Sreact.fragment"
+2:I[4817319,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"IntervalSelector"]
+3:I[6998365,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"LlmCopyButton"]
+f:I[3642796,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],""]
+10:I[3238488,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"StatCardsDisplay"]
+16:I[4261541,["/eliza-leaderboard/_next/static/chunks/b33bcbdcb3f88354.js","/eliza-leaderboard/_next/static/chunks/8ba59154b6704904.js"],"OutletBoundary"]
+17:"$Sreact.suspense"
+4:T1727,## Summary
+
+Adds a pluggable Docker container + Headscale VPN infrastructure layer as an alternative sandbox provider for Milady agents. Instead of Vercel Sandboxes, operators can deploy agents as Docker containers on remote VPS nodes with optional WireGuard mesh networking.
+
+**34 files changed, ~8,100 lines added** | Rebased onto `dev` with `milady` naming conventions.
+
+> Supersedes #375 (was targeting `main` with old `milaidy` naming).
+
+---
+
+## Architecture
+
+```
+                    MILADY_SANDBOX_PROVIDER=docker
+                              │
+User → Eliza Cloud API → SandboxProvider Factory
+                              │
+              ┌───────────────┼───────────────┐
+              ▼                               ▼
+     VercelSandboxProvider          DockerSandboxProvider
+     (existing, extracted)                    │
+                                    ┌─────────┼─────────┐
+                                    ▼         ▼         ▼
+                               SSH Client  Node Mgr  Headscale
+                                    │         │         │
+                                    ▼         ▼         ▼
+                              Hetzner VPS  Placement  VPN Mesh
+                              (Docker)     Strategy   (WireGuard)
+```
+
+## What's included
+
+### 1. Sandbox Provider Abstraction
+- `SandboxProvider` interface + factory (`MILADY_SANDBOX_PROVIDER` env var)
+- `VercelSandboxProvider`: extracted from inline Vercel code (zero behavior change)
+- `DockerSandboxProvider`: full lifecycle via SSH to remote nodes
+
+### 2. Docker Infrastructure
+- **DockerSSHClient**: connection pooling keyed on `host:port`, command timeout
+- **DockerSandboxProvider**: container create/stop/health/runCommand, DB-backed port allocation (collision-free), health check polling (3s interval, 60s timeout), shell-escaped commands, full agentId container names
+- **DockerNodeManager**: DB-backed least-loaded placement, health checks, capacity sync
+
+### 3. Headscale VPN
+- **HeadscaleClient**: REST API client for Headscale control plane
+- **HeadscaleIntegration**: ephemeral pre-auth keys per container, VPN lifecycle, automatic cleanup
+
+### 4. Database (migration `0046_docker_nodes.sql`)
+- New `docker_nodes` table (node_id, hostname, capacity, health status, allocation tracking)
+- 6 new columns on `milady_sandboxes`: node_id, container_name, bridge_port, web_ui_port, headscale_ip, docker_image
+
+### 5. Admin API (7 routes, all `requireAdmin`)
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/admin/docker-nodes` | GET/POST | List/register nodes |
+| `/admin/docker-nodes/:id` | GET/PATCH/DELETE | Node CRUD |
+| `/admin/docker-nodes/:id/health-check` | POST | SSH health check |
+| `/admin/docker-containers` | GET | List running containers |
+| `/admin/docker-containers/audit` | POST | Ghost/orphan audit |
+| `/admin/docker-containers/:id/logs` | GET | Container logs |
+| `/admin/headscale` | GET | Mesh status |
+
+### 6. Admin UI
+- **Infrastructure dashboard** (1,284 lines): Overview + Nodes + Containers + Mesh tabs
+- **Milady sandboxes table**: Docker metadata, status badges, VPN IPs
+- **Agent detail page**: Docker info card, SSH access info
+- **Docker logs viewer**: search, copy, download, auto-scroll
+
+### 7. Documentation
+- `docs/INTEGRATION_MAP.md` (1,555 lines): auth, credits, sandbox lifecycle mapping
+- `docs/DOCKER_HEADSCALE_PLAN.md`: implementation plan
+- `docs/DOCKER_PROVISIONING_SUMMARY.md`: provisioning flow docs
+
+---
+
+## Code Review (from #375, all addressed)
+
+All 12 findings from the automated review were fixed before rebasing:
+
+| # | Issue | Fix |
+|---|-------|-----|
+| 1 | In-memory registry loses state on restart | `resolveContainer()` hydrates from DB via `findBySandboxId()` |
+| 2 | DockerNodeManager bypassed | `create()` uses `getAvailableNode()` for least-loaded placement |
+| 3 | Port collision under concurrency | `allocatePort()` queries DB for used ports on target node |
+| 4 | Command injection in `runCommand()` | All args `shellQuote()`'d individually |
+| 5 | agentId unsanitized in shell | `validateAgentId()` before any shell interpolation |
+| 6 | Health check single-shot | Polls with 3s interval, 60s timeout |
+| 7 | Container name truncation collision | Uses full agentId |
+| 8 | Weakly typed metadata | Exported `DockerSandboxMetadata` interface |
+| 9 | Missing step 9 in comments | Fixed numbering |
+| 10 | SSH pool key collision | Keyed on `hostname:port` |
+| 11 | `parseDockerNodes()` re-parses every call | Module-level cache |
+| 12 | Docs at repo root | Moved to `docs/` |
+
+---
+
+## Configuration
+
+```env
+# Switch to Docker provider (default: vercel)
+MILADY_SANDBOX_PROVIDER=docker
+MILADY_DOCKER_NODES=node1:192.168.1.100:8,node2:192.168.1.101:8
+MILADY_SSH_KEY_PATH=/path/to/ssh/key
+MILADY_SSH_USER=root
+
+# Optional: Headscale VPN
+HEADSCALE_API_KEY=hskey-api-xxx
+HEADSCALE_API_URL=http://headscale:8081
+HEADSCALE_USER=milady
+```
+
+## Risk & Rollback
+
+- **Zero risk to existing Vercel path**: factory defaults to `vercel`, Docker code only loaded when configured
+- **Rollback**: remove `MILADY_SANDBOX_PROVIDER` env var
+- **Migration is additive**: new table + nullable columns, no data modifications
+- **No breaking API changes**: all existing routes work identically
+
+## Testing Checklist
+
+- [ ] Provision agent with `MILADY_SANDBOX_PROVIDER=vercel` (no regression)
+- [ ] Provision agent with `MILADY_SANDBOX_PROVIDER=docker`
+- [ ] Docker metadata persisted in DB
+- [ ] Bridge/stream/snapshot/restore work through provider
+- [ ] Agent deletion cleans up container + VPN
+- [ ] Admin API: nodes CRUD, container list/logs/audit, headscale status
+- [ ] Admin dashboard renders all tabs
+- [ ] Run migration `0046_docker_nodes.sql` on test DB
+- [ ] `tsc --noEmit` passes (2 pre-existing errors only)5:T2344,## Summary
+
+Adds a full Docker container + Headscale VPN infrastructure layer as an alternative sandbox provider for Milaidy agents. Instead of running agents in Vercel Sandboxes, operators can now deploy agents as Docker containers on remote VPS nodes with optional WireGuard mesh networking via Headscale.
+
+**34 files changed, ~8,200 lines added**
+
+---
+
+## Motivation
+
+Vercel Sandboxes are convenient but limiting: no persistent filesystem, no SSH access, no custom networking, constrained resources. For agents that need a real VPS-like environment (CLI tools, persistent data, inter-agent communication), we need Docker containers on dedicated infrastructure.
+
+This PR introduces a provider abstraction so both backends coexist cleanly, controlled by a single env var.
+
+---
+
+## Architecture
+
+```
+                    MILAIDY_SANDBOX_PROVIDER=docker
+                              │
+User → Eliza Cloud API → SandboxProvider Factory
+                              │
+              ┌───────────────┼───────────────┐
+              ▼                               ▼
+     VercelSandboxProvider          DockerSandboxProvider
+     (existing behavior)                      │
+                                    ┌─────────┼─────────┐
+                                    ▼         ▼         ▼
+                               SSH Client  Node Mgr  Headscale
+                                    │         │         │
+                                    ▼         ▼         ▼
+                              Hetzner VPS  Placement  VPN Mesh
+                              (Docker)     Strategy   (WireGuard)
+```
+
+---
+
+## What's included
+
+### 1. Sandbox Provider Abstraction (`lib/services/sandbox-provider.ts`)
+
+Extracted a `SandboxProvider` interface from the existing Vercel-specific code:
+
+```typescript
+interface SandboxProvider {
+  create(config: SandboxCreateConfig): Promise<SandboxHandle>;
+  stop(sandboxId: string): Promise<void>;
+  checkHealth(healthUrl: string): Promise<boolean>;
+  runCommand?(sandboxId: string, cmd: string): Promise<string>;
+}
+```
+
+Factory function reads `MILAIDY_SANDBOX_PROVIDER` env var (`vercel` | `docker`), defaults to `vercel`. Existing Vercel code extracted into `VercelSandboxProvider` with zero behavior changes.
+
+### 2. Docker SSH Client (`lib/services/docker-ssh.ts`)
+
+SSH client with connection pooling for managing containers on remote nodes:
+- Connection pool with configurable max connections
+- Command execution with timeout support
+- Container lifecycle (create, stop, remove, inspect, logs)
+- Image management (pull, check)
+
+### 3. Docker Sandbox Provider (`lib/services/docker-sandbox-provider.ts`)
+
+Full `SandboxProvider` implementation for Docker:
+- Container creation on remote nodes via SSH
+- Port allocation: bridge (18790-19790), web UI (20000-25000)
+- Health check polling with configurable timeout
+- In-memory container registry with DB backing
+- Optional Headscale VPN integration (graceful degradation if not configured)
+- Metadata passthrough (node_id, container_name, ports, VPN IP, image)
+
+### 4. Node Manager (`lib/services/docker-node-manager.ts`)
+
+Multi-node management with smart placement:
+- Least-loaded allocation strategy
+- Periodic health checks
+- Capacity tracking and reporting
+- Node enable/disable for maintenance
+
+### 5. Headscale VPN Layer
+
+**Client** (`lib/services/headscale-client.ts`):
+- Full REST API client for Headscale control plane
+- Node management, pre-auth key generation, route handling, health checks
+
+**Integration** (`lib/services/headscale-integration.ts`):
+- Container VPN lifecycle: prepare → register → cleanup
+- Ephemeral pre-auth keys per container
+- VPN registration polling (60s timeout)
+- Automatic node cleanup on container stop
+
+### 6. Database Schema (`db/migrations/0034_docker_nodes.sql`)
+
+New `docker_nodes` table:
+```sql
+CREATE TABLE docker_nodes (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  node_id TEXT UNIQUE NOT NULL,
+  hostname TEXT NOT NULL,
+  ssh_port INTEGER DEFAULT 22,
+  capacity INTEGER DEFAULT 8,
+  enabled BOOLEAN DEFAULT true,
+  status TEXT DEFAULT 'unknown',
+  allocated_count INTEGER DEFAULT 0,
+  last_health_check TIMESTAMPTZ,
+  ssh_user TEXT DEFAULT 'root',
+  metadata JSONB DEFAULT '{}'
+);
+```
+
+6 new columns on `milaidy_sandboxes`: `node_id`, `container_name`, `bridge_port`, `web_ui_port`, `headscale_ip`, `docker_image`.
+
+### 7. Admin API Routes (`app/api/v1/admin/`)
+
+7 new route files behind `requireAdmin` auth:
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/admin/docker-nodes` | GET | List all nodes with capacity info |
+| `/admin/docker-nodes` | POST | Register a new node |
+| `/admin/docker-nodes/:id` | GET/PATCH/DELETE | Node CRUD |
+| `/admin/docker-nodes/:id/health-check` | POST | SSH health check |
+| `/admin/docker-containers` | GET | List running containers |
+| `/admin/docker-containers/audit` | POST | Ghost/orphan container audit |
+| `/admin/docker-containers/:id/logs` | GET | Fetch container logs |
+| `/admin/headscale` | GET | Mesh status, nodes, pre-auth keys |
+
+### 8. Admin Infrastructure Dashboard (`components/admin/infrastructure-dashboard.tsx`)
+
+Full admin UI (1,284 lines) with three tabs:
+- **Docker Nodes**: list, add, edit, delete, health check, capacity bars
+- **Containers**: list with status badges, log viewer, ghost audit
+- **Headscale**: mesh status, connected nodes, pre-auth keys, VPN IPs
+
+### 9. Enhanced Container Views
+
+- **`components/containers/milaidy-sandboxes-table.tsx`** (608 lines): New table component showing all sandboxes with provider type, docker metadata, status filtering
+- **`components/containers/docker-logs-viewer.tsx`** (259 lines): Real-time log viewer with auto-scroll, line count, tail controls
+- **`app/dashboard/containers/agents/[id]/page.tsx`** (532 lines): Agent detail page with overview, logs, actions
+- Sidebar updated with infrastructure nav items
+
+### 10. Documentation
+
+- `docs/INTEGRATION_MAP.md` (1,555 lines): Comprehensive mapping of auth, credits, sandbox lifecycle, API surface, and data model between ElizaCloud and milady-cloud
+- `DOCKER_HEADSCALE_PLAN.md`: Original implementation plan
+- `DOCKER_PROVISIONING_SUMMARY.md`: Provisioning flow documentation
+
+---
+
+## Provisioning flow (Docker)
+
+```
+1. Database setup     → Neon DB provisioned (same as Vercel path)
+2. VPN preparation    → Generate Headscale pre-auth key (optional)
+3. Container creation → SSH to least-loaded node, pull image, run container
+4. VPN registration   → Wait for container to join mesh (60s timeout)
+5. Health check       → Poll /health endpoint via provider
+6. State restore      → Push backup via bridge API (if exists)
+7. Persist metadata   → Store docker fields in milaidy_sandboxes
+8. Return handle      → bridgeUrl + healthUrl (VPN IP or node hostname)
+```
+
+---
+
+## Configuration
+
+### Required for Docker provider
+```env
+MILAIDY_SANDBOX_PROVIDER=docker
+MILAIDY_DOCKER_NODES=node1:192.168.1.100:8,node2:192.168.1.101:8
+MILAIDY_SSH_KEY_PATH=/path/to/ssh/key
+MILAIDY_SSH_USER=root
+```
+
+### Optional (Headscale VPN)
+```env
+HEADSCALE_API_KEY=hskey-api-xxx
+HEADSCALE_API_URL=http://headscale:8081
+HEADSCALE_USER=milaidy
+```
+
+### Switching providers
+```env
+# Use Vercel (default, no change needed)
+MILAIDY_SANDBOX_PROVIDER=vercel
+
+# Use Docker
+MILAIDY_SANDBOX_PROVIDER=docker
+```
+
+---
+
+## Testing checklist
+
+- [ ] Provision agent with `MILAIDY_SANDBOX_PROVIDER=vercel` (no regression)
+- [ ] Provision agent with `MILAIDY_SANDBOX_PROVIDER=docker`
+- [ ] Verify docker metadata persisted in DB (node_id, container_name, ports)
+- [ ] Bridge requests work via `/api/v1/milaidy/agents/:id/bridge`
+- [ ] Streaming works via `/api/v1/milaidy/agents/:id/stream`
+- [ ] Snapshot + restore roundtrip
+- [ ] Agent deletion cleans up container + VPN node
+- [ ] Test with Headscale enabled (VPN IPs used for bridge/health URLs)
+- [ ] Test without Headscale (fallback to node hostname)
+- [ ] Admin API: list/add/health-check docker nodes
+- [ ] Admin API: list containers, fetch logs, run audit
+- [ ] Admin API: headscale mesh status
+- [ ] Admin dashboard renders all three tabs
+- [ ] Run migration `0034_docker_nodes.sql` on test DB
+- [ ] `tsc --noEmit` passes (2 pre-existing errors unrelated to this PR)
+
+---
+
+## Pre-existing type errors (not from this PR)
+
+```
+components/admin/admin-metrics-client.tsx — chart data type mismatch
+components/builders/quick-create-dialog.tsx — missing prop
+```
+
+These exist on `main` and are unrelated to this work.
+
+---
+
+## Risk & rollback
+
+- **Zero risk to existing Vercel path**: Provider factory defaults to `vercel`, Docker code is only loaded when explicitly configured
+- **Rollback**: Set `MILAIDY_SANDBOX_PROVIDER=vercel` (or remove the var). Docker code is never imported.
+- **Migration is additive**: New table + new nullable columns, no data modifications
+- **No breaking API changes**: All existing routes work identically6:Td1c,This pull request introduces performance optimizations and reliability improvements for action validation and multi-step processing in the cloud bootstrap plugin. The most significant changes include caching action validation results to avoid redundant computation, reducing retry counts and timeouts for faster failure handling, and updating agent instructions to encourage fewer iterations per task.
+
+**Performance and reliability improvements:**
+
+* Added a per-message cache for action validation results in `actions.ts`, significantly reducing redundant validation of actions during a single message processing cycle. Includes a cache invalidation function for use when new tools are registered. [[1]](diffhunk://#diff-1043c437446f42ad433555de27e72776dc407feedd0a41e5badfe43da2e5c3c5R31-R52) [[2]](diffhunk://#diff-1043c437446f42ad433555de27e72776dc407feedd0a41e5badfe43da2e5c3c5R77-R88) [[3]](diffhunk://#diff-149a006b2d70627fd4b73f8d8b75e1bf25bf170f90f14ec642417a11662a607cR970)
+* Lowered retry counts and timeouts for multi-step parsing and summary operations, and reduced the base/max delay for retries, resulting in faster error recovery and less waiting on failures. [[1]](diffhunk://#diff-149a006b2d70627fd4b73f8d8b75e1bf25bf170f90f14ec642417a11662a607cL51-R53) [[2]](diffhunk://#diff-149a006b2d70627fd4b73f8d8b75e1bf25bf170f90f14ec642417a11662a607cL729-R724) [[3]](diffhunk://#diff-149a006b2d70627fd4b73f8d8b75e1bf25bf170f90f14ec642417a11662a607cL1113-R1109) [[4]](diffhunk://#diff-50516c1ecf1f24da1ee22238877b5c294fb25685f26e62b0f5f94e65b89049eeL9-R9)
+
+**Codebase and logic simplification:**
+
+* Removed redundant waiting for MCP service initialization in `cloud-bootstrap-message-service.ts`, relying on runtime initialization to guarantee tool availability.
+
+**Agent behavior and instruction updates:**
+
+* Updated the multi-step agent template to emphasize immediate completion after task fulfillment and to minimize unnecessary action iterations.
+
+<!-- CURSOR_SUMMARY -->
+---
+
+> [!NOTE]
+> **Medium Risk**
+> Touches core action discovery/validation and multi-step execution defaults (retries/timeouts), which can change tool availability timing and cause earlier failures if limits are too aggressive.
+> 
+> **Overview**
+> **Reduces per-message overhead in action prompting** by adding a per-`message.id` cache in the `ACTIONS` provider for validated actions and MCP Tier-2 tool counts, with a 2-minute TTL and an explicit `invalidateActionValidationCache()` hook.
+> 
+> **Speeds up multi-step runs** by lowering retry backoff delays and reducing default parse/summary retries from `5` to `2`, removing the in-handler wait for MCP initialization (now assumed to happen during runtime creation), and invalidating the action-validation cache after successful `SEARCH_ACTIONS` tool registration.
+> 
+> **Tightens MCP defaults** by switching the tool call fallback timeout to `DEFAULT_MCP_TIMEOUT_MS = 15000` (keeping the legacy constant as a deprecated alias), and adds unit tests covering the new caching/invalidation behavior and the updated retry/timeout defaults.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit cf25060073d3d0452c9520e64772b84e069ff1c0. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->7:T7ad,# Relates to
+
+No existing issue.
+
+# Risks
+
+Low. Additive change only — new ref guard and two guard conditions added to an existing \`useEffect\`. No logic removed or restructured.
+
+# Background
+
+## What does this PR do?
+
+After an agent finishes responding, the chat textarea loses focus. The user has to click the input field manually before they can type their next message. This PR refocuses the input automatically when the agent finishes replying.
+
+## What kind of change is this?
+
+Bug fix (non-breaking change which fixes an issue)
+
+## Implementation notes
+
+- Adds \`hasSentMessageRef\` — a ref that is set to \`true\` the first time the user sends or retries a message. This prevents the \`useEffect\` from firing on mount (which would pop the virtual keyboard on mobile before the user has done anything).
+- The focus is only applied on non-mobile (\`!chatState.isMobile\`) to avoid the mobile virtual-keyboard anti-pattern of the keyboard appearing unexpectedly.
+
+# Documentation changes needed?
+
+My changes do not require a change to the project documentation.
+
+# Testing
+
+## Where should a reviewer start?
+
+\`packages/client/src/components/chat.tsx\` — the \`useEffect\` around line 700 that syncs \`inputDisabledRef\`, and the two \`updateChatState({ inputDisabled: true })\` calls in \`handleSendMessage\` and \`handleRetryMessage\`.
+
+## Detailed testing steps
+
+**Desktop:**
+1. Start the elizaOS server and open the client at \`localhost:3000\`
+2. Open a DM chat with an agent
+3. Send a message and wait for the agent to reply
+4. Verify the text input is focused automatically after the reply — cursor is active, no click needed
+5. Verify the input is NOT auto-focused on initial page load (before sending anything)
+
+**Mobile / narrow viewport:**
+1. Open the client on a mobile device or resize the browser below 768px
+2. Send a message and wait for the agent to reply
+3. Verify the virtual keyboard does NOT pop up automatically after the reply0:{"buildId":"US8XLB_zHXYj_PVAECGcd","rsc":["$","$1","c",{"children":[["$","div",null,{"className":"container mx-auto px-6 py-8 md:px-8","children":["$","div",null,{"className":"mx-auto max-w-4xl","children":[["$","div",null,{"className":"mb-4 flex flex-col justify-between sm:flex-row","children":[["$","$L2",null,{"currentInterval":"day","currentDate":"2026-03-09"}],["$","$L3",null,{"metrics":{"date":"2026-03-09","interval":{"intervalStart":"$D2026-03-09T00:00:00.000Z","intervalEnd":"$D2026-03-10T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":3,"merged":2,"total":4},"issues":{"new":0,"closed":0,"total":0},"activeContributors":5,"codeChanges":{"additions":10270,"deletions":546,"files":46,"commitCount":57},"topContributors":[{"username":"0xSolace","avatarUrl":"https://avatars.githubusercontent.com/u/257989456?u=2138984e3bfc9b5f8cd3f60f134e550b4cc22520&v=4","totalScore":103.5255477931522,"prScore":103.0875477931522,"issueScore":0,"reviewScore":0,"commentScore":0.43799999999999994,"summary":null},{"username":"monyrth","avatarUrl":"https://avatars.githubusercontent.com/u/120821793?u=d2d8e8dfae64580900bb5ff00f7b75391b4291da&v=4","totalScore":10.96961228866811,"prScore":10.96961228866811,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":null},{"username":"odilitime","avatarUrl":"https://avatars.githubusercontent.com/u/16395496?u=c9bac48e632aae594a0d85aaf9e9c9c69b674d8b&v=4","totalScore":4.84,"prScore":0,"issueScore":0,"reviewScore":4.5,"commentScore":0.33999999999999997,"summary":null},{"username":"greptile-apps","avatarUrl":"https://avatars.githubusercontent.com/in/867647?v=4","totalScore":4.5,"prScore":0,"issueScore":0,"reviewScore":4.5,"commentScore":0,"summary":null}],"focusAreas":[{"area":"lib/services","count":10},{"area":"app/api","count":7},{"area":"lib/eliza","count":5},{"area":"app/dashboard","count":4},{"area":"tests/unit","count":3},{"area":"db/repositories","count":3},{"area":"db/schemas","count":3},{"area":"docs","count":3},{"area":"components/containers","count":2},{"area":"components/admin","count":1}],"topIssues":[],"topPullRequests":[{"id":"PR_kwDOP6BTDM7I-Yb2","title":"feat: Docker + Headscale infrastructure layer for Milady sandboxes","author":"0xSolace","number":376,"body":"$4","repository":"elizaos/cloud","createdAt":"2026-03-09T06:43:08Z","mergedAt":"2026-03-09T12:05:02Z","additions":9049,"deletions":145},{"id":"PR_kwDOP6BTDM7I-EfH","title":"feat: Docker + Headscale infrastructure layer for Milaidy sandboxes","author":"0xSolace","number":375,"body":"$5","repository":"elizaos/cloud","createdAt":"2026-03-09T06:16:02Z","mergedAt":null,"additions":8453,"deletions":177},{"id":"PR_kwDOP6BTDM7FGR3s","title":"fix: add action validation cache, reduce retry delays and parse retries in telegram","author":"samarth30","number":362,"body":"$6","repository":"elizaos/cloud","createdAt":"2026-02-20T08:21:19Z","mergedAt":"2026-03-09T00:29:50Z","additions":1221,"deletions":401},{"id":"PR_kwDOMT5cIs7JKLvx","title":"fix(client): refocus chat input after agent finishes replying","author":"monyrth","number":6569,"body":"$7","repository":"elizaos/eliza","createdAt":"2026-03-09T18:42:57Z","mergedAt":null,"additions":7,"deletions":1}],"detailedContributorSummaries":{}},"summaryContent":null,"className":"self-end sm:self-start"}]]}],"$L8","$L9","$La"]}]}],["$Lb","$Lc","$Ld"],"$Le"]}],"loading":null,"isPartial":false}
+8:["$","div",null,{"className":"mb-6","children":["$","div",null,{"className":"flex items-center justify-between","children":[[["$","$Lf",null,{"href":"/summary/day/2026-03-08","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left mr-2 h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"children":"Previous"}],false],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$Lf",null,{"href":"/summary/day/2026-03-08","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Previous"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]],["$","div",null,{"className":"flex flex-col items-center","children":[["$","div",null,{"className":"text-sm font-medium text-gray-500","children":["Daily"," Summary"]}],["$","time",null,{"dateTime":"2026-03-09","className":"text-md font-bold","children":"Mar 9, 2026"}]]}],[["$","$Lf",null,{"href":"/summary/day/2026-03-10","children":[false,["$","span",null,{"children":"Next"}],["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right ml-2 h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}]],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$Lf",null,{"href":"/summary/day/2026-03-10","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Next"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]]]}]}]
+11:T1727,## Summary
+
+Adds a pluggable Docker container + Headscale VPN infrastructure layer as an alternative sandbox provider for Milady agents. Instead of Vercel Sandboxes, operators can deploy agents as Docker containers on remote VPS nodes with optional WireGuard mesh networking.
+
+**34 files changed, ~8,100 lines added** | Rebased onto `dev` with `milady` naming conventions.
+
+> Supersedes #375 (was targeting `main` with old `milaidy` naming).
+
+---
+
+## Architecture
+
+```
+                    MILADY_SANDBOX_PROVIDER=docker
+                              │
+User → Eliza Cloud API → SandboxProvider Factory
+                              │
+              ┌───────────────┼───────────────┐
+              ▼                               ▼
+     VercelSandboxProvider          DockerSandboxProvider
+     (existing, extracted)                    │
+                                    ┌─────────┼─────────┐
+                                    ▼         ▼         ▼
+                               SSH Client  Node Mgr  Headscale
+                                    │         │         │
+                                    ▼         ▼         ▼
+                              Hetzner VPS  Placement  VPN Mesh
+                              (Docker)     Strategy   (WireGuard)
+```
+
+## What's included
+
+### 1. Sandbox Provider Abstraction
+- `SandboxProvider` interface + factory (`MILADY_SANDBOX_PROVIDER` env var)
+- `VercelSandboxProvider`: extracted from inline Vercel code (zero behavior change)
+- `DockerSandboxProvider`: full lifecycle via SSH to remote nodes
+
+### 2. Docker Infrastructure
+- **DockerSSHClient**: connection pooling keyed on `host:port`, command timeout
+- **DockerSandboxProvider**: container create/stop/health/runCommand, DB-backed port allocation (collision-free), health check polling (3s interval, 60s timeout), shell-escaped commands, full agentId container names
+- **DockerNodeManager**: DB-backed least-loaded placement, health checks, capacity sync
+
+### 3. Headscale VPN
+- **HeadscaleClient**: REST API client for Headscale control plane
+- **HeadscaleIntegration**: ephemeral pre-auth keys per container, VPN lifecycle, automatic cleanup
+
+### 4. Database (migration `0046_docker_nodes.sql`)
+- New `docker_nodes` table (node_id, hostname, capacity, health status, allocation tracking)
+- 6 new columns on `milady_sandboxes`: node_id, container_name, bridge_port, web_ui_port, headscale_ip, docker_image
+
+### 5. Admin API (7 routes, all `requireAdmin`)
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/admin/docker-nodes` | GET/POST | List/register nodes |
+| `/admin/docker-nodes/:id` | GET/PATCH/DELETE | Node CRUD |
+| `/admin/docker-nodes/:id/health-check` | POST | SSH health check |
+| `/admin/docker-containers` | GET | List running containers |
+| `/admin/docker-containers/audit` | POST | Ghost/orphan audit |
+| `/admin/docker-containers/:id/logs` | GET | Container logs |
+| `/admin/headscale` | GET | Mesh status |
+
+### 6. Admin UI
+- **Infrastructure dashboard** (1,284 lines): Overview + Nodes + Containers + Mesh tabs
+- **Milady sandboxes table**: Docker metadata, status badges, VPN IPs
+- **Agent detail page**: Docker info card, SSH access info
+- **Docker logs viewer**: search, copy, download, auto-scroll
+
+### 7. Documentation
+- `docs/INTEGRATION_MAP.md` (1,555 lines): auth, credits, sandbox lifecycle mapping
+- `docs/DOCKER_HEADSCALE_PLAN.md`: implementation plan
+- `docs/DOCKER_PROVISIONING_SUMMARY.md`: provisioning flow docs
+
+---
+
+## Code Review (from #375, all addressed)
+
+All 12 findings from the automated review were fixed before rebasing:
+
+| # | Issue | Fix |
+|---|-------|-----|
+| 1 | In-memory registry loses state on restart | `resolveContainer()` hydrates from DB via `findBySandboxId()` |
+| 2 | DockerNodeManager bypassed | `create()` uses `getAvailableNode()` for least-loaded placement |
+| 3 | Port collision under concurrency | `allocatePort()` queries DB for used ports on target node |
+| 4 | Command injection in `runCommand()` | All args `shellQuote()`'d individually |
+| 5 | agentId unsanitized in shell | `validateAgentId()` before any shell interpolation |
+| 6 | Health check single-shot | Polls with 3s interval, 60s timeout |
+| 7 | Container name truncation collision | Uses full agentId |
+| 8 | Weakly typed metadata | Exported `DockerSandboxMetadata` interface |
+| 9 | Missing step 9 in comments | Fixed numbering |
+| 10 | SSH pool key collision | Keyed on `hostname:port` |
+| 11 | `parseDockerNodes()` re-parses every call | Module-level cache |
+| 12 | Docs at repo root | Moved to `docs/` |
+
+---
+
+## Configuration
+
+```env
+# Switch to Docker provider (default: vercel)
+MILADY_SANDBOX_PROVIDER=docker
+MILADY_DOCKER_NODES=node1:192.168.1.100:8,node2:192.168.1.101:8
+MILADY_SSH_KEY_PATH=/path/to/ssh/key
+MILADY_SSH_USER=root
+
+# Optional: Headscale VPN
+HEADSCALE_API_KEY=hskey-api-xxx
+HEADSCALE_API_URL=http://headscale:8081
+HEADSCALE_USER=milady
+```
+
+## Risk & Rollback
+
+- **Zero risk to existing Vercel path**: factory defaults to `vercel`, Docker code only loaded when configured
+- **Rollback**: remove `MILADY_SANDBOX_PROVIDER` env var
+- **Migration is additive**: new table + nullable columns, no data modifications
+- **No breaking API changes**: all existing routes work identically
+
+## Testing Checklist
+
+- [ ] Provision agent with `MILADY_SANDBOX_PROVIDER=vercel` (no regression)
+- [ ] Provision agent with `MILADY_SANDBOX_PROVIDER=docker`
+- [ ] Docker metadata persisted in DB
+- [ ] Bridge/stream/snapshot/restore work through provider
+- [ ] Agent deletion cleans up container + VPN
+- [ ] Admin API: nodes CRUD, container list/logs/audit, headscale status
+- [ ] Admin dashboard renders all tabs
+- [ ] Run migration `0046_docker_nodes.sql` on test DB
+- [ ] `tsc --noEmit` passes (2 pre-existing errors only)12:T2344,## Summary
+
+Adds a full Docker container + Headscale VPN infrastructure layer as an alternative sandbox provider for Milaidy agents. Instead of running agents in Vercel Sandboxes, operators can now deploy agents as Docker containers on remote VPS nodes with optional WireGuard mesh networking via Headscale.
+
+**34 files changed, ~8,200 lines added**
+
+---
+
+## Motivation
+
+Vercel Sandboxes are convenient but limiting: no persistent filesystem, no SSH access, no custom networking, constrained resources. For agents that need a real VPS-like environment (CLI tools, persistent data, inter-agent communication), we need Docker containers on dedicated infrastructure.
+
+This PR introduces a provider abstraction so both backends coexist cleanly, controlled by a single env var.
+
+---
+
+## Architecture
+
+```
+                    MILAIDY_SANDBOX_PROVIDER=docker
+                              │
+User → Eliza Cloud API → SandboxProvider Factory
+                              │
+              ┌───────────────┼───────────────┐
+              ▼                               ▼
+     VercelSandboxProvider          DockerSandboxProvider
+     (existing behavior)                      │
+                                    ┌─────────┼─────────┐
+                                    ▼         ▼         ▼
+                               SSH Client  Node Mgr  Headscale
+                                    │         │         │
+                                    ▼         ▼         ▼
+                              Hetzner VPS  Placement  VPN Mesh
+                              (Docker)     Strategy   (WireGuard)
+```
+
+---
+
+## What's included
+
+### 1. Sandbox Provider Abstraction (`lib/services/sandbox-provider.ts`)
+
+Extracted a `SandboxProvider` interface from the existing Vercel-specific code:
+
+```typescript
+interface SandboxProvider {
+  create(config: SandboxCreateConfig): Promise<SandboxHandle>;
+  stop(sandboxId: string): Promise<void>;
+  checkHealth(healthUrl: string): Promise<boolean>;
+  runCommand?(sandboxId: string, cmd: string): Promise<string>;
+}
+```
+
+Factory function reads `MILAIDY_SANDBOX_PROVIDER` env var (`vercel` | `docker`), defaults to `vercel`. Existing Vercel code extracted into `VercelSandboxProvider` with zero behavior changes.
+
+### 2. Docker SSH Client (`lib/services/docker-ssh.ts`)
+
+SSH client with connection pooling for managing containers on remote nodes:
+- Connection pool with configurable max connections
+- Command execution with timeout support
+- Container lifecycle (create, stop, remove, inspect, logs)
+- Image management (pull, check)
+
+### 3. Docker Sandbox Provider (`lib/services/docker-sandbox-provider.ts`)
+
+Full `SandboxProvider` implementation for Docker:
+- Container creation on remote nodes via SSH
+- Port allocation: bridge (18790-19790), web UI (20000-25000)
+- Health check polling with configurable timeout
+- In-memory container registry with DB backing
+- Optional Headscale VPN integration (graceful degradation if not configured)
+- Metadata passthrough (node_id, container_name, ports, VPN IP, image)
+
+### 4. Node Manager (`lib/services/docker-node-manager.ts`)
+
+Multi-node management with smart placement:
+- Least-loaded allocation strategy
+- Periodic health checks
+- Capacity tracking and reporting
+- Node enable/disable for maintenance
+
+### 5. Headscale VPN Layer
+
+**Client** (`lib/services/headscale-client.ts`):
+- Full REST API client for Headscale control plane
+- Node management, pre-auth key generation, route handling, health checks
+
+**Integration** (`lib/services/headscale-integration.ts`):
+- Container VPN lifecycle: prepare → register → cleanup
+- Ephemeral pre-auth keys per container
+- VPN registration polling (60s timeout)
+- Automatic node cleanup on container stop
+
+### 6. Database Schema (`db/migrations/0034_docker_nodes.sql`)
+
+New `docker_nodes` table:
+```sql
+CREATE TABLE docker_nodes (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  node_id TEXT UNIQUE NOT NULL,
+  hostname TEXT NOT NULL,
+  ssh_port INTEGER DEFAULT 22,
+  capacity INTEGER DEFAULT 8,
+  enabled BOOLEAN DEFAULT true,
+  status TEXT DEFAULT 'unknown',
+  allocated_count INTEGER DEFAULT 0,
+  last_health_check TIMESTAMPTZ,
+  ssh_user TEXT DEFAULT 'root',
+  metadata JSONB DEFAULT '{}'
+);
+```
+
+6 new columns on `milaidy_sandboxes`: `node_id`, `container_name`, `bridge_port`, `web_ui_port`, `headscale_ip`, `docker_image`.
+
+### 7. Admin API Routes (`app/api/v1/admin/`)
+
+7 new route files behind `requireAdmin` auth:
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/admin/docker-nodes` | GET | List all nodes with capacity info |
+| `/admin/docker-nodes` | POST | Register a new node |
+| `/admin/docker-nodes/:id` | GET/PATCH/DELETE | Node CRUD |
+| `/admin/docker-nodes/:id/health-check` | POST | SSH health check |
+| `/admin/docker-containers` | GET | List running containers |
+| `/admin/docker-containers/audit` | POST | Ghost/orphan container audit |
+| `/admin/docker-containers/:id/logs` | GET | Fetch container logs |
+| `/admin/headscale` | GET | Mesh status, nodes, pre-auth keys |
+
+### 8. Admin Infrastructure Dashboard (`components/admin/infrastructure-dashboard.tsx`)
+
+Full admin UI (1,284 lines) with three tabs:
+- **Docker Nodes**: list, add, edit, delete, health check, capacity bars
+- **Containers**: list with status badges, log viewer, ghost audit
+- **Headscale**: mesh status, connected nodes, pre-auth keys, VPN IPs
+
+### 9. Enhanced Container Views
+
+- **`components/containers/milaidy-sandboxes-table.tsx`** (608 lines): New table component showing all sandboxes with provider type, docker metadata, status filtering
+- **`components/containers/docker-logs-viewer.tsx`** (259 lines): Real-time log viewer with auto-scroll, line count, tail controls
+- **`app/dashboard/containers/agents/[id]/page.tsx`** (532 lines): Agent detail page with overview, logs, actions
+- Sidebar updated with infrastructure nav items
+
+### 10. Documentation
+
+- `docs/INTEGRATION_MAP.md` (1,555 lines): Comprehensive mapping of auth, credits, sandbox lifecycle, API surface, and data model between ElizaCloud and milady-cloud
+- `DOCKER_HEADSCALE_PLAN.md`: Original implementation plan
+- `DOCKER_PROVISIONING_SUMMARY.md`: Provisioning flow documentation
+
+---
+
+## Provisioning flow (Docker)
+
+```
+1. Database setup     → Neon DB provisioned (same as Vercel path)
+2. VPN preparation    → Generate Headscale pre-auth key (optional)
+3. Container creation → SSH to least-loaded node, pull image, run container
+4. VPN registration   → Wait for container to join mesh (60s timeout)
+5. Health check       → Poll /health endpoint via provider
+6. State restore      → Push backup via bridge API (if exists)
+7. Persist metadata   → Store docker fields in milaidy_sandboxes
+8. Return handle      → bridgeUrl + healthUrl (VPN IP or node hostname)
+```
+
+---
+
+## Configuration
+
+### Required for Docker provider
+```env
+MILAIDY_SANDBOX_PROVIDER=docker
+MILAIDY_DOCKER_NODES=node1:192.168.1.100:8,node2:192.168.1.101:8
+MILAIDY_SSH_KEY_PATH=/path/to/ssh/key
+MILAIDY_SSH_USER=root
+```
+
+### Optional (Headscale VPN)
+```env
+HEADSCALE_API_KEY=hskey-api-xxx
+HEADSCALE_API_URL=http://headscale:8081
+HEADSCALE_USER=milaidy
+```
+
+### Switching providers
+```env
+# Use Vercel (default, no change needed)
+MILAIDY_SANDBOX_PROVIDER=vercel
+
+# Use Docker
+MILAIDY_SANDBOX_PROVIDER=docker
+```
+
+---
+
+## Testing checklist
+
+- [ ] Provision agent with `MILAIDY_SANDBOX_PROVIDER=vercel` (no regression)
+- [ ] Provision agent with `MILAIDY_SANDBOX_PROVIDER=docker`
+- [ ] Verify docker metadata persisted in DB (node_id, container_name, ports)
+- [ ] Bridge requests work via `/api/v1/milaidy/agents/:id/bridge`
+- [ ] Streaming works via `/api/v1/milaidy/agents/:id/stream`
+- [ ] Snapshot + restore roundtrip
+- [ ] Agent deletion cleans up container + VPN node
+- [ ] Test with Headscale enabled (VPN IPs used for bridge/health URLs)
+- [ ] Test without Headscale (fallback to node hostname)
+- [ ] Admin API: list/add/health-check docker nodes
+- [ ] Admin API: list containers, fetch logs, run audit
+- [ ] Admin API: headscale mesh status
+- [ ] Admin dashboard renders all three tabs
+- [ ] Run migration `0034_docker_nodes.sql` on test DB
+- [ ] `tsc --noEmit` passes (2 pre-existing errors unrelated to this PR)
+
+---
+
+## Pre-existing type errors (not from this PR)
+
+```
+components/admin/admin-metrics-client.tsx — chart data type mismatch
+components/builders/quick-create-dialog.tsx — missing prop
+```
+
+These exist on `main` and are unrelated to this work.
+
+---
+
+## Risk & rollback
+
+- **Zero risk to existing Vercel path**: Provider factory defaults to `vercel`, Docker code is only loaded when explicitly configured
+- **Rollback**: Set `MILAIDY_SANDBOX_PROVIDER=vercel` (or remove the var). Docker code is never imported.
+- **Migration is additive**: New table + new nullable columns, no data modifications
+- **No breaking API changes**: All existing routes work identically13:Td1c,This pull request introduces performance optimizations and reliability improvements for action validation and multi-step processing in the cloud bootstrap plugin. The most significant changes include caching action validation results to avoid redundant computation, reducing retry counts and timeouts for faster failure handling, and updating agent instructions to encourage fewer iterations per task.
+
+**Performance and reliability improvements:**
+
+* Added a per-message cache for action validation results in `actions.ts`, significantly reducing redundant validation of actions during a single message processing cycle. Includes a cache invalidation function for use when new tools are registered. [[1]](diffhunk://#diff-1043c437446f42ad433555de27e72776dc407feedd0a41e5badfe43da2e5c3c5R31-R52) [[2]](diffhunk://#diff-1043c437446f42ad433555de27e72776dc407feedd0a41e5badfe43da2e5c3c5R77-R88) [[3]](diffhunk://#diff-149a006b2d70627fd4b73f8d8b75e1bf25bf170f90f14ec642417a11662a607cR970)
+* Lowered retry counts and timeouts for multi-step parsing and summary operations, and reduced the base/max delay for retries, resulting in faster error recovery and less waiting on failures. [[1]](diffhunk://#diff-149a006b2d70627fd4b73f8d8b75e1bf25bf170f90f14ec642417a11662a607cL51-R53) [[2]](diffhunk://#diff-149a006b2d70627fd4b73f8d8b75e1bf25bf170f90f14ec642417a11662a607cL729-R724) [[3]](diffhunk://#diff-149a006b2d70627fd4b73f8d8b75e1bf25bf170f90f14ec642417a11662a607cL1113-R1109) [[4]](diffhunk://#diff-50516c1ecf1f24da1ee22238877b5c294fb25685f26e62b0f5f94e65b89049eeL9-R9)
+
+**Codebase and logic simplification:**
+
+* Removed redundant waiting for MCP service initialization in `cloud-bootstrap-message-service.ts`, relying on runtime initialization to guarantee tool availability.
+
+**Agent behavior and instruction updates:**
+
+* Updated the multi-step agent template to emphasize immediate completion after task fulfillment and to minimize unnecessary action iterations.
+
+<!-- CURSOR_SUMMARY -->
+---
+
+> [!NOTE]
+> **Medium Risk**
+> Touches core action discovery/validation and multi-step execution defaults (retries/timeouts), which can change tool availability timing and cause earlier failures if limits are too aggressive.
+> 
+> **Overview**
+> **Reduces per-message overhead in action prompting** by adding a per-`message.id` cache in the `ACTIONS` provider for validated actions and MCP Tier-2 tool counts, with a 2-minute TTL and an explicit `invalidateActionValidationCache()` hook.
+> 
+> **Speeds up multi-step runs** by lowering retry backoff delays and reducing default parse/summary retries from `5` to `2`, removing the in-handler wait for MCP initialization (now assumed to happen during runtime creation), and invalidating the action-validation cache after successful `SEARCH_ACTIONS` tool registration.
+> 
+> **Tightens MCP defaults** by switching the tool call fallback timeout to `DEFAULT_MCP_TIMEOUT_MS = 15000` (keeping the legacy constant as a deprecated alias), and adds unit tests covering the new caching/invalidation behavior and the updated retry/timeout defaults.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit cf25060073d3d0452c9520e64772b84e069ff1c0. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->14:T7ad,# Relates to
+
+No existing issue.
+
+# Risks
+
+Low. Additive change only — new ref guard and two guard conditions added to an existing \`useEffect\`. No logic removed or restructured.
+
+# Background
+
+## What does this PR do?
+
+After an agent finishes responding, the chat textarea loses focus. The user has to click the input field manually before they can type their next message. This PR refocuses the input automatically when the agent finishes replying.
+
+## What kind of change is this?
+
+Bug fix (non-breaking change which fixes an issue)
+
+## Implementation notes
+
+- Adds \`hasSentMessageRef\` — a ref that is set to \`true\` the first time the user sends or retries a message. This prevents the \`useEffect\` from firing on mount (which would pop the virtual keyboard on mobile before the user has done anything).
+- The focus is only applied on non-mobile (\`!chatState.isMobile\`) to avoid the mobile virtual-keyboard anti-pattern of the keyboard appearing unexpectedly.
+
+# Documentation changes needed?
+
+My changes do not require a change to the project documentation.
+
+# Testing
+
+## Where should a reviewer start?
+
+\`packages/client/src/components/chat.tsx\` — the \`useEffect\` around line 700 that syncs \`inputDisabledRef\`, and the two \`updateChatState({ inputDisabled: true })\` calls in \`handleSendMessage\` and \`handleRetryMessage\`.
+
+## Detailed testing steps
+
+**Desktop:**
+1. Start the elizaOS server and open the client at \`localhost:3000\`
+2. Open a DM chat with an agent
+3. Send a message and wait for the agent to reply
+4. Verify the text input is focused automatically after the reply — cursor is active, no click needed
+5. Verify the input is NOT auto-focused on initial page load (before sending anything)
+
+**Mobile / narrow viewport:**
+1. Open the client on a mobile device or resize the browser below 768px
+2. Send a message and wait for the agent to reply
+3. Verify the virtual keyboard does NOT pop up automatically after the reply9:["$","div",null,{"className":"mb-8 space-y-6","children":[["$","$L10",null,{"metrics":{"date":"2026-03-09","interval":{"intervalStart":"$D2026-03-09T00:00:00.000Z","intervalEnd":"$D2026-03-10T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":3,"merged":2,"total":4},"issues":{"new":0,"closed":0,"total":0},"activeContributors":5,"codeChanges":{"additions":10270,"deletions":546,"files":46,"commitCount":57},"topContributors":[{"username":"0xSolace","avatarUrl":"https://avatars.githubusercontent.com/u/257989456?u=2138984e3bfc9b5f8cd3f60f134e550b4cc22520&v=4","totalScore":103.5255477931522,"prScore":103.0875477931522,"issueScore":0,"reviewScore":0,"commentScore":0.43799999999999994,"summary":null},{"username":"monyrth","avatarUrl":"https://avatars.githubusercontent.com/u/120821793?u=d2d8e8dfae64580900bb5ff00f7b75391b4291da&v=4","totalScore":10.96961228866811,"prScore":10.96961228866811,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":null},{"username":"odilitime","avatarUrl":"https://avatars.githubusercontent.com/u/16395496?u=c9bac48e632aae594a0d85aaf9e9c9c69b674d8b&v=4","totalScore":4.84,"prScore":0,"issueScore":0,"reviewScore":4.5,"commentScore":0.33999999999999997,"summary":null},{"username":"greptile-apps","avatarUrl":"https://avatars.githubusercontent.com/in/867647?v=4","totalScore":4.5,"prScore":0,"issueScore":0,"reviewScore":4.5,"commentScore":0,"summary":null}],"focusAreas":[{"area":"lib/services","count":10},{"area":"app/api","count":7},{"area":"lib/eliza","count":5},{"area":"app/dashboard","count":4},{"area":"tests/unit","count":3},{"area":"db/repositories","count":3},{"area":"db/schemas","count":3},{"area":"docs","count":3},{"area":"components/containers","count":2},{"area":"components/admin","count":1}],"topIssues":[],"topPullRequests":[{"id":"PR_kwDOP6BTDM7I-Yb2","title":"feat: Docker + Headscale infrastructure layer for Milady sandboxes","author":"0xSolace","number":376,"body":"$11","repository":"elizaos/cloud","createdAt":"2026-03-09T06:43:08Z","mergedAt":"2026-03-09T12:05:02Z","additions":9049,"deletions":145},{"id":"PR_kwDOP6BTDM7I-EfH","title":"feat: Docker + Headscale infrastructure layer for Milaidy sandboxes","author":"0xSolace","number":375,"body":"$12","repository":"elizaos/cloud","createdAt":"2026-03-09T06:16:02Z","mergedAt":null,"additions":8453,"deletions":177},{"id":"PR_kwDOP6BTDM7FGR3s","title":"fix: add action validation cache, reduce retry delays and parse retries in telegram","author":"samarth30","number":362,"body":"$13","repository":"elizaos/cloud","createdAt":"2026-02-20T08:21:19Z","mergedAt":"2026-03-09T00:29:50Z","additions":1221,"deletions":401},{"id":"PR_kwDOMT5cIs7JKLvx","title":"fix(client): refocus chat input after agent finishes replying","author":"monyrth","number":6569,"body":"$14","repository":"elizaos/eliza","createdAt":"2026-03-09T18:42:57Z","mergedAt":null,"additions":7,"deletions":1}],"detailedContributorSummaries":{}}}],"$L15"]}]
+a:null
+b:["$","script","script-0",{"src":"/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","async":true}]
+c:["$","script","script-1",{"src":"/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","async":true}]
+d:["$","script","script-2",{"src":"/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js","async":true}]
+e:["$","$L16",null,{"children":["$","$17",null,{"name":"Next.MetadataOutlet","children":"$@18"}]}]
+15:["$","div",null,{"className":"rounded-lg border bg-card text-card-foreground shadow-sm","children":[["$","div",null,{"className":"flex flex-col space-y-1.5 p-6 py-4","children":["$","div",null,{"className":"tracking-tight text-sm font-medium","children":["$undefined","Code Changes"]}]}],["$","div",null,{"className":"p-6 pt-0","children":["$","div",null,{"className":"grid grid-cols-2 gap-4 md:grid-cols-4","children":[["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-git-commit-vertical h-5 w-5","aria-hidden":"true","children":[["$","path","1holv5",{"d":"M12 3v6"}],["$","circle","1v7zrd",{"cx":"12","cy":"12","r":"3"}],["$","path","a9ows0",{"d":"M12 15v6"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":57}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Commits"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-file-code h-5 w-5","aria-hidden":"true","children":[["$","path","1oefj6",{"d":"M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"}],["$","path","wfsgrz",{"d":"M14 2v5a1 1 0 0 0 1 1h5"}],["$","path","1tg20x",{"d":"M10 12.5 8 15l2 2.5"}],["$","path","yinavb",{"d":"m14 12.5 2 2.5-2 2.5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":46}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Files Changed"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-green-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-up h-5 w-5 text-green-500","aria-hidden":"true","children":[["$","path","hav0vg",{"d":"m5 12 7-7 7 7"}],["$","path","x0mq9r",{"d":"M12 19V5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-green-500","children":"+10,270"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Added"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-red-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-down h-5 w-5 text-red-500","aria-hidden":"true","children":[["$","path","s699le",{"d":"M12 5v14"}],["$","path","1idqje",{"d":"m19 12-7 7-7-7"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-red-500","children":"-546"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Deleted"}]]}]]}]]}]}]]}]
+18:null

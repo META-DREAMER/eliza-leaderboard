@@ -1,0 +1,2317 @@
+1:"$Sreact.fragment"
+2:I[4817319,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"IntervalSelector"]
+3:I[6998365,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"LlmCopyButton"]
+1e:I[3642796,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],""]
+1f:I[3238488,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"StatCardsDisplay"]
+3d:I[4261541,["/eliza-leaderboard/_next/static/chunks/b33bcbdcb3f88354.js","/eliza-leaderboard/_next/static/chunks/8ba59154b6704904.js"],"OutletBoundary"]
+3e:"$Sreact.suspense"
+4:T49f,### Version
+1.0.3
+
+### Description
+`processKnowledgeAction` uses the following to generate an unique uuid for new memories:
+`clientDocumentId: createUniqueUuid(runtime.agentId + "text" + Date.now(), "user-knowledge"),`
+
+However, createUniqueUuid does the following:
+```
+export const createUniqueUuid = (runtime, baseUserId: UUID | string): UUID => {
+  // If the base user ID is the agent ID, return it directly
+  if (baseUserId === runtime.agentId) {
+    return runtime.agentId;
+  }
+
+  // Use a deterministic approach to generate a new UUID based on both IDs
+  // This creates a unique ID for each user+agent combination while still being deterministic
+  const combinedString = `${baseUserId}:${runtime.agentId}`;
+
+  // Create a namespace UUID (version 5) from the combined string
+  return stringToUuid(combinedString);
+};
+```
+
+Meaning that `createUniqueUuid` will always return: `stringToUuid("user-knowledge:undefined")` ie: `4e394ea6-af35-0010-8047-94bccb8b8e5b`
+
+### Expected Result
+The generated ID should be unique, the easiest approach would be to us `stringToUuid` directly.
+
+If possible, I would love to contribute. I can fix this issue, and others I've discovered.
+
+Thanks,5:T4c9,## 🐛 Bug Report
+
+The plugin defines an environment variable:
+
+````
+TWITTER_MAX_INTERACTIONS_PER_RUN=10  # Maximum interactions processed per cycle
+````
+
+However, this value is **never used anywhere in the code**. Specifically, the `handleTimeline()` function retrieves 20 tweets via `this.getTimeline(20)`, and for each tweet, the agent may perform up to 4 actions: `[LIKE]`, `[RETWEET]`, `[QUOTE]`, `[REPLY]`.
+
+In practice, this can result in **40–60 actions being executed in a single run**, all at once.
+
+---
+
+## ⚠️ Problem
+
+- The defined variable `maxActionsPerCycle = 20` inside the code is never enforced.
+- The system does not limit or throttle the number of actions performed per run.
+- All actions are executed immediately and in parallel, with no spacing or delay.
+- This behavior may **violate Twitter’s automation rules** and can result in accounts being rate-limited or banned.
+
+---
+
+## ❓ Open Question
+
+Given that `TWITTER_MAX_INTERACTIONS_PER_RUN` is documented as a limit, but not used anywhere in the code — is this an oversight, or is the intended behavior to handle rate-limiting differently?
+
+Shouldn’t there be a safeguard in place to avoid executing dozens of actions in a single cycle?6:T739,This pull request introduces several enhancements and new features to the plugin migration system, focusing on improving test generation, repository analysis, and environment variable management. The most significant changes include the introduction of a context-aware test generation system, updates to repository analysis logic, and improvements to environment variable prompting. Additionally, configuration constants and export structure have been updated for better maintainability.
+
+### Context-Aware Test Generation
+* Added a new system for generating plugin-specific tests dynamically based on the plugin's actual structure and functionality. This replaces the old static template system, ensuring more relevant and accurate tests. (`CONTEXT_AWARE_TESTING.md`)
+
+### Repository Analysis Enhancements
+* Implemented a repository analyzer that scans a plugin's directory for key files (`README.md`, `package.json`, `index.ts/js`) and source files while respecting token limits and skipping large or binary files. (`repository-analyzer.ts`)
+
+### Environment Variable Management
+* Introduced `EnvPrompter`, a utility for interactive collection and validation of environment variables, with support for sensitive values and default descriptions. (`env-prompter.ts`)
+
+### Configuration Updates
+* Added new configuration constants for migration, including `MAX_TOKENS`, `CLAUDE_CODE_TIMEOUT`, and `MIN_DISK_SPACE_GB`, to centralize and standardize settings. (`config.ts`)
+
+### Export Structure Improvements
+* Updated the export structure in `index.ts` to include new components like `EnvPrompter`, `ContextAwareTestGenerator`, and configuration constants, ensuring better modularity and accessibility. (`index.ts`)<!-- Use this template by filling in information and copying and pasting relevant items out of the HTML comments. -->
+
+7:Tdcf,Implements a new plugin `@elizaos/plugin-grok` to integrate with xAI's Grok language models. This plugin leverages Grok's OpenAI-compatible API.
+
+Key changes:
+- Created `packages/plugin-grok/`:
+    - `package.json`: Defines the new plugin package.
+    - `tsconfig.json`, `tsup.config.ts`: Build configuration.
+    - `src/index.ts`: Implements `GrokLanguageModel` (extending `ChatLanguageModel` from core) using the OpenAI SDK configured for Grok's API endpoint (`https://api.x.ai/v1`) and `XAI_API_KEY`. Includes `generate` and `stream` methods with preliminary tool use support. Registers `GrokService` with service type "grok".
+    - `src/__tests__/index.test.ts`: Basic unit tests for `GrokLanguageModel`.
+    - `README.md`: Documentation for setting up and using the plugin.
+- Updated `packages/cli/src/server/loader.ts` to import `@elizaos/plugin-grok`, ensuring the service is registered.
+- Updated `packages/cli/tsconfig.json` to include path mapping for the new local plugin.
+- Updated `packages/cli/src/characters/gork.ts` to demonstrate how a character can conditionally use `@elizaos/plugin-grok` if `XAI_API_KEY` is set.
+
+This allows users with an XAI API key to use Grok models within the ElizaOS ecosystem.
+
+<!-- Use this template by filling in information and copying and pasting relevant items out of the HTML comments. -->
+
+# Relates to
+
+<!-- LINK TO ISSUE OR TICKET -->
+
+<!-- This risks section must be filled out before the final review and merge. -->
+
+# Risks
+
+<!--
+Low, medium, large. List what kind of risks and what could be affected.
+-->
+
+# Background
+
+## What does this PR do?
+
+## What kind of change is this?
+
+<!--
+Bug fixes (non-breaking change which fixes an issue)
+Improvements (misc. changes to existing features)
+Features (non-breaking change which adds functionality)
+Updates (new versions of included code)
+-->
+
+<!-- This "Why" section is most relevant if there are no linked issues explaining why. If there is a related issue, it might make sense to skip this why section. -->
+<!--
+## Why are we doing this? Any context or related work?
+-->
+
+# Documentation changes needed?
+
+<!--
+My changes do not require a change to the project documentation.
+My changes require a change to the project documentation.
+If documentation change is needed: I have updated the documentation accordingly.
+-->
+
+<!-- Please show how you tested the PR. This will really help if the PR needs to be retested and probably help the PR get merged quicker. -->
+
+# Testing
+
+## Where should a reviewer start?
+
+## Detailed testing steps
+
+<!--
+None: Automated tests are acceptable.
+-->
+
+<!--
+- As [anon/admin], go to [link]
+  - [do action]
+  - verify [result]
+-->
+
+<!-- If there is a UI change, please include before and after screenshots or videos. This will speed up PRs being merged. It is extra nice to annotate screenshots with arrows or boxes pointing out the differences. -->
+<!--
+## Screenshots
+### Before
+### After
+-->
+
+<!-- If there is anything about the deployment, please make a note. -->
+<!--
+# Deploy Notes
+-->
+
+<!--  Copy and paste command line output. -->
+<!--
+## Database changes
+-->
+
+<!--  Please specify deploy instructions if there is something more than the automated steps. -->
+<!--
+## Deployment instructions
+-->
+
+<!-- If you are on Discord, please join https://discord.gg/ai16z and state your Discord username here for the contributor role and join us in #development-feed -->
+<!--
+## Discord username
+
+-->
+8:Tb0d,# Add ELIZA_UI_ENABLE environment variable to control web UI in production
+
+## Problem
+
+elizaOS currently serves the web UI to anyone who can reach the server. While there's `ELIZA_SERVER_AUTH_TOKEN` for API endpoints, the web interface itself is wide open. In production deployments, this creates an unnecessary attack surface.
+
+## Solution
+
+Added `ELIZA_UI_ENABLE` environment variable with sensible defaults:
+- **Development**: UI enabled by default
+- **Production**: UI disabled by default
+- **Override**: Set `ELIZA_UI_ENABLE=true/false`
+
+When disabled, the web UI returns a standard HTTP 403 Forbidden error, but all API endpoints continue to work normally.
+
+## Implementation
+
+~20 lines in `packages/server/src/index.ts`:
+
+1. Check `NODE_ENV` and `ELIZA_UI_ENABLE` to determine UI status
+2. Conditionally serve static files only when UI is enabled
+3. Replace SPA fallback with 403 response when UI is disabled
+4. Update startup logging to clearly show UI status
+
+## Testing
+
+```bash
+# Development (UI enabled)
+bun start
+
+# Production (UI disabled)  
+NODE_ENV=production bun start
+
+# Force enable in production
+NODE_ENV=production ELIZA_UI_ENABLE=true bun start
+
+# Force disable in development
+ELIZA_UI_ENABLE=false bun start
+```
+
+When UI is disabled:
+- `http://localhost:3000` → HTTP 403 Forbidden  
+- `http://localhost:3000/api/server/ping` → Still works fine
+
+## Test Coverage
+
+Added tests:
+- **Unit tests**: Environment variable parsing and default behaviours (development vs production)
+- **Integration tests**: Server configuration impact and HTTP response handling
+- **Security validation**: API functionality preservation when UI disabled
+
+`bun test packages/server/src/__tests__/ui-disable-feature.test.ts`
+
+25 tests passing, including both new tests and existing functionality verification.
+
+## Justification
+
+I'm working on scripting prod deploys and wanted a straighforward way to shut the UI off, but keep API open. I've purposely kept the API authentication (`ELIZA_SERVER_AUTH_TOKEN`) separate from this UI disable feature to minimise any clashes. 
+
+
+## ⚠️ Desktop App Compatibility
+
+Any remote deploy breaks the desktop anyway, as it's a wrapper to an iframe polling localhost:3000. 
+
+In future iterations of the desktop app, with the correct plumbing, it could:
+
+1. **Explicitly override**: `ELIZA_UI_ENABLE=true elizaos start`
+2. **Environment file**: Add `ELIZA_UI_ENABLE=true` to `.env`
+3. **Startup script**: Desktop app launcher can set the environment variable
+
+(I'd be happy to help with this!)
+
+## Backward compatibility
+
+Should be fully backward compatible - no breaking changes, development experience stays the same. Only affects deployments that explicitly set `NODE_ENV=production`.
+
+---
+
+Discord: @bealers 9:T1ba1,# 🔧 Fix Windows CI Issues - Comprehensive Solution
+
+## 📋 Summary
+
+This PR implements a comprehensive solution to resolve the long-standing Windows CI failures that have been affecting the ElizaOS project. The fixes address root causes including Bun installation issues, process cleanup problems, memory constraints, and flaky test execution.
+
+## 🎯 Problems Solved
+
+### 1. **Bun Installation & Reliability Issues**
+- ❌ Bun installation failures on Windows runners
+- ❌ PATH resolution problems preventing Bun execution
+- ❌ Cache corruption causing installation loops
+- ❌ File permission issues blocking Bun execution
+
+### 2. **Process Management Problems**
+- ❌ Hanging test processes causing CI timeouts
+- ❌ Port conflicts from previous test runs
+- ❌ Resource leaks affecting subsequent tests
+- ❌ Inadequate process cleanup on Windows
+
+### 3. **Test Execution Issues**
+- ❌ Flaky tests due to resource contention
+- ❌ Memory constraints causing OOM errors
+- ❌ Poor error handling and diagnostics
+- ❌ No retry logic for transient failures
+
+## ✅ Solutions Implemented
+
+### 🔧 **New Windows-Specific Scripts**
+
+#### 1. `packages/cli/tests/fix-bun-windows.ps1`
+**Comprehensive Bun Installation Fixer**
+- Automatically detects and repairs Bun installation issues
+- Fixes PATH resolution problems
+- Clears corrupted cache files
+- Repairs file permissions
+- Provides fallback reinstallation
+- Includes detailed diagnostics
+
+#### 2. `packages/cli/tests/cleanup-processes.ps1`
+**Advanced Process Cleanup**
+- Terminates hanging processes by pattern matching
+- Cleans up port conflicts using `Get-NetTCPConnection`
+- Handles Eliza-specific process cleanup
+- Forces garbage collection
+- Safe error handling for all operations
+
+#### 3. `packages/cli/tests/windows-test-helper.ps1`
+**Robust Test Execution Framework**
+- Implements configurable retry logic (default: 2 attempts)
+- Provides timeout handling using PowerShell jobs
+- Pre and post-test environment verification
+- Comprehensive cleanup between attempts
+- Detailed logging and error reporting
+
+### 🚀 **Enhanced CI Workflow**
+
+#### Updated `.github/workflows/cli-tests.yml`
+- **Memory Optimization**: Increased Node.js heap to 6144MB for Windows
+- **Performance**: Added Windows Defender exclusions for faster file operations
+- **Environment Setup**: Optimized environment variables and caching
+- **Integration**: Seamlessly integrated all new helper scripts
+- **Monitoring**: Added verification steps for cleanup success
+
+## 📊 **Key Improvements**
+
+| **Area** | **Before** | **After** |
+|----------|------------|-----------|
+| **Bun Reliability** | Manual troubleshooting | Automatic detection & fixing |
+| **Process Cleanup** | Basic `pkill` commands | Native PowerShell process management |
+| **Test Execution** | Single attempt, no retry | 2 retries with proper cleanup |
+| **Memory Handling** | Default limits (often insufficient) | 6144MB + forced GC |
+| **Diagnostics** | Limited error info | Comprehensive logging & monitoring |
+| **Timeout Handling** | Fixed 15min timeout | 25min with job-based isolation |
+
+## 🔄 **Workflow Changes**
+
+### Before:
+```yaml
+- name: Run CLI TypeScript tests (Windows)
+  run: cross-env NODE_OPTIONS="--max-old-space-size=4096" bun test tests/commands/
+```
+
+### After:
+```yaml
+- name: Configure Windows environment
+  # Windows Defender exclusions, memory optimization
+  
+- name: Fix and verify Bun installation
+  # Automatic Bun installation fixing
+  
+- name: Install dependencies (with retry logic)
+  # Retry logic for flaky installations
+  
+- name: Run CLI TypeScript tests (Windows - Enhanced)
+  # Advanced test execution with helper script
+  
+- name: Cleanup test processes (Windows - Enhanced)
+  # Comprehensive cleanup using dedicated script
+  
+- name: Verify Windows cleanup
+  # Verification of cleanup success
+```
+
+## 🧪 **Testing Strategy**
+
+### Manual Testing Commands:
+```powershell
+# Fix Bun installation
+powershell -ExecutionPolicy Bypass -File "packages/cli/tests/fix-bun-windows.ps1" -Verbose
+
+# Clean up processes
+powershell -ExecutionPolicy Bypass -File "packages/cli/tests/cleanup-processes.ps1"
+
+# Run tests with retry
+powershell -ExecutionPolicy Bypass -File "packages/cli/tests/windows-test-helper.ps1" -TestCommand "bun test tests/commands/" -MaxRetries 3
+```
+
+## 📈 **Expected Impact**
+
+### Immediate Benefits:
+- **🎯 Reduced CI failure rate** by addressing root causes
+- **⚡ Faster issue resolution** through automatic fixing
+- **🔍 Better debugging** with comprehensive diagnostics
+- **🔄 Consistent environment** through standardized cleanup
+- **🛠️ Maintainable solution** with modular, updateable scripts
+
+### Long-term Benefits:
+- **📊 Improved developer productivity** - Less time debugging CI
+- **🚀 Faster iteration cycles** - More reliable test execution
+- **💰 Reduced CI costs** - Fewer failed runs and retries
+- **🔧 Easier maintenance** - Clear separation of concerns
+
+## 🔍 **Files Changed**
+
+### New Files:
+- `packages/cli/tests/cleanup-processes.ps1` - Windows process cleanup
+- `packages/cli/tests/windows-test-helper.ps1` - Test execution framework
+- `packages/cli/tests/fix-bun-windows.ps1` - Bun installation fixer
+- `WINDOWS_CI_FIXES.md` - Comprehensive documentation
+
+### Modified Files:
+- `.github/workflows/cli-tests.yml` - Enhanced Windows CI workflow
+
+## ⚙️ **Configuration Options**
+
+### Windows Test Helper:
+- `TestCommand` - Command to execute
+- `MaxRetries` - Number of retry attempts (default: 2)
+- `TimeoutMinutes` - Timeout per attempt (default: 15)
+
+### Bun Fixer:
+- `Force` - Force reinstallation
+- `Verbose` - Enable detailed logging
+
+## 🔒 **Safety & Compatibility**
+
+- **✅ Backward Compatible**: Doesn't affect Linux/macOS workflows
+- **✅ Safe Error Handling**: Graceful degradation on failures
+- **✅ Non-Breaking**: Existing functionality preserved
+- **✅ Isolated**: Windows-specific changes only
+
+## 🚨 **Breaking Changes**
+
+**None** - This PR only enhances Windows CI reliability without changing any APIs or interfaces.
+
+## 📝 **Additional Notes**
+
+### Why PowerShell Scripts?
+- **Native Windows support** - Better process and port management
+- **Rich error handling** - Comprehensive try/catch blocks
+- **Built-in cmdlets** - `Get-NetTCPConnection`, `Get-Process`, etc.
+- **Job isolation** - Timeout handling with PowerShell jobs
+
+### Monitoring & Maintenance:
+- Scripts include detailed logging for troubleshooting
+- Diagnostic information collected on failures
+- Modular design allows individual component updates
+- Performance metrics can be extracted from logs
+
+## 🔮 **Future Enhancements**
+
+1. **Adaptive timeouts** based on system performance
+2. **Health checks** before test execution
+3. **Metrics collection** for optimization
+4. **Integration testing** across Windows versions
+
+---
+
+**This comprehensive solution addresses the "too long" Windows CI issues by tackling fundamental problems rather than applying band-aid fixes. The modular, well-documented approach ensures maintainability and allows for future improvements.**a:T11c8,## 🔧 CLI Environment System Improvements
+
+This PR significantly improves the CLI environment variable system, making it more maintainable, user-friendly, and feature-rich.
+
+### 🎯 Summary of Changes
+
+#### 1. **Enhanced Plugin Environment Variable Prompts**
+- Migrated to `@clack/prompts` for better UI with progress indicators, styled prompts, and clearer visual separation
+- Added ability to easily skip optional environment variables (press Enter to skip)
+- Improved progress tracking with `[1/N]` indicators
+- Separated required and optional variables into distinct sections
+- Fixed the `placeholder.slice is not a function` error by ensuring all placeholder values are strings
+
+#### 2. **Removed Hardcoded Environment Configurations**
+- **Before**: CLI maintained hardcoded configs for plugins (openai, discord, twitter, etc.) in `env-prompt.ts`
+- **After**: System now relies purely on `agentConfig.pluginParameters` from each plugin's `package.json`
+- Deleted ~600 lines of hardcoded configuration
+- Makes the system more flexible - plugin authors can define their own env vars without CLI changes
+
+#### 3. **Extended Type Support for Environment Variables**
+Added support for multiple data types beyond just strings:
+- **Boolean**: Uses `clack.confirm()` for yes/no prompts
+- **Number**: Validates numeric input
+- **Array**: Accepts comma-separated values, automatically trims whitespace
+- **JSON Object**: Validates JSON syntax, minifies for storage
+
+Example plugin configuration:
+```json
+{
+  "agentConfig": {
+    "pluginParameters": {
+      "PORT": { "type": "number", "default": 3000 },
+      "ENABLE_DEBUG": { "type": "boolean", "default": false },
+      "ALLOWED_HOSTS": { "type": "array", "default": "localhost,example.com" },
+      "CONFIG": { "type": "json", "default": "{\"timeout\": 5000}" }
+    }
+  }
+}
+```
+
+#### 4. **Consolidated Environment File Handling**
+Created a unified `EnvFileService` that eliminates code duplication:
+- Single source of truth for all .env file operations
+- Supports comment preservation
+- Automatically syncs with `process.env`
+- Provides backup functionality
+- Validates .env file format
+
+Consolidated three separate implementations:
+- `utils/env-prompt.ts` (async global paths)
+- `commands/plugins/utils/env-vars.ts` (sync plugin-specific)
+- `commands/env/utils/file-operations.ts` (async with dotenv)
+
+#### 5. **Process.env Synchronization**
+- Fixed issue where newly configured environment variables weren't available in the current session
+- Now all env var updates immediately sync to `process.env`
+
+### 📁 Files Changed
+
+**Modified:**
+- `/packages/cli/src/utils/env-prompt.ts` - Simplified to use unified service
+- `/packages/cli/src/commands/plugins/utils/env-vars.ts` - Added type support, uses unified service
+- `/packages/cli/src/commands/env/utils/file-operations.ts` - Refactored to use unified service
+- `/packages/cli/src/utils/config-manager.ts` - Removed hardcoded validation functions
+- `/packages/cli/src/utils/index.ts` - Updated exports
+- `/packages/cli/src/commands/test/actions/e2e-tests.ts` - Removed promptForEnvVars usage
+- `/packages/cli/tests/unit/commands/test/e2e-tests.test.ts` - Updated mocks
+
+**Added:**
+- `/packages/cli/src/services/env-file.service.ts` - New unified environment file service
+- `/packages/cli/src/services/index.ts` - Service exports
+- `/packages/cli/src/examples/env-types-example.ts` - Documentation for plugin authors
+
+**Verified:**
+- All template `.gitignore` files already include comprehensive `.env` protection
+
+### ✅ Benefits
+
+1. **Better Developer Experience**: Type-specific prompts, easier to skip optional vars, clearer UI
+2. **More Maintainable**: Single service for env operations, no hardcoded configs
+3. **More Flexible**: Plugin authors can define any env vars without CLI changes
+4. **More Secure**: Immediate process.env sync, validated inputs, .env in gitignore
+5. **More Powerful**: Support for complex data types (arrays, JSON objects)
+
+### 🧪 Testing Notes
+
+- Existing unit tests updated to remove references to deleted functions
+- Manual testing recommended with various plugins to verify env var prompting
+- Type validation tested for all new types (boolean, number, array, json)
+
+This refactoring makes the ElizaOS CLI environment system more robust and user-friendly while reducing maintenance burden and enabling richer plugin configurations.
+
+https://github.com/user-attachments/assets/14d48c62-20a6-4367-8314-5e0ac1f0946b
+b:Ta9f,# Fix CLI create command directory display and cleanup on interruption
+
+## Problem
+
+Two minor bugs with the `elizaos create` command:
+
+1. **Confusing directory display**: When creating a project/plugin, the confirmation prompt showed `"Create plugin 'testing' in plugin-testing?"` instead of the actual directory name (e.g., `"Create 'plugin-testing' in Desktop?"`)
+
+2. **Abandoned directories on Ctrl-C**: Pressing Ctrl-C during `bun install` during a plugin or project installation left partially created directories behind, requiring manual cleanup
+
+## Solution
+
+1. **Directory display**: Added `getDisplayDirectory()` helper that gives the current directory name and simplifies absolute paths to just the directory name
+
+2. **Cleanup on interruption**: Implemented `withCleanupOnInterrupt()` wrapper that:
+   - Registers signal handlers (SIGINT/SIGTERM) before creating directories
+   - Tracks directory creation state to avoid removing pre-existing directories
+   - Automatically removes partially created directories on interruption
+   - Shows red-colored cleanup messages for visibility
+
+## Details
+
+### Implementation
+- Signal handlers are registered at the create function level, ensuring cleanup even when child processes (like `bun install`) receive signals directly
+- Handlers are properly removed on success to prevent memory leaks
+- Simplified `installDependencies` and `buildProject` functions since cleanup is now handled at a higher level
+
+### Files Changed
+- `src/commands/create/actions/creators.ts` - Added cleanup wrapper and updated all create functions
+- `src/commands/create/actions/setup.ts` - Simplified after moving cleanup logic up
+- `src/utils/helpers.ts` - Added `getDisplayDirectory()` helper
+- `tests/commands/create.test.ts` - Added test for cleanup behavior
+
+### Testing
+Run the full test suite:
+```bash
+bun test tests/commands/create.test.ts
+```
+
+Manual test:
+```bash
+bun run dist/index.js create test-plugin --type plugin
+# Press Ctrl-C during "Installing dependencies..."
+# Directory should be cleaned up automatically
+``` 
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+* **New Features**
+  * Improved project creation process to automatically clean up incomplete directories if interrupted or if an error occurs.
+  * Enhanced user prompts to display more user-friendly directory names.
+
+* **Bug Fixes**
+  * Prevents leftover incomplete directories when project creation is interrupted or fails.
+
+* **Tests**
+  * Added tests to verify directory cleanup when project creation is interrupted (e.g., via Ctrl-C).
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->c:T85c,## Problem
+Ubuntu CLI CI tests were failing due to parallelization issues causing:
+- Port conflicts between concurrent tests
+- Race conditions during process cleanup
+- Inconsistent test execution timing
+
+## Solution
+This PR implements several fixes specifically targeting Ubuntu CI stability:
+
+### 1. Sequential Test Execution
+- Added `--no-parallelism` flag for Ubuntu CI to prevent concurrent test execution
+- Increased timeout from 15 to 20 minutes to accommodate sequential execution
+
+### 2. Dynamic Port Allocation 
+- Created `PortAllocator` class to manage unique port assignment per test
+- Prevents port conflicts that were causing test failures
+- Added proper port cleanup and release mechanisms
+
+### 3. Enhanced Process Cleanup
+- Improved cleanup script with escalating termination signals (TERM → KILL)
+- Added verification steps to ensure complete cleanup
+- Enhanced port-specific cleanup with retry logic
+
+### 4. Ubuntu-Specific Timeouts & Delays
+- Added conservative timeouts for Ubuntu CI environment
+- Implemented strategic sleep delays between test phases
+- Increased retry counts and wait times for better stability
+
+### 5. Improved Test Synchronization
+- Added proper delays between test cleanup and startup
+- Enhanced process manager with better termination handling
+- Added verification for complete resource cleanup
+
+## Testing
+The changes are designed to maintain performance on macOS/Windows while fixing Ubuntu-specific issues:
+- Ubuntu CI: Sequential execution with longer timeouts
+- Other platforms: Existing parallel execution preserved
+- All changes wrapped in platform/environment detection
+
+## Files Changed
+- `.github/workflows/cli-tests.yml` - Ubuntu CI configuration  
+- `bunfig.toml` - Test execution settings
+- `packages/cli/tests/cleanup-processes.sh` - Enhanced cleanup
+- `packages/cli/tests/port-allocator.ts` - New port management
+- `packages/cli/tests/test-timeouts.ts` - Ubuntu-specific timeouts
+- `packages/cli/tests/commands/test-utils.ts` - Improved utilities
+- `packages/cli/tests/commands/start.test.ts` - Updated test implementation
+
+Fixes parallelization-related test failures on Ubuntu CI.d:Tc5d,Based on our changes, here's a comprehensive PR comment for GitHub:
+
+---
+
+## Fix: Automatic AI Model Plugin Installation During Project Creation
+
+### 🐛 Problem
+When creating a new project with `elizaos create`, selecting an AI model (e.g., OpenAI, Claude) would:
+- ✅ Store the API key in `.env`
+- ✅ Report successful configuration
+- ❌ **NOT** install the corresponding plugin package
+- ❌ **NOT** add the plugin to `package.json` dependencies
+
+This left users with a broken setup where the agent couldn't actually use the selected AI model.
+
+### 🔧 Solution
+This PR implements automatic plugin installation for AI models during project creation and adds missing plugin detection on startup.
+
+### 📝 Changes Made
+
+#### 1. **Plugin Mapping System** (`plugin-mapping.ts`)
+- Created mappings between AI model selections and their corresponding plugin packages
+- Added support for both primary AI models and embedding models
+- Handles special cases like OpenRouter requiring both base and provider plugins
+
+#### 2. **Automatic Installation** (`setup.ts`, `creators.ts`)
+- Added `installAIModelPlugins()` function that runs after environment setup
+- Automatically installs the correct plugin packages based on user selection
+- Shows clear success/failure messages during installation
+- Provides manual installation commands if automatic installation fails
+
+#### 3. **Missing Plugin Detection** (`plugin-detection.ts`, `start/index.ts`)
+- Added detection for API keys in `.env` without corresponding plugins
+- Shows helpful suggestions when starting a project with missing plugins
+- Example: If `ANTHROPIC_API_KEY` exists but `@elizaos/plugin-anthropic` is not installed
+
+#### 4. **Documentation & Testing**
+- Added comprehensive documentation for the feature
+- Created test scripts to verify the functionality
+- Added examples showing the expected behavior
+
+### 📁 Files Changed
+- `packages/cli/src/commands/create/utils/plugin-mapping.ts` (new)
+- `packages/cli/src/commands/create/utils/plugin-detection.ts` (new)
+- `packages/cli/src/commands/create/actions/setup.ts` (modified)
+- `packages/cli/src/commands/create/actions/creators.ts` (modified)
+- `packages/cli/src/commands/start/index.ts` (modified)
+- `packages/cli/docs/AI_MODEL_PLUGIN_INSTALLATION.md` (new)
+- `packages/cli/examples/test-ai-plugin-install.sh` (new)
+
+### 🎯 Expected Behavior
+
+**Before:**
+```
+✅ OpenAI integration configured
+# But plugin NOT installed, agent can't use OpenAI
+```
+
+**After:**
+```
+✅ OpenAI integration configured
+📦 Installing AI model plugins...
+✅ Installed @elizaos/plugin-openai
+✅ All plugins installed successfully!
+```
+
+### 🔍 Additional Improvements
+- The solution is extensible - adding new AI models just requires updating the mapping
+- Non-intrusive - only installs plugins for the models actually selected
+- Helpful error messages guide users to manual installation if needed
+- Works for both new projects and existing projects (via detection on start)
+
+This fixes a critical UX issue that was preventing users from having a working agent after following the setup wizard.e:Tae3,```
+<!-- Use this template by filling in information and copying and pasting relevant items out of the HTML comments. -->
+
+# Relates to
+
+<!-- LINK TO ISSUE OR TICKET -->
+Windows CI issues
+
+<!-- This risks section must be filled out before the final review and merge. -->
+
+# Risks
+
+Low
+
+<!--
+Low, medium, large. List what kind of risks and what could be affected.
+-->
+
+# Background
+
+## What does this PR do?
+
+This PR contains no code changes. It marks the conclusion of an initial diagnostic session aimed at resolving persistent Windows CI issues.
+
+## What kind of change is this?
+
+N/A (No code changes)
+
+<!--
+Bug fixes (non-breaking change which fixes an issue)
+Improvements (misc. changes to existing features)
+Features (non-breaking change which adds functionality)
+Updates (new versions of included code)
+-->
+
+<!-- This "Why" section is most relevant if there are no linked issues explaining why. If there is a related issue, it might make sense to skip this why section. -->
+
+## Why are we doing this? Any context or related work?
+
+To address persistent Windows CI failures. This session involved extensive file examination and search operations across the repository to understand the current CI configuration and identify potential root causes, but no code modifications were made.
+
+# Documentation changes needed?
+
+My changes do not require a change to the project documentation.
+
+<!--
+My changes do not require a change to the project documentation.
+My changes require a change to the project documentation.
+If documentation change is needed: I have updated the documentation accordingly.
+-->
+
+<!-- Please show how you tested the PR. This will really help if the PR needs to be retested and probably help the PR get merged quicker. -->
+
+# Testing
+
+## Where should a reviewer start?
+
+N/A (No code changes to review or test).
+
+## Detailed testing steps
+
+None: No changes to test.
+
+<!--
+None: Automated tests are acceptable.
+-->
+
+<!--
+- As [anon/admin], go to [link]
+  - [do action]
+  - verify [result]
+-->
+
+<!-- If there is a UI change, please include before and after screenshots or videos. This will speed up PRs being merged. It is extra nice to annotate screenshots with arrows or boxes pointing out the differences. -->
+<!--
+## Screenshots
+### Before
+### After
+-->
+
+<!-- If there is anything about the deployment, please make a note. -->
+<!--
+# Deploy Notes
+-->
+
+<!--  Copy and paste command line output. -->
+<!--
+## Database changes
+-->
+
+<!--  Please specify deploy instructions if there is something more than the automated steps. -->
+<!--
+## Deployment instructions
+-->
+
+<!-- If you are on Discord, please join https://discord.gg/ai16z and state your Discord username here for the contributor role and join us in #development-feed -->
+<!--
+## Discord username
+
+-->
+```f:T76c,# Registry Update Checklist
+
+Registry:
+- [ ] I've made the left side of the colon of JSON entry in index.json match the potential NPM package name
+- [ ] I've used github not github.com
+- [ ] There is no .git extension
+- [ ] It's placed it alphabetically in the list
+- [ ] I've dealt with commas properly so the list is still valid JSON
+
+If not an eliza-plugins official repo, i.e. new plugin: 
+
+The plugin repo has:
+- [ ] is publically accessible (not a private repo)
+- [ ] uses main as it's default branch
+- [ ] I have include `elizaos-plugins` in the topics in the GitHub repo settings. If the plugin is related to `AI` or `crypto`, please add those as topics as well.
+- [ ] add simple description in github repo
+- [ ] follows this convention
+```
+plugin-name/
+├── images/
+│   ├── logo.jpg        # Plugin branding logo
+│   ├── banner.jpg      # Plugin banner image
+├── src/
+│   ├── index.ts        # Main plugin entry point
+│   ├── actions/        # Plugin-specific actions
+│   ├── clients/        # Client implementations
+│   ├── adapters/       # Adapter implementations
+│   └── types.ts        # Type definitions
+│   └── environment.ts  # runtime.getSetting, zod validation
+├── package.json        # Plugin dependencies
+└── README.md          # Plugin documentation
+```
+- [ ] an `images/banner.jpg` and `images/logo.jpg` and they
+  - Use clear, high-resolution images
+  - Keep file sizes optimized (< 500KB for logos, < 1MB for banners)
+  - Follow the [elizaOS Brand Guidelines](https://github.com/elizaOS/brandkit)
+  - Include alt text for accessibility
+- [ ] package.json has a agentConfig like the following
+```json
+
+import { dataiPlugin } from "@elizaos/plugin-datai";
+
+export default {
+  plugins: ["@elizaos/plugin-datai"],
+  // ... other configuration
+};
+10:T71c,## Description
+
+This PR restructures the character form action buttons to improve the user experience and visual layout.
+
+## Changes Made
+
+### Layout Improvements
+- **Horizontal Layout**: Replaced vertical stacked buttons with horizontal layout
+- **Three-dot Menu**: Added dropdown menu with MoreVertical icon on the left
+- **Primary Actions**: Positioned Reset and Save buttons on the right with proper spacing
+- **Full Width Container**: Action container now takes full available width
+
+### Button Organization
+- **Primary Actions** (right side): Reset, Save
+- **Secondary Actions** (dropdown menu): Export, Import, Stop Agent, Delete Agent
+
+### Icon Updates
+- **Export**: Updated to use  icon
+- **Import**: Updated to use  icon  
+- **Menu**: Changed to  (three vertical dots)
+
+### UX Improvements
+- **Dropdown Position**: Menu opens above the button ()
+- **Menu Order**: Export → Import → Stop Agent → Delete Agent (top to bottom)
+- **Visual Hierarchy**: Only Delete Agent has destructive (red) styling
+- **Responsive**: Maintains proper spacing and alignment
+
+## Screenshots
+
+The new layout provides a cleaner, more intuitive interface that follows modern UI patterns with secondary actions grouped in a dropdown menu and primary actions prominently displayed.
+
+## Testing
+
+- [x] Form submission works correctly
+- [x] All dropdown menu actions function properly  
+- [x] Reset functionality works
+- [x] Export/Import operations work
+- [x] Stop/Delete actions work (when available)
+- [x] Responsive layout maintained
+
+## Type of Change
+
+- [x] New feature (non-breaking change which adds functionality)
+- [x] UI/UX improvement
+- [ ] Bug fix (non-breaking change which fixes an issue)
+- [ ] Breaking change (fix or feature that would cause existing functionality to not work as expected)
+- [ ] Documentation update11:T55e,## Fix: Handle unwrapped server responses in BaseApiClient
+
+### Problem
+- Calls to Server routes through api-client (`/api/server/health`, `/api/server/ping`, `/api/server/status`) were failing with "Unknown error"
+- Manual requests to these endpoints worked fine
+- Only affected server endpoints, other API routes worked correctly
+
+### Root Cause
+- Server endpoints return direct JSON: `{ pong: true }`, `{ status: "OK" }`
+- Other API endpoints return wrapped format: `{ success: true, data: {...} }`
+- BaseApiClient expected ALL responses to have `success` property
+- When checking `!data.success` on unwrapped responses, it failed and threw "UNKNOWN_ERROR"
+
+### Solution
+- Updated `BaseApiClient.request()` to detect response format
+- **Wrapped responses**: Extract `data` from `{ success: true, data: ... }`
+- **Unwrapped responses**: Return JSON directly
+- Maintains backward compatibility with existing endpoints
+
+### Changes
+- **Core fix**: `src/lib/base-client.ts` - Smart response format detection
+- **Tests**: Added coverage for both wrapped and unwrapped response types
+- **Compatibility**: All 170 existing tests pass + 3 new tests
+
+### Impact
+- ✅ Server routes now work correctly
+- ✅ No breaking changes to existing functionality
+- ✅ Maintains type safety and error handling
+- ✅ Backward compatible with wrapped API responses12:T6f3,## Summary
+
+Add automatic synchronization of secrets from local `.env` file for characters that don't have secrets configured.
+
+## Context
+
+When characters are stored in the database or loaded from files, they often lack secrets for security reasons. However, agents need these secrets (API keys, tokens, etc.) to function properly. This change implements an automatic fallback mechanism.
+
+## Problem
+
+- Characters stored without secrets fail to run properly
+- Manual secret configuration was required for each character
+- No standardized way to handle missing secrets
+
+## Solution
+
+Implemented automatic secret synchronization that:
+
+1. Checks if character has secrets configured
+2. If not, loads secrets from local `.env` file
+3. Applies them to character before runtime initialization
+
+## Technical Details
+
+### New Functions in `config-utils.ts`:
+
+- `hasCharacterSecrets(character)` - Validates if secrets exist
+- `ensureCharacterSettings(character)` - Ensures settings object exists
+- `loadLocalEnvSecrets()` - Loads secrets from `.env` file
+- `setDefaultSecretsFromEnv(character)` - Main sync function
+
+### Integration Point:
+
+- Added to `agent-start.ts` before `AgentRuntime` creation
+- Ensures secrets are available before any plugins initialize
+
+## Benefits
+
+- **Security**: Secrets remain in `.env` files, not in stored characters
+- **Convenience**: Characters work automatically with local environment
+- **Flexibility**: Characters can be shared without exposing secrets
+- **Consistency**: Single source of truth for secrets (local `.env`)
+
+## Testing
+
+- Character without secrets → should load from `.env`
+- Character with existing secrets → should keep original secrets
+- No `.env` file → should handle gracefully13:T6e4,## Problem
+
+When creating a new project with `elizaos create`, selecting an AI model (e.g., OpenAI, Claude) would:
+- ✅ Store the API key in `.env`
+- ✅ Report successful configuration
+- ❌ **NOT** install the corresponding plugin package
+- ❌ **NOT** add the plugin to `package.json` dependencies
+
+This left users with a broken setup where the agent couldn't actually use the selected AI model.
+
+## Solution
+
+This PR adds automatic plugin installation during project creation by calling the existing `installPlugin` utility after AI model configuration.
+
+**Key changes:**
+- Added ~15 lines of code to `setup.ts` 
+- Reuses existing `installPlugin` function from utils
+- Handles the special case where `claude` maps to `@elizaos/plugin-anthropic`
+- Installs embedding model plugin if different from main AI model
+
+## Replaces PR #5330
+
+This is a simpler alternative to #5330 that accomplishes the same goal with significantly less code by leveraging existing infrastructure instead of creating new mapping files and detection logic.
+
+## Testing
+
+Tested with:
+- `elizaos create --type project` selecting OpenAI ✅
+- `elizaos create --type project` selecting Claude ✅
+- `elizaos create --type project` selecting Claude + OpenAI embeddings ✅
+- Non-interactive mode with `--yes` flag ✅
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+* **New Features**
+  * Added automatic installation of AI model plugins during project setup, including support for embedding models.
+  * Clear messages are provided for both successful and failed plugin installations, with guidance for manual installation if needed.
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->14:T423,## Summary
+- Remove automatic merging of process.env variables into .env file
+- Use clean template without runtime environment pollution
+- Prevent .env file from becoming cluttered with unrelated variables
+
+## Problem
+The previous implementation was automatically merging all process.env variables into the generated .env file, which:
+- Made the .env file messy and confusing with system/unrelated variables
+- Added variables that weren't required by ElizaOS
+- Created an unclear configuration experience for new users
+
+## Solution
+This PR simplifies the .env file creation to only use the template content, providing:
+- A clean, well-documented configuration file
+- Only the variables actually needed by ElizaOS
+- Clear structure for users to understand and modify
+
+## Test plan
+- [x] Verify .env file is created with template content only when it doesn't exist
+- [x] Verify empty .env files are populated with template content
+- [x] Verify existing .env files with content are not modified
+- [x] Test that the CLI still loads environment variables correctly15:T931,```
+<!-- Use this template by filling in information and copying and pasting relevant items out of the HTML comments. -->
+
+# Relates to
+
+<!-- LINK TO ISSUE OR TICKET -->
+
+<!-- This risks section must be filled out before the final review and merge. -->
+
+# Risks
+
+Low. Downgrading to a stable LTS Node.js version should improve CI stability.
+
+# Background
+
+## What does this PR do?
+
+This PR updates the Node.js version used in the `cli-tests.yml` GitHub Actions workflow.
+
+## What kind of change is this?
+
+Bug fixes
+
+## Why are we doing this? Any context or related work?
+
+CLI tests were failing on Ubuntu CI environments because Node.js 23 builds were not yet available on the official Linux runner images. This caused the CI job to silently crash before any tests could execute. Downgrading the Node.js setup step from 23 to 22 (latest stable LTS) ensures that a supported binary is always found on every runner OS, resolving the test failures.
+
+All temporary changes made during the initial incorrect diagnosis (related to Bun auto-installation in `packages/cli/run-all-tests.sh` and `packages/cli/package.json`) have been fully reverted, leaving only the necessary workflow change.
+
+# Documentation changes needed?
+
+My changes do not require a change to the project documentation.
+
+# Testing
+
+## Where should a reviewer start?
+
+`.github/workflows/cli-tests.yml`
+
+## Detailed testing steps
+
+- Observe the CI results for the `cli-tests.yml` workflow on Ubuntu runners to confirm that tests now pass.
+
+<!--
+- As [anon/admin], go to [link]
+  - [do action]
+  - verify [result]
+-->
+
+<!-- If there is a UI change, please include before and after screenshots or videos. This will speed up PRs being merged. It is extra nice to annotate screenshots with arrows or boxes pointing out the differences. -->
+<!--
+## Screenshots
+### Before
+### After
+-->
+
+<!-- If there is anything about the deployment, please make a note. -->
+<!--
+# Deploy Notes
+-->
+
+<!--  Copy and paste command line output. -->
+<!--
+## Database changes
+-->
+
+<!--  Please specify deploy instructions if there is something more than the automated steps. -->
+<!--
+## Deployment instructions
+-->
+
+<!-- If you are on Discord, please join https://discord.gg/ai16z and state your Discord username here for the contributor role and join us in #development-feed -->
+<!--
+## Discord username
+
+-->
+```16:T15dc,ElizaOS significantly advanced its core CLI today with major enhancements to environment variable management and the introduction of an AI-powered plugin upgrade tool, alongside critical UI improvements and bug fixes. Development teams also focused on addressing long-standing issues related to testing consistency, documentation, and agent deployment strategies across multiple repositories.
+
+## 🚨 Needs Attention 
+- **Urgent Discussions**:
+    - [elizaos/eliza#5234](https://github.com/elizaos/eliza/issues/5234): Documentation overhaul needs input on creating separate tracks for simple users and developers, with detailed feedback already provided on current shortcomings.
+    - [elizaos/eliza#5244](https://github.com/elizaos/eliza/issues/5244): Discussion on best ways to deploy custom Eliza agents, with `claude` making progress on deployment configuration files and `bealers` offering "elizify" as a community project.
+    - [elizaos/eliza#5295](https://github.com/elizaos/eliza/issues/5295): Migration of CLI input methods to `@clack/prompts` needs review for PR #5359.
+
+## ✅ Completed Work
+- **Enhanced CLI Functionality and User Experience**:
+    - Refactored environment variable system for improved maintainability and user-friendliness, now utilizing `clack` for prompts ([elizaos/eliza#5326](https://github.com/elizaos/eliza/pull/5326)).
+    - Fixed the `create` command to correctly display project types and clean up on interruption ([elizaos/eliza#5321](https://github.com/elizaos/eliza/pull/5321), [elizaos/eliza#5337](https://github.com/elizaos/eliza/pull/5337)).
+    - Implemented automatic installation of AI model plugins during project creation ([elizaos/eliza#5335](https://github.com/elizaos/eliza/pull/5335)).
+    - Simplified `.env` file creation to use templates only, preventing clutter from runtime environment pollution ([elizaos/eliza#5340](https://github.com/elizaos/eliza/pull/5340)).
+    - Ensured agent secrets are automatically updated with local variables if empty ([elizaos/eliza#5329](https://github.com/elizaos/eliza/pull/5329)).
+- **AI-Powered Plugin Migration Tool**:
+    - Introduced a new AI-powered migration tool to streamline the upgrade process for ElizaOS plugins from version 0.x to 1.x, featuring a stepwise migration guide ([elizaos/eliza#5311](https://github.com/elizaos/eliza/pull/5311)).
+- **UI/UX Improvements and Server Control**:
+    - Added an environment variable to toggle Web UI availability, enhancing control in production environments ([elizaos/eliza#5304](https://github.com/elizaos/eliza/pull/5304)).
+    - Restructured character form action buttons for improved layout and user experience ([elizaos/eliza#5342](https://github.com/elizaos/eliza/pull/5342)).
+    - Enabled the GUI to dynamically display the server version, fetched from a new server endpoint ([elizaos/eliza#5339](https://github.com/elizaos/eliza/pull/5339)).
+- **Bug Fixes and Stability**:
+    - Resolved a critical bug in `plugin-knowledge` where `processKnowledgeAction` generated the same `clientDocumentId` for every memory, ensuring unique identification for new memories ([elizaos-plugins/plugin-knowledge#16](https://github.com/elizaos-plugins/plugin-knowledge/issues/16)).
+
+## 🏗️ Work in Progress
+- **New Pull Requests**:
+    - elizaos/eliza:
+        - [#5338](https://github.com/elizaos/eliza/pull/5338): Introduces `@elizaos/plugin-grok` to support xAI Grok models.
+    - elizaos-plugins/registry:
+        - [#185](https://github.com/elizaos-plugins/registry/pull/185): Adds `@elizaos/plugin-datai` to the registry.
+- **Active Discussions**:
+    - [elizaos/eliza#5218](https://github.com/elizaos/eliza/issues/5218): Ensuring `bun run test` works consistently across all packages.
+    - [elizaos/eliza#5234](https://github.com/elizaos/eliza/issues/5234): Documentation overhaul for simple users and developers.
+    - [elizaos/eliza#5244](https://github.com/elizaos/eliza/issues/5244): Best ways to deploy custom Eliza agents.
+    - [elizaos/eliza#5295](https://github.com/elizaos/eliza/issues/5295): Migrating remaining CLI input methods to `@clack/prompts`.
+
+## 🐞 Issue Triage
+- **New Issues**:
+    - elizaos/eliza:
+        - [#5341](https://github.com/elizaos/eliza/issues/5341): Tracks the upgrade of BD tier 1-4 plugins.
+    - elizaos-plugins/plugin-twitter:
+        - [#30](https://github.com/elizaos-plugins/plugin-twitter/issues/30): Highlights that `TWITTER_MAX_INTERACTIONS_PER_RUN` is documented but not utilized in the plugin's code.
+- **Closed Issues**:
+    - elizaos/eliza:
+        - [#5336](https://github.com/elizaos/eliza/issues/5336): Fixed CLI create command displaying incorrect project types.
+    - elizaos-plugins/plugin-knowledge:
+        - [#16](https://github.com/elizaos-plugins/plugin-knowledge/issues/16): Resolved critical bug where `processKnowledgeAction` generated the same `clientDocumentId` for every memory.
+
+## ✨ Contributor Spotlight
+- **@ai16z-demirix**: Confirmed progress on phase 1 of fixing inconsistent `bun run test` behavior across packages and committed to completing the issue.
+- **@bealers**: Shared significant work on "elizify," a project aimed at making Eliza easier to install in production environments with `docker compose up` and one-click Coolify install.
+- **@claude**: Made progress on creating `railway.json`, `render.yaml`, and a `DEPLOYMENT.md` guide to address Eliza agent deployment challenges.
+- **@Ifechukwudaniel**: Requested assignment to multiple key issues including documentation overhaul and CLI input method migration, indicating a strong commitment to these areas.0:{"buildId":"US8XLB_zHXYj_PVAECGcd","rsc":["$","$1","c",{"children":[["$","div",null,{"className":"container mx-auto px-6 py-8 md:px-8","children":["$","div",null,{"className":"mx-auto max-w-4xl","children":[["$","div",null,{"className":"mb-4 flex flex-col justify-between sm:flex-row","children":[["$","$L2",null,{"currentInterval":"day","currentDate":"2025-07-01"}],["$","$L3",null,{"metrics":{"date":"2025-07-01","interval":{"intervalStart":"$D2025-07-01T00:00:00.000Z","intervalEnd":"$D2025-07-02T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":8,"merged":10,"total":13},"issues":{"new":3,"closed":2,"total":4},"activeContributors":13,"codeChanges":{"additions":10678,"deletions":2446,"files":89,"commitCount":56},"topContributors":[{"username":"wtfsayo","avatarUrl":"https://avatars.githubusercontent.com/u/82053242?u=98209a1f10456f42d4d2fa71db4d5bf4a672cbc3&v=4","totalScore":130.08694431577842,"prScore":129.64894431577844,"issueScore":0,"reviewScore":0,"commentScore":0.43799999999999994,"summary":"wtfsayo: Merged 3 PRs in elizaos/eliza, including a feature restructuring the character form action buttons layout (+143/-137 lines) and two bug fixes, one of which significantly modified the GUI version resolve (+583/-193 lines). Also, made 10 comments on pull requests and modified 124 files with 15 commits, focusing on bug fixes, other work, and feature work, primarily involving configuration and code files (+8800/-2948 lines)."},{"username":"yungalgo","avatarUrl":"https://avatars.githubusercontent.com/u/113615973?u=92e0f29f7e2fbb8ce46ed13c51f692ca803de02d&v=4","totalScore":52.06035254341913,"prScore":51.622352543419126,"issueScore":0,"reviewScore":0,"commentScore":0.43799999999999994,"summary":"yungalgo: Merged 2 PRs in elizaos/eliza, including elizaos/eliza#5335 which auto-installs AI model plugins on project creation (+81/-22 lines), and made 12 commits modifying 12 files (+168/-66 lines) with a focus on other, bugfix, and refactor work, also commenting on 4 PRs."},{"username":"0xtc23","avatarUrl":"https://avatars.githubusercontent.com/u/129641996?v=4","totalScore":43.5437738965761,"prScore":43.5437738965761,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"0xtc23: Opened elizaos/eliza#5338, a feature adding the @elizaos/plugin-grok for xAI Grok models. Sporadic activity was observed."},{"username":"Dangoz","avatarUrl":"https://avatars.githubusercontent.com/u/71613713?u=1839f372422c7a5503a713dca22981490b4ea7da&v=4","totalScore":33.74239089914137,"prScore":33.74239089914137,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"Dangoz: Merged elizaos/eliza#5343, a bug fix in `BaseApiClient` (+47/-28 lines). This work involved changes to both code and tests."},{"username":"germashevanton","avatarUrl":"https://avatars.githubusercontent.com/u/28603211?u=ec2ea9a310c9a6a08e97754fefef8d3541550df9&v=4","totalScore":17.392751502819134,"prScore":17.392751502819134,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":null},{"username":"0xbbjoker","avatarUrl":"https://avatars.githubusercontent.com/u/54844437?u=90fe1762420de6ad493a1c1582f1f70c0d87d8e2&v=4","totalScore":10.34,"prScore":0,"issueScore":0,"reviewScore":10,"commentScore":0.33999999999999997,"summary":"0xbbjoker: Modified 64 files with 7 commits (+9508/-4415 lines) focusing on bug fixes and feature work, and provided 2 approvals with 2 PR comments. Active with consistent daily work."},{"username":"linear","avatarUrl":"https://avatars.githubusercontent.com/in/20150?v=4","totalScore":4,"prScore":0,"issueScore":4,"reviewScore":0,"commentScore":0,"summary":"linear: Created issue elizaos/eliza#5336 to fix CLI create command text for different types. Sporadic activity today."},{"username":"borisudovicic","avatarUrl":"https://avatars.githubusercontent.com/u/31806472?u=c0478c34097551ba98aaa71edb33af0885a72d69&v=4","totalScore":4,"prScore":0,"issueScore":4,"reviewScore":0,"commentScore":0,"summary":"borisudovicic: Created issue elizaos/eliza#5341 to upgrade BD tier 1-4 plugins. Sporadic activity suggests involvement in diverse areas."},{"username":"myst4","avatarUrl":"https://avatars.githubusercontent.com/u/86130282?u=2aee3ed374a6ecd7ba99178257ec95e8690f239b&v=4","totalScore":2,"prScore":0,"issueScore":2,"reviewScore":0,"commentScore":0,"summary":null},{"username":"bealers","avatarUrl":"https://avatars.githubusercontent.com/u/6403055?u=8c40778251e25b92cdee727056415b6c0d1bcdc5&v=4","totalScore":0.43799999999999994,"prScore":0,"issueScore":0,"reviewScore":0,"commentScore":0.43799999999999994,"summary":null}],"focusAreas":[{"area":"cli","count":47},{"area":"client","count":7},{"area":"docs","count":7},{"area":"server","count":6},{"area":"app","count":1},{"area":"api-client","count":1}],"topIssues":[{"id":"I_kwDOMT5cIs6-RUyw","title":"Upgrade BD tier 1-4 plugins","author":"borisudovicic","number":5341,"repository":"elizaos/eliza","body":"[https://docs.google.com/spreadsheets/d/13Xbqg5W80jx9kCK_3AzkeTCPVT6Lm19gyConLTw5KEU/edit?gid=123741074#gid=123741074](https://docs.google.com/spreadsheets/d/13Xbqg5W80jx9kCK_3AzkeTCPVT6Lm19gyConLTw5KEU/edit?gid=123741074#gid=123741074)","createdAt":"2025-07-01T12:07:38Z","closedAt":"2025-07-02T15:42:01Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs6-LdhY","title":"Fix CLI Create Command Text for Different Types","author":"linear","number":5336,"repository":"elizaos/eliza","body":"* Update CLI create command to display correct type in prompts\n* Change \"Creating ElizaOS Project\" to dynamic text based on --type flag\n* Update confirmation prompts to match the actual creation type\n* Test with different --type values (plugin, agent, etc)\n* Ensure consistent messaging throughout create workflow\n* Verify all create command text reflects the actual type being created\n\n**Context:** When running `elizaos create --type plugin labubu`, the CLI incorrectly shows \"Creating ElizaOS Project\" and \"Create plugin...\" when it should display type-appropriate messaging for plugins vs projects vs agents vs tees.","createdAt":"2025-07-01T04:47:14Z","closedAt":"2025-07-01T07:55:07Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOOu4gVs66mpXr","title":"processKnowledgeAction: Generates the same clientDocumentId for every memory","author":"lkoczorowski","number":16,"repository":"elizaos-plugins/plugin-knowledge","body":"$4","createdAt":"2025-06-09T15:45:23Z","closedAt":"2025-07-01T22:28:06Z","state":"CLOSED","commentCount":0},{"id":"I_kwDONkwNcc6-WOOP","title":"TWITTER_MAX_INTERACTIONS_PER_RUN is documented but never used","author":"myst4","number":30,"repository":"elizaos-plugins/plugin-twitter","body":"$5","createdAt":"2025-07-01T18:51:49Z","closedAt":null,"state":"OPEN","commentCount":0}],"topPullRequests":[{"id":"PR_kwDOMT5cIs6aFGnn","title":"feat: updated plugin migrator","author":"samarth30","number":5066,"body":"$6","repository":"elizaos/eliza","createdAt":"2025-06-11T18:02:27Z","mergedAt":null,"additions":46293,"deletions":1326},{"id":"PR_kwDOMT5cIs6clTBC","title":"feat: plugins upgrade with claude code","author":"0xbbjoker","number":5311,"body":"\n\n<!-- This is an auto-generated comment: release notes by coderabbit.ai -->\n\n## Summary by CodeRabbit\n\n* **New Features**\n  * Introduced an AI-powered migration tool for upgrading ElizaOS plugins from version 0.x to 1.x, featuring a stepwise, gated process with detailed progress reporting and validation at each stage.\n  * Added advanced migration guides and comprehensive documentation covering configuration, state management, providers, prompt generation, and testing.\n  * Extended CLI options for the upgrade command, including verbosity controls and confirmation skipping.\n\n* **Bug Fixes**\n  * Improved error handling and user messaging during the migration process.\n\n* **Documentation**\n  * Added detailed migration, prompt, state, provider, and testing guides to assist plugin developers with the upgrade process.\n\n* **Chores**\n  * Updated dependencies to support the new migration workflow.\n\n<!-- end of auto-generated comment: release notes by coderabbit.ai -->","repository":"elizaos/eliza","createdAt":"2025-06-29T15:07:06Z","mergedAt":"2025-07-01T12:49:28Z","additions":6050,"deletions":1089},{"id":"PR_kwDOMT5cIs6c1Ksr","title":"feat: Add @elizaos/plugin-grok for xAI Grok models","author":"0xtc23","number":5338,"body":"$7","repository":"elizaos/eliza","createdAt":"2025-07-01T07:08:57Z","mergedAt":null,"additions":1731,"deletions":2143},{"id":"PR_kwDOMT5cIs6cbDtx","title":"Feature: Add ELIZA_UI_ENABLE environment variable to toggle Web UI availability","author":"bealers","number":5304,"body":"$8","repository":"elizaos/eliza","createdAt":"2025-06-27T12:57:03Z","mergedAt":"2025-07-01T16:03:02Z","additions":1148,"deletions":217},{"id":"PR_kwDOMT5cIs6cw3Tz","title":"🔧 Fix Windows CI Issues - Comprehensive Solution","author":"wtfsayo","number":5332,"body":"$9","repository":"elizaos/eliza","createdAt":"2025-06-30T20:29:42Z","mergedAt":null,"additions":1009,"deletions":32},{"id":"PR_kwDOMT5cIs6cuVHG","title":"feat: clack env prompts cli, major refactor of cli envs","author":"ChristopherTrimboli","number":5326,"body":"$a","repository":"elizaos/eliza","createdAt":"2025-06-30T15:49:30Z","mergedAt":"2025-07-01T09:14:54Z","additions":846,"deletions":708},{"id":"PR_kwDOMT5cIs6c2BSm","title":"fix: gui version resolve","author":"wtfsayo","number":5339,"body":"\n\n<!-- This is an auto-generated comment: release notes by coderabbit.ai -->\n\n## Summary by CodeRabbit\n\n* **New Features**\n  * The app sidebar now displays the server version dynamically, fetched from the server.\n  * Added a new server endpoint to provide version information, including environment and uptime.\n  * Introduced a React hook to fetch and display server version data in the client.\n\n* **Refactor**\n  * Replaced static version imports with dynamic server version fetching throughout the client.\n  * Removed redundant version file generation and related build logic.\n\n* **Chores**\n  * Updated version numbers across all packages to 1.0.15.\n  * Cleaned up unused files and comments in client and configuration files.\n\n<!-- end of auto-generated comment: release notes by coderabbit.ai -->","repository":"elizaos/eliza","createdAt":"2025-07-01T08:17:00Z","mergedAt":"2025-07-01T08:55:23Z","additions":297,"deletions":127},{"id":"PR_kwDOMT5cIs6cs5WF","title":"fix: cli create command directory display and cleanup on interruption","author":"yungalgo","number":5321,"body":"$b","repository":"elizaos/eliza","createdAt":"2025-06-30T13:51:00Z","mergedAt":"2025-07-01T08:37:39Z","additions":279,"deletions":59},{"id":"PR_kwDOMT5cIs6cwBez","title":"fix: Ubuntu CLI test parallelization issues","author":"wtfsayo","number":5331,"body":"$c","repository":"elizaos/eliza","createdAt":"2025-06-30T18:48:28Z","mergedAt":null,"additions":269,"deletions":115},{"id":"PR_kwDOMT5cIs6cv72m","title":"fix: install AI model plugins on create","author":"ChristopherTrimboli","number":5330,"body":"$d","repository":"elizaos/eliza","createdAt":"2025-06-30T18:39:35Z","mergedAt":null,"additions":207,"deletions":1},{"id":"PR_kwDOMT5cIs6cw9OI","title":"Fix Windows CI issues","author":"wtfsayo","number":5333,"body":"$e","repository":"elizaos/eliza","createdAt":"2025-06-30T20:38:41Z","mergedAt":null,"additions":197,"deletions":87},{"id":"PR_kwDONkg7v86c6Gqc","title":"@elizaos/plugin-datai added","author":"germashevanton","number":185,"body":"$f","repository":"elizaos-plugins/registry","createdAt":"2025-07-01T13:26:15Z","mergedAt":null,"additions":185,"deletions":184},{"id":"PR_kwDOMT5cIs6c51Rq","title":"feat(client): Restructure character form action buttons layout","author":"wtfsayo","number":5342,"body":"$10","repository":"elizaos/eliza","createdAt":"2025-07-01T13:03:51Z","mergedAt":"2025-07-01T13:49:38Z","additions":120,"deletions":114},{"id":"PR_kwDOMT5cIs6c8uZi","title":"fix: handle unwrapped server responses in BaseApiClient","author":"Dangoz","number":5343,"body":"$11","repository":"elizaos/eliza","createdAt":"2025-07-01T17:28:30Z","mergedAt":"2025-07-06T08:29:05Z","additions":77,"deletions":26},{"id":"PR_kwDOMT5cIs6cvtwV","title":"chore: update agent secrets when they are empty with local vars","author":"0xbbjoker","number":5329,"body":"$12","repository":"elizaos/eliza","createdAt":"2025-06-30T18:11:26Z","mergedAt":"2025-07-01T10:21:49Z","additions":67,"deletions":1},{"id":"PR_kwDOMT5cIs6czgm1","title":"fix: auto-install AI model plugins on project creation","author":"yungalgo","number":5335,"body":"$13","repository":"elizaos/eliza","createdAt":"2025-07-01T03:34:49Z","mergedAt":"2025-07-01T07:39:24Z","additions":59,"deletions":0},{"id":"PR_kwDOMT5cIs6cz-Mw","title":"fix: (cli) show correct type in create command messages","author":"yungalgo","number":5337,"body":"## Description\r\n\r\nUpdates the CLI create command to display the correct type (Plugin/Agent/TEE Project) in prompts instead of always showing \"Project\".\r\n\r\n## Changes\r\n\r\n- Dynamic intro message based on `--type` flag\r\n- Type-specific success messages\r\n- Proper error messages that match the creation type\r\n\r\n## Before & After\r\n\r\n### Before\r\n\r\n┌ Creating ElizaOS Project\r\n│\r\n◇ Create plugin \"plugin-labubu\" in Desktop?\r\n\r\n### After\r\n\r\n┌ Creating ElizaOS Plugin\r\n│\r\n◇ Create plugin \"plugin-labubu\" in Desktop?\r\n\r\n\n\n<!-- This is an auto-generated comment: release notes by coderabbit.ai -->\n\n## Summary by CodeRabbit\n\n* **Enhancements**\n  * Improved command messages to dynamically display and format the project type throughout the creation process, including success and error messages.\n\n<!-- end of auto-generated comment: release notes by coderabbit.ai -->","repository":"elizaos/eliza","createdAt":"2025-07-01T05:03:16Z","mergedAt":"2025-07-01T07:00:23Z","additions":29,"deletions":4},{"id":"PR_kwDOMT5cIs6c3vlG","title":"fix: simplify .env file creation to use template only","author":"wtfsayo","number":5340,"body":"$14","repository":"elizaos/eliza","createdAt":"2025-07-01T10:20:56Z","mergedAt":"2025-07-01T10:28:55Z","additions":11,"deletions":124},{"id":"PR_kwDOMT5cIs6cxAku","title":"Fix cli tests failing in Ubuntu","author":"wtfsayo","number":5334,"body":"$15","repository":"elizaos/eliza","createdAt":"2025-06-30T20:44:10Z","mergedAt":null,"additions":2,"deletions":2}],"detailedContributorSummaries":{"0xbbjoker":"0xbbjoker: Modified 64 files with 7 commits (+9508/-4415 lines) focusing on bug fixes and feature work, and provided 2 approvals with 2 PR comments. Active with consistent daily work.","0xtc23":"0xtc23: Opened elizaos/eliza#5338, a feature adding the @elizaos/plugin-grok for xAI Grok models. Sporadic activity was observed.","Dangoz":"Dangoz: Merged elizaos/eliza#5343, a bug fix in `BaseApiClient` (+47/-28 lines). This work involved changes to both code and tests.","borisudovicic":"borisudovicic: Created issue elizaos/eliza#5341 to upgrade BD tier 1-4 plugins. Sporadic activity suggests involvement in diverse areas.","linear":"linear: Created issue elizaos/eliza#5336 to fix CLI create command text for different types. Sporadic activity today.","wtfsayo":"wtfsayo: Merged 3 PRs in elizaos/eliza, including a feature restructuring the character form action buttons layout (+143/-137 lines) and two bug fixes, one of which significantly modified the GUI version resolve (+583/-193 lines). Also, made 10 comments on pull requests and modified 124 files with 15 commits, focusing on bug fixes, other work, and feature work, primarily involving configuration and code files (+8800/-2948 lines).","yungalgo":"yungalgo: Merged 2 PRs in elizaos/eliza, including elizaos/eliza#5335 which auto-installs AI model plugins on project creation (+81/-22 lines), and made 12 commits modifying 12 files (+168/-66 lines) with a focus on other, bugfix, and refactor work, also commenting on 4 PRs."}},"summaryContent":"$16","className":"self-end sm:self-start"}]]}],"$L17","$L18","$L19"]}]}],["$L1a","$L1b","$L1c"],"$L1d"]}],"loading":null,"isPartial":false}
+17:["$","div",null,{"className":"mb-6","children":["$","div",null,{"className":"flex items-center justify-between","children":[[["$","$L1e",null,{"href":"/summary/day/2025-06-30","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left mr-2 h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"children":"Previous"}],false],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$L1e",null,{"href":"/summary/day/2025-06-30","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Previous"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]],["$","div",null,{"className":"flex flex-col items-center","children":[["$","div",null,{"className":"text-sm font-medium text-gray-500","children":["Daily"," Summary"]}],["$","time",null,{"dateTime":"2025-07-01","className":"text-md font-bold","children":"Jul 1, 2025"}]]}],[["$","$L1e",null,{"href":"/summary/day/2025-07-02","children":[false,["$","span",null,{"children":"Next"}],["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right ml-2 h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}]],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$L1e",null,{"href":"/summary/day/2025-07-02","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Next"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]]]}]}]
+20:T49f,### Version
+1.0.3
+
+### Description
+`processKnowledgeAction` uses the following to generate an unique uuid for new memories:
+`clientDocumentId: createUniqueUuid(runtime.agentId + "text" + Date.now(), "user-knowledge"),`
+
+However, createUniqueUuid does the following:
+```
+export const createUniqueUuid = (runtime, baseUserId: UUID | string): UUID => {
+  // If the base user ID is the agent ID, return it directly
+  if (baseUserId === runtime.agentId) {
+    return runtime.agentId;
+  }
+
+  // Use a deterministic approach to generate a new UUID based on both IDs
+  // This creates a unique ID for each user+agent combination while still being deterministic
+  const combinedString = `${baseUserId}:${runtime.agentId}`;
+
+  // Create a namespace UUID (version 5) from the combined string
+  return stringToUuid(combinedString);
+};
+```
+
+Meaning that `createUniqueUuid` will always return: `stringToUuid("user-knowledge:undefined")` ie: `4e394ea6-af35-0010-8047-94bccb8b8e5b`
+
+### Expected Result
+The generated ID should be unique, the easiest approach would be to us `stringToUuid` directly.
+
+If possible, I would love to contribute. I can fix this issue, and others I've discovered.
+
+Thanks,21:T4c9,## 🐛 Bug Report
+
+The plugin defines an environment variable:
+
+````
+TWITTER_MAX_INTERACTIONS_PER_RUN=10  # Maximum interactions processed per cycle
+````
+
+However, this value is **never used anywhere in the code**. Specifically, the `handleTimeline()` function retrieves 20 tweets via `this.getTimeline(20)`, and for each tweet, the agent may perform up to 4 actions: `[LIKE]`, `[RETWEET]`, `[QUOTE]`, `[REPLY]`.
+
+In practice, this can result in **40–60 actions being executed in a single run**, all at once.
+
+---
+
+## ⚠️ Problem
+
+- The defined variable `maxActionsPerCycle = 20` inside the code is never enforced.
+- The system does not limit or throttle the number of actions performed per run.
+- All actions are executed immediately and in parallel, with no spacing or delay.
+- This behavior may **violate Twitter’s automation rules** and can result in accounts being rate-limited or banned.
+
+---
+
+## ❓ Open Question
+
+Given that `TWITTER_MAX_INTERACTIONS_PER_RUN` is documented as a limit, but not used anywhere in the code — is this an oversight, or is the intended behavior to handle rate-limiting differently?
+
+Shouldn’t there be a safeguard in place to avoid executing dozens of actions in a single cycle?22:T739,This pull request introduces several enhancements and new features to the plugin migration system, focusing on improving test generation, repository analysis, and environment variable management. The most significant changes include the introduction of a context-aware test generation system, updates to repository analysis logic, and improvements to environment variable prompting. Additionally, configuration constants and export structure have been updated for better maintainability.
+
+### Context-Aware Test Generation
+* Added a new system for generating plugin-specific tests dynamically based on the plugin's actual structure and functionality. This replaces the old static template system, ensuring more relevant and accurate tests. (`CONTEXT_AWARE_TESTING.md`)
+
+### Repository Analysis Enhancements
+* Implemented a repository analyzer that scans a plugin's directory for key files (`README.md`, `package.json`, `index.ts/js`) and source files while respecting token limits and skipping large or binary files. (`repository-analyzer.ts`)
+
+### Environment Variable Management
+* Introduced `EnvPrompter`, a utility for interactive collection and validation of environment variables, with support for sensitive values and default descriptions. (`env-prompter.ts`)
+
+### Configuration Updates
+* Added new configuration constants for migration, including `MAX_TOKENS`, `CLAUDE_CODE_TIMEOUT`, and `MIN_DISK_SPACE_GB`, to centralize and standardize settings. (`config.ts`)
+
+### Export Structure Improvements
+* Updated the export structure in `index.ts` to include new components like `EnvPrompter`, `ContextAwareTestGenerator`, and configuration constants, ensuring better modularity and accessibility. (`index.ts`)<!-- Use this template by filling in information and copying and pasting relevant items out of the HTML comments. -->
+
+23:Tdcf,Implements a new plugin `@elizaos/plugin-grok` to integrate with xAI's Grok language models. This plugin leverages Grok's OpenAI-compatible API.
+
+Key changes:
+- Created `packages/plugin-grok/`:
+    - `package.json`: Defines the new plugin package.
+    - `tsconfig.json`, `tsup.config.ts`: Build configuration.
+    - `src/index.ts`: Implements `GrokLanguageModel` (extending `ChatLanguageModel` from core) using the OpenAI SDK configured for Grok's API endpoint (`https://api.x.ai/v1`) and `XAI_API_KEY`. Includes `generate` and `stream` methods with preliminary tool use support. Registers `GrokService` with service type "grok".
+    - `src/__tests__/index.test.ts`: Basic unit tests for `GrokLanguageModel`.
+    - `README.md`: Documentation for setting up and using the plugin.
+- Updated `packages/cli/src/server/loader.ts` to import `@elizaos/plugin-grok`, ensuring the service is registered.
+- Updated `packages/cli/tsconfig.json` to include path mapping for the new local plugin.
+- Updated `packages/cli/src/characters/gork.ts` to demonstrate how a character can conditionally use `@elizaos/plugin-grok` if `XAI_API_KEY` is set.
+
+This allows users with an XAI API key to use Grok models within the ElizaOS ecosystem.
+
+<!-- Use this template by filling in information and copying and pasting relevant items out of the HTML comments. -->
+
+# Relates to
+
+<!-- LINK TO ISSUE OR TICKET -->
+
+<!-- This risks section must be filled out before the final review and merge. -->
+
+# Risks
+
+<!--
+Low, medium, large. List what kind of risks and what could be affected.
+-->
+
+# Background
+
+## What does this PR do?
+
+## What kind of change is this?
+
+<!--
+Bug fixes (non-breaking change which fixes an issue)
+Improvements (misc. changes to existing features)
+Features (non-breaking change which adds functionality)
+Updates (new versions of included code)
+-->
+
+<!-- This "Why" section is most relevant if there are no linked issues explaining why. If there is a related issue, it might make sense to skip this why section. -->
+<!--
+## Why are we doing this? Any context or related work?
+-->
+
+# Documentation changes needed?
+
+<!--
+My changes do not require a change to the project documentation.
+My changes require a change to the project documentation.
+If documentation change is needed: I have updated the documentation accordingly.
+-->
+
+<!-- Please show how you tested the PR. This will really help if the PR needs to be retested and probably help the PR get merged quicker. -->
+
+# Testing
+
+## Where should a reviewer start?
+
+## Detailed testing steps
+
+<!--
+None: Automated tests are acceptable.
+-->
+
+<!--
+- As [anon/admin], go to [link]
+  - [do action]
+  - verify [result]
+-->
+
+<!-- If there is a UI change, please include before and after screenshots or videos. This will speed up PRs being merged. It is extra nice to annotate screenshots with arrows or boxes pointing out the differences. -->
+<!--
+## Screenshots
+### Before
+### After
+-->
+
+<!-- If there is anything about the deployment, please make a note. -->
+<!--
+# Deploy Notes
+-->
+
+<!--  Copy and paste command line output. -->
+<!--
+## Database changes
+-->
+
+<!--  Please specify deploy instructions if there is something more than the automated steps. -->
+<!--
+## Deployment instructions
+-->
+
+<!-- If you are on Discord, please join https://discord.gg/ai16z and state your Discord username here for the contributor role and join us in #development-feed -->
+<!--
+## Discord username
+
+-->
+24:Tb0d,# Add ELIZA_UI_ENABLE environment variable to control web UI in production
+
+## Problem
+
+elizaOS currently serves the web UI to anyone who can reach the server. While there's `ELIZA_SERVER_AUTH_TOKEN` for API endpoints, the web interface itself is wide open. In production deployments, this creates an unnecessary attack surface.
+
+## Solution
+
+Added `ELIZA_UI_ENABLE` environment variable with sensible defaults:
+- **Development**: UI enabled by default
+- **Production**: UI disabled by default
+- **Override**: Set `ELIZA_UI_ENABLE=true/false`
+
+When disabled, the web UI returns a standard HTTP 403 Forbidden error, but all API endpoints continue to work normally.
+
+## Implementation
+
+~20 lines in `packages/server/src/index.ts`:
+
+1. Check `NODE_ENV` and `ELIZA_UI_ENABLE` to determine UI status
+2. Conditionally serve static files only when UI is enabled
+3. Replace SPA fallback with 403 response when UI is disabled
+4. Update startup logging to clearly show UI status
+
+## Testing
+
+```bash
+# Development (UI enabled)
+bun start
+
+# Production (UI disabled)  
+NODE_ENV=production bun start
+
+# Force enable in production
+NODE_ENV=production ELIZA_UI_ENABLE=true bun start
+
+# Force disable in development
+ELIZA_UI_ENABLE=false bun start
+```
+
+When UI is disabled:
+- `http://localhost:3000` → HTTP 403 Forbidden  
+- `http://localhost:3000/api/server/ping` → Still works fine
+
+## Test Coverage
+
+Added tests:
+- **Unit tests**: Environment variable parsing and default behaviours (development vs production)
+- **Integration tests**: Server configuration impact and HTTP response handling
+- **Security validation**: API functionality preservation when UI disabled
+
+`bun test packages/server/src/__tests__/ui-disable-feature.test.ts`
+
+25 tests passing, including both new tests and existing functionality verification.
+
+## Justification
+
+I'm working on scripting prod deploys and wanted a straighforward way to shut the UI off, but keep API open. I've purposely kept the API authentication (`ELIZA_SERVER_AUTH_TOKEN`) separate from this UI disable feature to minimise any clashes. 
+
+
+## ⚠️ Desktop App Compatibility
+
+Any remote deploy breaks the desktop anyway, as it's a wrapper to an iframe polling localhost:3000. 
+
+In future iterations of the desktop app, with the correct plumbing, it could:
+
+1. **Explicitly override**: `ELIZA_UI_ENABLE=true elizaos start`
+2. **Environment file**: Add `ELIZA_UI_ENABLE=true` to `.env`
+3. **Startup script**: Desktop app launcher can set the environment variable
+
+(I'd be happy to help with this!)
+
+## Backward compatibility
+
+Should be fully backward compatible - no breaking changes, development experience stays the same. Only affects deployments that explicitly set `NODE_ENV=production`.
+
+---
+
+Discord: @bealers 25:T1ba1,# 🔧 Fix Windows CI Issues - Comprehensive Solution
+
+## 📋 Summary
+
+This PR implements a comprehensive solution to resolve the long-standing Windows CI failures that have been affecting the ElizaOS project. The fixes address root causes including Bun installation issues, process cleanup problems, memory constraints, and flaky test execution.
+
+## 🎯 Problems Solved
+
+### 1. **Bun Installation & Reliability Issues**
+- ❌ Bun installation failures on Windows runners
+- ❌ PATH resolution problems preventing Bun execution
+- ❌ Cache corruption causing installation loops
+- ❌ File permission issues blocking Bun execution
+
+### 2. **Process Management Problems**
+- ❌ Hanging test processes causing CI timeouts
+- ❌ Port conflicts from previous test runs
+- ❌ Resource leaks affecting subsequent tests
+- ❌ Inadequate process cleanup on Windows
+
+### 3. **Test Execution Issues**
+- ❌ Flaky tests due to resource contention
+- ❌ Memory constraints causing OOM errors
+- ❌ Poor error handling and diagnostics
+- ❌ No retry logic for transient failures
+
+## ✅ Solutions Implemented
+
+### 🔧 **New Windows-Specific Scripts**
+
+#### 1. `packages/cli/tests/fix-bun-windows.ps1`
+**Comprehensive Bun Installation Fixer**
+- Automatically detects and repairs Bun installation issues
+- Fixes PATH resolution problems
+- Clears corrupted cache files
+- Repairs file permissions
+- Provides fallback reinstallation
+- Includes detailed diagnostics
+
+#### 2. `packages/cli/tests/cleanup-processes.ps1`
+**Advanced Process Cleanup**
+- Terminates hanging processes by pattern matching
+- Cleans up port conflicts using `Get-NetTCPConnection`
+- Handles Eliza-specific process cleanup
+- Forces garbage collection
+- Safe error handling for all operations
+
+#### 3. `packages/cli/tests/windows-test-helper.ps1`
+**Robust Test Execution Framework**
+- Implements configurable retry logic (default: 2 attempts)
+- Provides timeout handling using PowerShell jobs
+- Pre and post-test environment verification
+- Comprehensive cleanup between attempts
+- Detailed logging and error reporting
+
+### 🚀 **Enhanced CI Workflow**
+
+#### Updated `.github/workflows/cli-tests.yml`
+- **Memory Optimization**: Increased Node.js heap to 6144MB for Windows
+- **Performance**: Added Windows Defender exclusions for faster file operations
+- **Environment Setup**: Optimized environment variables and caching
+- **Integration**: Seamlessly integrated all new helper scripts
+- **Monitoring**: Added verification steps for cleanup success
+
+## 📊 **Key Improvements**
+
+| **Area** | **Before** | **After** |
+|----------|------------|-----------|
+| **Bun Reliability** | Manual troubleshooting | Automatic detection & fixing |
+| **Process Cleanup** | Basic `pkill` commands | Native PowerShell process management |
+| **Test Execution** | Single attempt, no retry | 2 retries with proper cleanup |
+| **Memory Handling** | Default limits (often insufficient) | 6144MB + forced GC |
+| **Diagnostics** | Limited error info | Comprehensive logging & monitoring |
+| **Timeout Handling** | Fixed 15min timeout | 25min with job-based isolation |
+
+## 🔄 **Workflow Changes**
+
+### Before:
+```yaml
+- name: Run CLI TypeScript tests (Windows)
+  run: cross-env NODE_OPTIONS="--max-old-space-size=4096" bun test tests/commands/
+```
+
+### After:
+```yaml
+- name: Configure Windows environment
+  # Windows Defender exclusions, memory optimization
+  
+- name: Fix and verify Bun installation
+  # Automatic Bun installation fixing
+  
+- name: Install dependencies (with retry logic)
+  # Retry logic for flaky installations
+  
+- name: Run CLI TypeScript tests (Windows - Enhanced)
+  # Advanced test execution with helper script
+  
+- name: Cleanup test processes (Windows - Enhanced)
+  # Comprehensive cleanup using dedicated script
+  
+- name: Verify Windows cleanup
+  # Verification of cleanup success
+```
+
+## 🧪 **Testing Strategy**
+
+### Manual Testing Commands:
+```powershell
+# Fix Bun installation
+powershell -ExecutionPolicy Bypass -File "packages/cli/tests/fix-bun-windows.ps1" -Verbose
+
+# Clean up processes
+powershell -ExecutionPolicy Bypass -File "packages/cli/tests/cleanup-processes.ps1"
+
+# Run tests with retry
+powershell -ExecutionPolicy Bypass -File "packages/cli/tests/windows-test-helper.ps1" -TestCommand "bun test tests/commands/" -MaxRetries 3
+```
+
+## 📈 **Expected Impact**
+
+### Immediate Benefits:
+- **🎯 Reduced CI failure rate** by addressing root causes
+- **⚡ Faster issue resolution** through automatic fixing
+- **🔍 Better debugging** with comprehensive diagnostics
+- **🔄 Consistent environment** through standardized cleanup
+- **🛠️ Maintainable solution** with modular, updateable scripts
+
+### Long-term Benefits:
+- **📊 Improved developer productivity** - Less time debugging CI
+- **🚀 Faster iteration cycles** - More reliable test execution
+- **💰 Reduced CI costs** - Fewer failed runs and retries
+- **🔧 Easier maintenance** - Clear separation of concerns
+
+## 🔍 **Files Changed**
+
+### New Files:
+- `packages/cli/tests/cleanup-processes.ps1` - Windows process cleanup
+- `packages/cli/tests/windows-test-helper.ps1` - Test execution framework
+- `packages/cli/tests/fix-bun-windows.ps1` - Bun installation fixer
+- `WINDOWS_CI_FIXES.md` - Comprehensive documentation
+
+### Modified Files:
+- `.github/workflows/cli-tests.yml` - Enhanced Windows CI workflow
+
+## ⚙️ **Configuration Options**
+
+### Windows Test Helper:
+- `TestCommand` - Command to execute
+- `MaxRetries` - Number of retry attempts (default: 2)
+- `TimeoutMinutes` - Timeout per attempt (default: 15)
+
+### Bun Fixer:
+- `Force` - Force reinstallation
+- `Verbose` - Enable detailed logging
+
+## 🔒 **Safety & Compatibility**
+
+- **✅ Backward Compatible**: Doesn't affect Linux/macOS workflows
+- **✅ Safe Error Handling**: Graceful degradation on failures
+- **✅ Non-Breaking**: Existing functionality preserved
+- **✅ Isolated**: Windows-specific changes only
+
+## 🚨 **Breaking Changes**
+
+**None** - This PR only enhances Windows CI reliability without changing any APIs or interfaces.
+
+## 📝 **Additional Notes**
+
+### Why PowerShell Scripts?
+- **Native Windows support** - Better process and port management
+- **Rich error handling** - Comprehensive try/catch blocks
+- **Built-in cmdlets** - `Get-NetTCPConnection`, `Get-Process`, etc.
+- **Job isolation** - Timeout handling with PowerShell jobs
+
+### Monitoring & Maintenance:
+- Scripts include detailed logging for troubleshooting
+- Diagnostic information collected on failures
+- Modular design allows individual component updates
+- Performance metrics can be extracted from logs
+
+## 🔮 **Future Enhancements**
+
+1. **Adaptive timeouts** based on system performance
+2. **Health checks** before test execution
+3. **Metrics collection** for optimization
+4. **Integration testing** across Windows versions
+
+---
+
+**This comprehensive solution addresses the "too long" Windows CI issues by tackling fundamental problems rather than applying band-aid fixes. The modular, well-documented approach ensures maintainability and allows for future improvements.**26:T11c8,## 🔧 CLI Environment System Improvements
+
+This PR significantly improves the CLI environment variable system, making it more maintainable, user-friendly, and feature-rich.
+
+### 🎯 Summary of Changes
+
+#### 1. **Enhanced Plugin Environment Variable Prompts**
+- Migrated to `@clack/prompts` for better UI with progress indicators, styled prompts, and clearer visual separation
+- Added ability to easily skip optional environment variables (press Enter to skip)
+- Improved progress tracking with `[1/N]` indicators
+- Separated required and optional variables into distinct sections
+- Fixed the `placeholder.slice is not a function` error by ensuring all placeholder values are strings
+
+#### 2. **Removed Hardcoded Environment Configurations**
+- **Before**: CLI maintained hardcoded configs for plugins (openai, discord, twitter, etc.) in `env-prompt.ts`
+- **After**: System now relies purely on `agentConfig.pluginParameters` from each plugin's `package.json`
+- Deleted ~600 lines of hardcoded configuration
+- Makes the system more flexible - plugin authors can define their own env vars without CLI changes
+
+#### 3. **Extended Type Support for Environment Variables**
+Added support for multiple data types beyond just strings:
+- **Boolean**: Uses `clack.confirm()` for yes/no prompts
+- **Number**: Validates numeric input
+- **Array**: Accepts comma-separated values, automatically trims whitespace
+- **JSON Object**: Validates JSON syntax, minifies for storage
+
+Example plugin configuration:
+```json
+{
+  "agentConfig": {
+    "pluginParameters": {
+      "PORT": { "type": "number", "default": 3000 },
+      "ENABLE_DEBUG": { "type": "boolean", "default": false },
+      "ALLOWED_HOSTS": { "type": "array", "default": "localhost,example.com" },
+      "CONFIG": { "type": "json", "default": "{\"timeout\": 5000}" }
+    }
+  }
+}
+```
+
+#### 4. **Consolidated Environment File Handling**
+Created a unified `EnvFileService` that eliminates code duplication:
+- Single source of truth for all .env file operations
+- Supports comment preservation
+- Automatically syncs with `process.env`
+- Provides backup functionality
+- Validates .env file format
+
+Consolidated three separate implementations:
+- `utils/env-prompt.ts` (async global paths)
+- `commands/plugins/utils/env-vars.ts` (sync plugin-specific)
+- `commands/env/utils/file-operations.ts` (async with dotenv)
+
+#### 5. **Process.env Synchronization**
+- Fixed issue where newly configured environment variables weren't available in the current session
+- Now all env var updates immediately sync to `process.env`
+
+### 📁 Files Changed
+
+**Modified:**
+- `/packages/cli/src/utils/env-prompt.ts` - Simplified to use unified service
+- `/packages/cli/src/commands/plugins/utils/env-vars.ts` - Added type support, uses unified service
+- `/packages/cli/src/commands/env/utils/file-operations.ts` - Refactored to use unified service
+- `/packages/cli/src/utils/config-manager.ts` - Removed hardcoded validation functions
+- `/packages/cli/src/utils/index.ts` - Updated exports
+- `/packages/cli/src/commands/test/actions/e2e-tests.ts` - Removed promptForEnvVars usage
+- `/packages/cli/tests/unit/commands/test/e2e-tests.test.ts` - Updated mocks
+
+**Added:**
+- `/packages/cli/src/services/env-file.service.ts` - New unified environment file service
+- `/packages/cli/src/services/index.ts` - Service exports
+- `/packages/cli/src/examples/env-types-example.ts` - Documentation for plugin authors
+
+**Verified:**
+- All template `.gitignore` files already include comprehensive `.env` protection
+
+### ✅ Benefits
+
+1. **Better Developer Experience**: Type-specific prompts, easier to skip optional vars, clearer UI
+2. **More Maintainable**: Single service for env operations, no hardcoded configs
+3. **More Flexible**: Plugin authors can define any env vars without CLI changes
+4. **More Secure**: Immediate process.env sync, validated inputs, .env in gitignore
+5. **More Powerful**: Support for complex data types (arrays, JSON objects)
+
+### 🧪 Testing Notes
+
+- Existing unit tests updated to remove references to deleted functions
+- Manual testing recommended with various plugins to verify env var prompting
+- Type validation tested for all new types (boolean, number, array, json)
+
+This refactoring makes the ElizaOS CLI environment system more robust and user-friendly while reducing maintenance burden and enabling richer plugin configurations.
+
+https://github.com/user-attachments/assets/14d48c62-20a6-4367-8314-5e0ac1f0946b
+27:Ta9f,# Fix CLI create command directory display and cleanup on interruption
+
+## Problem
+
+Two minor bugs with the `elizaos create` command:
+
+1. **Confusing directory display**: When creating a project/plugin, the confirmation prompt showed `"Create plugin 'testing' in plugin-testing?"` instead of the actual directory name (e.g., `"Create 'plugin-testing' in Desktop?"`)
+
+2. **Abandoned directories on Ctrl-C**: Pressing Ctrl-C during `bun install` during a plugin or project installation left partially created directories behind, requiring manual cleanup
+
+## Solution
+
+1. **Directory display**: Added `getDisplayDirectory()` helper that gives the current directory name and simplifies absolute paths to just the directory name
+
+2. **Cleanup on interruption**: Implemented `withCleanupOnInterrupt()` wrapper that:
+   - Registers signal handlers (SIGINT/SIGTERM) before creating directories
+   - Tracks directory creation state to avoid removing pre-existing directories
+   - Automatically removes partially created directories on interruption
+   - Shows red-colored cleanup messages for visibility
+
+## Details
+
+### Implementation
+- Signal handlers are registered at the create function level, ensuring cleanup even when child processes (like `bun install`) receive signals directly
+- Handlers are properly removed on success to prevent memory leaks
+- Simplified `installDependencies` and `buildProject` functions since cleanup is now handled at a higher level
+
+### Files Changed
+- `src/commands/create/actions/creators.ts` - Added cleanup wrapper and updated all create functions
+- `src/commands/create/actions/setup.ts` - Simplified after moving cleanup logic up
+- `src/utils/helpers.ts` - Added `getDisplayDirectory()` helper
+- `tests/commands/create.test.ts` - Added test for cleanup behavior
+
+### Testing
+Run the full test suite:
+```bash
+bun test tests/commands/create.test.ts
+```
+
+Manual test:
+```bash
+bun run dist/index.js create test-plugin --type plugin
+# Press Ctrl-C during "Installing dependencies..."
+# Directory should be cleaned up automatically
+``` 
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+* **New Features**
+  * Improved project creation process to automatically clean up incomplete directories if interrupted or if an error occurs.
+  * Enhanced user prompts to display more user-friendly directory names.
+
+* **Bug Fixes**
+  * Prevents leftover incomplete directories when project creation is interrupted or fails.
+
+* **Tests**
+  * Added tests to verify directory cleanup when project creation is interrupted (e.g., via Ctrl-C).
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->28:T85c,## Problem
+Ubuntu CLI CI tests were failing due to parallelization issues causing:
+- Port conflicts between concurrent tests
+- Race conditions during process cleanup
+- Inconsistent test execution timing
+
+## Solution
+This PR implements several fixes specifically targeting Ubuntu CI stability:
+
+### 1. Sequential Test Execution
+- Added `--no-parallelism` flag for Ubuntu CI to prevent concurrent test execution
+- Increased timeout from 15 to 20 minutes to accommodate sequential execution
+
+### 2. Dynamic Port Allocation 
+- Created `PortAllocator` class to manage unique port assignment per test
+- Prevents port conflicts that were causing test failures
+- Added proper port cleanup and release mechanisms
+
+### 3. Enhanced Process Cleanup
+- Improved cleanup script with escalating termination signals (TERM → KILL)
+- Added verification steps to ensure complete cleanup
+- Enhanced port-specific cleanup with retry logic
+
+### 4. Ubuntu-Specific Timeouts & Delays
+- Added conservative timeouts for Ubuntu CI environment
+- Implemented strategic sleep delays between test phases
+- Increased retry counts and wait times for better stability
+
+### 5. Improved Test Synchronization
+- Added proper delays between test cleanup and startup
+- Enhanced process manager with better termination handling
+- Added verification for complete resource cleanup
+
+## Testing
+The changes are designed to maintain performance on macOS/Windows while fixing Ubuntu-specific issues:
+- Ubuntu CI: Sequential execution with longer timeouts
+- Other platforms: Existing parallel execution preserved
+- All changes wrapped in platform/environment detection
+
+## Files Changed
+- `.github/workflows/cli-tests.yml` - Ubuntu CI configuration  
+- `bunfig.toml` - Test execution settings
+- `packages/cli/tests/cleanup-processes.sh` - Enhanced cleanup
+- `packages/cli/tests/port-allocator.ts` - New port management
+- `packages/cli/tests/test-timeouts.ts` - Ubuntu-specific timeouts
+- `packages/cli/tests/commands/test-utils.ts` - Improved utilities
+- `packages/cli/tests/commands/start.test.ts` - Updated test implementation
+
+Fixes parallelization-related test failures on Ubuntu CI.29:Tc5d,Based on our changes, here's a comprehensive PR comment for GitHub:
+
+---
+
+## Fix: Automatic AI Model Plugin Installation During Project Creation
+
+### 🐛 Problem
+When creating a new project with `elizaos create`, selecting an AI model (e.g., OpenAI, Claude) would:
+- ✅ Store the API key in `.env`
+- ✅ Report successful configuration
+- ❌ **NOT** install the corresponding plugin package
+- ❌ **NOT** add the plugin to `package.json` dependencies
+
+This left users with a broken setup where the agent couldn't actually use the selected AI model.
+
+### 🔧 Solution
+This PR implements automatic plugin installation for AI models during project creation and adds missing plugin detection on startup.
+
+### 📝 Changes Made
+
+#### 1. **Plugin Mapping System** (`plugin-mapping.ts`)
+- Created mappings between AI model selections and their corresponding plugin packages
+- Added support for both primary AI models and embedding models
+- Handles special cases like OpenRouter requiring both base and provider plugins
+
+#### 2. **Automatic Installation** (`setup.ts`, `creators.ts`)
+- Added `installAIModelPlugins()` function that runs after environment setup
+- Automatically installs the correct plugin packages based on user selection
+- Shows clear success/failure messages during installation
+- Provides manual installation commands if automatic installation fails
+
+#### 3. **Missing Plugin Detection** (`plugin-detection.ts`, `start/index.ts`)
+- Added detection for API keys in `.env` without corresponding plugins
+- Shows helpful suggestions when starting a project with missing plugins
+- Example: If `ANTHROPIC_API_KEY` exists but `@elizaos/plugin-anthropic` is not installed
+
+#### 4. **Documentation & Testing**
+- Added comprehensive documentation for the feature
+- Created test scripts to verify the functionality
+- Added examples showing the expected behavior
+
+### 📁 Files Changed
+- `packages/cli/src/commands/create/utils/plugin-mapping.ts` (new)
+- `packages/cli/src/commands/create/utils/plugin-detection.ts` (new)
+- `packages/cli/src/commands/create/actions/setup.ts` (modified)
+- `packages/cli/src/commands/create/actions/creators.ts` (modified)
+- `packages/cli/src/commands/start/index.ts` (modified)
+- `packages/cli/docs/AI_MODEL_PLUGIN_INSTALLATION.md` (new)
+- `packages/cli/examples/test-ai-plugin-install.sh` (new)
+
+### 🎯 Expected Behavior
+
+**Before:**
+```
+✅ OpenAI integration configured
+# But plugin NOT installed, agent can't use OpenAI
+```
+
+**After:**
+```
+✅ OpenAI integration configured
+📦 Installing AI model plugins...
+✅ Installed @elizaos/plugin-openai
+✅ All plugins installed successfully!
+```
+
+### 🔍 Additional Improvements
+- The solution is extensible - adding new AI models just requires updating the mapping
+- Non-intrusive - only installs plugins for the models actually selected
+- Helpful error messages guide users to manual installation if needed
+- Works for both new projects and existing projects (via detection on start)
+
+This fixes a critical UX issue that was preventing users from having a working agent after following the setup wizard.2a:Tae3,```
+<!-- Use this template by filling in information and copying and pasting relevant items out of the HTML comments. -->
+
+# Relates to
+
+<!-- LINK TO ISSUE OR TICKET -->
+Windows CI issues
+
+<!-- This risks section must be filled out before the final review and merge. -->
+
+# Risks
+
+Low
+
+<!--
+Low, medium, large. List what kind of risks and what could be affected.
+-->
+
+# Background
+
+## What does this PR do?
+
+This PR contains no code changes. It marks the conclusion of an initial diagnostic session aimed at resolving persistent Windows CI issues.
+
+## What kind of change is this?
+
+N/A (No code changes)
+
+<!--
+Bug fixes (non-breaking change which fixes an issue)
+Improvements (misc. changes to existing features)
+Features (non-breaking change which adds functionality)
+Updates (new versions of included code)
+-->
+
+<!-- This "Why" section is most relevant if there are no linked issues explaining why. If there is a related issue, it might make sense to skip this why section. -->
+
+## Why are we doing this? Any context or related work?
+
+To address persistent Windows CI failures. This session involved extensive file examination and search operations across the repository to understand the current CI configuration and identify potential root causes, but no code modifications were made.
+
+# Documentation changes needed?
+
+My changes do not require a change to the project documentation.
+
+<!--
+My changes do not require a change to the project documentation.
+My changes require a change to the project documentation.
+If documentation change is needed: I have updated the documentation accordingly.
+-->
+
+<!-- Please show how you tested the PR. This will really help if the PR needs to be retested and probably help the PR get merged quicker. -->
+
+# Testing
+
+## Where should a reviewer start?
+
+N/A (No code changes to review or test).
+
+## Detailed testing steps
+
+None: No changes to test.
+
+<!--
+None: Automated tests are acceptable.
+-->
+
+<!--
+- As [anon/admin], go to [link]
+  - [do action]
+  - verify [result]
+-->
+
+<!-- If there is a UI change, please include before and after screenshots or videos. This will speed up PRs being merged. It is extra nice to annotate screenshots with arrows or boxes pointing out the differences. -->
+<!--
+## Screenshots
+### Before
+### After
+-->
+
+<!-- If there is anything about the deployment, please make a note. -->
+<!--
+# Deploy Notes
+-->
+
+<!--  Copy and paste command line output. -->
+<!--
+## Database changes
+-->
+
+<!--  Please specify deploy instructions if there is something more than the automated steps. -->
+<!--
+## Deployment instructions
+-->
+
+<!-- If you are on Discord, please join https://discord.gg/ai16z and state your Discord username here for the contributor role and join us in #development-feed -->
+<!--
+## Discord username
+
+-->
+```2b:T76c,# Registry Update Checklist
+
+Registry:
+- [ ] I've made the left side of the colon of JSON entry in index.json match the potential NPM package name
+- [ ] I've used github not github.com
+- [ ] There is no .git extension
+- [ ] It's placed it alphabetically in the list
+- [ ] I've dealt with commas properly so the list is still valid JSON
+
+If not an eliza-plugins official repo, i.e. new plugin: 
+
+The plugin repo has:
+- [ ] is publically accessible (not a private repo)
+- [ ] uses main as it's default branch
+- [ ] I have include `elizaos-plugins` in the topics in the GitHub repo settings. If the plugin is related to `AI` or `crypto`, please add those as topics as well.
+- [ ] add simple description in github repo
+- [ ] follows this convention
+```
+plugin-name/
+├── images/
+│   ├── logo.jpg        # Plugin branding logo
+│   ├── banner.jpg      # Plugin banner image
+├── src/
+│   ├── index.ts        # Main plugin entry point
+│   ├── actions/        # Plugin-specific actions
+│   ├── clients/        # Client implementations
+│   ├── adapters/       # Adapter implementations
+│   └── types.ts        # Type definitions
+│   └── environment.ts  # runtime.getSetting, zod validation
+├── package.json        # Plugin dependencies
+└── README.md          # Plugin documentation
+```
+- [ ] an `images/banner.jpg` and `images/logo.jpg` and they
+  - Use clear, high-resolution images
+  - Keep file sizes optimized (< 500KB for logos, < 1MB for banners)
+  - Follow the [elizaOS Brand Guidelines](https://github.com/elizaOS/brandkit)
+  - Include alt text for accessibility
+- [ ] package.json has a agentConfig like the following
+```json
+
+import { dataiPlugin } from "@elizaos/plugin-datai";
+
+export default {
+  plugins: ["@elizaos/plugin-datai"],
+  // ... other configuration
+};
+2c:T71c,## Description
+
+This PR restructures the character form action buttons to improve the user experience and visual layout.
+
+## Changes Made
+
+### Layout Improvements
+- **Horizontal Layout**: Replaced vertical stacked buttons with horizontal layout
+- **Three-dot Menu**: Added dropdown menu with MoreVertical icon on the left
+- **Primary Actions**: Positioned Reset and Save buttons on the right with proper spacing
+- **Full Width Container**: Action container now takes full available width
+
+### Button Organization
+- **Primary Actions** (right side): Reset, Save
+- **Secondary Actions** (dropdown menu): Export, Import, Stop Agent, Delete Agent
+
+### Icon Updates
+- **Export**: Updated to use  icon
+- **Import**: Updated to use  icon  
+- **Menu**: Changed to  (three vertical dots)
+
+### UX Improvements
+- **Dropdown Position**: Menu opens above the button ()
+- **Menu Order**: Export → Import → Stop Agent → Delete Agent (top to bottom)
+- **Visual Hierarchy**: Only Delete Agent has destructive (red) styling
+- **Responsive**: Maintains proper spacing and alignment
+
+## Screenshots
+
+The new layout provides a cleaner, more intuitive interface that follows modern UI patterns with secondary actions grouped in a dropdown menu and primary actions prominently displayed.
+
+## Testing
+
+- [x] Form submission works correctly
+- [x] All dropdown menu actions function properly  
+- [x] Reset functionality works
+- [x] Export/Import operations work
+- [x] Stop/Delete actions work (when available)
+- [x] Responsive layout maintained
+
+## Type of Change
+
+- [x] New feature (non-breaking change which adds functionality)
+- [x] UI/UX improvement
+- [ ] Bug fix (non-breaking change which fixes an issue)
+- [ ] Breaking change (fix or feature that would cause existing functionality to not work as expected)
+- [ ] Documentation update2d:T55e,## Fix: Handle unwrapped server responses in BaseApiClient
+
+### Problem
+- Calls to Server routes through api-client (`/api/server/health`, `/api/server/ping`, `/api/server/status`) were failing with "Unknown error"
+- Manual requests to these endpoints worked fine
+- Only affected server endpoints, other API routes worked correctly
+
+### Root Cause
+- Server endpoints return direct JSON: `{ pong: true }`, `{ status: "OK" }`
+- Other API endpoints return wrapped format: `{ success: true, data: {...} }`
+- BaseApiClient expected ALL responses to have `success` property
+- When checking `!data.success` on unwrapped responses, it failed and threw "UNKNOWN_ERROR"
+
+### Solution
+- Updated `BaseApiClient.request()` to detect response format
+- **Wrapped responses**: Extract `data` from `{ success: true, data: ... }`
+- **Unwrapped responses**: Return JSON directly
+- Maintains backward compatibility with existing endpoints
+
+### Changes
+- **Core fix**: `src/lib/base-client.ts` - Smart response format detection
+- **Tests**: Added coverage for both wrapped and unwrapped response types
+- **Compatibility**: All 170 existing tests pass + 3 new tests
+
+### Impact
+- ✅ Server routes now work correctly
+- ✅ No breaking changes to existing functionality
+- ✅ Maintains type safety and error handling
+- ✅ Backward compatible with wrapped API responses2e:T6f3,## Summary
+
+Add automatic synchronization of secrets from local `.env` file for characters that don't have secrets configured.
+
+## Context
+
+When characters are stored in the database or loaded from files, they often lack secrets for security reasons. However, agents need these secrets (API keys, tokens, etc.) to function properly. This change implements an automatic fallback mechanism.
+
+## Problem
+
+- Characters stored without secrets fail to run properly
+- Manual secret configuration was required for each character
+- No standardized way to handle missing secrets
+
+## Solution
+
+Implemented automatic secret synchronization that:
+
+1. Checks if character has secrets configured
+2. If not, loads secrets from local `.env` file
+3. Applies them to character before runtime initialization
+
+## Technical Details
+
+### New Functions in `config-utils.ts`:
+
+- `hasCharacterSecrets(character)` - Validates if secrets exist
+- `ensureCharacterSettings(character)` - Ensures settings object exists
+- `loadLocalEnvSecrets()` - Loads secrets from `.env` file
+- `setDefaultSecretsFromEnv(character)` - Main sync function
+
+### Integration Point:
+
+- Added to `agent-start.ts` before `AgentRuntime` creation
+- Ensures secrets are available before any plugins initialize
+
+## Benefits
+
+- **Security**: Secrets remain in `.env` files, not in stored characters
+- **Convenience**: Characters work automatically with local environment
+- **Flexibility**: Characters can be shared without exposing secrets
+- **Consistency**: Single source of truth for secrets (local `.env`)
+
+## Testing
+
+- Character without secrets → should load from `.env`
+- Character with existing secrets → should keep original secrets
+- No `.env` file → should handle gracefully2f:T6e4,## Problem
+
+When creating a new project with `elizaos create`, selecting an AI model (e.g., OpenAI, Claude) would:
+- ✅ Store the API key in `.env`
+- ✅ Report successful configuration
+- ❌ **NOT** install the corresponding plugin package
+- ❌ **NOT** add the plugin to `package.json` dependencies
+
+This left users with a broken setup where the agent couldn't actually use the selected AI model.
+
+## Solution
+
+This PR adds automatic plugin installation during project creation by calling the existing `installPlugin` utility after AI model configuration.
+
+**Key changes:**
+- Added ~15 lines of code to `setup.ts` 
+- Reuses existing `installPlugin` function from utils
+- Handles the special case where `claude` maps to `@elizaos/plugin-anthropic`
+- Installs embedding model plugin if different from main AI model
+
+## Replaces PR #5330
+
+This is a simpler alternative to #5330 that accomplishes the same goal with significantly less code by leveraging existing infrastructure instead of creating new mapping files and detection logic.
+
+## Testing
+
+Tested with:
+- `elizaos create --type project` selecting OpenAI ✅
+- `elizaos create --type project` selecting Claude ✅
+- `elizaos create --type project` selecting Claude + OpenAI embeddings ✅
+- Non-interactive mode with `--yes` flag ✅
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+* **New Features**
+  * Added automatic installation of AI model plugins during project setup, including support for embedding models.
+  * Clear messages are provided for both successful and failed plugin installations, with guidance for manual installation if needed.
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->30:T423,## Summary
+- Remove automatic merging of process.env variables into .env file
+- Use clean template without runtime environment pollution
+- Prevent .env file from becoming cluttered with unrelated variables
+
+## Problem
+The previous implementation was automatically merging all process.env variables into the generated .env file, which:
+- Made the .env file messy and confusing with system/unrelated variables
+- Added variables that weren't required by ElizaOS
+- Created an unclear configuration experience for new users
+
+## Solution
+This PR simplifies the .env file creation to only use the template content, providing:
+- A clean, well-documented configuration file
+- Only the variables actually needed by ElizaOS
+- Clear structure for users to understand and modify
+
+## Test plan
+- [x] Verify .env file is created with template content only when it doesn't exist
+- [x] Verify empty .env files are populated with template content
+- [x] Verify existing .env files with content are not modified
+- [x] Test that the CLI still loads environment variables correctly31:T931,```
+<!-- Use this template by filling in information and copying and pasting relevant items out of the HTML comments. -->
+
+# Relates to
+
+<!-- LINK TO ISSUE OR TICKET -->
+
+<!-- This risks section must be filled out before the final review and merge. -->
+
+# Risks
+
+Low. Downgrading to a stable LTS Node.js version should improve CI stability.
+
+# Background
+
+## What does this PR do?
+
+This PR updates the Node.js version used in the `cli-tests.yml` GitHub Actions workflow.
+
+## What kind of change is this?
+
+Bug fixes
+
+## Why are we doing this? Any context or related work?
+
+CLI tests were failing on Ubuntu CI environments because Node.js 23 builds were not yet available on the official Linux runner images. This caused the CI job to silently crash before any tests could execute. Downgrading the Node.js setup step from 23 to 22 (latest stable LTS) ensures that a supported binary is always found on every runner OS, resolving the test failures.
+
+All temporary changes made during the initial incorrect diagnosis (related to Bun auto-installation in `packages/cli/run-all-tests.sh` and `packages/cli/package.json`) have been fully reverted, leaving only the necessary workflow change.
+
+# Documentation changes needed?
+
+My changes do not require a change to the project documentation.
+
+# Testing
+
+## Where should a reviewer start?
+
+`.github/workflows/cli-tests.yml`
+
+## Detailed testing steps
+
+- Observe the CI results for the `cli-tests.yml` workflow on Ubuntu runners to confirm that tests now pass.
+
+<!--
+- As [anon/admin], go to [link]
+  - [do action]
+  - verify [result]
+-->
+
+<!-- If there is a UI change, please include before and after screenshots or videos. This will speed up PRs being merged. It is extra nice to annotate screenshots with arrows or boxes pointing out the differences. -->
+<!--
+## Screenshots
+### Before
+### After
+-->
+
+<!-- If there is anything about the deployment, please make a note. -->
+<!--
+# Deploy Notes
+-->
+
+<!--  Copy and paste command line output. -->
+<!--
+## Database changes
+-->
+
+<!--  Please specify deploy instructions if there is something more than the automated steps. -->
+<!--
+## Deployment instructions
+-->
+
+<!-- If you are on Discord, please join https://discord.gg/ai16z and state your Discord username here for the contributor role and join us in #development-feed -->
+<!--
+## Discord username
+
+-->
+```18:["$","div",null,{"className":"mb-8 space-y-6","children":[["$","$L1f",null,{"metrics":{"date":"2025-07-01","interval":{"intervalStart":"$D2025-07-01T00:00:00.000Z","intervalEnd":"$D2025-07-02T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":8,"merged":10,"total":13},"issues":{"new":3,"closed":2,"total":4},"activeContributors":13,"codeChanges":{"additions":10678,"deletions":2446,"files":89,"commitCount":56},"topContributors":[{"username":"wtfsayo","avatarUrl":"https://avatars.githubusercontent.com/u/82053242?u=98209a1f10456f42d4d2fa71db4d5bf4a672cbc3&v=4","totalScore":130.08694431577842,"prScore":129.64894431577844,"issueScore":0,"reviewScore":0,"commentScore":0.43799999999999994,"summary":"wtfsayo: Merged 3 PRs in elizaos/eliza, including a feature restructuring the character form action buttons layout (+143/-137 lines) and two bug fixes, one of which significantly modified the GUI version resolve (+583/-193 lines). Also, made 10 comments on pull requests and modified 124 files with 15 commits, focusing on bug fixes, other work, and feature work, primarily involving configuration and code files (+8800/-2948 lines)."},{"username":"yungalgo","avatarUrl":"https://avatars.githubusercontent.com/u/113615973?u=92e0f29f7e2fbb8ce46ed13c51f692ca803de02d&v=4","totalScore":52.06035254341913,"prScore":51.622352543419126,"issueScore":0,"reviewScore":0,"commentScore":0.43799999999999994,"summary":"yungalgo: Merged 2 PRs in elizaos/eliza, including elizaos/eliza#5335 which auto-installs AI model plugins on project creation (+81/-22 lines), and made 12 commits modifying 12 files (+168/-66 lines) with a focus on other, bugfix, and refactor work, also commenting on 4 PRs."},{"username":"0xtc23","avatarUrl":"https://avatars.githubusercontent.com/u/129641996?v=4","totalScore":43.5437738965761,"prScore":43.5437738965761,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"0xtc23: Opened elizaos/eliza#5338, a feature adding the @elizaos/plugin-grok for xAI Grok models. Sporadic activity was observed."},{"username":"Dangoz","avatarUrl":"https://avatars.githubusercontent.com/u/71613713?u=1839f372422c7a5503a713dca22981490b4ea7da&v=4","totalScore":33.74239089914137,"prScore":33.74239089914137,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"Dangoz: Merged elizaos/eliza#5343, a bug fix in `BaseApiClient` (+47/-28 lines). This work involved changes to both code and tests."},{"username":"germashevanton","avatarUrl":"https://avatars.githubusercontent.com/u/28603211?u=ec2ea9a310c9a6a08e97754fefef8d3541550df9&v=4","totalScore":17.392751502819134,"prScore":17.392751502819134,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":null},{"username":"0xbbjoker","avatarUrl":"https://avatars.githubusercontent.com/u/54844437?u=90fe1762420de6ad493a1c1582f1f70c0d87d8e2&v=4","totalScore":10.34,"prScore":0,"issueScore":0,"reviewScore":10,"commentScore":0.33999999999999997,"summary":"0xbbjoker: Modified 64 files with 7 commits (+9508/-4415 lines) focusing on bug fixes and feature work, and provided 2 approvals with 2 PR comments. Active with consistent daily work."},{"username":"linear","avatarUrl":"https://avatars.githubusercontent.com/in/20150?v=4","totalScore":4,"prScore":0,"issueScore":4,"reviewScore":0,"commentScore":0,"summary":"linear: Created issue elizaos/eliza#5336 to fix CLI create command text for different types. Sporadic activity today."},{"username":"borisudovicic","avatarUrl":"https://avatars.githubusercontent.com/u/31806472?u=c0478c34097551ba98aaa71edb33af0885a72d69&v=4","totalScore":4,"prScore":0,"issueScore":4,"reviewScore":0,"commentScore":0,"summary":"borisudovicic: Created issue elizaos/eliza#5341 to upgrade BD tier 1-4 plugins. Sporadic activity suggests involvement in diverse areas."},{"username":"myst4","avatarUrl":"https://avatars.githubusercontent.com/u/86130282?u=2aee3ed374a6ecd7ba99178257ec95e8690f239b&v=4","totalScore":2,"prScore":0,"issueScore":2,"reviewScore":0,"commentScore":0,"summary":null},{"username":"bealers","avatarUrl":"https://avatars.githubusercontent.com/u/6403055?u=8c40778251e25b92cdee727056415b6c0d1bcdc5&v=4","totalScore":0.43799999999999994,"prScore":0,"issueScore":0,"reviewScore":0,"commentScore":0.43799999999999994,"summary":null}],"focusAreas":[{"area":"cli","count":47},{"area":"client","count":7},{"area":"docs","count":7},{"area":"server","count":6},{"area":"app","count":1},{"area":"api-client","count":1}],"topIssues":[{"id":"I_kwDOMT5cIs6-RUyw","title":"Upgrade BD tier 1-4 plugins","author":"borisudovicic","number":5341,"repository":"elizaos/eliza","body":"[https://docs.google.com/spreadsheets/d/13Xbqg5W80jx9kCK_3AzkeTCPVT6Lm19gyConLTw5KEU/edit?gid=123741074#gid=123741074](https://docs.google.com/spreadsheets/d/13Xbqg5W80jx9kCK_3AzkeTCPVT6Lm19gyConLTw5KEU/edit?gid=123741074#gid=123741074)","createdAt":"2025-07-01T12:07:38Z","closedAt":"2025-07-02T15:42:01Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs6-LdhY","title":"Fix CLI Create Command Text for Different Types","author":"linear","number":5336,"repository":"elizaos/eliza","body":"* Update CLI create command to display correct type in prompts\n* Change \"Creating ElizaOS Project\" to dynamic text based on --type flag\n* Update confirmation prompts to match the actual creation type\n* Test with different --type values (plugin, agent, etc)\n* Ensure consistent messaging throughout create workflow\n* Verify all create command text reflects the actual type being created\n\n**Context:** When running `elizaos create --type plugin labubu`, the CLI incorrectly shows \"Creating ElizaOS Project\" and \"Create plugin...\" when it should display type-appropriate messaging for plugins vs projects vs agents vs tees.","createdAt":"2025-07-01T04:47:14Z","closedAt":"2025-07-01T07:55:07Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOOu4gVs66mpXr","title":"processKnowledgeAction: Generates the same clientDocumentId for every memory","author":"lkoczorowski","number":16,"repository":"elizaos-plugins/plugin-knowledge","body":"$20","createdAt":"2025-06-09T15:45:23Z","closedAt":"2025-07-01T22:28:06Z","state":"CLOSED","commentCount":0},{"id":"I_kwDONkwNcc6-WOOP","title":"TWITTER_MAX_INTERACTIONS_PER_RUN is documented but never used","author":"myst4","number":30,"repository":"elizaos-plugins/plugin-twitter","body":"$21","createdAt":"2025-07-01T18:51:49Z","closedAt":null,"state":"OPEN","commentCount":0}],"topPullRequests":[{"id":"PR_kwDOMT5cIs6aFGnn","title":"feat: updated plugin migrator","author":"samarth30","number":5066,"body":"$22","repository":"elizaos/eliza","createdAt":"2025-06-11T18:02:27Z","mergedAt":null,"additions":46293,"deletions":1326},{"id":"PR_kwDOMT5cIs6clTBC","title":"feat: plugins upgrade with claude code","author":"0xbbjoker","number":5311,"body":"\n\n<!-- This is an auto-generated comment: release notes by coderabbit.ai -->\n\n## Summary by CodeRabbit\n\n* **New Features**\n  * Introduced an AI-powered migration tool for upgrading ElizaOS plugins from version 0.x to 1.x, featuring a stepwise, gated process with detailed progress reporting and validation at each stage.\n  * Added advanced migration guides and comprehensive documentation covering configuration, state management, providers, prompt generation, and testing.\n  * Extended CLI options for the upgrade command, including verbosity controls and confirmation skipping.\n\n* **Bug Fixes**\n  * Improved error handling and user messaging during the migration process.\n\n* **Documentation**\n  * Added detailed migration, prompt, state, provider, and testing guides to assist plugin developers with the upgrade process.\n\n* **Chores**\n  * Updated dependencies to support the new migration workflow.\n\n<!-- end of auto-generated comment: release notes by coderabbit.ai -->","repository":"elizaos/eliza","createdAt":"2025-06-29T15:07:06Z","mergedAt":"2025-07-01T12:49:28Z","additions":6050,"deletions":1089},{"id":"PR_kwDOMT5cIs6c1Ksr","title":"feat: Add @elizaos/plugin-grok for xAI Grok models","author":"0xtc23","number":5338,"body":"$23","repository":"elizaos/eliza","createdAt":"2025-07-01T07:08:57Z","mergedAt":null,"additions":1731,"deletions":2143},{"id":"PR_kwDOMT5cIs6cbDtx","title":"Feature: Add ELIZA_UI_ENABLE environment variable to toggle Web UI availability","author":"bealers","number":5304,"body":"$24","repository":"elizaos/eliza","createdAt":"2025-06-27T12:57:03Z","mergedAt":"2025-07-01T16:03:02Z","additions":1148,"deletions":217},{"id":"PR_kwDOMT5cIs6cw3Tz","title":"🔧 Fix Windows CI Issues - Comprehensive Solution","author":"wtfsayo","number":5332,"body":"$25","repository":"elizaos/eliza","createdAt":"2025-06-30T20:29:42Z","mergedAt":null,"additions":1009,"deletions":32},{"id":"PR_kwDOMT5cIs6cuVHG","title":"feat: clack env prompts cli, major refactor of cli envs","author":"ChristopherTrimboli","number":5326,"body":"$26","repository":"elizaos/eliza","createdAt":"2025-06-30T15:49:30Z","mergedAt":"2025-07-01T09:14:54Z","additions":846,"deletions":708},{"id":"PR_kwDOMT5cIs6c2BSm","title":"fix: gui version resolve","author":"wtfsayo","number":5339,"body":"\n\n<!-- This is an auto-generated comment: release notes by coderabbit.ai -->\n\n## Summary by CodeRabbit\n\n* **New Features**\n  * The app sidebar now displays the server version dynamically, fetched from the server.\n  * Added a new server endpoint to provide version information, including environment and uptime.\n  * Introduced a React hook to fetch and display server version data in the client.\n\n* **Refactor**\n  * Replaced static version imports with dynamic server version fetching throughout the client.\n  * Removed redundant version file generation and related build logic.\n\n* **Chores**\n  * Updated version numbers across all packages to 1.0.15.\n  * Cleaned up unused files and comments in client and configuration files.\n\n<!-- end of auto-generated comment: release notes by coderabbit.ai -->","repository":"elizaos/eliza","createdAt":"2025-07-01T08:17:00Z","mergedAt":"2025-07-01T08:55:23Z","additions":297,"deletions":127},{"id":"PR_kwDOMT5cIs6cs5WF","title":"fix: cli create command directory display and cleanup on interruption","author":"yungalgo","number":5321,"body":"$27","repository":"elizaos/eliza","createdAt":"2025-06-30T13:51:00Z","mergedAt":"2025-07-01T08:37:39Z","additions":279,"deletions":59},{"id":"PR_kwDOMT5cIs6cwBez","title":"fix: Ubuntu CLI test parallelization issues","author":"wtfsayo","number":5331,"body":"$28","repository":"elizaos/eliza","createdAt":"2025-06-30T18:48:28Z","mergedAt":null,"additions":269,"deletions":115},{"id":"PR_kwDOMT5cIs6cv72m","title":"fix: install AI model plugins on create","author":"ChristopherTrimboli","number":5330,"body":"$29","repository":"elizaos/eliza","createdAt":"2025-06-30T18:39:35Z","mergedAt":null,"additions":207,"deletions":1},{"id":"PR_kwDOMT5cIs6cw9OI","title":"Fix Windows CI issues","author":"wtfsayo","number":5333,"body":"$2a","repository":"elizaos/eliza","createdAt":"2025-06-30T20:38:41Z","mergedAt":null,"additions":197,"deletions":87},{"id":"PR_kwDONkg7v86c6Gqc","title":"@elizaos/plugin-datai added","author":"germashevanton","number":185,"body":"$2b","repository":"elizaos-plugins/registry","createdAt":"2025-07-01T13:26:15Z","mergedAt":null,"additions":185,"deletions":184},{"id":"PR_kwDOMT5cIs6c51Rq","title":"feat(client): Restructure character form action buttons layout","author":"wtfsayo","number":5342,"body":"$2c","repository":"elizaos/eliza","createdAt":"2025-07-01T13:03:51Z","mergedAt":"2025-07-01T13:49:38Z","additions":120,"deletions":114},{"id":"PR_kwDOMT5cIs6c8uZi","title":"fix: handle unwrapped server responses in BaseApiClient","author":"Dangoz","number":5343,"body":"$2d","repository":"elizaos/eliza","createdAt":"2025-07-01T17:28:30Z","mergedAt":"2025-07-06T08:29:05Z","additions":77,"deletions":26},{"id":"PR_kwDOMT5cIs6cvtwV","title":"chore: update agent secrets when they are empty with local vars","author":"0xbbjoker","number":5329,"body":"$2e","repository":"elizaos/eliza","createdAt":"2025-06-30T18:11:26Z","mergedAt":"2025-07-01T10:21:49Z","additions":67,"deletions":1},{"id":"PR_kwDOMT5cIs6czgm1","title":"fix: auto-install AI model plugins on project creation","author":"yungalgo","number":5335,"body":"$2f","repository":"elizaos/eliza","createdAt":"2025-07-01T03:34:49Z","mergedAt":"2025-07-01T07:39:24Z","additions":59,"deletions":0},{"id":"PR_kwDOMT5cIs6cz-Mw","title":"fix: (cli) show correct type in create command messages","author":"yungalgo","number":5337,"body":"## Description\r\n\r\nUpdates the CLI create command to display the correct type (Plugin/Agent/TEE Project) in prompts instead of always showing \"Project\".\r\n\r\n## Changes\r\n\r\n- Dynamic intro message based on `--type` flag\r\n- Type-specific success messages\r\n- Proper error messages that match the creation type\r\n\r\n## Before & After\r\n\r\n### Before\r\n\r\n┌ Creating ElizaOS Project\r\n│\r\n◇ Create plugin \"plugin-labubu\" in Desktop?\r\n\r\n### After\r\n\r\n┌ Creating ElizaOS Plugin\r\n│\r\n◇ Create plugin \"plugin-labubu\" in Desktop?\r\n\r\n\n\n<!-- This is an auto-generated comment: release notes by coderabbit.ai -->\n\n## Summary by CodeRabbit\n\n* **Enhancements**\n  * Improved command messages to dynamically display and format the project type throughout the creation process, including success and error messages.\n\n<!-- end of auto-generated comment: release notes by coderabbit.ai -->","repository":"elizaos/eliza","createdAt":"2025-07-01T05:03:16Z","mergedAt":"2025-07-01T07:00:23Z","additions":29,"deletions":4},{"id":"PR_kwDOMT5cIs6c3vlG","title":"fix: simplify .env file creation to use template only","author":"wtfsayo","number":5340,"body":"$30","repository":"elizaos/eliza","createdAt":"2025-07-01T10:20:56Z","mergedAt":"2025-07-01T10:28:55Z","additions":11,"deletions":124},{"id":"PR_kwDOMT5cIs6cxAku","title":"Fix cli tests failing in Ubuntu","author":"wtfsayo","number":5334,"body":"$31","repository":"elizaos/eliza","createdAt":"2025-06-30T20:44:10Z","mergedAt":null,"additions":2,"deletions":2}],"detailedContributorSummaries":{"0xbbjoker":"0xbbjoker: Modified 64 files with 7 commits (+9508/-4415 lines) focusing on bug fixes and feature work, and provided 2 approvals with 2 PR comments. Active with consistent daily work.","0xtc23":"0xtc23: Opened elizaos/eliza#5338, a feature adding the @elizaos/plugin-grok for xAI Grok models. Sporadic activity was observed.","Dangoz":"Dangoz: Merged elizaos/eliza#5343, a bug fix in `BaseApiClient` (+47/-28 lines). This work involved changes to both code and tests.","borisudovicic":"borisudovicic: Created issue elizaos/eliza#5341 to upgrade BD tier 1-4 plugins. Sporadic activity suggests involvement in diverse areas.","linear":"linear: Created issue elizaos/eliza#5336 to fix CLI create command text for different types. Sporadic activity today.","wtfsayo":"wtfsayo: Merged 3 PRs in elizaos/eliza, including a feature restructuring the character form action buttons layout (+143/-137 lines) and two bug fixes, one of which significantly modified the GUI version resolve (+583/-193 lines). Also, made 10 comments on pull requests and modified 124 files with 15 commits, focusing on bug fixes, other work, and feature work, primarily involving configuration and code files (+8800/-2948 lines).","yungalgo":"yungalgo: Merged 2 PRs in elizaos/eliza, including elizaos/eliza#5335 which auto-installs AI model plugins on project creation (+81/-22 lines), and made 12 commits modifying 12 files (+168/-66 lines) with a focus on other, bugfix, and refactor work, also commenting on 4 PRs."}}}],"$L32"]}]
+19:["$","div",null,{"className":"prose prose-sm mx-auto mt-8 dark:prose-invert sm:prose lg:prose-lg xl:prose-xl","children":[["$","p","p-0",{"children":"ElizaOS significantly advanced its core CLI today with major enhancements to environment variable management and the introduction of an AI-powered plugin upgrade tool, alongside critical UI improvements and bug fixes. Development teams also focused on addressing long-standing issues related to testing consistency, documentation, and agent deployment strategies across multiple repositories."}],"\n",["$","h2","h2-0",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"🚨 Needs Attention","position":{"start":{"line":3,"column":4,"offset":397},"end":{"line":3,"column":22,"offset":415}}}],"position":{"start":{"line":3,"column":1,"offset":394},"end":{"line":3,"column":23,"offset":416}}},"children":"🚨 Needs Attention"}],"\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"Urgent Discussions"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/5234","children":"elizaos/eliza#5234"}],": Documentation overhaul needs input on creating separate tracks for simple users and developers, with detailed feedback already provided on current shortcomings."]}],"\n",["$","li","li-1",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/5244","children":"elizaos/eliza#5244"}],": Discussion on best ways to deploy custom Eliza agents, with ",["$","code","code-0",{"children":"claude"}]," making progress on deployment configuration files and ",["$","code","code-1",{"children":"bealers"}]," offering \"elizify\" as a community project."]}],"\n",["$","li","li-2",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/5295","children":"elizaos/eliza#5295"}],": Migration of CLI input methods to ",["$","code","code-0",{"children":"@clack/prompts"}]," needs review for PR #5359."]}],"\n"]}],"\n"]}],"\n"]}],"\n",["$","h2","h2-1",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"✅ Completed Work","position":{"start":{"line":9,"column":4,"offset":1084},"end":{"line":9,"column":20,"offset":1100}}}],"position":{"start":{"line":9,"column":1,"offset":1081},"end":{"line":9,"column":20,"offset":1100}}},"children":"✅ Completed Work"}],"\n",["$","ul","ul-1",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"Enhanced CLI Functionality and User Experience"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["Refactored environment variable system for improved maintainability and user-friendliness, now utilizing ",["$","code","code-0",{"children":"clack"}]," for prompts (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5326","children":"elizaos/eliza#5326"}],")."]}],"\n",["$","li","li-1",{"children":["Fixed the ",["$","code","code-0",{"children":"create"}]," command to correctly display project types and clean up on interruption (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5321","children":"elizaos/eliza#5321"}],", ",["$","a","a-1",{"href":"https://github.com/elizaos/eliza/pull/5337","children":"elizaos/eliza#5337"}],")."]}],"\n",["$","li","li-2",{"children":["Implemented automatic installation of AI model plugins during project creation (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5335","children":"elizaos/eliza#5335"}],")."]}],"\n",["$","li","li-3",{"children":["Simplified ",["$","code","code-0",{"children":".env"}]," file creation to use templates only, preventing clutter from runtime environment pollution (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5340","children":"elizaos/eliza#5340"}],")."]}],"\n",["$","li","li-4",{"children":["Ensured agent secrets are automatically updated with local variables if empty (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5329","children":"elizaos/eliza#5329"}],")."]}],"\n"]}],"\n"]}],"\n",["$","li","li-1",{"children":["$L33",":","\n","$L34","\n"]}],"\n","$L35","\n","$L36","\n"]}],"\n","$L37","\n","$L38","\n","$L39","\n","$L3a","\n","$L3b","\n","$L3c"]}]
+1a:["$","script","script-0",{"src":"/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","async":true}]
+1b:["$","script","script-1",{"src":"/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","async":true}]
+1c:["$","script","script-2",{"src":"/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js","async":true}]
+1d:["$","$L3d",null,{"children":["$","$3e",null,{"name":"Next.MetadataOutlet","children":"$@3f"}]}]
+32:["$","div",null,{"className":"rounded-lg border bg-card text-card-foreground shadow-sm","children":[["$","div",null,{"className":"flex flex-col space-y-1.5 p-6 py-4","children":["$","div",null,{"className":"tracking-tight text-sm font-medium","children":["$undefined","Code Changes"]}]}],["$","div",null,{"className":"p-6 pt-0","children":["$","div",null,{"className":"grid grid-cols-2 gap-4 md:grid-cols-4","children":[["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-git-commit-vertical h-5 w-5","aria-hidden":"true","children":[["$","path","1holv5",{"d":"M12 3v6"}],["$","circle","1v7zrd",{"cx":"12","cy":"12","r":"3"}],["$","path","a9ows0",{"d":"M12 15v6"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":56}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Commits"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-file-code h-5 w-5","aria-hidden":"true","children":[["$","path","1oefj6",{"d":"M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"}],["$","path","wfsgrz",{"d":"M14 2v5a1 1 0 0 0 1 1h5"}],["$","path","1tg20x",{"d":"M10 12.5 8 15l2 2.5"}],["$","path","yinavb",{"d":"m14 12.5 2 2.5-2 2.5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":89}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Files Changed"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-green-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-up h-5 w-5 text-green-500","aria-hidden":"true","children":[["$","path","hav0vg",{"d":"m5 12 7-7 7 7"}],["$","path","x0mq9r",{"d":"M12 19V5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-green-500","children":"+10,678"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Added"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-red-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-down h-5 w-5 text-red-500","aria-hidden":"true","children":[["$","path","s699le",{"d":"M12 5v14"}],["$","path","1idqje",{"d":"m19 12-7 7-7-7"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-red-500","children":"-2,446"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Deleted"}]]}]]}]]}]}]]}]
+33:["$","strong","strong-0",{"children":"AI-Powered Plugin Migration Tool"}]
+34:["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["Introduced a new AI-powered migration tool to streamline the upgrade process for ElizaOS plugins from version 0.x to 1.x, featuring a stepwise migration guide (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5311","children":"elizaos/eliza#5311"}],")."]}],"\n"]}]
+35:["$","li","li-2",{"children":[["$","strong","strong-0",{"children":"UI/UX Improvements and Server Control"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["Added an environment variable to toggle Web UI availability, enhancing control in production environments (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5304","children":"elizaos/eliza#5304"}],")."]}],"\n",["$","li","li-1",{"children":["Restructured character form action buttons for improved layout and user experience (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5342","children":"elizaos/eliza#5342"}],")."]}],"\n",["$","li","li-2",{"children":["Enabled the GUI to dynamically display the server version, fetched from a new server endpoint (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5339","children":"elizaos/eliza#5339"}],")."]}],"\n"]}],"\n"]}]
+36:["$","li","li-3",{"children":[["$","strong","strong-0",{"children":"Bug Fixes and Stability"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["Resolved a critical bug in ",["$","code","code-0",{"children":"plugin-knowledge"}]," where ",["$","code","code-1",{"children":"processKnowledgeAction"}]," generated the same ",["$","code","code-2",{"children":"clientDocumentId"}]," for every memory, ensuring unique identification for new memories (",["$","a","a-0",{"href":"https://github.com/elizaos-plugins/plugin-knowledge/issues/16","children":"elizaos-plugins/plugin-knowledge#16"}],")."]}],"\n"]}],"\n"]}]
+37:["$","h2","h2-2",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"🏗️ Work in Progress","position":{"start":{"line":25,"column":4,"offset":3222},"end":{"line":25,"column":24,"offset":3242}}}],"position":{"start":{"line":25,"column":1,"offset":3219},"end":{"line":25,"column":24,"offset":3242}}},"children":"🏗️ Work in Progress"}]
+38:["$","ul","ul-2",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"New Pull Requests"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["elizaos/eliza:","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5338","children":"#5338"}],": Introduces ",["$","code","code-0",{"children":"@elizaos/plugin-grok"}]," to support xAI Grok models."]}],"\n"]}],"\n"]}],"\n",["$","li","li-1",{"children":["elizaos-plugins/registry:","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos-plugins/registry/pull/185","children":"#185"}],": Adds ",["$","code","code-0",{"children":"@elizaos/plugin-datai"}]," to the registry."]}],"\n"]}],"\n"]}],"\n"]}],"\n"]}],"\n",["$","li","li-1",{"children":[["$","strong","strong-0",{"children":"Active Discussions"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/5218","children":"elizaos/eliza#5218"}],": Ensuring ",["$","code","code-0",{"children":"bun run test"}]," works consistently across all packages."]}],"\n",["$","li","li-1",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/5234","children":"elizaos/eliza#5234"}],": Documentation overhaul for simple users and developers."]}],"\n",["$","li","li-2",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/5244","children":"elizaos/eliza#5244"}],": Best ways to deploy custom Eliza agents."]}],"\n",["$","li","li-3",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/5295","children":"elizaos/eliza#5295"}],": Migrating remaining CLI input methods to ",["$","code","code-0",{"children":"@clack/prompts"}],"."]}],"\n"]}],"\n"]}],"\n"]}]
+39:["$","h2","h2-3",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"🐞 Issue Triage","position":{"start":{"line":37,"column":4,"offset":4110},"end":{"line":37,"column":19,"offset":4125}}}],"position":{"start":{"line":37,"column":1,"offset":4107},"end":{"line":37,"column":19,"offset":4125}}},"children":"🐞 Issue Triage"}]
+3a:["$","ul","ul-3",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"New Issues"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["elizaos/eliza:","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/5341","children":"#5341"}],": Tracks the upgrade of BD tier 1-4 plugins."]}],"\n"]}],"\n"]}],"\n",["$","li","li-1",{"children":["elizaos-plugins/plugin-twitter:","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos-plugins/plugin-twitter/issues/30","children":"#30"}],": Highlights that ",["$","code","code-0",{"children":"TWITTER_MAX_INTERACTIONS_PER_RUN"}]," is documented but not utilized in the plugin's code."]}],"\n"]}],"\n"]}],"\n"]}],"\n"]}],"\n",["$","li","li-1",{"children":[["$","strong","strong-0",{"children":"Closed Issues"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["elizaos/eliza:","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/5336","children":"#5336"}],": Fixed CLI create command displaying incorrect project types."]}],"\n"]}],"\n"]}],"\n",["$","li","li-1",{"children":["elizaos-plugins/plugin-knowledge:","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos-plugins/plugin-knowledge/issues/16","children":"#16"}],": Resolved critical bug where ",["$","code","code-0",{"children":"processKnowledgeAction"}]," generated the same ",["$","code","code-1",{"children":"clientDocumentId"}]," for every memory."]}],"\n"]}],"\n"]}],"\n"]}],"\n"]}],"\n"]}]
+3b:["$","h2","h2-4",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"✨ Contributor Spotlight","position":{"start":{"line":49,"column":4,"offset":4894},"end":{"line":49,"column":27,"offset":4917}}}],"position":{"start":{"line":49,"column":1,"offset":4891},"end":{"line":49,"column":27,"offset":4917}}},"children":"✨ Contributor Spotlight"}]
+3c:["$","ul","ul-4",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"@ai16z-demirix"}],": Confirmed progress on phase 1 of fixing inconsistent ",["$","code","code-0",{"children":"bun run test"}]," behavior across packages and committed to completing the issue."]}],"\n",["$","li","li-1",{"children":[["$","strong","strong-0",{"children":"@bealers"}],": Shared significant work on \"elizify,\" a project aimed at making Eliza easier to install in production environments with ",["$","code","code-0",{"children":"docker compose up"}]," and one-click Coolify install."]}],"\n",["$","li","li-2",{"children":[["$","strong","strong-0",{"children":"@claude"}],": Made progress on creating ",["$","code","code-0",{"children":"railway.json"}],", ",["$","code","code-1",{"children":"render.yaml"}],", and a ",["$","code","code-2",{"children":"DEPLOYMENT.md"}]," guide to address Eliza agent deployment challenges."]}],"\n",["$","li","li-3",{"children":[["$","strong","strong-0",{"children":"@Ifechukwudaniel"}],": Requested assignment to multiple key issues including documentation overhaul and CLI input method migration, indicating a strong commitment to these areas."]}],"\n"]}]
+3f:null

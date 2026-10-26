@@ -1,0 +1,1829 @@
+1:"$Sreact.fragment"
+2:I[4817319,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"IntervalSelector"]
+3:I[6998365,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"LlmCopyButton"]
+13:I[3642796,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],""]
+14:I[3238488,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"StatCardsDisplay"]
+1d:I[4261541,["/eliza-leaderboard/_next/static/chunks/b33bcbdcb3f88354.js","/eliza-leaderboard/_next/static/chunks/8ba59154b6704904.js"],"OutletBoundary"]
+1e:"$Sreact.suspense"
+4:T3411,## Summary
+
+12 commits that ship connector capability detection (Sprint A), orchestrator self-healing + security gates, and a moltbot-inspired UX redesign for sub-agent narration that prevents conversation-memory pollution from poisoning future planner turns.
+
+## What changed
+
+**Core (Sprint A — connector capability detection)**
+- New `MessageConnectorCapability` enum + 4 handler types (`typingHandler`, `stopTypingHandler`, `createThreadHandler`, `postToThreadHandler`).
+- 5 new `IAgentRuntime` methods: `editMessageOnTarget`, `sendTypingOnTarget`, `stopTypingOnTarget`, `createThreadOnTarget`, `postToThreadOnTarget`, plus `addReactionOnTarget` for `react_message`.
+- `requireConnectorHook<K>` DRY helper (4 call sites would otherwise repeat the same lookup + guard).
+- Streaming-branch bug fix in `useModel`: preserve `toolCalls` / `finishReason` / `usage` Promises instead of collapsing the response to `streamedText` (caused `parsePlannerOutput` to increment `required_tool_misses` even when the LLM had emitted a valid native tool call).
+
+**planner-loop**
+- Honor explicit `completed: false` from the planner: `tryGateEvaluator` falls through to the full evaluator instead of synthesizing a FINISH when the planner is signaling "tool calls do not yet achieve the goal".
+- Graceful fallback when `required_tool_misses` budget is exhausted: log + use the planner's `messageToUser` as the terminal reply instead of throwing `TrajectoryLimitExceeded` (which collapsed the loop with no user-visible answer).
+
+**plugin-discord**
+- Declares 7 capabilities incl. `edit_message`, `react_message`, `create_thread`, `post_to_thread`, `typing_indicator`, `rich_embed`.
+- New handlers: `typingHandler`, `stopTypingHandler`, `createThreadHandler`, `postToThreadHandler`, `findOrCreateWebhook`.
+- `handleSendMessage` now returns a `Memory` carrying `metadata.platformMessageId` so callers can edit/react later.
+
+**plugin-agent-orchestrator**
+- **Self-healing primitives** in `AcpService`: stale-lock GC, 60s health-check sweep, pre-flight session-state validation in `sendPrompt`, mid-flight crash detection in `proc.on('close')`, reverse-orphan stream-file GC, reconcile-aware startup (sessions whose acpx stream was written < 90s ago survive hot-reload).
+- **Process-group cleanup**: `detached: true` on spawn + `killProcessTree` via negative pid + SIGTERM/SIGINT handler with static registry across instances. No more `claude-agent-acp` zombies after parent exit.
+- **Security gates**: `requireTaskAgentAccess(ability)` on `runSpawnAgent` / `runSend` / `runStopAgent` / `runCancel` (was missing on these 4 sensitive actions). `ELIZA_ADMIN_ENTITY_ID` already supported by core roles.
+- **TASK_AUDIT NDJSON** at `~/.eliza/plugin-acp/audit.ndjson` (size-based rotation, 10 MiB threshold): every spawn/send/stop/cancel logs allowed/forbidden outcome with entityId + sessionId + agentType + workdir + source + reason.
+- **Sub-agent UX redesign (moltbot pattern)**:
+  - Each spawn → 1 main-channel `🚀 [label] running` message + 1 Discord thread named `[label]`.
+  - Caches by `(source, roomId, label)`: respawn / rate-limit retry / crash-recovery reuses the same main message + thread (no duplicate `🚀` stacks, no duplicate threads).
+  - LRU eviction with `LABEL_CACHE_LIMIT = 200` bounds runtime growth.
+  - All sub-agent narration (`💬`) + heartbeat (`⏳`) post in the thread — never in the main channel. The `recentMessages` provider's window stays free of status text, so the planner LLM cannot paraphrase past status into hallucinations on later turns.
+  - `runtime.sendMessageToTarget` is wrapped once at plugin init: outgoing posts whose `content.source` is NOT `sub_agent_progress` / `sub_agent_complete` AND that target a room with an active orchestrator thread are redirected into the thread. Cross-platform — capability-gated on `post_to_thread`.
+  - Capability fallback ladder: thread → edit-in-place → fresh send. Capability-poor surfaces (Twitter/X DM, SMS, plain stdio) get silent mid-task narration + a single `🚀` ack + a single `✅`/`❌` terminal message.
+  - Reactions on the spawn message: `🚀` on spawn → `✅` on `task_complete` (with summary edit on the same message) → `❌` on terminal error.
+  - Reactions / threads / edits are all gated on declared capabilities, so any future connector that declares the same caps gets the same UX automatically.
+- **Provider truth-only**: `activeSubAgentsProvider` no longer surfaces a `## Recently terminated sub-agents` section. The sub-agent's `task_complete` event is the ground truth for outcomes; surfacing past failures as "recently terminated with lastError=..." was letting the planner generalize them as predictors for new spawns.
+- **Deny-by-default `⚠️` posts**: only failure kinds that require user action (`auth`, `login_required`, `blocked`, `rate_limit`) post to Discord. Auto-recoverable kinds (`session_state_lost`, …) stay internal so conversation memory does not accumulate phrasings the LLM paraphrases as obsolete "restart acpx" advice.
+
+**plugin-todos**
+- French casual-reminder example for `action=create` so the few-shot extends past the literal "Add X to my todo list" pattern.
+
+## Test plan
+
+- [ ] `bun run build` clean for `packages/core` + `plugins/plugin-agent-orchestrator` + `plugins/plugin-discord`.
+- [ ] New unit tests: `sanitize-planner-text.test.ts` (12), `scan-and-unlink-older-than.test.ts` (4), `strip-progress-label-prefix.test.ts` (8) — all pass under `bun test`.
+- [ ] Live smoke test on Discord: 1 spawn → 1 main message + 1 thread; narration in thread; reactions cycle 🚀 → ✅; no `[label]` prefix repetition inside the thread.
+- [ ] Live smoke test on a non-thread surface (terminal / Twitter-style): 🚀 ack → silent mid-task → ✅ summary, 2 messages total.
+
+## Known follow-ups (out of scope for this PR)
+
+- `suppressPlannerReply` flag on `TASKS_SPAWN_AGENT.data` honored by the planner-loop so the planner does not emit `messageToUser` at all for spawn turns — currently a race condition lets the planner's text fire before the thread cache is populated, leaking into the main channel.
+- `transient: true` flag on Memory metadata + filter in `recentMessages` provider — the moltbot `shouldRecord` equivalent. Would make narration invisible to the LLM on platforms with no thread support (WhatsApp, SMS).
+
+<!-- greptile_comment -->
+
+<h3>Greptile Summary</h3>
+
+This PR ships three interlocking feature areas: connector capability detection (Sprint A), orchestrator self-healing and security gates, and a moltbot-inspired sub-agent UX redesign that routes all narration into per-session Discord threads so the planner's `recentMessages` window stays clean.
+
+- **Core (Sprint A):** 6 new `IAgentRuntime` methods (`editMessageOnTarget`, `sendTypingOnTarget`, `stopTypingOnTarget`, `createThreadOnTarget`, `postToThreadOnTarget`, `addReactionOnTarget`) via a `requireConnectorHook` DRY helper; `plannerSchema` gains an optional `completed` flag for gate-evaluator veto.
+- **`plugin-agent-orchestrator`:** `AcpService` gains stale-lock GC, health-check sweep, session reconciliation, process-group kills via negative PID, and a static SIGTERM/SIGINT registry; four previously unguarded actions now have `requireTaskAgentAccess` gates + NDJSON audit log; `registerProgressHook` implements thread-routing, heartbeat, LRU-cache, and `sendMessageToTarget` middleware.
+- **`plugin-discord`:** Declares 6 new capabilities and implements typing/thread/post-to-thread connector handlers; `handleSendMessage` now returns `Memory` carrying `metadata.platformMessageId`.
+
+<h3>Confidence Score: 3/5</h3>
+
+The core and action-security changes are solid; the orchestrator's registerProgressHook is the most complex area and monkey-patches sendMessageToTarget in a way that can misdirect post-completion planner replies into closed Discord threads.
+
+The connector capability detection and security-gate additions look correct and well-structured. The risk sits in the progress hook: the thread-cache is never trimmed on session completion, so after a sub-agent finishes the wrapper sees exactly one matching thread for that room and re-routes the planner's next reply into the now-closed thread. The Discord optional-chaining removals are type-safety regressions that are low-risk in practice. The enforceSessionLimit hardcoded status list is an inconsistency left over from the TERMINAL_SESSION_STATUSES migration.
+
+plugins/plugin-agent-orchestrator/src/index.ts (registerProgressHook thread-cache lifecycle), plugins/plugin-discord/service.ts (optional-chaining removal), plugins/plugin-agent-orchestrator/src/services/acp-service.ts (enforceSessionLimit status list)
+
+<h3>Important Files Changed</h3>
+
+
+
+
+| Filename | Overview |
+|----------|----------|
+| plugins/plugin-agent-orchestrator/src/index.ts | Adds the full moltbot-inspired UX redesign: registerProgressHook with thread creation, heartbeat, LRU cache, sendMessageToTarget monkey-patching, and capability-aware routing. Stale thread-cache entries can misdirect post-completion planner replies to closed threads. |
+| plugins/plugin-agent-orchestrator/src/services/acp-service.ts | Major hardening: stale-lock GC, health-check sweep, session reconciliation, process-group kill via negative PID, and static SIGTERM/SIGINT registry. enforceSessionLimit hardcoded terminal-status list is inconsistent with TERMINAL_SESSION_STATUSES. |
+| plugins/plugin-discord/service.ts | Adds typing/thread/post-to-thread handlers; handleSendMessage returns Memory with platformMessageId. Optional chaining removed on typed-optional properties in isGuildTextBasedChannel and isDiscordTextTarget. |
+| packages/core/src/runtime/planner-loop.ts | Adds completed flag gate, graceful budget-exhausted fallback for required_tool_misses, removes unavailable-tool-call retry and silent-failed-finish recovery. Sound for JSON-output models. |
+| packages/core/src/types/runtime.ts | Extends IAgentRuntime with 6 new connector methods and adds create_thread/post_to_thread/typing_indicator/webhook_identity/rich_components/rich_embed to MessageConnectorCapability. |
+| plugins/plugin-agent-orchestrator/src/actions/tasks.ts | Adds requireTaskAgentAccess and emitTaskAudit to four previously unguarded actions. Removes swarm-room metadata helpers and simplifies session metadata. |
+| plugins/plugin-agent-orchestrator/src/services/audit.ts | New NDJSON audit log with 10 MiB size-based rotation. Best-effort emission never blocks the audited action. |
+| plugins/plugin-agent-orchestrator/src/evaluators/sub-agent-completion.ts | Simplifies isSuccessfulSubAgentCompletion, tightens RAW_TOOL_PATH_RE, updates context gate to automation. |
+| plugins/plugin-agent-orchestrator/src/providers/active-sub-agents.ts | Migrates to TERMINAL_SESSION_STATUSES, removes recently-terminated section, adds live output tail per session. |
+
+</details>
+
+
+
+<h3>Sequence Diagram</h3>
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant PlannerLoop
+    participant TasksAction
+    participant AcpService
+    participant ProgressHook
+    participant Discord
+
+    User->>PlannerLoop: message
+    PlannerLoop->>TasksAction: TASKS_SPAWN_AGENT (security gate)
+    TasksAction->>AcpService: spawnSession()
+    AcpService-->>TasksAction: sessionId
+    TasksAction->>ProgressHook: emitTaskAudit(spawn_agent, allowed)
+
+    AcpService->>ProgressHook: onSessionEvent(ready)
+    ProgressHook->>Discord: sendMessageToTarget 🚀 [label] running
+    Discord-->>ProgressHook: "Memory { platformMessageId }"
+    ProgressHook->>Discord: createThreadOnTarget(parentMessageId)
+    ProgressHook->>Discord: addReactionOnTarget(🚀)
+
+    loop Sub-agent running
+        AcpService->>ProgressHook: onSessionEvent(message/tool_running)
+        ProgressHook->>Discord: postToThreadOnTarget(thread, narration)
+    end
+
+    AcpService->>ProgressHook: onSessionEvent(task_complete)
+    ProgressHook->>Discord: editMessageOnTarget(mainMsgId, ✅ summary)
+    ProgressHook->>Discord: addReactionOnTarget(✅)
+    ProgressHook->>PlannerLoop: subAgentCompletionResponseEvaluator
+    PlannerLoop->>User: final reply
+```
+
+<!-- greptile_failed_comments -->
+<details><summary><h3>Comments Outside Diff (1)</h3></summary>
+
+1. `plugins/plugin-agent-orchestrator/src/services/acp-service.ts`, line 1234-1237 ([link](https://github.com/elizaos/eliza/blob/0bf4c00724205a52a127816e907d34424300b0a7/plugins/plugin-agent-orchestrator/src/services/acp-service.ts#L1234-L1237)) 
+
+   <a href="#"><img alt="P2" src="https://greptile-static-assets.s3.amazonaws.com/badges/p2.svg?v=8" align="top"></a> **`enforceSessionLimit` not migrated to `TERMINAL_SESSION_STATUSES`**
+
+   `TERMINAL_SESSION_STATUSES` is the shared source of truth introduced in this PR. `enforceSessionLimit` still uses an inline hardcoded list that omits `"error"`, so a session that ends up with that status is counted as active and consumes a slot unnecessarily.
+
+</details>
+
+<!-- /greptile_failed_comments -->
+
+<sub>Reviews (1): Last reviewed commit: ["feat(workdir): auto-detect by convention..."](https://github.com/elizaos/eliza/commit/0bf4c00724205a52a127816e907d34424300b0a7) | [Re-trigger Greptile](https://app.greptile.com/api/retrigger?id=32534841)</sub>
+
+> Greptile also left **2 inline comments** on this PR.
+
+<!-- /greptile_comment -->5:T1992,## What
+
+Adds `packages/benchmarks/swe_bench/harness/comparison.py` — a side-by-side comparison runner that grades the **same** SWE-bench Lite instance through two paths and produces a single JSON report with per-instance patches, resolve status, time, and a winner field.
+
+- **Path A (elizaOS)**: reuses `swe_bench.cli._run_instance` — same TS bridge, same prompt, same diff extractor. Number changes there carry over automatically.
+- **Path B (opencode)**: clones `<repo>.git`, `git checkout <base_commit>`, runs `opencode run "<task>"` in the workdir, captures `git diff`. Both paths feed the same `SWEBenchEvaluator.evaluate_patch` so grading is identical.
+
+## Why
+
+Closes the "is elizaOS on par at coding with opencode?" question with measurable apples-to-apples. The orchestrator's `buildOpencodeSpawnConfig` only adds routing wiring, so Path B bypasses the orchestrator to keep variance attributable to opencode itself (not routing).
+
+## Schema (`comparison_<ts>.json`)
+
+```jsonc
+{
+  "schema_version": 1,
+  "totals": { "instances", "elizaos_resolved", "opencode_resolved",
+              "elizaos_wins", "opencode_wins", "ties_resolved", "ties_failed" },
+  "records": [{
+    "instance_id", "repo", "base_commit",
+    "path_a": { "path": "elizaos", "status", "patch", "resolved", "time_s",
+                "patch_status", "tests_passed", "tests_failed", "error" },
+    "path_b": { "path": "opencode", ... same shape ... },
+    "winner": "elizaos | opencode | tie_resolved | tie_failed"
+  }]
+}
+```
+
+`status` ∈ `resolved | failed | no_patch | error | skipped_opencode_missing | not_run_yet`.
+
+## Run
+
+```bash
+# schema check, zero deps
+python -m benchmarks.swe_bench.harness.comparison --n 2 --stub
+
+# real N=2 smoke (needs docker + eliza-adapter + opencode on PATH)
+python -m benchmarks.swe_bench.harness.comparison --n 2
+```
+
+## What is stubbed
+
+`harness/fixtures/comparison_smoke.json` contains 2 placeholder records (`status: "not_run_yet"`) so the schema is validatable without docker. Real run output replaces it.
+
+## Verification
+
+- `python -c "import ast; ast.parse(open('harness/comparison.py').read())"` — clean.
+- `json.load(open('harness/fixtures/comparison_smoke.json'))` — schema matches.
+
+## Caveats
+
+- For a fair head-to-head, the caller pins both sides to the same model before the real run. The harness sets only `OPENCODE_DISABLE_AUTOUPDATE=1`; the rest is the caller's opencode config.
+- Sequential by instance — add `--parallel` later if cost allows.
+- If `opencode` isn't on PATH, Path B emits `skipped_opencode_missing` instead of crashing.
+
+<!-- greptile_comment -->
+
+<h3>Greptile Summary</h3>
+
+This PR adds `harness/comparison.py`, a new benchmarking runner that evaluates the same SWE-bench Lite instances through two code-generation paths (elizaOS and opencode) and emits a unified JSON report. It also adds a README, a package `__init__.py`, and a stub fixture for schema validation.
+
+- **Path B (opencode)** clones each repo at `base_commit` into a sandbox, invokes `opencode run \"<task>\"`, and captures the working-tree diff; both paths share the same `SWEBenchEvaluator` so grading is consistent.
+- **`_run_path_a` has no exception guard** unlike `_run_path_b_instance` — any uncaught error from the eliza bridge propagates to the main loop and aborts the run, discarding all previously collected records since the output file is written only after the loop completes.
+- **Intermediate persistence is absent** — for long multi-instance runs a mid-run failure (network error, eliza server crash, `KeyboardInterrupt`) means total data loss; writing a partial report in the `finally` block would mitigate this.
+
+<h3>Confidence Score: 3/5</h3>
+
+The harness is safe for short stub runs but will silently lose all collected data in any real multi-instance run that encounters an error mid-loop.
+
+The main loop writes its output file only after completing without error. `_run_path_a` propagates exceptions instead of catching them (unlike the symmetrically structured `_run_path_b_instance`), so a single eliza-server failure mid-run aborts the loop and discards every record collected so far. These two issues compound each other for real N>2 runs.
+
+packages/benchmarks/swe_bench/harness/comparison.py — specifically `_run_path_a` (no exception guard) and the post-loop output write in `_run()`
+
+<h3>Important Files Changed</h3>
+
+| Filename | Overview |
+|----------|----------|
+| packages/benchmarks/swe_bench/harness/comparison.py | New comparison harness; `_run_path_a` lacks exception handling unlike its Path B counterpart, and the output file is only written after the full loop, meaning any mid-run failure causes complete data loss |
+| packages/benchmarks/swe_bench/README.md | New README documenting the comparison harness; accurate and matches the implementation |
+| packages/benchmarks/swe_bench/harness/__init__.py | Minimal package init for the harness subpackage; no issues |
+| packages/benchmarks/swe_bench/harness/fixtures/comparison_smoke.json | Placeholder fixture with two stub records; schema matches the code's output format |
+
+</details>
+
+<h3>Sequence Diagram</h3>
+
+```mermaid
+sequenceDiagram
+    participant CLI as comparison.py main()
+    participant DS as SWEBenchDataset
+    participant EA as ElizaServerManager
+    participant PA as _run_path_a
+    participant PB as _run_path_b_instance
+    participant GH as GitHub (git clone)
+    participant OC as opencode CLI
+    participant EV as SWEBenchEvaluator
+
+    CLI->>DS: load() SWE-bench Lite
+    CLI->>EA: start() eliza bridge
+    loop for each instance
+        CLI->>PA: run instance (elizaOS path)
+        PA->>EV: evaluate_patch(instance, diff)
+        EV-->>PA: PathResult
+        PA-->>CLI: PathResult (or exception - no guard)
+
+        CLI->>PB: run instance (opencode path)
+        PB->>GH: git clone + checkout base_commit
+        GH-->>PB: workdir
+        PB->>OC: opencode run task
+        OC-->>PB: working-tree changes
+        PB->>EV: git diff to evaluate_patch
+        EV-->>PB: PathResult
+        PB-->>CLI: PathResult (always, try/except)
+
+        CLI->>CLI: _decide_winner(a, b)
+    end
+    CLI->>EA: stop()
+    CLI->>CLI: write comparison_ts.json (only on success)
+```
+
+<sub>Reviews (2): Last reviewed commit: ["fix(swe-bench): reap git + opencode subp..."](https://github.com/elizaos/eliza/commit/f348026d0fb35c7d7da116c50728b2474e20d85f) | [Re-trigger Greptile](https://app.greptile.com/api/retrigger?id=32695163)</sub>
+
+> Greptile also left **2 inline comments** on this PR.
+
+<!-- /greptile_comment -->6:T2187,## What
+
+Adds graceful Windows fallbacks for the macOS-only feature surface in `plugin-lifeops` so the agent never plans a darwin-only action on non-darwin platforms. Today, Windows users see "macOS-only" errors mid-execution when the planner picks `SCREEN_TIME`, the iMessage connector subaction, or apple-reminders flows. After this PR, the planner doesn't see those actions on non-darwin, and any direct invocation returns a typed `FeatureResult` with `reason: "not_supported"` cleanly.
+
+## Files
+
+- `plugins/plugin-lifeops/src/platform/host.ts` (new) — `isDarwin()` + `darwinUnavailableActionResult({ actionName, connector?, subaction?, feature })` shared helpers. Centralized so plugin registration, action handlers, and connector dispatchers all read the same predicate.
+- `plugins/plugin-lifeops/src/platform/index.ts` — re-exports `host.ts`.
+- `plugins/plugin-lifeops/src/plugin.ts` — `ownerScreenTimeAction` (the owner-surface umbrella) is now excluded from the plugin's actions array on non-darwin. The planner / `enabled_skills` provider never sees it on Windows/Linux.
+- `plugins/plugin-lifeops/src/actions/connector.ts` — iMessage subaction short-circuits before touching the macOS bridge; `imessage` is dropped from `listKnownConnectorKinds` on non-darwin so the planner doesn't pick it as a valid choice.
+- `plugins/plugin-lifeops/src/actions/screen-time.ts` — uses the shared `isDarwin()` helper instead of the local check.
+- `plugins/plugin-lifeops/src/lifeops/apple-reminders.ts` — 3 callsites (`createNativeAppleReminderLikeItem`, `update…`, `delete…`) gated by the shared helper.
+- `plugins/plugin-lifeops/src/__tests__/platform-guards.test.ts` (new) — 8 vitest tests covering darwin/win32/linux shapes for the helper + each guarded callsite.
+
+## Why
+
+This is a real user-visible polish for the LifeOps surface on Windows. Today, a Windows user asking "what's my screen time" gets the planner trying `SCREEN_TIME`, then a mid-execution error like _"Activity tracking is macOS-only. No data available on this platform."_ With this PR, the planner doesn't see `SCREEN_TIME` on non-darwin so it picks a different path, and any direct invocation gets a typed fallback instead of a thrown error.
+
+## Verification
+
+`bunx vitest run src/__tests__/platform-guards.test.ts` — **8/8 pass** (Test Files 1 passed, Tests 8 passed).
+
+```
+✓ platform/host helper
+  ✓ isDarwin returns true on darwin
+  ✓ isDarwin returns false on win32
+  ✓ isDarwin returns false on linux
+  ✓ darwinUnavailableActionResult returns the PLATFORM_UNSUPPORTED shape
+✓ platform guards — apple reminders bridge
+  ✓ createNativeAppleReminderLikeItem returns not_supported on win32
+  ✓ updateNativeAppleReminderLikeItem returns not_supported on win32
+  ✓ deleteNativeAppleReminderLikeItem returns not_supported on win32
+✓ platform guards — website blocker engine
+  ✓ reports unavailable when the hosts file path is missing on win32
+```
+
+## Design notes
+
+- **Kept upstream's typed `FeatureResult` shape** (`{ ok: false, reason: "not_supported", platform }`) rather than regressing to a looser `{ ok: false, error, skippedReason }` shape. Tests assert on the typed shape.
+- **Gated the umbrella, not the inner action.** `ownerScreenTimeAction` is what gets promoted via `promoteSubactionsToActions`, so hiding the umbrella is the correct surface for planner suppression — `screenTimeAction` itself doesn't appear in `plugin.actions`.
+- **Defense-in-depth retained.** The existing `process.platform !== "darwin"` check inside `loadNativeReminderBridge` is kept — the outer `isDarwin()` short-circuits before it runs, but it remains a safety net for any future callsite that bypasses the outer guard.
+
+## Risk
+
+Low. No new dependencies. All changes are additive (helper + conditional skips). The darwin behavior is preserved exactly — only non-darwin behavior changes from "mid-execution error" to "typed unavailable result + planner doesn't see the action".
+
+<!-- greptile_comment -->
+
+<h3>Greptile Summary</h3>
+
+This PR adds graceful Windows/Linux fallbacks for the macOS-only feature surface in `plugin-lifeops`, so the planner never sees or executes darwin-only actions on non-darwin hosts. All changes are additive — existing darwin behavior is completely preserved.
+
+- **`platform/host.ts`** (new): centralizes `isDarwin()` and `darwinUnavailableActionResult()` so every guard in the plugin reads the same predicate, replacing scattered `process.platform === "darwin"` literals in `screen-time.ts`, `apple-reminders.ts`, and `connector.ts`.
+- **`plugin.ts`**: hides the `ownerScreenTimeAction` umbrella from the planner's action list on non-darwin at registration time, so the planner never considers `SCREEN_TIME` on Windows/Linux.
+- **`connector.ts`**: removes `imessage` from the planner-visible connector list and adds an early-return guard in `dispatchIMessage` for defense-in-depth; new test suite covers the shared helper and all three apple-reminders callsites.
+
+<h3>Confidence Score: 5/5</h3>
+
+Safe to merge — all changes are purely additive platform guards that leave darwin behavior untouched.
+
+The darwin path is a straightforward pass-through with no modifications. Non-darwin paths now return typed fallbacks or hide actions at registration time. The new test suite correctly uses `vi.resetModules()` in `beforeEach` to isolate module-level platform captures between tests. No new dependencies, no schema changes, and no logic changes for existing darwin users.
+
+No files require special attention. The two observations are about `feature` not being surfaced in the structured `data` object of `darwinUnavailableActionResult`, and registry-contributed connector kinds not being filtered alongside the hardcoded list — both are minor design gaps that do not affect correctness on darwin.
+
+<h3>Important Files Changed</h3>
+
+| Filename | Overview |
+|----------|----------|
+| plugins/plugin-lifeops/src/platform/host.ts | New module exposing `isDarwin()` and `darwinUnavailableActionResult()`. Clean and minimal; `feature` arg is accepted but omitted from the returned `data` object, only appearing in the human-readable `text`. |
+| plugins/plugin-lifeops/src/platform/index.ts | Trivial re-export of `host.ts` alongside the existing `lifeops-github.js` exports. No issues. |
+| plugins/plugin-lifeops/src/plugin.ts | Introduces `platformGatedActionUmbrellas` evaluated at module-load time to suppress `ownerScreenTimeAction` on non-darwin; safe since `process.platform` is constant at runtime. |
+| plugins/plugin-lifeops/src/actions/connector.ts | Adds a platform guard in `dispatchIMessage` and filters `imessage` from `VERBOSE_DISPATCHER_KINDS` on non-darwin; registry-sourced connector kinds are not filtered, which is a minor gap covered by the defense-in-depth guard. |
+| plugins/plugin-lifeops/src/actions/screen-time.ts | Replaces the local `isSupportedPlatform()` predicate with the shared `isDarwin()` helper; existing behavior is preserved exactly. |
+| plugins/plugin-lifeops/src/lifeops/apple-reminders.ts | Three `process.platform !== "darwin"` checks replaced with `!isDarwin()`, preserving the existing `FeatureResult` shape and logic; no behavioral change on darwin. |
+| plugins/plugin-lifeops/src/__tests__/platform-guards.test.ts | 8 vitest tests covering `isDarwin`, `darwinUnavailableActionResult`, and the three apple-reminders guards. `vi.resetModules()` in `beforeEach` correctly future-proofs against eager platform captures; `restorePlatform()` in per-describe `afterEach` keeps tests isolated. |
+
+</details>
+
+<h3>Flowchart</h3>
+
+```mermaid
+%%{init: {'theme': 'neutral'}}%%
+flowchart TD
+    A[Agent / Planner request] --> B{isDarwin?}
+
+    B -- darwin --> C[Full action surface visible]
+    C --> D[SCREEN_TIME / iMessage / Apple Reminders]
+
+    B -- non-darwin --> E[Filtered action surface]
+    E --> F[ownerScreenTimeAction hidden at registration]
+    E --> G[imessage removed from listKnownConnectorKinds]
+    E --> H[Apple Reminders: early FeatureResult not_supported]
+
+    G --> I{Direct CONNECTOR/imessage call?}
+    I -- yes --> J[dispatchIMessage guard\ndarwinUnavailableActionResult\nActionResult PLATFORM_UNSUPPORTED]
+    I -- no --> K[Planner picks different connector]
+
+    F --> L[Planner picks different action]
+```
+
+<sub>Reviews (2): Last reviewed commit: ["style(plugin-lifeops): drop dead isApple..."](https://github.com/elizaos/eliza/commit/545bddc528730802f5010c98c53c5916398bcff7) | [Re-trigger Greptile](https://app.greptile.com/api/retrigger?id=32700320)</sub>
+
+<!-- /greptile_comment -->7:T1a0c,## What
+
+Lays the keel for `elizaos deploy` so creators wiring monetized apps to `.com` domains have a stable CLI surface + agreed design while the real implementation lands.
+
+```bash
+elizaos deploy --dry-run --domain test.example
+```
+
+Output:
+
+```
+elizaos deploy — dry run
+Planned sequence (no network calls performed):
+
+   1. auth check
+       Load credentials, GET /api/v1/me, abort on 401.
+   2. app lookup
+       Resolve app-id (<resolved from .elizaos/template.json>).
+   3. build
+       Run 'bun run build' in <cwd>.
+   4. upload
+       Push built artifact to the app's linked GitHub repo.
+   5. register app deploy
+       POST /api/v1/apps/<id>/deploy → status=building.
+   6. attach domain
+       POST /api/v1/apps/<id>/domains { domain: "test.example" } and surface DNS TXT record.
+   7. poll status
+       GET /api/v1/apps/<id>/deploy/status every 5s until deployed|failed (10min cap).
+   8. print URL
+       URL: https://test.example  (+ apps.elizacloud.ai subdomain).
+```
+
+## Files
+
+- `packages/elizaos/src/commands/deploy.ts` (new) — keel handler. Validates `--domain` against a hostname regex; in `--dry-run` prints the planned 8-step sequence + exit 0; bare invocation prints a stub message + exit 1 pointing to the design doc.
+- `packages/elizaos/src/commands/DEPLOY_DESIGN.md` (new) — full design: command surface, auth, 8-step sequence, Vercel routing, error modes, deferrals, open questions.
+- `packages/elizaos/src/cli.ts` — wires the deploy command into commander with `--app-id`, `--domain`, `--dry-run`, `--verbose`.
+- `packages/elizaos/src/commands/index.ts` — re-exports `deploy`.
+- `packages/elizaos/src/types.ts` — adds `DeployOptions`.
+
+## What is intentionally NOT in this PR
+
+- The real Vercel build/upload/poll loop. The backing service `cloud/packages/lib/services/vercel-deployments.ts` and the custom-domain attach API (`POST /api/v1/apps/[id]/domains`) already exist; what's still missing is `POST /api/v1/apps/[id]/deploy` + `…/deploy/status`. These land in the follow-up. See `DEPLOY_DESIGN.md` §Open questions.
+- Credentials file shape. Assumed `~/.elizaos/credentials.json` for the design doc; not actually read or written by this keel. Pick canonical path before first-run prompt logic.
+- 1:N domain support (one `--domain` per invocation today; `app_domains` is 1:N upstream).
+
+## Verification
+
+- `bunx tsc -p tsconfig.json --noEmit` clean on `packages/elizaos` (verified on the source branch before retargeting onto `develop`).
+- Built `dist/cli.js` via tsc, then ran the 4 keel scenarios:
+  - `node dist/cli.js deploy --dry-run --domain test.example` → 8-step plan, exit 0
+  - `node dist/cli.js deploy` → stub message, exit 1
+  - `node dist/cli.js deploy --dry-run --domain "not a domain"` → validation error, exit 1
+  - `node dist/cli.js --help` → `deploy` appears alongside `create`/`upgrade`/`info`
+
+## Why a keel and not the real thing
+
+`elizaos deploy` is the difference between "creators can ship their monetized app to a `.com`" and "they can't". Locking the command surface + design first means the follow-up PR is mechanical and reviewable — and unblocks downstream design work (onboarding flow, dashboards) that needs to point at the right command today.
+
+<!-- greptile_comment -->
+
+<h3>Greptile Summary</h3>
+
+This PR adds the `elizaos deploy` command as a "keel" — registering the full flag surface (`--app-id`, `--domain`, `--dry-run`, `--verbose`) and printing a planned 8-step deploy sequence in `--dry-run` mode, while stubbing the real implementation with `exit 1` pending a follow-up PR.
+
+- **`deploy.ts`**: validates `--domain` with a regex matching the server-side contract, renders the dry-run plan to stdout, and exits cleanly; non-dry-run path prints a link to the design doc and exits 1.
+- **`DEPLOY_DESIGN.md`**: documents the full command surface, auth flow, Vercel integration strategy, error modes, and open questions for the follow-up implementation PR.
+- **`cli.ts` / `index.ts` / `types.ts`**: standard wiring — Commander subcommand registration, re-export, and `DeployOptions` interface additions.
+
+<h3>Confidence Score: 5/5</h3>
+
+This PR is safe to merge; it adds no real network calls, no auth logic, and no filesystem writes — only flag registration and dry-run output printing.
+
+The change is strictly additive: a new subcommand that either prints a plan and exits 0 (dry-run) or prints a stub message and exits 1 (bare invocation). No existing command paths are touched, no credentials are read or written, and the domain regex matches the documented server-side contract. The only nits are cosmetic (floating branch links).
+
+No files require special attention — deploy.ts is the only substantive addition and its logic is trivially simple.
+
+<h3>Important Files Changed</h3>
+
+| Filename | Overview |
+|----------|----------|
+| packages/elizaos/src/commands/deploy.ts | New keel handler for the deploy command; validates domain regex, prints 8-step dry-run plan, and stubs non-dry-run with exit 1. Floating develop-branch links are the main cosmetic concern. |
+| packages/elizaos/src/cli.ts | Wires deploy subcommand into Commander with four options; straightforward registration consistent with existing commands. |
+| packages/elizaos/src/types.ts | Adds DeployOptions interface; fields align exactly with the CLI option definitions. |
+| packages/elizaos/src/commands/index.ts | Re-exports deploy alongside existing commands; no issues. |
+| packages/elizaos/src/commands/DEPLOY_DESIGN.md | Design doc covering the 8-step deploy sequence, auth, Vercel integration, error modes, and open questions; internal documentation only. |
+
+</details>
+
+<h3>Flowchart</h3>
+
+```mermaid
+%%{init: {'theme': 'neutral'}}%%
+flowchart TD
+    A([elizaos deploy]) --> B{--domain set?}
+    B -->|Yes| C{Domain valid?}
+    C -->|No| D[console.error invalid domain\nexit 1]
+    C -->|Yes| E{--dry-run?}
+    B -->|No| E
+    E -->|Yes| F[buildPlan\nappId + domain + cwd]
+    F --> G[printPlan\n8 steps to stdout]
+    G --> H[exit 0]
+    E -->|No| I[console.error stub msg\nexit 1]
+
+    subgraph Planned Steps dry-run only
+        S1[1. auth check]
+        S2[2. app lookup]
+        S3[3. build]
+        S4[4. upload]
+        S5[5. register deploy]
+        S6[6. attach domain]
+        S7[7. poll status]
+        S8[8. print URL]
+        S1 --> S2 --> S3 --> S4 --> S5 --> S6 --> S7 --> S8
+    end
+```
+
+<sub>Reviews (2): Last reviewed commit: ["fix(elizaos): point deploy doc pointer a..."](https://github.com/elizaos/eliza/commit/0ba44fc7a3e2b6b6a69b6b40aeec6d70462133b2) | [Re-trigger Greptile](https://app.greptile.com/api/retrigger?id=32695822)</sub>
+
+<!-- /greptile_comment -->8:T1ba6,## What
+
+Two small linux-packaging polish items: enable arm64 in the snap CI matrix as an experimental leg, and prep the Flatpak manifest + CI for Flathub's offline-only build environment.
+
+### Item A — Snap arm64 (experimental matrix entry)
+
+`.github/workflows/snap-build-test.yml`:
+- Adds an `arm64` matrix entry on `ubuntu-24.04-arm` with `experimental: true`.
+- Adds `continue-on-error: ${{ matrix.experimental }}` at the job level so an arm64 flake never blocks an amd64 PR.
+- Sets `experimental: false` on amd64 so it remains the gating leg.
+
+`packages/app-core/packaging/snap/snapcraft.yaml` is **not** touched — it already lists `arm64` in `architectures:` (the previous "commented out" note in the manifest was already cleaned up by an earlier commit). This PR just lights up the CI leg.
+
+Reason `continue-on-error` is on: GitHub's `ubuntu-24.04-arm` runners are in public preview for public repos — free but queue-prone. Promote `experimental: false` once ARM goes GA.
+
+### Item B — Flatpak offline-mode prep (Flathub readiness)
+
+The current `ai.elizaos.App.yml` build invokes `npm install -g elizaos` and relies on `--share=network` build-args. Flathub's submission infrastructure forbids network during build. This PR ships the **prep** path — script + CI generator + manifest playbook — without flipping the manifest to offline (that flip wants `node-sources.json` committed first, which we want to land in a follow-up after one green generator run).
+
+- `packages/app-core/packaging/flatpak/generate-sources.sh` (new, executable) — wraps `flatpak-node-generator npm --recursive`. Spins up a tempdir, runs `npm install --package-lock-only --ignore-scripts elizaos@latest` to resolve the published-CLI dependency graph, then writes `node-sources.json` next to the manifest. Self-contained, with prereq checks + helpful error output.
+- `.github/workflows/test-flatpak.yml` — runs the generator on every PR (3 new steps: pipx install, generate, upload-artifact). `continue-on-error: true` on the generate step so a flatpak-node-generator regression doesn't break the currently-green build.
+- `ai.elizaos.App.yml` — replaces the short offline-mode note (lines 95–103 upstream) with a concrete 3-step Flathub-prep playbook referencing the new script and CI step. **No build-command changes**, so the green build stays green.
+
+## Risk
+
+- Snap arm64 leg depends on GH provisioning `ubuntu-24.04-arm`. Mitigated by `continue-on-error`. Worst case: arm64 leg shows yellow check on PRs.
+- `flatpak-node-generator` requires pipx + network. `pip install --user` fallback present. Step is `continue-on-error: true`. Worst case: artifact missing one run.
+- Generator pins to `elizaos@latest`, not the in-tree workspace. Acceptable for Flathub (which ships published CLI). Document this when flipping to offline.
+
+## Verification
+
+- All 4 touched YAML files parse with `yaml.safe_load` (Python).
+- `generate-sources.sh` is shellcheck-clean.
+- No edits to `agent-release.yml` / scoring / trust gate — no trust impact.
+
+## Followup PR
+
+Once we have one green generator run + a reviewed `node-sources.json`:
+
+1. Commit `node-sources.json` next to the manifest.
+2. Add `- type: file / path: node-sources.json` to the `elizaos-app` module `sources:` block.
+3. Replace `npm install -g elizaos` with `npm install -g --offline --prefix=/app elizaos`.
+4. Drop `--share=network` from the module's `build-options.build-args`.
+5. Then we're Flathub-submittable.
+
+<!-- greptile_comment -->
+
+<h3>Greptile Summary</h3>
+
+This PR adds an experimental arm64 CI leg to the snap build matrix and lays the groundwork for Flathub-compatible offline Flatpak builds, without changing any application logic or the currently-passing manifest build command.
+
+- **Snap arm64**: Adds `ubuntu-24.04-arm` to the snap matrix with `experimental: true` and `continue-on-error: ${{ matrix.experimental }}`; `fail-fast: false` was already set, so a flaky ARM runner cannot block the gating amd64 job.
+- **Flatpak offline prep**: Introduces `generate-sources.sh` (a self-contained `flatpak-node-generator` wrapper) and three new non-fatal CI steps (install → generate → upload-artifact); both the install and generate steps carry `continue-on-error: true` with correct `outcome == 'success'` guards on downstream steps.
+- **Manifest comments**: Updates the `ai.elizaos.App.yml` comment block with a concrete 3-step Flathub submission playbook; no executable manifest lines are touched.
+
+<h3>Confidence Score: 5/5</h3>
+
+Safe to merge — all changes are CI-only; no application code or manifest build commands are modified, and every new step is guarded against failure.
+
+All four changed files are CI workflows or packaging scripts. The snap matrix change is isolated by `continue-on-error` and `fail-fast: false`. The flatpak generator steps are non-fatal by design and properly wired with `outcome`-based conditionals. The manifest change is comment-only. The only nit is a missing `mkdir -p` in the shell script for non-default output directories, which would not affect CI (the default path always exists).
+
+No files require special attention; the `generate-sources.sh` script has a minor edge case with custom output directories but it does not affect CI operation.
+
+<h3>Important Files Changed</h3>
+
+| Filename | Overview |
+|----------|----------|
+| .github/workflows/snap-build-test.yml | Adds arm64 experimental matrix entry with `continue-on-error: ${{ matrix.experimental }}`; `fail-fast: false` is already set; placement and boolean propagation are correct. |
+| .github/workflows/test-flatpak.yml | Adds three non-fatal steps (install, generate, upload) with proper `continue-on-error: true` on both the install and generate steps, and correct `outcome == 'success'` guards on dependent steps. |
+| packages/app-core/packaging/flatpak/generate-sources.sh | New shell script for generating Flatpak offline sources; shellcheck-clean overall, but does not `mkdir -p` the custom `OUT_DIR` before writing to it, which would fail if a non-existent directory is passed as the first argument. |
+| packages/app-core/packaging/flatpak/ai.elizaos.App.yml | Comment-only update expanding the offline-mode prep playbook; no build-command or manifest logic changes, so the currently-green build is unaffected. |
+
+</details>
+
+<h3>Flowchart</h3>
+
+```mermaid
+%%{init: {'theme': 'neutral'}}%%
+flowchart TD
+    A[Install flatpak-node-generator\ncontinue-on-error: true] -->|outcome == success| B[Generate offline node sources\ncontinue-on-error: true]
+    A -->|outcome == failure| D[Skip generate + upload]
+    B -->|outcome == success| C[Upload node-sources.json artifact]
+    B -->|outcome == failure| E[Skip upload]
+    C --> F[Build Flatpak\nnpm install -g over network\ncurrently green]
+    D --> F
+    E --> F
+```
+
+<sub>Reviews (2): Last reviewed commit: ["ci(linux): tolerate flatpak-node-generat..."](https://github.com/elizaos/eliza/commit/fa9d3395869e099faa64e1103b1f50b90b190fee) | [Re-trigger Greptile](https://app.greptile.com/api/retrigger?id=32696211)</sub>
+
+<!-- /greptile_comment -->9:T19b0,## Root cause
+
+Fresh sandboxes provisioned with `:develop` consistently failed health check at 180s. The container started, Node ran, but never reached the HTTP listen.
+
+Container logs:
+```
+[wallet][os-store] boot hydrate skipped: Cannot find package 'jose' imported from /app/plugins/plugin-elizacloud/dist/node/index.node.js
+[eliza-autonomous] Failed to start: Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'jose' ...
+```
+
+Inspecting the image:
+
+```
+/app/node_modules/jose -> /app/packages/app-core/node_modules/jose
+/app/packages/app-core/node_modules/jose -> ../../../node_modules/jose
+```
+
+Two-hop circular symlink. Node's ESM resolver can't traverse it → import fails → process never finishes boot → container hangs in `ep_poll` until daemon kills it.
+
+## How the loop was formed
+
+`link-docker-local-app-packages.mjs` links app-core's owned root deps (`jose`, `@node-rs/argon2`) in two passes:
+1. `packages/app-core/node_modules/<dep>` (for app-core's local resolution)
+2. `/app/node_modules/<dep>` (for transitive imports from other plugins)
+
+Each pass calls `resolveDependencyPackageDir` with `[packageDir, repoRoot]`. After the first pass linked `app-core/node_modules/jose → /app/node_modules/jose`, the second pass's resolver searched packageDir first, saw the freshly-created symlink's target had `package.json` (`fs.existsSync` follows symlinks), and returned the symlink path verbatim.
+
+`linkDependencyPackage`'s equality check `path.resolve(packageDir) === path.resolve(target)` compared the symlink path against the target — different strings, so the function proceeded:
+1. `removePath(target)` — **deleted the real npm-installed jose at `/app/node_modules/jose`**
+2. symlinked target → packageDir (the now-broken intermediate symlink)
+
+End state: circular symlink. Real npm install gone.
+
+## Fix
+
+`resolveDependencyPackageDir` now returns `fs.realpathSync(dir)` instead of the raw join path. The realpath collapses any prior symlink, so when the second-pass call resolves jose it returns `/app/node_modules/jose` (the actual install). `linkDependencyPackage`'s equality check then correctly detects `target === packageDir` and skips — preserving the real npm install at root.
+
+## How this was missed
+
+The first `:develop` builds without Shaw's `baseDirs` patch resolved only at root, so this couldn't happen. The bug was introduced in `06dc596` ("fix(docker): resolve app-core owned dependencies") which added `baseDirs: [packageDir, repoRoot]` so the resolver searches both. Once that landed, every subsequent `:develop` build had the circular symlink baked in.
+
+## Test plan
+
+- [ ] CI build-agent-image.yml succeeds on this branch
+- [ ] In the resulting image, `ls -la /app/node_modules/jose` is a real directory (not a symlink)
+- [ ] In the resulting image, `ls -la /app/packages/app-core/node_modules/jose` is a symlink → `/app/node_modules/jose` (one hop, not circular)
+- [ ] Manual provision of a fresh sandbox via the dashboard transitions from `pending` → `running` (not stuck in health timeout)
+- [ ] Existing PR #7780's consolidation + tsx fix still works (this branch contains all those commits)
+
+<!-- greptile_comment -->
+
+<h3>Greptile Summary</h3>
+
+This PR fixes a circular symlink bug in the Docker image build process where `resolveDependencyPackageDir` was returning raw (potentially symlinked) paths, causing `linkDependencyPackage`'s equality guard to fail and subsequently overwrite the real npm-installed package with a circular symlink.
+
+- **Core fix**: `realIfExists` now calls `fs.realpathSync(dir)` before returning, so the equality check `path.resolve(packageDir) === path.resolve(target)` correctly identifies when source and destination resolve to the same on-disk location and skips the symlink creation.
+- **Bun store search path** gets the same `realpathSync` treatment, keeping consistency across both resolution strategies.
+- The README update reflects the rename of the Docker workflow file from `image.yaml` to `build-agent-image.yml`.
+
+<h3>Confidence Score: 5/5</h3>
+
+Safe to merge — the change is narrowly scoped to the symlink resolution helper and directly fixes the broken two-hop symlink that was causing containers to hang at boot.
+
+The fix correctly collapses symlinks via `realpathSync` before the equality guard in `linkDependencyPackage` runs, preventing the second-pass from treating the newly-created `app-core/node_modules/jose` symlink as a distinct source and overwriting the real root install. Both the first-pass and bun-store search paths receive the same treatment.
+
+The `realIfExists` catch fallback in `link-docker-local-app-packages.mjs` is worth tracking but was flagged in a prior review thread.
+
+<h3>Important Files Changed</h3>
+
+| Filename | Overview |
+|----------|----------|
+| packages/app-core/scripts/link-docker-local-app-packages.mjs | Introduces `realIfExists` helper using `fs.realpathSync` to resolve symlinks before returning package paths, preventing the circular-symlink race between the two `linkDependency` passes for `jose` and `@node-rs/argon2`. The catch fallback returning the raw `dir` rather than `null` is a residual risk (already flagged in prior review thread). |
+| .github/workflows/README.md | Documentation-only update: corrects the workflow table entry from `image.yaml` to `build-agent-image.yml` with an updated trigger/tag description. |
+
+</details>
+
+<h3>Sequence Diagram</h3>
+
+```mermaid
+sequenceDiagram
+    participant S as link-docker script
+    participant R as resolveDependencyPackageDir
+    participant FS as Node fs
+
+    Note over S: app-core loop first dep pass
+    S->>R: jose with appCoreDir and repoRoot
+    R->>FS: existsSync appCoreDir/node_modules/jose false
+    R->>FS: existsSync repoRoot/node_modules/jose true
+    R->>FS: realpathSync returns /app/node_modules/jose
+    R-->>S: /app/node_modules/jose
+    S->>FS: symlink appCoreDir/node_modules/jose to /app/node_modules/jose
+
+    Note over S: app-core loop second root pass
+    S->>R: jose with appCoreDir and repoRoot
+    R->>FS: existsSync appCoreDir/node_modules/jose true via symlink
+    R->>FS: realpathSync returns /app/node_modules/jose
+    R-->>S: /app/node_modules/jose
+    S->>S: packageDir equals target skip
+
+    Note over S: Result no circular symlink real install preserved
+```
+
+<sub>Reviews (2): Last reviewed commit: ["chore(clean): trim verbose comment + upd..."](https://github.com/elizaos/eliza/commit/e3f61404f7adadd6e84ac3a5abb852f85ccaa909) | [Re-trigger Greptile](https://app.greptile.com/api/retrigger?id=32536457)</sub>
+
+<!-- /greptile_comment -->a:T38be,Bumps the npm_and_yarn group with 1 update in the /packages/cloud-services/operator directory: [uuid](https://github.com/uuidjs/uuid).
+Bumps the npm_and_yarn group with 1 update in the /plugins/plugin-elizacloud directory: [ws](https://github.com/websockets/ws).
+
+Updates `uuid` from 13.0.0 to 14.0.0
+<details>
+<summary>Release notes</summary>
+<p><em>Sourced from <a href="https://github.com/uuidjs/uuid/releases">uuid's releases</a>.</em></p>
+<blockquote>
+<h2>v14.0.0</h2>
+<h2><a href="https://github.com/uuidjs/uuid/compare/v13.0.0...v14.0.0">14.0.0</a> (2026-04-19)</h2>
+<h3>⚠ BREAKING CHANGES</h3>
+<ul>
+<li>expect <code>crypto</code> to be global everywhere (requires node@20+) (<a href="https://redirect.github.com/uuidjs/uuid/issues/935">#935</a>)</li>
+<li>drop node@18 support (<a href="https://redirect.github.com/uuidjs/uuid/issues/934">#934</a>)</li>
+</ul>
+<h3>Features</h3>
+<ul>
+<li>drop node@18 support (<a href="https://redirect.github.com/uuidjs/uuid/issues/934">#934</a>) (<a href="https://github.com/uuidjs/uuid/commit/dc4ddb87272ed2843faccd130bcc41d492688bd3">dc4ddb8</a>)</li>
+</ul>
+<h3>Bug Fixes</h3>
+<ul>
+<li>expect <code>crypto</code> to be global everywhere (requires node@20+) (<a href="https://redirect.github.com/uuidjs/uuid/issues/935">#935</a>) (<a href="https://github.com/uuidjs/uuid/commit/f2c235f93059325fa43e1106e624b5291bb523c4">f2c235f</a>)</li>
+<li>Use GITHUB_TOKEN for release-please and enable npm provenance (<a href="https://redirect.github.com/uuidjs/uuid/issues/925">#925</a>) (<a href="https://github.com/uuidjs/uuid/commit/ffa31383e8e4e1f0b4e22e504561272041b8738c">ffa3138</a>)</li>
+</ul>
+<h2>v13.0.2</h2>
+<h2><a href="https://github.com/uuidjs/uuid/compare/v13.0.1...v13.0.2">13.0.2</a> (2026-05-04)</h2>
+<h3>Bug Fixes</h3>
+<ul>
+<li>rerelease to fix provenance. (<a href="https://github.com/uuidjs/uuid/commit/49ccb35f78c0c4ce1409dd2f1d89f83caadba10b">49ccb35</a>)</li>
+</ul>
+<h2>v13.0.1</h2>
+<h2><a href="https://github.com/uuidjs/uuid/compare/v13.0.0...v13.0.1">13.0.1</a> (2026-04-27)</h2>
+<h3>Bug Fixes</h3>
+<ul>
+<li>backport fix for GHSA-w5hq-g745-h8pq (<a href="https://github.com/uuidjs/uuid/commit/9d27ddf7046ce496ef39569ff84d948eeff9cb2a">9d27ddf</a>)</li>
+</ul>
+</blockquote>
+</details>
+<details>
+<summary>Changelog</summary>
+<p><em>Sourced from <a href="https://github.com/uuidjs/uuid/blob/main/CHANGELOG.md">uuid's changelog</a>.</em></p>
+<blockquote>
+<h2><a href="https://github.com/uuidjs/uuid/compare/v13.0.0...v14.0.0">14.0.0</a> (2026-04-19)</h2>
+<h3>Security</h3>
+<ul>
+<li>Fixes <a href="https://github.com/uuidjs/uuid/security/advisories/GHSA-w5hq-g745-h8pq">GHSA-w5hq-g745-h8pq</a>: <code>v3()</code>, <code>v5()</code>, and <code>v6()</code> did not validate that writes would remain within the bounds of a caller-supplied buffer, allowing out-of-bounds writes when an invalid <code>offset</code> was provided. A <code>RangeError</code> is now thrown if <code>offset &lt; 0</code> or <code>offset + 16 &gt; buf.length</code>.</li>
+</ul>
+<h3>⚠ BREAKING CHANGES</h3>
+<ul>
+<li><code>crypto</code> is now expected to be globally defined (requires node@20+) (<a href="https://redirect.github.com/uuidjs/uuid/issues/935">#935</a>)</li>
+<li>drop node@18 support (<a href="https://redirect.github.com/uuidjs/uuid/issues/934">#934</a>)</li>
+<li>upgrade minimum supported TypeScript version to 5.4.3, in keeping with the project's policy of supporting TypeScript versions released within the last two years</li>
+</ul>
+</blockquote>
+</details>
+<details>
+<summary>Commits</summary>
+<ul>
+<li><a href="https://github.com/uuidjs/uuid/commit/7c1ea087a8149b57380fc8bb7f68c3a215cb6e4b"><code>7c1ea08</code></a> chore(main): release 14.0.0 (<a href="https://redirect.github.com/uuidjs/uuid/issues/926">#926</a>)</li>
+<li><a href="https://github.com/uuidjs/uuid/commit/3d2c5b0342f0fcb52a5ac681c3d47c13e7444b34"><code>3d2c5b0</code></a> Merge commit from fork</li>
+<li><a href="https://github.com/uuidjs/uuid/commit/f2c235f93059325fa43e1106e624b5291bb523c4"><code>f2c235f</code></a> fix!: expect <code>crypto</code> to be global everywhere (requires node@20+) (<a href="https://redirect.github.com/uuidjs/uuid/issues/935">#935</a>)</li>
+<li><a href="https://github.com/uuidjs/uuid/commit/529ef0899f5dd503d2ee90d690585d63d78bc212"><code>529ef08</code></a> chore: upgrade TypeScript and fixup types (<a href="https://redirect.github.com/uuidjs/uuid/issues/927">#927</a>)</li>
+<li><a href="https://github.com/uuidjs/uuid/commit/086fd7976f11433edf9ac80be876b3ad243fe087"><code>086fd79</code></a> chore: update dependencies (<a href="https://redirect.github.com/uuidjs/uuid/issues/933">#933</a>)</li>
+<li><a href="https://github.com/uuidjs/uuid/commit/dc4ddb87272ed2843faccd130bcc41d492688bd3"><code>dc4ddb8</code></a> feat!: drop node@18 support (<a href="https://redirect.github.com/uuidjs/uuid/issues/934">#934</a>)</li>
+<li><a href="https://github.com/uuidjs/uuid/commit/0f1f9c9c9cedbae5a1d363d5406c5dfbabe81404"><code>0f1f9c9</code></a> chore: switch to Biome for parsing and linting (<a href="https://redirect.github.com/uuidjs/uuid/issues/932">#932</a>)</li>
+<li><a href="https://github.com/uuidjs/uuid/commit/e2879e64bf125add903c1eff6e0860542c605013"><code>e2879e6</code></a> chore: use maintained version of npm-run-all (<a href="https://redirect.github.com/uuidjs/uuid/issues/930">#930</a>)</li>
+<li><a href="https://github.com/uuidjs/uuid/commit/ffa31383e8e4e1f0b4e22e504561272041b8738c"><code>ffa3138</code></a> fix: Use GITHUB_TOKEN for release-please and enable npm provenance (<a href="https://redirect.github.com/uuidjs/uuid/issues/925">#925</a>)</li>
+<li><a href="https://github.com/uuidjs/uuid/commit/0423d49df2dc8efc300c804731d25f4d7e0fccc4"><code>0423d49</code></a> docs: remove obsolete v1 option notes (<a href="https://redirect.github.com/uuidjs/uuid/issues/915">#915</a>)</li>
+<li>Additional commits viewable in <a href="https://github.com/uuidjs/uuid/compare/v13.0.0...v14.0.0">compare view</a></li>
+</ul>
+</details>
+<details>
+<summary>Maintainer changes</summary>
+<p>This version was pushed to npm by <a href="https://www.npmjs.com/~GitHub%20Actions">GitHub Actions</a>, a new releaser for uuid since your current version.</p>
+</details>
+<br />
+
+Updates `ws` from 8.18.3 to 8.20.1
+<details>
+<summary>Release notes</summary>
+<p><em>Sourced from <a href="https://github.com/websockets/ws/releases">ws's releases</a>.</em></p>
+<blockquote>
+<h2>8.20.1</h2>
+<h1>Bug fixes</h1>
+<ul>
+<li>Fixed an uninitialized memory disclosure issue in <code>websocket.close()</code>
+(c0327ec1).</li>
+</ul>
+<p>Providing a <code>TypedArray</code> (e.g. <code>Float32Array</code>) as the <code>reason</code> argument for
+<code>websocket.close()</code>, rather than the supported string or <code>Buffer</code> types, caused
+uninitialized memory to be disclosed to the remote peer.</p>
+<pre lang="js"><code>import { deepStrictEqual } from 'node:assert';
+import { WebSocket, WebSocketServer } from 'ws';
+<p>const wss = new WebSocketServer(
+{ port: 0, skipUTF8Validation: true },
+function () {
+const { port } = wss.address();
+const ws = new WebSocket(<code>ws://localhost:${port}</code>, {
+skipUTF8Validation: true
+});</p>
+<pre><code>ws.on('close', function (code, reason) {
+  deepStrictEqual(reason, Buffer.alloc(80));
+});
+</code></pre>
+<p>}
+);</p>
+<p>wss.on('connection', function (ws) {
+ws.close(1000, new Float32Array(20));
+});
+</code></pre></p>
+<p>The issue was privately reported by <a href="https://github.com/ChALkeR">Nikita Skovoroda</a>.</p>
+<h2>8.20.0</h2>
+<h1>Features</h1>
+<ul>
+<li>Added exports for the <code>PerMessageDeflate</code> class and utilities for the
+<code>Sec-WebSocket-Extensions</code> and <code>Sec-WebSocket-Protocol</code> headers (d3503c1f).</li>
+</ul>
+<h2>8.19.0</h2>
+<h1>Features</h1>
+<ul>
+<li>Added the <code>closeTimeout</code> option (<a href="https://redirect.github.com/websockets/ws/issues/2308">#2308</a>).</li>
+</ul>
+<h1>Bug fixes</h1>
+<ul>
+<li>Handled a forthcoming breaking change in Node.js core (19984854).</li>
+</ul>
+</blockquote>
+</details>
+<details>
+<summary>Commits</summary>
+<ul>
+<li><a href="https://github.com/websockets/ws/commit/5d9b316230ea931532a6671cc450f18c11edd02f"><code>5d9b316</code></a> [dist] 8.20.1</li>
+<li><a href="https://github.com/websockets/ws/commit/c0327ec15a54d701eb6ccefaa8bef328cfc03086"><code>c0327ec</code></a> [security] Fix uninitialized memory disclosure in <code>websocket.close()</code></li>
+<li><a href="https://github.com/websockets/ws/commit/ce2a3d62437995a47e6056d485a33d21b6a8f867"><code>ce2a3d6</code></a> [ci] Test on node 26</li>
+<li><a href="https://github.com/websockets/ws/commit/58e45b872bb0f35a3edd553c27e105300a4f5bd0"><code>58e45b8</code></a> [ci] Do not test on node 25</li>
+<li><a href="https://github.com/websockets/ws/commit/5f26c245231a4b018479a9269e8c3da4773fe42f"><code>5f26c24</code></a> [ci] Run the lint step on node 24</li>
+<li><a href="https://github.com/websockets/ws/commit/843925544e2f4cffe445e0179947f56d6c5b608f"><code>8439255</code></a> [dist] 8.20.0</li>
+<li><a href="https://github.com/websockets/ws/commit/d3503c1fd36a310985108f62b343bae18346ab67"><code>d3503c1</code></a> [minor] Export the <code>PerMessageDeflate</code> class and header utils</li>
+<li><a href="https://github.com/websockets/ws/commit/3ee5349a0b1580f6e1f347b59ec3371011bd8481"><code>3ee5349</code></a> [api] Convert the <code>isServer</code> and <code>maxPayload</code> parameters to options</li>
+<li><a href="https://github.com/websockets/ws/commit/91707b470ebd803aaa3fd1e896217740f39267d4"><code>91707b4</code></a> [doc] Add missing space</li>
+<li><a href="https://github.com/websockets/ws/commit/8b553192268810a83253e2a4a39ac16768e75bb3"><code>8b55319</code></a> [pkg] Update eslint to version 10.0.1</li>
+<li>Additional commits viewable in <a href="https://github.com/websockets/ws/compare/8.18.3...8.20.1">compare view</a></li>
+</ul>
+</details>
+<br />
+
+Dependabot will resolve any conflicts with this PR as long as you don't alter it yourself. You can also trigger a rebase manually by commenting `@dependabot rebase`.
+
+[//]: # (dependabot-automerge-start)
+[//]: # (dependabot-automerge-end)
+
+---
+
+<details>
+<summary>Dependabot commands and options</summary>
+<br />
+
+You can trigger Dependabot actions by commenting on this PR:
+- `@dependabot rebase` will rebase this PR
+- `@dependabot recreate` will recreate this PR, overwriting any edits that have been made to it
+- `@dependabot show <dependency name> ignore conditions` will show all of the ignore conditions of the specified dependency
+- `@dependabot ignore <dependency name> major version` will close this group update PR and stop Dependabot creating any more for the specific dependency's major version (unless you unignore this specific dependency's major version or upgrade to it yourself)
+- `@dependabot ignore <dependency name> minor version` will close this group update PR and stop Dependabot creating any more for the specific dependency's minor version (unless you unignore this specific dependency's minor version or upgrade to it yourself)
+- `@dependabot ignore <dependency name>` will close this group update PR and stop Dependabot creating any more for the specific dependency (unless you unignore this specific dependency or upgrade to it yourself)
+- `@dependabot unignore <dependency name>` will remove all of the ignore conditions of the specified dependency
+- `@dependabot unignore <dependency name> <ignore condition>` will remove the ignore condition of the specified dependency and ignore conditions
+You can disable automated security fix PRs for this repo from the [Security Alerts page](https://github.com/elizaOS/eliza/network/alerts).
+
+</details>
+
+<!-- greptile_comment -->
+
+<h3>Greptile Summary</h3>
+
+This is a Dependabot-generated security and maintenance dependency bump across two packages. Both updates address known security vulnerabilities.
+
+- **`uuid` 13.0.0 → 14.0.0** (`packages/cloud-services/operator`, devDependency): Major version bump that drops Node.js 18 support and fixes GHSA-w5hq-g745-h8pq (out-of-bounds writes in `v3()`, `v5()`, and `v6()` when an invalid `offset` is supplied). The operator package already declares `engines: node>=24.0.0`, so the Node.js requirement is satisfied.
+- **`ws` 8.18.3 → 8.20.1** (`plugins/plugin-elizacloud`, runtime dependency): Two-minor-version bump within v8 with no breaking changes; patches an uninitialized memory disclosure in `websocket.close()` when a `TypedArray` is passed as the `reason` argument.
+
+<h3>Confidence Score: 5/5</h3>
+
+Safe to merge — both updates are targeted security fixes with no breaking changes affecting the current runtime environment.
+
+The `uuid` bump is a devDependency-only change; the one breaking constraint (Node.js ≥ 20) is already exceeded by the operator's declared engine floor of 24. The `ws` bump stays within the 8.x semver range, carries no breaking changes, and closes an uninitialized memory disclosure. Neither change touches runtime logic, schema, or configuration.
+
+No files require special attention.
+
+<h3>Important Files Changed</h3>
+
+| Filename | Overview |
+|----------|----------|
+| packages/cloud-services/operator/package.json | Bumps `uuid` from 13.0.0 to 14.0.0 (devDependency only); the breaking node@20+ requirement is already satisfied by the package's `engines: node>=24.0.0` constraint, and the update includes a security fix for GHSA-w5hq-g745-h8pq. |
+| plugins/plugin-elizacloud/package.json | Bumps `ws` from 8.18.3 to 8.20.1 (runtime dependency); includes a security fix for an uninitialized memory disclosure in `websocket.close()` and stays within the 8.x semver range with no breaking changes. |
+
+</details>
+
+<h3>Flowchart</h3>
+
+```mermaid
+%%{init: {'theme': 'neutral'}}%%
+flowchart TD
+    A[Dependabot PR #7789] --> B[packages/cloud-services/operator]
+    A --> C[plugins/plugin-elizacloud]
+
+    B --> D["uuid devDependency\n13.0.0 → 14.0.0"]
+    D --> E["Fixes GHSA-w5hq-g745-h8pq\nout-of-bounds write in v3/v5/v6"]
+    D --> F["Breaking: requires node≥20\nOperator already requires node≥24 ✓"]
+
+    C --> G["ws dependency\n8.18.3 → 8.20.1"]
+    G --> H["Fixes uninitialized memory\ndisclosure in websocket.close()"]
+    G --> I["No breaking changes\n(within 8.x range) ✓"]
+```
+
+<sub>Reviews (1): Last reviewed commit: ["chore(deps): bump the npm\_and\_yarn group..."](https://github.com/elizaos/eliza/commit/840d9872021156834b35551134013cadfcdb7ac3) | [Re-trigger Greptile](https://app.greptile.com/api/retrigger?id=32716971)</sub>
+
+<!-- /greptile_comment -->b:T6f4,# ElizaOS Daily Summary: May 18, 2026
+
+Development on May 18 focused on hardening agent orchestration and expanding deployment infrastructure, highlighted by the introduction of a new CLI for domain-based deployments and improved cross-platform stability. The team also advanced benchmarking capabilities for SWE-bench and resolved critical Docker health check failures to ensure more reliable agent operations.
+
+## ✅ Completed Work
+
+**Agent Orchestration and Security**
+*   Hardened the orchestrator with new security gates and implemented connector capability detection to improve system reliability ([elizaos/eliza#7782](https://github.com/elizaos/eliza/pull/7782)).
+*   Redesigned sub-agent UX to eliminate conversation-memory pollution, resulting in cleaner and more stable agent interactions ([elizaos/eliza#7782](https://github.com/elizaos/eliza/pull/7782)).
+
+**Deployment and Platform Compatibility**
+*   Launched the `elizaos deploy` CLI command to facilitate domain-based app monetization ([elizaos/eliza#7786](https://github.com/elizaos/eliza/pull/7786)).
+*   Improved cross-platform stability by adding graceful Windows fallbacks for `plugin-lifeops` and resolving circular symlink issues in Docker containers ([elizaos/eliza#7788](https://github.com/elizaos/eliza/pull/7788), [elizaos/eliza#7783](https://github.com/elizaos/eliza/pull/7783)).
+
+**Benchmarking and CI/CD Enhancements**
+*   Integrated a side-by-side comparison harness for SWE-bench Lite to better evaluate agent performance ([elizaos/eliza#7785](https://github.com/elizaos/eliza/pull/7785)).
+*   Expanded CI/CD capabilities by enabling experimental arm64 support in the Snap matrix and preparing Flatpak manifests for offline builds ([elizaos/eliza#7787](https://github.com/elizaos/eliza/pull/7787)).0:{"buildId":"US8XLB_zHXYj_PVAECGcd","rsc":["$","$1","c",{"children":[["$","div",null,{"className":"container mx-auto px-6 py-8 md:px-8","children":["$","div",null,{"className":"mx-auto max-w-4xl","children":[["$","div",null,{"className":"mb-4 flex flex-col justify-between sm:flex-row","children":[["$","$L2",null,{"currentInterval":"day","currentDate":"2026-05-18"}],["$","$L3",null,{"metrics":{"date":"2026-05-18","interval":{"intervalStart":"$D2026-05-18T00:00:00.000Z","intervalEnd":"$D2026-05-19T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":5,"merged":6,"total":7},"issues":{"new":0,"closed":0,"total":0},"activeContributors":5,"codeChanges":{"additions":20951,"deletions":16560,"files":50,"commitCount":65},"topContributors":[{"username":"2-A-M","avatarUrl":"https://avatars.githubusercontent.com/u/96268540?u=39ce724443b5cd500fc28905812cdba16e3181a7&v=4","totalScore":189.83404420793312,"prScore":189.83404420793312,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"2-A-M: Drove significant project expansion and infrastructure improvements by implementing the elizaos deploy keel command (#7786) and conducting a comprehensive head-to-head performance comparison for swe-bench (#7785), while also enhancing cross-platform stability through Windows fallbacks (#7788) and expanded CI support (#7787). Their work today centered on a balanced mix of feature development, bug fixes, and refactoring efforts across 25 files."},{"username":"greptile-apps","avatarUrl":"https://avatars.githubusercontent.com/in/867647?v=4","totalScore":27,"prScore":0,"issueScore":0,"reviewScore":27,"commentScore":0,"summary":"greptile-apps: No activity today."}],"focusAreas":[{"area":"plugins/plugin-agent-orchestrator","count":17},{"area":"plugins/plugin-lifeops","count":7},{"area":"core","count":7},{"area":"elizaos","count":5},{"area":"benchmarks","count":3},{"area":"app-core","count":3},{"area":".github/workflows","count":2},{"area":"plugins/plugin-discord","count":2},{"area":"agent","count":1},{"area":"plugins/plugin-todos","count":1}],"topIssues":[],"topPullRequests":[{"id":"PR_kwDOMT5cIs7cczlv","title":"feat: connector capability detection + orchestrator hardening + sub-agent UX redesign","author":"standujar","number":7782,"body":"$4","repository":"elizaos/eliza","createdAt":"2026-05-17T22:25:26Z","mergedAt":"2026-05-18T23:35:13Z","additions":19783,"deletions":16505},{"id":"PR_kwDOMT5cIs7c07Su","title":"feat(swe-bench): elizaOS vs opencode head-to-head comparison harness","author":"2-A-M","number":7785,"body":"$5","repository":"elizaos/eliza","createdAt":"2026-05-18T21:10:45Z","mergedAt":"2026-05-18T23:29:28Z","additions":559,"deletions":0},{"id":"PR_kwDOMT5cIs7c1exp","title":"fix(plugin-lifeops): graceful Windows fallbacks for darwin-only features","author":"2-A-M","number":7788,"body":"$6","repository":"elizaos/eliza","createdAt":"2026-05-18T21:40:13Z","mergedAt":"2026-05-18T23:29:28Z","additions":223,"deletions":12},{"id":"PR_kwDOMT5cIs7c1AWA","title":"feat(elizaos): elizaos deploy keel command + design doc","author":"2-A-M","number":7786,"body":"$7","repository":"elizaos/eliza","createdAt":"2026-05-18T21:14:32Z","mergedAt":"2026-05-18T23:29:28Z","additions":205,"deletions":0},{"id":"PR_kwDOMT5cIs7c1Ddy","title":"ci(linux): enable snap arm64 experimental matrix + flatpak offline-mode prep","author":"2-A-M","number":7787,"body":"$8","repository":"elizaos/eliza","createdAt":"2026-05-18T21:17:02Z","mergedAt":"2026-05-18T23:29:28Z","additions":119,"deletions":10},{"id":"PR_kwDOMT5cIs7cc_zZ","title":"fix(docker): break circular symlink for app-core's jose / @node-rs/argon2 in pruner","author":"standujar","number":7783,"body":"$9","repository":"elizaos/eliza","createdAt":"2026-05-17T22:54:26Z","mergedAt":"2026-05-18T23:29:28Z","additions":62,"deletions":33},{"id":"PR_kwDOMT5cIs7c3QUc","title":"chore(deps): bump the npm_and_yarn group across 2 directories with 2 updates","author":"dependabot","number":7789,"body":"$a","repository":"elizaos/eliza","createdAt":"2026-05-18T23:45:47Z","mergedAt":"2026-05-19T00:00:46Z","additions":2,"deletions":2}],"detailedContributorSummaries":{"2-A-M":"2-A-M: Drove significant project expansion and infrastructure improvements by implementing the elizaos deploy keel command (#7786) and conducting a comprehensive head-to-head performance comparison for swe-bench (#7785), while also enhancing cross-platform stability through Windows fallbacks (#7788) and expanded CI support (#7787). Their work today centered on a balanced mix of feature development, bug fixes, and refactoring efforts across 25 files.","greptile-apps":"greptile-apps: No activity today."}},"summaryContent":"$b","className":"self-end sm:self-start"}]]}],"$Lc","$Ld","$Le"]}]}],["$Lf","$L10","$L11"],"$L12"]}],"loading":null,"isPartial":false}
+c:["$","div",null,{"className":"mb-6","children":["$","div",null,{"className":"flex items-center justify-between","children":[[["$","$L13",null,{"href":"/summary/day/2026-05-17","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left mr-2 h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"children":"Previous"}],false],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$L13",null,{"href":"/summary/day/2026-05-17","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Previous"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]],["$","div",null,{"className":"flex flex-col items-center","children":[["$","div",null,{"className":"text-sm font-medium text-gray-500","children":["Daily"," Summary"]}],["$","time",null,{"dateTime":"2026-05-18","className":"text-md font-bold","children":"May 18, 2026"}]]}],[["$","$L13",null,{"href":"/summary/day/2026-05-19","children":[false,["$","span",null,{"children":"Next"}],["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right ml-2 h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}]],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$L13",null,{"href":"/summary/day/2026-05-19","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Next"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]]]}]}]
+15:T3411,## Summary
+
+12 commits that ship connector capability detection (Sprint A), orchestrator self-healing + security gates, and a moltbot-inspired UX redesign for sub-agent narration that prevents conversation-memory pollution from poisoning future planner turns.
+
+## What changed
+
+**Core (Sprint A — connector capability detection)**
+- New `MessageConnectorCapability` enum + 4 handler types (`typingHandler`, `stopTypingHandler`, `createThreadHandler`, `postToThreadHandler`).
+- 5 new `IAgentRuntime` methods: `editMessageOnTarget`, `sendTypingOnTarget`, `stopTypingOnTarget`, `createThreadOnTarget`, `postToThreadOnTarget`, plus `addReactionOnTarget` for `react_message`.
+- `requireConnectorHook<K>` DRY helper (4 call sites would otherwise repeat the same lookup + guard).
+- Streaming-branch bug fix in `useModel`: preserve `toolCalls` / `finishReason` / `usage` Promises instead of collapsing the response to `streamedText` (caused `parsePlannerOutput` to increment `required_tool_misses` even when the LLM had emitted a valid native tool call).
+
+**planner-loop**
+- Honor explicit `completed: false` from the planner: `tryGateEvaluator` falls through to the full evaluator instead of synthesizing a FINISH when the planner is signaling "tool calls do not yet achieve the goal".
+- Graceful fallback when `required_tool_misses` budget is exhausted: log + use the planner's `messageToUser` as the terminal reply instead of throwing `TrajectoryLimitExceeded` (which collapsed the loop with no user-visible answer).
+
+**plugin-discord**
+- Declares 7 capabilities incl. `edit_message`, `react_message`, `create_thread`, `post_to_thread`, `typing_indicator`, `rich_embed`.
+- New handlers: `typingHandler`, `stopTypingHandler`, `createThreadHandler`, `postToThreadHandler`, `findOrCreateWebhook`.
+- `handleSendMessage` now returns a `Memory` carrying `metadata.platformMessageId` so callers can edit/react later.
+
+**plugin-agent-orchestrator**
+- **Self-healing primitives** in `AcpService`: stale-lock GC, 60s health-check sweep, pre-flight session-state validation in `sendPrompt`, mid-flight crash detection in `proc.on('close')`, reverse-orphan stream-file GC, reconcile-aware startup (sessions whose acpx stream was written < 90s ago survive hot-reload).
+- **Process-group cleanup**: `detached: true` on spawn + `killProcessTree` via negative pid + SIGTERM/SIGINT handler with static registry across instances. No more `claude-agent-acp` zombies after parent exit.
+- **Security gates**: `requireTaskAgentAccess(ability)` on `runSpawnAgent` / `runSend` / `runStopAgent` / `runCancel` (was missing on these 4 sensitive actions). `ELIZA_ADMIN_ENTITY_ID` already supported by core roles.
+- **TASK_AUDIT NDJSON** at `~/.eliza/plugin-acp/audit.ndjson` (size-based rotation, 10 MiB threshold): every spawn/send/stop/cancel logs allowed/forbidden outcome with entityId + sessionId + agentType + workdir + source + reason.
+- **Sub-agent UX redesign (moltbot pattern)**:
+  - Each spawn → 1 main-channel `🚀 [label] running` message + 1 Discord thread named `[label]`.
+  - Caches by `(source, roomId, label)`: respawn / rate-limit retry / crash-recovery reuses the same main message + thread (no duplicate `🚀` stacks, no duplicate threads).
+  - LRU eviction with `LABEL_CACHE_LIMIT = 200` bounds runtime growth.
+  - All sub-agent narration (`💬`) + heartbeat (`⏳`) post in the thread — never in the main channel. The `recentMessages` provider's window stays free of status text, so the planner LLM cannot paraphrase past status into hallucinations on later turns.
+  - `runtime.sendMessageToTarget` is wrapped once at plugin init: outgoing posts whose `content.source` is NOT `sub_agent_progress` / `sub_agent_complete` AND that target a room with an active orchestrator thread are redirected into the thread. Cross-platform — capability-gated on `post_to_thread`.
+  - Capability fallback ladder: thread → edit-in-place → fresh send. Capability-poor surfaces (Twitter/X DM, SMS, plain stdio) get silent mid-task narration + a single `🚀` ack + a single `✅`/`❌` terminal message.
+  - Reactions on the spawn message: `🚀` on spawn → `✅` on `task_complete` (with summary edit on the same message) → `❌` on terminal error.
+  - Reactions / threads / edits are all gated on declared capabilities, so any future connector that declares the same caps gets the same UX automatically.
+- **Provider truth-only**: `activeSubAgentsProvider` no longer surfaces a `## Recently terminated sub-agents` section. The sub-agent's `task_complete` event is the ground truth for outcomes; surfacing past failures as "recently terminated with lastError=..." was letting the planner generalize them as predictors for new spawns.
+- **Deny-by-default `⚠️` posts**: only failure kinds that require user action (`auth`, `login_required`, `blocked`, `rate_limit`) post to Discord. Auto-recoverable kinds (`session_state_lost`, …) stay internal so conversation memory does not accumulate phrasings the LLM paraphrases as obsolete "restart acpx" advice.
+
+**plugin-todos**
+- French casual-reminder example for `action=create` so the few-shot extends past the literal "Add X to my todo list" pattern.
+
+## Test plan
+
+- [ ] `bun run build` clean for `packages/core` + `plugins/plugin-agent-orchestrator` + `plugins/plugin-discord`.
+- [ ] New unit tests: `sanitize-planner-text.test.ts` (12), `scan-and-unlink-older-than.test.ts` (4), `strip-progress-label-prefix.test.ts` (8) — all pass under `bun test`.
+- [ ] Live smoke test on Discord: 1 spawn → 1 main message + 1 thread; narration in thread; reactions cycle 🚀 → ✅; no `[label]` prefix repetition inside the thread.
+- [ ] Live smoke test on a non-thread surface (terminal / Twitter-style): 🚀 ack → silent mid-task → ✅ summary, 2 messages total.
+
+## Known follow-ups (out of scope for this PR)
+
+- `suppressPlannerReply` flag on `TASKS_SPAWN_AGENT.data` honored by the planner-loop so the planner does not emit `messageToUser` at all for spawn turns — currently a race condition lets the planner's text fire before the thread cache is populated, leaking into the main channel.
+- `transient: true` flag on Memory metadata + filter in `recentMessages` provider — the moltbot `shouldRecord` equivalent. Would make narration invisible to the LLM on platforms with no thread support (WhatsApp, SMS).
+
+<!-- greptile_comment -->
+
+<h3>Greptile Summary</h3>
+
+This PR ships three interlocking feature areas: connector capability detection (Sprint A), orchestrator self-healing and security gates, and a moltbot-inspired sub-agent UX redesign that routes all narration into per-session Discord threads so the planner's `recentMessages` window stays clean.
+
+- **Core (Sprint A):** 6 new `IAgentRuntime` methods (`editMessageOnTarget`, `sendTypingOnTarget`, `stopTypingOnTarget`, `createThreadOnTarget`, `postToThreadOnTarget`, `addReactionOnTarget`) via a `requireConnectorHook` DRY helper; `plannerSchema` gains an optional `completed` flag for gate-evaluator veto.
+- **`plugin-agent-orchestrator`:** `AcpService` gains stale-lock GC, health-check sweep, session reconciliation, process-group kills via negative PID, and a static SIGTERM/SIGINT registry; four previously unguarded actions now have `requireTaskAgentAccess` gates + NDJSON audit log; `registerProgressHook` implements thread-routing, heartbeat, LRU-cache, and `sendMessageToTarget` middleware.
+- **`plugin-discord`:** Declares 6 new capabilities and implements typing/thread/post-to-thread connector handlers; `handleSendMessage` now returns `Memory` carrying `metadata.platformMessageId`.
+
+<h3>Confidence Score: 3/5</h3>
+
+The core and action-security changes are solid; the orchestrator's registerProgressHook is the most complex area and monkey-patches sendMessageToTarget in a way that can misdirect post-completion planner replies into closed Discord threads.
+
+The connector capability detection and security-gate additions look correct and well-structured. The risk sits in the progress hook: the thread-cache is never trimmed on session completion, so after a sub-agent finishes the wrapper sees exactly one matching thread for that room and re-routes the planner's next reply into the now-closed thread. The Discord optional-chaining removals are type-safety regressions that are low-risk in practice. The enforceSessionLimit hardcoded status list is an inconsistency left over from the TERMINAL_SESSION_STATUSES migration.
+
+plugins/plugin-agent-orchestrator/src/index.ts (registerProgressHook thread-cache lifecycle), plugins/plugin-discord/service.ts (optional-chaining removal), plugins/plugin-agent-orchestrator/src/services/acp-service.ts (enforceSessionLimit status list)
+
+<h3>Important Files Changed</h3>
+
+
+
+
+| Filename | Overview |
+|----------|----------|
+| plugins/plugin-agent-orchestrator/src/index.ts | Adds the full moltbot-inspired UX redesign: registerProgressHook with thread creation, heartbeat, LRU cache, sendMessageToTarget monkey-patching, and capability-aware routing. Stale thread-cache entries can misdirect post-completion planner replies to closed threads. |
+| plugins/plugin-agent-orchestrator/src/services/acp-service.ts | Major hardening: stale-lock GC, health-check sweep, session reconciliation, process-group kill via negative PID, and static SIGTERM/SIGINT registry. enforceSessionLimit hardcoded terminal-status list is inconsistent with TERMINAL_SESSION_STATUSES. |
+| plugins/plugin-discord/service.ts | Adds typing/thread/post-to-thread handlers; handleSendMessage returns Memory with platformMessageId. Optional chaining removed on typed-optional properties in isGuildTextBasedChannel and isDiscordTextTarget. |
+| packages/core/src/runtime/planner-loop.ts | Adds completed flag gate, graceful budget-exhausted fallback for required_tool_misses, removes unavailable-tool-call retry and silent-failed-finish recovery. Sound for JSON-output models. |
+| packages/core/src/types/runtime.ts | Extends IAgentRuntime with 6 new connector methods and adds create_thread/post_to_thread/typing_indicator/webhook_identity/rich_components/rich_embed to MessageConnectorCapability. |
+| plugins/plugin-agent-orchestrator/src/actions/tasks.ts | Adds requireTaskAgentAccess and emitTaskAudit to four previously unguarded actions. Removes swarm-room metadata helpers and simplifies session metadata. |
+| plugins/plugin-agent-orchestrator/src/services/audit.ts | New NDJSON audit log with 10 MiB size-based rotation. Best-effort emission never blocks the audited action. |
+| plugins/plugin-agent-orchestrator/src/evaluators/sub-agent-completion.ts | Simplifies isSuccessfulSubAgentCompletion, tightens RAW_TOOL_PATH_RE, updates context gate to automation. |
+| plugins/plugin-agent-orchestrator/src/providers/active-sub-agents.ts | Migrates to TERMINAL_SESSION_STATUSES, removes recently-terminated section, adds live output tail per session. |
+
+</details>
+
+
+
+<h3>Sequence Diagram</h3>
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant PlannerLoop
+    participant TasksAction
+    participant AcpService
+    participant ProgressHook
+    participant Discord
+
+    User->>PlannerLoop: message
+    PlannerLoop->>TasksAction: TASKS_SPAWN_AGENT (security gate)
+    TasksAction->>AcpService: spawnSession()
+    AcpService-->>TasksAction: sessionId
+    TasksAction->>ProgressHook: emitTaskAudit(spawn_agent, allowed)
+
+    AcpService->>ProgressHook: onSessionEvent(ready)
+    ProgressHook->>Discord: sendMessageToTarget 🚀 [label] running
+    Discord-->>ProgressHook: "Memory { platformMessageId }"
+    ProgressHook->>Discord: createThreadOnTarget(parentMessageId)
+    ProgressHook->>Discord: addReactionOnTarget(🚀)
+
+    loop Sub-agent running
+        AcpService->>ProgressHook: onSessionEvent(message/tool_running)
+        ProgressHook->>Discord: postToThreadOnTarget(thread, narration)
+    end
+
+    AcpService->>ProgressHook: onSessionEvent(task_complete)
+    ProgressHook->>Discord: editMessageOnTarget(mainMsgId, ✅ summary)
+    ProgressHook->>Discord: addReactionOnTarget(✅)
+    ProgressHook->>PlannerLoop: subAgentCompletionResponseEvaluator
+    PlannerLoop->>User: final reply
+```
+
+<!-- greptile_failed_comments -->
+<details><summary><h3>Comments Outside Diff (1)</h3></summary>
+
+1. `plugins/plugin-agent-orchestrator/src/services/acp-service.ts`, line 1234-1237 ([link](https://github.com/elizaos/eliza/blob/0bf4c00724205a52a127816e907d34424300b0a7/plugins/plugin-agent-orchestrator/src/services/acp-service.ts#L1234-L1237)) 
+
+   <a href="#"><img alt="P2" src="https://greptile-static-assets.s3.amazonaws.com/badges/p2.svg?v=8" align="top"></a> **`enforceSessionLimit` not migrated to `TERMINAL_SESSION_STATUSES`**
+
+   `TERMINAL_SESSION_STATUSES` is the shared source of truth introduced in this PR. `enforceSessionLimit` still uses an inline hardcoded list that omits `"error"`, so a session that ends up with that status is counted as active and consumes a slot unnecessarily.
+
+</details>
+
+<!-- /greptile_failed_comments -->
+
+<sub>Reviews (1): Last reviewed commit: ["feat(workdir): auto-detect by convention..."](https://github.com/elizaos/eliza/commit/0bf4c00724205a52a127816e907d34424300b0a7) | [Re-trigger Greptile](https://app.greptile.com/api/retrigger?id=32534841)</sub>
+
+> Greptile also left **2 inline comments** on this PR.
+
+<!-- /greptile_comment -->16:T1992,## What
+
+Adds `packages/benchmarks/swe_bench/harness/comparison.py` — a side-by-side comparison runner that grades the **same** SWE-bench Lite instance through two paths and produces a single JSON report with per-instance patches, resolve status, time, and a winner field.
+
+- **Path A (elizaOS)**: reuses `swe_bench.cli._run_instance` — same TS bridge, same prompt, same diff extractor. Number changes there carry over automatically.
+- **Path B (opencode)**: clones `<repo>.git`, `git checkout <base_commit>`, runs `opencode run "<task>"` in the workdir, captures `git diff`. Both paths feed the same `SWEBenchEvaluator.evaluate_patch` so grading is identical.
+
+## Why
+
+Closes the "is elizaOS on par at coding with opencode?" question with measurable apples-to-apples. The orchestrator's `buildOpencodeSpawnConfig` only adds routing wiring, so Path B bypasses the orchestrator to keep variance attributable to opencode itself (not routing).
+
+## Schema (`comparison_<ts>.json`)
+
+```jsonc
+{
+  "schema_version": 1,
+  "totals": { "instances", "elizaos_resolved", "opencode_resolved",
+              "elizaos_wins", "opencode_wins", "ties_resolved", "ties_failed" },
+  "records": [{
+    "instance_id", "repo", "base_commit",
+    "path_a": { "path": "elizaos", "status", "patch", "resolved", "time_s",
+                "patch_status", "tests_passed", "tests_failed", "error" },
+    "path_b": { "path": "opencode", ... same shape ... },
+    "winner": "elizaos | opencode | tie_resolved | tie_failed"
+  }]
+}
+```
+
+`status` ∈ `resolved | failed | no_patch | error | skipped_opencode_missing | not_run_yet`.
+
+## Run
+
+```bash
+# schema check, zero deps
+python -m benchmarks.swe_bench.harness.comparison --n 2 --stub
+
+# real N=2 smoke (needs docker + eliza-adapter + opencode on PATH)
+python -m benchmarks.swe_bench.harness.comparison --n 2
+```
+
+## What is stubbed
+
+`harness/fixtures/comparison_smoke.json` contains 2 placeholder records (`status: "not_run_yet"`) so the schema is validatable without docker. Real run output replaces it.
+
+## Verification
+
+- `python -c "import ast; ast.parse(open('harness/comparison.py').read())"` — clean.
+- `json.load(open('harness/fixtures/comparison_smoke.json'))` — schema matches.
+
+## Caveats
+
+- For a fair head-to-head, the caller pins both sides to the same model before the real run. The harness sets only `OPENCODE_DISABLE_AUTOUPDATE=1`; the rest is the caller's opencode config.
+- Sequential by instance — add `--parallel` later if cost allows.
+- If `opencode` isn't on PATH, Path B emits `skipped_opencode_missing` instead of crashing.
+
+<!-- greptile_comment -->
+
+<h3>Greptile Summary</h3>
+
+This PR adds `harness/comparison.py`, a new benchmarking runner that evaluates the same SWE-bench Lite instances through two code-generation paths (elizaOS and opencode) and emits a unified JSON report. It also adds a README, a package `__init__.py`, and a stub fixture for schema validation.
+
+- **Path B (opencode)** clones each repo at `base_commit` into a sandbox, invokes `opencode run \"<task>\"`, and captures the working-tree diff; both paths share the same `SWEBenchEvaluator` so grading is consistent.
+- **`_run_path_a` has no exception guard** unlike `_run_path_b_instance` — any uncaught error from the eliza bridge propagates to the main loop and aborts the run, discarding all previously collected records since the output file is written only after the loop completes.
+- **Intermediate persistence is absent** — for long multi-instance runs a mid-run failure (network error, eliza server crash, `KeyboardInterrupt`) means total data loss; writing a partial report in the `finally` block would mitigate this.
+
+<h3>Confidence Score: 3/5</h3>
+
+The harness is safe for short stub runs but will silently lose all collected data in any real multi-instance run that encounters an error mid-loop.
+
+The main loop writes its output file only after completing without error. `_run_path_a` propagates exceptions instead of catching them (unlike the symmetrically structured `_run_path_b_instance`), so a single eliza-server failure mid-run aborts the loop and discards every record collected so far. These two issues compound each other for real N>2 runs.
+
+packages/benchmarks/swe_bench/harness/comparison.py — specifically `_run_path_a` (no exception guard) and the post-loop output write in `_run()`
+
+<h3>Important Files Changed</h3>
+
+| Filename | Overview |
+|----------|----------|
+| packages/benchmarks/swe_bench/harness/comparison.py | New comparison harness; `_run_path_a` lacks exception handling unlike its Path B counterpart, and the output file is only written after the full loop, meaning any mid-run failure causes complete data loss |
+| packages/benchmarks/swe_bench/README.md | New README documenting the comparison harness; accurate and matches the implementation |
+| packages/benchmarks/swe_bench/harness/__init__.py | Minimal package init for the harness subpackage; no issues |
+| packages/benchmarks/swe_bench/harness/fixtures/comparison_smoke.json | Placeholder fixture with two stub records; schema matches the code's output format |
+
+</details>
+
+<h3>Sequence Diagram</h3>
+
+```mermaid
+sequenceDiagram
+    participant CLI as comparison.py main()
+    participant DS as SWEBenchDataset
+    participant EA as ElizaServerManager
+    participant PA as _run_path_a
+    participant PB as _run_path_b_instance
+    participant GH as GitHub (git clone)
+    participant OC as opencode CLI
+    participant EV as SWEBenchEvaluator
+
+    CLI->>DS: load() SWE-bench Lite
+    CLI->>EA: start() eliza bridge
+    loop for each instance
+        CLI->>PA: run instance (elizaOS path)
+        PA->>EV: evaluate_patch(instance, diff)
+        EV-->>PA: PathResult
+        PA-->>CLI: PathResult (or exception - no guard)
+
+        CLI->>PB: run instance (opencode path)
+        PB->>GH: git clone + checkout base_commit
+        GH-->>PB: workdir
+        PB->>OC: opencode run task
+        OC-->>PB: working-tree changes
+        PB->>EV: git diff to evaluate_patch
+        EV-->>PB: PathResult
+        PB-->>CLI: PathResult (always, try/except)
+
+        CLI->>CLI: _decide_winner(a, b)
+    end
+    CLI->>EA: stop()
+    CLI->>CLI: write comparison_ts.json (only on success)
+```
+
+<sub>Reviews (2): Last reviewed commit: ["fix(swe-bench): reap git + opencode subp..."](https://github.com/elizaos/eliza/commit/f348026d0fb35c7d7da116c50728b2474e20d85f) | [Re-trigger Greptile](https://app.greptile.com/api/retrigger?id=32695163)</sub>
+
+> Greptile also left **2 inline comments** on this PR.
+
+<!-- /greptile_comment -->17:T2187,## What
+
+Adds graceful Windows fallbacks for the macOS-only feature surface in `plugin-lifeops` so the agent never plans a darwin-only action on non-darwin platforms. Today, Windows users see "macOS-only" errors mid-execution when the planner picks `SCREEN_TIME`, the iMessage connector subaction, or apple-reminders flows. After this PR, the planner doesn't see those actions on non-darwin, and any direct invocation returns a typed `FeatureResult` with `reason: "not_supported"` cleanly.
+
+## Files
+
+- `plugins/plugin-lifeops/src/platform/host.ts` (new) — `isDarwin()` + `darwinUnavailableActionResult({ actionName, connector?, subaction?, feature })` shared helpers. Centralized so plugin registration, action handlers, and connector dispatchers all read the same predicate.
+- `plugins/plugin-lifeops/src/platform/index.ts` — re-exports `host.ts`.
+- `plugins/plugin-lifeops/src/plugin.ts` — `ownerScreenTimeAction` (the owner-surface umbrella) is now excluded from the plugin's actions array on non-darwin. The planner / `enabled_skills` provider never sees it on Windows/Linux.
+- `plugins/plugin-lifeops/src/actions/connector.ts` — iMessage subaction short-circuits before touching the macOS bridge; `imessage` is dropped from `listKnownConnectorKinds` on non-darwin so the planner doesn't pick it as a valid choice.
+- `plugins/plugin-lifeops/src/actions/screen-time.ts` — uses the shared `isDarwin()` helper instead of the local check.
+- `plugins/plugin-lifeops/src/lifeops/apple-reminders.ts` — 3 callsites (`createNativeAppleReminderLikeItem`, `update…`, `delete…`) gated by the shared helper.
+- `plugins/plugin-lifeops/src/__tests__/platform-guards.test.ts` (new) — 8 vitest tests covering darwin/win32/linux shapes for the helper + each guarded callsite.
+
+## Why
+
+This is a real user-visible polish for the LifeOps surface on Windows. Today, a Windows user asking "what's my screen time" gets the planner trying `SCREEN_TIME`, then a mid-execution error like _"Activity tracking is macOS-only. No data available on this platform."_ With this PR, the planner doesn't see `SCREEN_TIME` on non-darwin so it picks a different path, and any direct invocation gets a typed fallback instead of a thrown error.
+
+## Verification
+
+`bunx vitest run src/__tests__/platform-guards.test.ts` — **8/8 pass** (Test Files 1 passed, Tests 8 passed).
+
+```
+✓ platform/host helper
+  ✓ isDarwin returns true on darwin
+  ✓ isDarwin returns false on win32
+  ✓ isDarwin returns false on linux
+  ✓ darwinUnavailableActionResult returns the PLATFORM_UNSUPPORTED shape
+✓ platform guards — apple reminders bridge
+  ✓ createNativeAppleReminderLikeItem returns not_supported on win32
+  ✓ updateNativeAppleReminderLikeItem returns not_supported on win32
+  ✓ deleteNativeAppleReminderLikeItem returns not_supported on win32
+✓ platform guards — website blocker engine
+  ✓ reports unavailable when the hosts file path is missing on win32
+```
+
+## Design notes
+
+- **Kept upstream's typed `FeatureResult` shape** (`{ ok: false, reason: "not_supported", platform }`) rather than regressing to a looser `{ ok: false, error, skippedReason }` shape. Tests assert on the typed shape.
+- **Gated the umbrella, not the inner action.** `ownerScreenTimeAction` is what gets promoted via `promoteSubactionsToActions`, so hiding the umbrella is the correct surface for planner suppression — `screenTimeAction` itself doesn't appear in `plugin.actions`.
+- **Defense-in-depth retained.** The existing `process.platform !== "darwin"` check inside `loadNativeReminderBridge` is kept — the outer `isDarwin()` short-circuits before it runs, but it remains a safety net for any future callsite that bypasses the outer guard.
+
+## Risk
+
+Low. No new dependencies. All changes are additive (helper + conditional skips). The darwin behavior is preserved exactly — only non-darwin behavior changes from "mid-execution error" to "typed unavailable result + planner doesn't see the action".
+
+<!-- greptile_comment -->
+
+<h3>Greptile Summary</h3>
+
+This PR adds graceful Windows/Linux fallbacks for the macOS-only feature surface in `plugin-lifeops`, so the planner never sees or executes darwin-only actions on non-darwin hosts. All changes are additive — existing darwin behavior is completely preserved.
+
+- **`platform/host.ts`** (new): centralizes `isDarwin()` and `darwinUnavailableActionResult()` so every guard in the plugin reads the same predicate, replacing scattered `process.platform === "darwin"` literals in `screen-time.ts`, `apple-reminders.ts`, and `connector.ts`.
+- **`plugin.ts`**: hides the `ownerScreenTimeAction` umbrella from the planner's action list on non-darwin at registration time, so the planner never considers `SCREEN_TIME` on Windows/Linux.
+- **`connector.ts`**: removes `imessage` from the planner-visible connector list and adds an early-return guard in `dispatchIMessage` for defense-in-depth; new test suite covers the shared helper and all three apple-reminders callsites.
+
+<h3>Confidence Score: 5/5</h3>
+
+Safe to merge — all changes are purely additive platform guards that leave darwin behavior untouched.
+
+The darwin path is a straightforward pass-through with no modifications. Non-darwin paths now return typed fallbacks or hide actions at registration time. The new test suite correctly uses `vi.resetModules()` in `beforeEach` to isolate module-level platform captures between tests. No new dependencies, no schema changes, and no logic changes for existing darwin users.
+
+No files require special attention. The two observations are about `feature` not being surfaced in the structured `data` object of `darwinUnavailableActionResult`, and registry-contributed connector kinds not being filtered alongside the hardcoded list — both are minor design gaps that do not affect correctness on darwin.
+
+<h3>Important Files Changed</h3>
+
+| Filename | Overview |
+|----------|----------|
+| plugins/plugin-lifeops/src/platform/host.ts | New module exposing `isDarwin()` and `darwinUnavailableActionResult()`. Clean and minimal; `feature` arg is accepted but omitted from the returned `data` object, only appearing in the human-readable `text`. |
+| plugins/plugin-lifeops/src/platform/index.ts | Trivial re-export of `host.ts` alongside the existing `lifeops-github.js` exports. No issues. |
+| plugins/plugin-lifeops/src/plugin.ts | Introduces `platformGatedActionUmbrellas` evaluated at module-load time to suppress `ownerScreenTimeAction` on non-darwin; safe since `process.platform` is constant at runtime. |
+| plugins/plugin-lifeops/src/actions/connector.ts | Adds a platform guard in `dispatchIMessage` and filters `imessage` from `VERBOSE_DISPATCHER_KINDS` on non-darwin; registry-sourced connector kinds are not filtered, which is a minor gap covered by the defense-in-depth guard. |
+| plugins/plugin-lifeops/src/actions/screen-time.ts | Replaces the local `isSupportedPlatform()` predicate with the shared `isDarwin()` helper; existing behavior is preserved exactly. |
+| plugins/plugin-lifeops/src/lifeops/apple-reminders.ts | Three `process.platform !== "darwin"` checks replaced with `!isDarwin()`, preserving the existing `FeatureResult` shape and logic; no behavioral change on darwin. |
+| plugins/plugin-lifeops/src/__tests__/platform-guards.test.ts | 8 vitest tests covering `isDarwin`, `darwinUnavailableActionResult`, and the three apple-reminders guards. `vi.resetModules()` in `beforeEach` correctly future-proofs against eager platform captures; `restorePlatform()` in per-describe `afterEach` keeps tests isolated. |
+
+</details>
+
+<h3>Flowchart</h3>
+
+```mermaid
+%%{init: {'theme': 'neutral'}}%%
+flowchart TD
+    A[Agent / Planner request] --> B{isDarwin?}
+
+    B -- darwin --> C[Full action surface visible]
+    C --> D[SCREEN_TIME / iMessage / Apple Reminders]
+
+    B -- non-darwin --> E[Filtered action surface]
+    E --> F[ownerScreenTimeAction hidden at registration]
+    E --> G[imessage removed from listKnownConnectorKinds]
+    E --> H[Apple Reminders: early FeatureResult not_supported]
+
+    G --> I{Direct CONNECTOR/imessage call?}
+    I -- yes --> J[dispatchIMessage guard\ndarwinUnavailableActionResult\nActionResult PLATFORM_UNSUPPORTED]
+    I -- no --> K[Planner picks different connector]
+
+    F --> L[Planner picks different action]
+```
+
+<sub>Reviews (2): Last reviewed commit: ["style(plugin-lifeops): drop dead isApple..."](https://github.com/elizaos/eliza/commit/545bddc528730802f5010c98c53c5916398bcff7) | [Re-trigger Greptile](https://app.greptile.com/api/retrigger?id=32700320)</sub>
+
+<!-- /greptile_comment -->18:T1a0c,## What
+
+Lays the keel for `elizaos deploy` so creators wiring monetized apps to `.com` domains have a stable CLI surface + agreed design while the real implementation lands.
+
+```bash
+elizaos deploy --dry-run --domain test.example
+```
+
+Output:
+
+```
+elizaos deploy — dry run
+Planned sequence (no network calls performed):
+
+   1. auth check
+       Load credentials, GET /api/v1/me, abort on 401.
+   2. app lookup
+       Resolve app-id (<resolved from .elizaos/template.json>).
+   3. build
+       Run 'bun run build' in <cwd>.
+   4. upload
+       Push built artifact to the app's linked GitHub repo.
+   5. register app deploy
+       POST /api/v1/apps/<id>/deploy → status=building.
+   6. attach domain
+       POST /api/v1/apps/<id>/domains { domain: "test.example" } and surface DNS TXT record.
+   7. poll status
+       GET /api/v1/apps/<id>/deploy/status every 5s until deployed|failed (10min cap).
+   8. print URL
+       URL: https://test.example  (+ apps.elizacloud.ai subdomain).
+```
+
+## Files
+
+- `packages/elizaos/src/commands/deploy.ts` (new) — keel handler. Validates `--domain` against a hostname regex; in `--dry-run` prints the planned 8-step sequence + exit 0; bare invocation prints a stub message + exit 1 pointing to the design doc.
+- `packages/elizaos/src/commands/DEPLOY_DESIGN.md` (new) — full design: command surface, auth, 8-step sequence, Vercel routing, error modes, deferrals, open questions.
+- `packages/elizaos/src/cli.ts` — wires the deploy command into commander with `--app-id`, `--domain`, `--dry-run`, `--verbose`.
+- `packages/elizaos/src/commands/index.ts` — re-exports `deploy`.
+- `packages/elizaos/src/types.ts` — adds `DeployOptions`.
+
+## What is intentionally NOT in this PR
+
+- The real Vercel build/upload/poll loop. The backing service `cloud/packages/lib/services/vercel-deployments.ts` and the custom-domain attach API (`POST /api/v1/apps/[id]/domains`) already exist; what's still missing is `POST /api/v1/apps/[id]/deploy` + `…/deploy/status`. These land in the follow-up. See `DEPLOY_DESIGN.md` §Open questions.
+- Credentials file shape. Assumed `~/.elizaos/credentials.json` for the design doc; not actually read or written by this keel. Pick canonical path before first-run prompt logic.
+- 1:N domain support (one `--domain` per invocation today; `app_domains` is 1:N upstream).
+
+## Verification
+
+- `bunx tsc -p tsconfig.json --noEmit` clean on `packages/elizaos` (verified on the source branch before retargeting onto `develop`).
+- Built `dist/cli.js` via tsc, then ran the 4 keel scenarios:
+  - `node dist/cli.js deploy --dry-run --domain test.example` → 8-step plan, exit 0
+  - `node dist/cli.js deploy` → stub message, exit 1
+  - `node dist/cli.js deploy --dry-run --domain "not a domain"` → validation error, exit 1
+  - `node dist/cli.js --help` → `deploy` appears alongside `create`/`upgrade`/`info`
+
+## Why a keel and not the real thing
+
+`elizaos deploy` is the difference between "creators can ship their monetized app to a `.com`" and "they can't". Locking the command surface + design first means the follow-up PR is mechanical and reviewable — and unblocks downstream design work (onboarding flow, dashboards) that needs to point at the right command today.
+
+<!-- greptile_comment -->
+
+<h3>Greptile Summary</h3>
+
+This PR adds the `elizaos deploy` command as a "keel" — registering the full flag surface (`--app-id`, `--domain`, `--dry-run`, `--verbose`) and printing a planned 8-step deploy sequence in `--dry-run` mode, while stubbing the real implementation with `exit 1` pending a follow-up PR.
+
+- **`deploy.ts`**: validates `--domain` with a regex matching the server-side contract, renders the dry-run plan to stdout, and exits cleanly; non-dry-run path prints a link to the design doc and exits 1.
+- **`DEPLOY_DESIGN.md`**: documents the full command surface, auth flow, Vercel integration strategy, error modes, and open questions for the follow-up implementation PR.
+- **`cli.ts` / `index.ts` / `types.ts`**: standard wiring — Commander subcommand registration, re-export, and `DeployOptions` interface additions.
+
+<h3>Confidence Score: 5/5</h3>
+
+This PR is safe to merge; it adds no real network calls, no auth logic, and no filesystem writes — only flag registration and dry-run output printing.
+
+The change is strictly additive: a new subcommand that either prints a plan and exits 0 (dry-run) or prints a stub message and exits 1 (bare invocation). No existing command paths are touched, no credentials are read or written, and the domain regex matches the documented server-side contract. The only nits are cosmetic (floating branch links).
+
+No files require special attention — deploy.ts is the only substantive addition and its logic is trivially simple.
+
+<h3>Important Files Changed</h3>
+
+| Filename | Overview |
+|----------|----------|
+| packages/elizaos/src/commands/deploy.ts | New keel handler for the deploy command; validates domain regex, prints 8-step dry-run plan, and stubs non-dry-run with exit 1. Floating develop-branch links are the main cosmetic concern. |
+| packages/elizaos/src/cli.ts | Wires deploy subcommand into Commander with four options; straightforward registration consistent with existing commands. |
+| packages/elizaos/src/types.ts | Adds DeployOptions interface; fields align exactly with the CLI option definitions. |
+| packages/elizaos/src/commands/index.ts | Re-exports deploy alongside existing commands; no issues. |
+| packages/elizaos/src/commands/DEPLOY_DESIGN.md | Design doc covering the 8-step deploy sequence, auth, Vercel integration, error modes, and open questions; internal documentation only. |
+
+</details>
+
+<h3>Flowchart</h3>
+
+```mermaid
+%%{init: {'theme': 'neutral'}}%%
+flowchart TD
+    A([elizaos deploy]) --> B{--domain set?}
+    B -->|Yes| C{Domain valid?}
+    C -->|No| D[console.error invalid domain\nexit 1]
+    C -->|Yes| E{--dry-run?}
+    B -->|No| E
+    E -->|Yes| F[buildPlan\nappId + domain + cwd]
+    F --> G[printPlan\n8 steps to stdout]
+    G --> H[exit 0]
+    E -->|No| I[console.error stub msg\nexit 1]
+
+    subgraph Planned Steps dry-run only
+        S1[1. auth check]
+        S2[2. app lookup]
+        S3[3. build]
+        S4[4. upload]
+        S5[5. register deploy]
+        S6[6. attach domain]
+        S7[7. poll status]
+        S8[8. print URL]
+        S1 --> S2 --> S3 --> S4 --> S5 --> S6 --> S7 --> S8
+    end
+```
+
+<sub>Reviews (2): Last reviewed commit: ["fix(elizaos): point deploy doc pointer a..."](https://github.com/elizaos/eliza/commit/0ba44fc7a3e2b6b6a69b6b40aeec6d70462133b2) | [Re-trigger Greptile](https://app.greptile.com/api/retrigger?id=32695822)</sub>
+
+<!-- /greptile_comment -->19:T1ba6,## What
+
+Two small linux-packaging polish items: enable arm64 in the snap CI matrix as an experimental leg, and prep the Flatpak manifest + CI for Flathub's offline-only build environment.
+
+### Item A — Snap arm64 (experimental matrix entry)
+
+`.github/workflows/snap-build-test.yml`:
+- Adds an `arm64` matrix entry on `ubuntu-24.04-arm` with `experimental: true`.
+- Adds `continue-on-error: ${{ matrix.experimental }}` at the job level so an arm64 flake never blocks an amd64 PR.
+- Sets `experimental: false` on amd64 so it remains the gating leg.
+
+`packages/app-core/packaging/snap/snapcraft.yaml` is **not** touched — it already lists `arm64` in `architectures:` (the previous "commented out" note in the manifest was already cleaned up by an earlier commit). This PR just lights up the CI leg.
+
+Reason `continue-on-error` is on: GitHub's `ubuntu-24.04-arm` runners are in public preview for public repos — free but queue-prone. Promote `experimental: false` once ARM goes GA.
+
+### Item B — Flatpak offline-mode prep (Flathub readiness)
+
+The current `ai.elizaos.App.yml` build invokes `npm install -g elizaos` and relies on `--share=network` build-args. Flathub's submission infrastructure forbids network during build. This PR ships the **prep** path — script + CI generator + manifest playbook — without flipping the manifest to offline (that flip wants `node-sources.json` committed first, which we want to land in a follow-up after one green generator run).
+
+- `packages/app-core/packaging/flatpak/generate-sources.sh` (new, executable) — wraps `flatpak-node-generator npm --recursive`. Spins up a tempdir, runs `npm install --package-lock-only --ignore-scripts elizaos@latest` to resolve the published-CLI dependency graph, then writes `node-sources.json` next to the manifest. Self-contained, with prereq checks + helpful error output.
+- `.github/workflows/test-flatpak.yml` — runs the generator on every PR (3 new steps: pipx install, generate, upload-artifact). `continue-on-error: true` on the generate step so a flatpak-node-generator regression doesn't break the currently-green build.
+- `ai.elizaos.App.yml` — replaces the short offline-mode note (lines 95–103 upstream) with a concrete 3-step Flathub-prep playbook referencing the new script and CI step. **No build-command changes**, so the green build stays green.
+
+## Risk
+
+- Snap arm64 leg depends on GH provisioning `ubuntu-24.04-arm`. Mitigated by `continue-on-error`. Worst case: arm64 leg shows yellow check on PRs.
+- `flatpak-node-generator` requires pipx + network. `pip install --user` fallback present. Step is `continue-on-error: true`. Worst case: artifact missing one run.
+- Generator pins to `elizaos@latest`, not the in-tree workspace. Acceptable for Flathub (which ships published CLI). Document this when flipping to offline.
+
+## Verification
+
+- All 4 touched YAML files parse with `yaml.safe_load` (Python).
+- `generate-sources.sh` is shellcheck-clean.
+- No edits to `agent-release.yml` / scoring / trust gate — no trust impact.
+
+## Followup PR
+
+Once we have one green generator run + a reviewed `node-sources.json`:
+
+1. Commit `node-sources.json` next to the manifest.
+2. Add `- type: file / path: node-sources.json` to the `elizaos-app` module `sources:` block.
+3. Replace `npm install -g elizaos` with `npm install -g --offline --prefix=/app elizaos`.
+4. Drop `--share=network` from the module's `build-options.build-args`.
+5. Then we're Flathub-submittable.
+
+<!-- greptile_comment -->
+
+<h3>Greptile Summary</h3>
+
+This PR adds an experimental arm64 CI leg to the snap build matrix and lays the groundwork for Flathub-compatible offline Flatpak builds, without changing any application logic or the currently-passing manifest build command.
+
+- **Snap arm64**: Adds `ubuntu-24.04-arm` to the snap matrix with `experimental: true` and `continue-on-error: ${{ matrix.experimental }}`; `fail-fast: false` was already set, so a flaky ARM runner cannot block the gating amd64 job.
+- **Flatpak offline prep**: Introduces `generate-sources.sh` (a self-contained `flatpak-node-generator` wrapper) and three new non-fatal CI steps (install → generate → upload-artifact); both the install and generate steps carry `continue-on-error: true` with correct `outcome == 'success'` guards on downstream steps.
+- **Manifest comments**: Updates the `ai.elizaos.App.yml` comment block with a concrete 3-step Flathub submission playbook; no executable manifest lines are touched.
+
+<h3>Confidence Score: 5/5</h3>
+
+Safe to merge — all changes are CI-only; no application code or manifest build commands are modified, and every new step is guarded against failure.
+
+All four changed files are CI workflows or packaging scripts. The snap matrix change is isolated by `continue-on-error` and `fail-fast: false`. The flatpak generator steps are non-fatal by design and properly wired with `outcome`-based conditionals. The manifest change is comment-only. The only nit is a missing `mkdir -p` in the shell script for non-default output directories, which would not affect CI (the default path always exists).
+
+No files require special attention; the `generate-sources.sh` script has a minor edge case with custom output directories but it does not affect CI operation.
+
+<h3>Important Files Changed</h3>
+
+| Filename | Overview |
+|----------|----------|
+| .github/workflows/snap-build-test.yml | Adds arm64 experimental matrix entry with `continue-on-error: ${{ matrix.experimental }}`; `fail-fast: false` is already set; placement and boolean propagation are correct. |
+| .github/workflows/test-flatpak.yml | Adds three non-fatal steps (install, generate, upload) with proper `continue-on-error: true` on both the install and generate steps, and correct `outcome == 'success'` guards on dependent steps. |
+| packages/app-core/packaging/flatpak/generate-sources.sh | New shell script for generating Flatpak offline sources; shellcheck-clean overall, but does not `mkdir -p` the custom `OUT_DIR` before writing to it, which would fail if a non-existent directory is passed as the first argument. |
+| packages/app-core/packaging/flatpak/ai.elizaos.App.yml | Comment-only update expanding the offline-mode prep playbook; no build-command or manifest logic changes, so the currently-green build is unaffected. |
+
+</details>
+
+<h3>Flowchart</h3>
+
+```mermaid
+%%{init: {'theme': 'neutral'}}%%
+flowchart TD
+    A[Install flatpak-node-generator\ncontinue-on-error: true] -->|outcome == success| B[Generate offline node sources\ncontinue-on-error: true]
+    A -->|outcome == failure| D[Skip generate + upload]
+    B -->|outcome == success| C[Upload node-sources.json artifact]
+    B -->|outcome == failure| E[Skip upload]
+    C --> F[Build Flatpak\nnpm install -g over network\ncurrently green]
+    D --> F
+    E --> F
+```
+
+<sub>Reviews (2): Last reviewed commit: ["ci(linux): tolerate flatpak-node-generat..."](https://github.com/elizaos/eliza/commit/fa9d3395869e099faa64e1103b1f50b90b190fee) | [Re-trigger Greptile](https://app.greptile.com/api/retrigger?id=32696211)</sub>
+
+<!-- /greptile_comment -->1a:T19b0,## Root cause
+
+Fresh sandboxes provisioned with `:develop` consistently failed health check at 180s. The container started, Node ran, but never reached the HTTP listen.
+
+Container logs:
+```
+[wallet][os-store] boot hydrate skipped: Cannot find package 'jose' imported from /app/plugins/plugin-elizacloud/dist/node/index.node.js
+[eliza-autonomous] Failed to start: Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'jose' ...
+```
+
+Inspecting the image:
+
+```
+/app/node_modules/jose -> /app/packages/app-core/node_modules/jose
+/app/packages/app-core/node_modules/jose -> ../../../node_modules/jose
+```
+
+Two-hop circular symlink. Node's ESM resolver can't traverse it → import fails → process never finishes boot → container hangs in `ep_poll` until daemon kills it.
+
+## How the loop was formed
+
+`link-docker-local-app-packages.mjs` links app-core's owned root deps (`jose`, `@node-rs/argon2`) in two passes:
+1. `packages/app-core/node_modules/<dep>` (for app-core's local resolution)
+2. `/app/node_modules/<dep>` (for transitive imports from other plugins)
+
+Each pass calls `resolveDependencyPackageDir` with `[packageDir, repoRoot]`. After the first pass linked `app-core/node_modules/jose → /app/node_modules/jose`, the second pass's resolver searched packageDir first, saw the freshly-created symlink's target had `package.json` (`fs.existsSync` follows symlinks), and returned the symlink path verbatim.
+
+`linkDependencyPackage`'s equality check `path.resolve(packageDir) === path.resolve(target)` compared the symlink path against the target — different strings, so the function proceeded:
+1. `removePath(target)` — **deleted the real npm-installed jose at `/app/node_modules/jose`**
+2. symlinked target → packageDir (the now-broken intermediate symlink)
+
+End state: circular symlink. Real npm install gone.
+
+## Fix
+
+`resolveDependencyPackageDir` now returns `fs.realpathSync(dir)` instead of the raw join path. The realpath collapses any prior symlink, so when the second-pass call resolves jose it returns `/app/node_modules/jose` (the actual install). `linkDependencyPackage`'s equality check then correctly detects `target === packageDir` and skips — preserving the real npm install at root.
+
+## How this was missed
+
+The first `:develop` builds without Shaw's `baseDirs` patch resolved only at root, so this couldn't happen. The bug was introduced in `06dc596` ("fix(docker): resolve app-core owned dependencies") which added `baseDirs: [packageDir, repoRoot]` so the resolver searches both. Once that landed, every subsequent `:develop` build had the circular symlink baked in.
+
+## Test plan
+
+- [ ] CI build-agent-image.yml succeeds on this branch
+- [ ] In the resulting image, `ls -la /app/node_modules/jose` is a real directory (not a symlink)
+- [ ] In the resulting image, `ls -la /app/packages/app-core/node_modules/jose` is a symlink → `/app/node_modules/jose` (one hop, not circular)
+- [ ] Manual provision of a fresh sandbox via the dashboard transitions from `pending` → `running` (not stuck in health timeout)
+- [ ] Existing PR #7780's consolidation + tsx fix still works (this branch contains all those commits)
+
+<!-- greptile_comment -->
+
+<h3>Greptile Summary</h3>
+
+This PR fixes a circular symlink bug in the Docker image build process where `resolveDependencyPackageDir` was returning raw (potentially symlinked) paths, causing `linkDependencyPackage`'s equality guard to fail and subsequently overwrite the real npm-installed package with a circular symlink.
+
+- **Core fix**: `realIfExists` now calls `fs.realpathSync(dir)` before returning, so the equality check `path.resolve(packageDir) === path.resolve(target)` correctly identifies when source and destination resolve to the same on-disk location and skips the symlink creation.
+- **Bun store search path** gets the same `realpathSync` treatment, keeping consistency across both resolution strategies.
+- The README update reflects the rename of the Docker workflow file from `image.yaml` to `build-agent-image.yml`.
+
+<h3>Confidence Score: 5/5</h3>
+
+Safe to merge — the change is narrowly scoped to the symlink resolution helper and directly fixes the broken two-hop symlink that was causing containers to hang at boot.
+
+The fix correctly collapses symlinks via `realpathSync` before the equality guard in `linkDependencyPackage` runs, preventing the second-pass from treating the newly-created `app-core/node_modules/jose` symlink as a distinct source and overwriting the real root install. Both the first-pass and bun-store search paths receive the same treatment.
+
+The `realIfExists` catch fallback in `link-docker-local-app-packages.mjs` is worth tracking but was flagged in a prior review thread.
+
+<h3>Important Files Changed</h3>
+
+| Filename | Overview |
+|----------|----------|
+| packages/app-core/scripts/link-docker-local-app-packages.mjs | Introduces `realIfExists` helper using `fs.realpathSync` to resolve symlinks before returning package paths, preventing the circular-symlink race between the two `linkDependency` passes for `jose` and `@node-rs/argon2`. The catch fallback returning the raw `dir` rather than `null` is a residual risk (already flagged in prior review thread). |
+| .github/workflows/README.md | Documentation-only update: corrects the workflow table entry from `image.yaml` to `build-agent-image.yml` with an updated trigger/tag description. |
+
+</details>
+
+<h3>Sequence Diagram</h3>
+
+```mermaid
+sequenceDiagram
+    participant S as link-docker script
+    participant R as resolveDependencyPackageDir
+    participant FS as Node fs
+
+    Note over S: app-core loop first dep pass
+    S->>R: jose with appCoreDir and repoRoot
+    R->>FS: existsSync appCoreDir/node_modules/jose false
+    R->>FS: existsSync repoRoot/node_modules/jose true
+    R->>FS: realpathSync returns /app/node_modules/jose
+    R-->>S: /app/node_modules/jose
+    S->>FS: symlink appCoreDir/node_modules/jose to /app/node_modules/jose
+
+    Note over S: app-core loop second root pass
+    S->>R: jose with appCoreDir and repoRoot
+    R->>FS: existsSync appCoreDir/node_modules/jose true via symlink
+    R->>FS: realpathSync returns /app/node_modules/jose
+    R-->>S: /app/node_modules/jose
+    S->>S: packageDir equals target skip
+
+    Note over S: Result no circular symlink real install preserved
+```
+
+<sub>Reviews (2): Last reviewed commit: ["chore(clean): trim verbose comment + upd..."](https://github.com/elizaos/eliza/commit/e3f61404f7adadd6e84ac3a5abb852f85ccaa909) | [Re-trigger Greptile](https://app.greptile.com/api/retrigger?id=32536457)</sub>
+
+<!-- /greptile_comment -->1b:T38be,Bumps the npm_and_yarn group with 1 update in the /packages/cloud-services/operator directory: [uuid](https://github.com/uuidjs/uuid).
+Bumps the npm_and_yarn group with 1 update in the /plugins/plugin-elizacloud directory: [ws](https://github.com/websockets/ws).
+
+Updates `uuid` from 13.0.0 to 14.0.0
+<details>
+<summary>Release notes</summary>
+<p><em>Sourced from <a href="https://github.com/uuidjs/uuid/releases">uuid's releases</a>.</em></p>
+<blockquote>
+<h2>v14.0.0</h2>
+<h2><a href="https://github.com/uuidjs/uuid/compare/v13.0.0...v14.0.0">14.0.0</a> (2026-04-19)</h2>
+<h3>⚠ BREAKING CHANGES</h3>
+<ul>
+<li>expect <code>crypto</code> to be global everywhere (requires node@20+) (<a href="https://redirect.github.com/uuidjs/uuid/issues/935">#935</a>)</li>
+<li>drop node@18 support (<a href="https://redirect.github.com/uuidjs/uuid/issues/934">#934</a>)</li>
+</ul>
+<h3>Features</h3>
+<ul>
+<li>drop node@18 support (<a href="https://redirect.github.com/uuidjs/uuid/issues/934">#934</a>) (<a href="https://github.com/uuidjs/uuid/commit/dc4ddb87272ed2843faccd130bcc41d492688bd3">dc4ddb8</a>)</li>
+</ul>
+<h3>Bug Fixes</h3>
+<ul>
+<li>expect <code>crypto</code> to be global everywhere (requires node@20+) (<a href="https://redirect.github.com/uuidjs/uuid/issues/935">#935</a>) (<a href="https://github.com/uuidjs/uuid/commit/f2c235f93059325fa43e1106e624b5291bb523c4">f2c235f</a>)</li>
+<li>Use GITHUB_TOKEN for release-please and enable npm provenance (<a href="https://redirect.github.com/uuidjs/uuid/issues/925">#925</a>) (<a href="https://github.com/uuidjs/uuid/commit/ffa31383e8e4e1f0b4e22e504561272041b8738c">ffa3138</a>)</li>
+</ul>
+<h2>v13.0.2</h2>
+<h2><a href="https://github.com/uuidjs/uuid/compare/v13.0.1...v13.0.2">13.0.2</a> (2026-05-04)</h2>
+<h3>Bug Fixes</h3>
+<ul>
+<li>rerelease to fix provenance. (<a href="https://github.com/uuidjs/uuid/commit/49ccb35f78c0c4ce1409dd2f1d89f83caadba10b">49ccb35</a>)</li>
+</ul>
+<h2>v13.0.1</h2>
+<h2><a href="https://github.com/uuidjs/uuid/compare/v13.0.0...v13.0.1">13.0.1</a> (2026-04-27)</h2>
+<h3>Bug Fixes</h3>
+<ul>
+<li>backport fix for GHSA-w5hq-g745-h8pq (<a href="https://github.com/uuidjs/uuid/commit/9d27ddf7046ce496ef39569ff84d948eeff9cb2a">9d27ddf</a>)</li>
+</ul>
+</blockquote>
+</details>
+<details>
+<summary>Changelog</summary>
+<p><em>Sourced from <a href="https://github.com/uuidjs/uuid/blob/main/CHANGELOG.md">uuid's changelog</a>.</em></p>
+<blockquote>
+<h2><a href="https://github.com/uuidjs/uuid/compare/v13.0.0...v14.0.0">14.0.0</a> (2026-04-19)</h2>
+<h3>Security</h3>
+<ul>
+<li>Fixes <a href="https://github.com/uuidjs/uuid/security/advisories/GHSA-w5hq-g745-h8pq">GHSA-w5hq-g745-h8pq</a>: <code>v3()</code>, <code>v5()</code>, and <code>v6()</code> did not validate that writes would remain within the bounds of a caller-supplied buffer, allowing out-of-bounds writes when an invalid <code>offset</code> was provided. A <code>RangeError</code> is now thrown if <code>offset &lt; 0</code> or <code>offset + 16 &gt; buf.length</code>.</li>
+</ul>
+<h3>⚠ BREAKING CHANGES</h3>
+<ul>
+<li><code>crypto</code> is now expected to be globally defined (requires node@20+) (<a href="https://redirect.github.com/uuidjs/uuid/issues/935">#935</a>)</li>
+<li>drop node@18 support (<a href="https://redirect.github.com/uuidjs/uuid/issues/934">#934</a>)</li>
+<li>upgrade minimum supported TypeScript version to 5.4.3, in keeping with the project's policy of supporting TypeScript versions released within the last two years</li>
+</ul>
+</blockquote>
+</details>
+<details>
+<summary>Commits</summary>
+<ul>
+<li><a href="https://github.com/uuidjs/uuid/commit/7c1ea087a8149b57380fc8bb7f68c3a215cb6e4b"><code>7c1ea08</code></a> chore(main): release 14.0.0 (<a href="https://redirect.github.com/uuidjs/uuid/issues/926">#926</a>)</li>
+<li><a href="https://github.com/uuidjs/uuid/commit/3d2c5b0342f0fcb52a5ac681c3d47c13e7444b34"><code>3d2c5b0</code></a> Merge commit from fork</li>
+<li><a href="https://github.com/uuidjs/uuid/commit/f2c235f93059325fa43e1106e624b5291bb523c4"><code>f2c235f</code></a> fix!: expect <code>crypto</code> to be global everywhere (requires node@20+) (<a href="https://redirect.github.com/uuidjs/uuid/issues/935">#935</a>)</li>
+<li><a href="https://github.com/uuidjs/uuid/commit/529ef0899f5dd503d2ee90d690585d63d78bc212"><code>529ef08</code></a> chore: upgrade TypeScript and fixup types (<a href="https://redirect.github.com/uuidjs/uuid/issues/927">#927</a>)</li>
+<li><a href="https://github.com/uuidjs/uuid/commit/086fd7976f11433edf9ac80be876b3ad243fe087"><code>086fd79</code></a> chore: update dependencies (<a href="https://redirect.github.com/uuidjs/uuid/issues/933">#933</a>)</li>
+<li><a href="https://github.com/uuidjs/uuid/commit/dc4ddb87272ed2843faccd130bcc41d492688bd3"><code>dc4ddb8</code></a> feat!: drop node@18 support (<a href="https://redirect.github.com/uuidjs/uuid/issues/934">#934</a>)</li>
+<li><a href="https://github.com/uuidjs/uuid/commit/0f1f9c9c9cedbae5a1d363d5406c5dfbabe81404"><code>0f1f9c9</code></a> chore: switch to Biome for parsing and linting (<a href="https://redirect.github.com/uuidjs/uuid/issues/932">#932</a>)</li>
+<li><a href="https://github.com/uuidjs/uuid/commit/e2879e64bf125add903c1eff6e0860542c605013"><code>e2879e6</code></a> chore: use maintained version of npm-run-all (<a href="https://redirect.github.com/uuidjs/uuid/issues/930">#930</a>)</li>
+<li><a href="https://github.com/uuidjs/uuid/commit/ffa31383e8e4e1f0b4e22e504561272041b8738c"><code>ffa3138</code></a> fix: Use GITHUB_TOKEN for release-please and enable npm provenance (<a href="https://redirect.github.com/uuidjs/uuid/issues/925">#925</a>)</li>
+<li><a href="https://github.com/uuidjs/uuid/commit/0423d49df2dc8efc300c804731d25f4d7e0fccc4"><code>0423d49</code></a> docs: remove obsolete v1 option notes (<a href="https://redirect.github.com/uuidjs/uuid/issues/915">#915</a>)</li>
+<li>Additional commits viewable in <a href="https://github.com/uuidjs/uuid/compare/v13.0.0...v14.0.0">compare view</a></li>
+</ul>
+</details>
+<details>
+<summary>Maintainer changes</summary>
+<p>This version was pushed to npm by <a href="https://www.npmjs.com/~GitHub%20Actions">GitHub Actions</a>, a new releaser for uuid since your current version.</p>
+</details>
+<br />
+
+Updates `ws` from 8.18.3 to 8.20.1
+<details>
+<summary>Release notes</summary>
+<p><em>Sourced from <a href="https://github.com/websockets/ws/releases">ws's releases</a>.</em></p>
+<blockquote>
+<h2>8.20.1</h2>
+<h1>Bug fixes</h1>
+<ul>
+<li>Fixed an uninitialized memory disclosure issue in <code>websocket.close()</code>
+(c0327ec1).</li>
+</ul>
+<p>Providing a <code>TypedArray</code> (e.g. <code>Float32Array</code>) as the <code>reason</code> argument for
+<code>websocket.close()</code>, rather than the supported string or <code>Buffer</code> types, caused
+uninitialized memory to be disclosed to the remote peer.</p>
+<pre lang="js"><code>import { deepStrictEqual } from 'node:assert';
+import { WebSocket, WebSocketServer } from 'ws';
+<p>const wss = new WebSocketServer(
+{ port: 0, skipUTF8Validation: true },
+function () {
+const { port } = wss.address();
+const ws = new WebSocket(<code>ws://localhost:${port}</code>, {
+skipUTF8Validation: true
+});</p>
+<pre><code>ws.on('close', function (code, reason) {
+  deepStrictEqual(reason, Buffer.alloc(80));
+});
+</code></pre>
+<p>}
+);</p>
+<p>wss.on('connection', function (ws) {
+ws.close(1000, new Float32Array(20));
+});
+</code></pre></p>
+<p>The issue was privately reported by <a href="https://github.com/ChALkeR">Nikita Skovoroda</a>.</p>
+<h2>8.20.0</h2>
+<h1>Features</h1>
+<ul>
+<li>Added exports for the <code>PerMessageDeflate</code> class and utilities for the
+<code>Sec-WebSocket-Extensions</code> and <code>Sec-WebSocket-Protocol</code> headers (d3503c1f).</li>
+</ul>
+<h2>8.19.0</h2>
+<h1>Features</h1>
+<ul>
+<li>Added the <code>closeTimeout</code> option (<a href="https://redirect.github.com/websockets/ws/issues/2308">#2308</a>).</li>
+</ul>
+<h1>Bug fixes</h1>
+<ul>
+<li>Handled a forthcoming breaking change in Node.js core (19984854).</li>
+</ul>
+</blockquote>
+</details>
+<details>
+<summary>Commits</summary>
+<ul>
+<li><a href="https://github.com/websockets/ws/commit/5d9b316230ea931532a6671cc450f18c11edd02f"><code>5d9b316</code></a> [dist] 8.20.1</li>
+<li><a href="https://github.com/websockets/ws/commit/c0327ec15a54d701eb6ccefaa8bef328cfc03086"><code>c0327ec</code></a> [security] Fix uninitialized memory disclosure in <code>websocket.close()</code></li>
+<li><a href="https://github.com/websockets/ws/commit/ce2a3d62437995a47e6056d485a33d21b6a8f867"><code>ce2a3d6</code></a> [ci] Test on node 26</li>
+<li><a href="https://github.com/websockets/ws/commit/58e45b872bb0f35a3edd553c27e105300a4f5bd0"><code>58e45b8</code></a> [ci] Do not test on node 25</li>
+<li><a href="https://github.com/websockets/ws/commit/5f26c245231a4b018479a9269e8c3da4773fe42f"><code>5f26c24</code></a> [ci] Run the lint step on node 24</li>
+<li><a href="https://github.com/websockets/ws/commit/843925544e2f4cffe445e0179947f56d6c5b608f"><code>8439255</code></a> [dist] 8.20.0</li>
+<li><a href="https://github.com/websockets/ws/commit/d3503c1fd36a310985108f62b343bae18346ab67"><code>d3503c1</code></a> [minor] Export the <code>PerMessageDeflate</code> class and header utils</li>
+<li><a href="https://github.com/websockets/ws/commit/3ee5349a0b1580f6e1f347b59ec3371011bd8481"><code>3ee5349</code></a> [api] Convert the <code>isServer</code> and <code>maxPayload</code> parameters to options</li>
+<li><a href="https://github.com/websockets/ws/commit/91707b470ebd803aaa3fd1e896217740f39267d4"><code>91707b4</code></a> [doc] Add missing space</li>
+<li><a href="https://github.com/websockets/ws/commit/8b553192268810a83253e2a4a39ac16768e75bb3"><code>8b55319</code></a> [pkg] Update eslint to version 10.0.1</li>
+<li>Additional commits viewable in <a href="https://github.com/websockets/ws/compare/8.18.3...8.20.1">compare view</a></li>
+</ul>
+</details>
+<br />
+
+Dependabot will resolve any conflicts with this PR as long as you don't alter it yourself. You can also trigger a rebase manually by commenting `@dependabot rebase`.
+
+[//]: # (dependabot-automerge-start)
+[//]: # (dependabot-automerge-end)
+
+---
+
+<details>
+<summary>Dependabot commands and options</summary>
+<br />
+
+You can trigger Dependabot actions by commenting on this PR:
+- `@dependabot rebase` will rebase this PR
+- `@dependabot recreate` will recreate this PR, overwriting any edits that have been made to it
+- `@dependabot show <dependency name> ignore conditions` will show all of the ignore conditions of the specified dependency
+- `@dependabot ignore <dependency name> major version` will close this group update PR and stop Dependabot creating any more for the specific dependency's major version (unless you unignore this specific dependency's major version or upgrade to it yourself)
+- `@dependabot ignore <dependency name> minor version` will close this group update PR and stop Dependabot creating any more for the specific dependency's minor version (unless you unignore this specific dependency's minor version or upgrade to it yourself)
+- `@dependabot ignore <dependency name>` will close this group update PR and stop Dependabot creating any more for the specific dependency (unless you unignore this specific dependency or upgrade to it yourself)
+- `@dependabot unignore <dependency name>` will remove all of the ignore conditions of the specified dependency
+- `@dependabot unignore <dependency name> <ignore condition>` will remove the ignore condition of the specified dependency and ignore conditions
+You can disable automated security fix PRs for this repo from the [Security Alerts page](https://github.com/elizaOS/eliza/network/alerts).
+
+</details>
+
+<!-- greptile_comment -->
+
+<h3>Greptile Summary</h3>
+
+This is a Dependabot-generated security and maintenance dependency bump across two packages. Both updates address known security vulnerabilities.
+
+- **`uuid` 13.0.0 → 14.0.0** (`packages/cloud-services/operator`, devDependency): Major version bump that drops Node.js 18 support and fixes GHSA-w5hq-g745-h8pq (out-of-bounds writes in `v3()`, `v5()`, and `v6()` when an invalid `offset` is supplied). The operator package already declares `engines: node>=24.0.0`, so the Node.js requirement is satisfied.
+- **`ws` 8.18.3 → 8.20.1** (`plugins/plugin-elizacloud`, runtime dependency): Two-minor-version bump within v8 with no breaking changes; patches an uninitialized memory disclosure in `websocket.close()` when a `TypedArray` is passed as the `reason` argument.
+
+<h3>Confidence Score: 5/5</h3>
+
+Safe to merge — both updates are targeted security fixes with no breaking changes affecting the current runtime environment.
+
+The `uuid` bump is a devDependency-only change; the one breaking constraint (Node.js ≥ 20) is already exceeded by the operator's declared engine floor of 24. The `ws` bump stays within the 8.x semver range, carries no breaking changes, and closes an uninitialized memory disclosure. Neither change touches runtime logic, schema, or configuration.
+
+No files require special attention.
+
+<h3>Important Files Changed</h3>
+
+| Filename | Overview |
+|----------|----------|
+| packages/cloud-services/operator/package.json | Bumps `uuid` from 13.0.0 to 14.0.0 (devDependency only); the breaking node@20+ requirement is already satisfied by the package's `engines: node>=24.0.0` constraint, and the update includes a security fix for GHSA-w5hq-g745-h8pq. |
+| plugins/plugin-elizacloud/package.json | Bumps `ws` from 8.18.3 to 8.20.1 (runtime dependency); includes a security fix for an uninitialized memory disclosure in `websocket.close()` and stays within the 8.x semver range with no breaking changes. |
+
+</details>
+
+<h3>Flowchart</h3>
+
+```mermaid
+%%{init: {'theme': 'neutral'}}%%
+flowchart TD
+    A[Dependabot PR #7789] --> B[packages/cloud-services/operator]
+    A --> C[plugins/plugin-elizacloud]
+
+    B --> D["uuid devDependency\n13.0.0 → 14.0.0"]
+    D --> E["Fixes GHSA-w5hq-g745-h8pq\nout-of-bounds write in v3/v5/v6"]
+    D --> F["Breaking: requires node≥20\nOperator already requires node≥24 ✓"]
+
+    C --> G["ws dependency\n8.18.3 → 8.20.1"]
+    G --> H["Fixes uninitialized memory\ndisclosure in websocket.close()"]
+    G --> I["No breaking changes\n(within 8.x range) ✓"]
+```
+
+<sub>Reviews (1): Last reviewed commit: ["chore(deps): bump the npm\_and\_yarn group..."](https://github.com/elizaos/eliza/commit/840d9872021156834b35551134013cadfcdb7ac3) | [Re-trigger Greptile](https://app.greptile.com/api/retrigger?id=32716971)</sub>
+
+<!-- /greptile_comment -->d:["$","div",null,{"className":"mb-8 space-y-6","children":[["$","$L14",null,{"metrics":{"date":"2026-05-18","interval":{"intervalStart":"$D2026-05-18T00:00:00.000Z","intervalEnd":"$D2026-05-19T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":5,"merged":6,"total":7},"issues":{"new":0,"closed":0,"total":0},"activeContributors":5,"codeChanges":{"additions":20951,"deletions":16560,"files":50,"commitCount":65},"topContributors":[{"username":"2-A-M","avatarUrl":"https://avatars.githubusercontent.com/u/96268540?u=39ce724443b5cd500fc28905812cdba16e3181a7&v=4","totalScore":189.83404420793312,"prScore":189.83404420793312,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"2-A-M: Drove significant project expansion and infrastructure improvements by implementing the elizaos deploy keel command (#7786) and conducting a comprehensive head-to-head performance comparison for swe-bench (#7785), while also enhancing cross-platform stability through Windows fallbacks (#7788) and expanded CI support (#7787). Their work today centered on a balanced mix of feature development, bug fixes, and refactoring efforts across 25 files."},{"username":"greptile-apps","avatarUrl":"https://avatars.githubusercontent.com/in/867647?v=4","totalScore":27,"prScore":0,"issueScore":0,"reviewScore":27,"commentScore":0,"summary":"greptile-apps: No activity today."}],"focusAreas":[{"area":"plugins/plugin-agent-orchestrator","count":17},{"area":"plugins/plugin-lifeops","count":7},{"area":"core","count":7},{"area":"elizaos","count":5},{"area":"benchmarks","count":3},{"area":"app-core","count":3},{"area":".github/workflows","count":2},{"area":"plugins/plugin-discord","count":2},{"area":"agent","count":1},{"area":"plugins/plugin-todos","count":1}],"topIssues":[],"topPullRequests":[{"id":"PR_kwDOMT5cIs7cczlv","title":"feat: connector capability detection + orchestrator hardening + sub-agent UX redesign","author":"standujar","number":7782,"body":"$15","repository":"elizaos/eliza","createdAt":"2026-05-17T22:25:26Z","mergedAt":"2026-05-18T23:35:13Z","additions":19783,"deletions":16505},{"id":"PR_kwDOMT5cIs7c07Su","title":"feat(swe-bench): elizaOS vs opencode head-to-head comparison harness","author":"2-A-M","number":7785,"body":"$16","repository":"elizaos/eliza","createdAt":"2026-05-18T21:10:45Z","mergedAt":"2026-05-18T23:29:28Z","additions":559,"deletions":0},{"id":"PR_kwDOMT5cIs7c1exp","title":"fix(plugin-lifeops): graceful Windows fallbacks for darwin-only features","author":"2-A-M","number":7788,"body":"$17","repository":"elizaos/eliza","createdAt":"2026-05-18T21:40:13Z","mergedAt":"2026-05-18T23:29:28Z","additions":223,"deletions":12},{"id":"PR_kwDOMT5cIs7c1AWA","title":"feat(elizaos): elizaos deploy keel command + design doc","author":"2-A-M","number":7786,"body":"$18","repository":"elizaos/eliza","createdAt":"2026-05-18T21:14:32Z","mergedAt":"2026-05-18T23:29:28Z","additions":205,"deletions":0},{"id":"PR_kwDOMT5cIs7c1Ddy","title":"ci(linux): enable snap arm64 experimental matrix + flatpak offline-mode prep","author":"2-A-M","number":7787,"body":"$19","repository":"elizaos/eliza","createdAt":"2026-05-18T21:17:02Z","mergedAt":"2026-05-18T23:29:28Z","additions":119,"deletions":10},{"id":"PR_kwDOMT5cIs7cc_zZ","title":"fix(docker): break circular symlink for app-core's jose / @node-rs/argon2 in pruner","author":"standujar","number":7783,"body":"$1a","repository":"elizaos/eliza","createdAt":"2026-05-17T22:54:26Z","mergedAt":"2026-05-18T23:29:28Z","additions":62,"deletions":33},{"id":"PR_kwDOMT5cIs7c3QUc","title":"chore(deps): bump the npm_and_yarn group across 2 directories with 2 updates","author":"dependabot","number":7789,"body":"$1b","repository":"elizaos/eliza","createdAt":"2026-05-18T23:45:47Z","mergedAt":"2026-05-19T00:00:46Z","additions":2,"deletions":2}],"detailedContributorSummaries":{"2-A-M":"2-A-M: Drove significant project expansion and infrastructure improvements by implementing the elizaos deploy keel command (#7786) and conducting a comprehensive head-to-head performance comparison for swe-bench (#7785), while also enhancing cross-platform stability through Windows fallbacks (#7788) and expanded CI support (#7787). Their work today centered on a balanced mix of feature development, bug fixes, and refactoring efforts across 25 files.","greptile-apps":"greptile-apps: No activity today."}}}],"$L1c"]}]
+e:["$","div",null,{"className":"prose prose-sm mx-auto mt-8 dark:prose-invert sm:prose lg:prose-lg xl:prose-xl","children":[["$","p","p-0",{"children":"Development on May 18 focused on hardening agent orchestration and expanding deployment infrastructure, highlighted by the introduction of a new CLI for domain-based deployments and improved cross-platform stability. The team also advanced benchmarking capabilities for SWE-bench and resolved critical Docker health check failures to ensure more reliable agent operations."}],"\n",["$","h2","h2-0",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"✅ Completed Work","position":{"start":{"line":5,"column":4,"offset":416},"end":{"line":5,"column":20,"offset":432}}}],"position":{"start":{"line":5,"column":1,"offset":413},"end":{"line":5,"column":20,"offset":432}}},"children":"✅ Completed Work"}],"\n",["$","p","p-1",{"children":["$","strong","strong-0",{"children":"Agent Orchestration and Security"}]}],"\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["Hardened the orchestrator with new security gates and implemented connector capability detection to improve system reliability (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/7782","children":"elizaos/eliza#7782"}],")."]}],"\n",["$","li","li-1",{"children":["Redesigned sub-agent UX to eliminate conversation-memory pollution, resulting in cleaner and more stable agent interactions (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/7782","children":"elizaos/eliza#7782"}],")."]}],"\n"]}],"\n",["$","p","p-2",{"children":["$","strong","strong-0",{"children":"Deployment and Platform Compatibility"}]}],"\n",["$","ul","ul-1",{"children":["\n",["$","li","li-0",{"children":["Launched the ",["$","code","code-0",{"children":"elizaos deploy"}]," CLI command to facilitate domain-based app monetization (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/7786","children":"elizaos/eliza#7786"}],")."]}],"\n",["$","li","li-1",{"children":["Improved cross-platform stability by adding graceful Windows fallbacks for ",["$","code","code-0",{"children":"plugin-lifeops"}]," and resolving circular symlink issues in Docker containers (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/7788","children":"elizaos/eliza#7788"}],", ",["$","a","a-1",{"href":"https://github.com/elizaos/eliza/pull/7783","children":"elizaos/eliza#7783"}],")."]}],"\n"]}],"\n",["$","p","p-3",{"children":["$","strong","strong-0",{"children":"Benchmarking and CI/CD Enhancements"}]}],"\n",["$","ul","ul-2",{"children":["\n",["$","li","li-0",{"children":["Integrated a side-by-side comparison harness for SWE-bench Lite to better evaluate agent performance (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/7785","children":"elizaos/eliza#7785"}],")."]}],"\n",["$","li","li-1",{"children":["Expanded CI/CD capabilities by enabling experimental arm64 support in the Snap matrix and preparing Flatpak manifests for offline builds (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/7787","children":"elizaos/eliza#7787"}],")."]}],"\n"]}]]}]
+f:["$","script","script-0",{"src":"/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","async":true}]
+10:["$","script","script-1",{"src":"/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","async":true}]
+11:["$","script","script-2",{"src":"/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js","async":true}]
+12:["$","$L1d",null,{"children":["$","$1e",null,{"name":"Next.MetadataOutlet","children":"$@1f"}]}]
+1c:["$","div",null,{"className":"rounded-lg border bg-card text-card-foreground shadow-sm","children":[["$","div",null,{"className":"flex flex-col space-y-1.5 p-6 py-4","children":["$","div",null,{"className":"tracking-tight text-sm font-medium","children":["$undefined","Code Changes"]}]}],["$","div",null,{"className":"p-6 pt-0","children":["$","div",null,{"className":"grid grid-cols-2 gap-4 md:grid-cols-4","children":[["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-git-commit-vertical h-5 w-5","aria-hidden":"true","children":[["$","path","1holv5",{"d":"M12 3v6"}],["$","circle","1v7zrd",{"cx":"12","cy":"12","r":"3"}],["$","path","a9ows0",{"d":"M12 15v6"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":65}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Commits"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-file-code h-5 w-5","aria-hidden":"true","children":[["$","path","1oefj6",{"d":"M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"}],["$","path","wfsgrz",{"d":"M14 2v5a1 1 0 0 0 1 1h5"}],["$","path","1tg20x",{"d":"M10 12.5 8 15l2 2.5"}],["$","path","yinavb",{"d":"m14 12.5 2 2.5-2 2.5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":50}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Files Changed"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-green-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-up h-5 w-5 text-green-500","aria-hidden":"true","children":[["$","path","hav0vg",{"d":"m5 12 7-7 7 7"}],["$","path","x0mq9r",{"d":"M12 19V5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-green-500","children":"+20,951"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Added"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-red-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-down h-5 w-5 text-red-500","aria-hidden":"true","children":[["$","path","s699le",{"d":"M12 5v14"}],["$","path","1idqje",{"d":"m19 12-7 7-7-7"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-red-500","children":"-16,560"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Deleted"}]]}]]}]]}]}]]}]
+1f:null

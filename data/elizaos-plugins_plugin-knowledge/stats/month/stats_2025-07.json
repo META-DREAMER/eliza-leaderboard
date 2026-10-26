@@ -1,0 +1,692 @@
+{
+  "interval": {
+    "intervalStart": "2025-07-01T00:00:00.000Z",
+    "intervalEnd": "2025-08-01T00:00:00.000Z",
+    "intervalType": "month"
+  },
+  "repository": "elizaos-plugins/plugin-knowledge",
+  "overview": "From 2025-07-01 to 2025-08-01, elizaos-plugins/plugin-knowledge had 6 new PRs (4 merged), 1 new issues, and 13 active contributors.",
+  "topIssues": [
+    {
+      "id": "I_kwDOOu4gVs6-ZlR6",
+      "title": "Various issues found",
+      "author": "odilitime",
+      "number": 31,
+      "repository": "elizaos-plugins/plugin-knowledge",
+      "body": "README said to use\n`LOAD_DOCS_ON_STARTUP=true`\n\nlogs are saying\n`CTX_KNOWLEDGE_ENABLED` needs to be set\n\nprovider is dynamic, probably shouldn't be. A model isn't going to know when to ask about what it doesn't know.\n\nlooksLikeBase64 was too greedy, converted it to\n\n(util.ts)\n```ts\nexport function looksLikeBase64(content?: string | null): boolean {\n  if (!content || content.length === 0) return false;\n\n  const cleanContent = content.replace(/\\s/g, '');\n\n  // Too short to be meaningful Base64\n  if (cleanContent.length < 16) return false;\n\n  // Must be divisible by 4\n  if (cleanContent.length % 4 !== 0) return false;\n\n  // Check for Base64 pattern with proper padding\n  const base64Regex = /^[A-Za-z0-9+/]*={0,2}$/;\n  if (!base64Regex.test(cleanContent)) return false;\n\n  // Additional heuristic: Base64 typically has a good mix of characters\n  const hasNumbers = /\\d/.test(cleanContent);\n  const hasUpperCase = /[A-Z]/.test(cleanContent);\n  const hasLowerCase = /[a-z]/.test(cleanContent);\n\n  return (hasNumbers || hasUpperCase) && hasLowerCase;\n}\n```\n\ngetting told\n```\n[2025-07-01 23:06:40] DEBUG: [Document Processor] CTX_KNOWLEDGE_ENABLED: 'undefined' → false (runtime: false)\n[2025-07-01 23:06:40] DEBUG: [Document Processor] EMBEDDING_PROVIDER not specified. Assuming embeddings are provided by another plugin (e.g., plugin-google-genai).\n[2025-07-01 23:06:40] DEBUG: [Document Processor] No EMBEDDING_PROVIDER specified. Embeddings will be handled by the runtime.\n[2025-07-01 23:06:40] INFO: [Document Processor] Contextual Knowledge is DISABLED!\n[2025-07-01 23:06:40] INFO: [Document Processor] This means documents will NOT be enriched with context.\n```\n\neven though it's on... confirmed in config.ts it's enabled but I still see this:\n```\n[2025-07-01 23:06:39] INFO: KnowledgeService initialized for agent 479233fd-b0e7-0f50-9d88-d4c9ea5b0de0 with config:\n    CTX_KNOWLEDGE_ENABLED: false\n    LOAD_DOCS_ON_STARTUP: true\n[2025-07-01 23:06:39] INFO: LOAD_DOCS_ON_STARTUP is enabled. Loading documents from docs folder...\n```\n\nlooks like service loads a config different than config.ts. Service doesn't not take runtime.getSettings into account at all.\n\nI also blame how service cstr takes config as a 2nd param. I don't think this system/patterns has been thought through or used properly.\n\nAfter reviewing how/where plugin-twitter does it's config, I believe the service should do the detection and store the configuration",
+      "createdAt": "2025-07-02T03:18:58Z",
+      "closedAt": "2025-07-02T19:30:22Z",
+      "state": "CLOSED",
+      "commentCount": 1
+    },
+    {
+      "id": "I_kwDOOu4gVs66mpXr",
+      "title": "processKnowledgeAction: Generates the same clientDocumentId for every memory",
+      "author": "lkoczorowski",
+      "number": 16,
+      "repository": "elizaos-plugins/plugin-knowledge",
+      "body": "### Version\n1.0.3\n\n### Description\n`processKnowledgeAction` uses the following to generate an unique uuid for new memories:\n`clientDocumentId: createUniqueUuid(runtime.agentId + \"text\" + Date.now(), \"user-knowledge\"),`\n\nHowever, createUniqueUuid does the following:\n```\nexport const createUniqueUuid = (runtime, baseUserId: UUID | string): UUID => {\n  // If the base user ID is the agent ID, return it directly\n  if (baseUserId === runtime.agentId) {\n    return runtime.agentId;\n  }\n\n  // Use a deterministic approach to generate a new UUID based on both IDs\n  // This creates a unique ID for each user+agent combination while still being deterministic\n  const combinedString = `${baseUserId}:${runtime.agentId}`;\n\n  // Create a namespace UUID (version 5) from the combined string\n  return stringToUuid(combinedString);\n};\n```\n\nMeaning that `createUniqueUuid` will always return: `stringToUuid(\"user-knowledge:undefined\")` ie: `4e394ea6-af35-0010-8047-94bccb8b8e5b`\n\n### Expected Result\nThe generated ID should be unique, the easiest approach would be to us `stringToUuid` directly.\n\nIf possible, I would love to contribute. I can fix this issue, and others I've discovered.\n\nThanks,",
+      "createdAt": "2025-06-09T15:45:23Z",
+      "closedAt": "2025-07-01T22:28:06Z",
+      "state": "CLOSED",
+      "commentCount": 0
+    }
+  ],
+  "topPRs": [
+    {
+      "id": "PR_kwDOOu4gVs6eYAhv",
+      "title": "cleanup TS and bump packages",
+      "author": "ChristopherTrimboli",
+      "number": 33,
+      "body": "This pull request introduces updates to dependencies, refactors code to improve type safety, and simplifies logging in the `KnowledgeService` class. The most significant changes include upgrading dependencies in `package.json`, adding type annotations for runtime parameters, and replacing `runtime.logger` with a direct `logger` import for cleaner logging.\r\n\r\n### Dependency Updates:\r\n* [`package.json`](diffhunk://#diff-7ae45ad102eab3b6d7e7896acd08c427a9b25b346470d7bc6507b6481575d519L36-R65): Upgraded several dependencies, including `react` and `react-dom` to version `^19.1.0`, `zod` to version `4.0.3`, and `dotenv` to version `^17.2.0`. These updates enhance compatibility and functionality.\r\n\r\n### Type Safety Improvements:\r\n* [`src/config.ts`](diffhunk://#diff-c3095d5010e65c52737a98a5d618ea24049ebe90c8470752426081d70ed6e012L16-R16): Updated `validateModelConfig` to accept an optional `runtime` parameter and fixed the default value for `CTX_KNOWLEDGE_ENABLED` to `'false'` for consistency. [[1]](diffhunk://#diff-c3095d5010e65c52737a98a5d618ea24049ebe90c8470752426081d70ed6e012L16-R16) [[2]](diffhunk://#diff-c3095d5010e65c52737a98a5d618ea24049ebe90c8470752426081d70ed6e012L27-R27)\r\n* [`src/llm.ts`](diffhunk://#diff-9d1147e1eeafc554ffa50a5890c4cc45e3ca64c5cbdce2c20c5b181b40550b4bL20-R23): Added explicit type annotations (`IAgentRuntime` and `ModelConfig`) to runtime and config parameters across multiple functions, improving code clarity and type safety. [[1]](diffhunk://#diff-9d1147e1eeafc554ffa50a5890c4cc45e3ca64c5cbdce2c20c5b181b40550b4bL20-R23) [[2]](diffhunk://#diff-9d1147e1eeafc554ffa50a5890c4cc45e3ca64c5cbdce2c20c5b181b40550b4bL254-R257) [[3]](diffhunk://#diff-9d1147e1eeafc554ffa50a5890c4cc45e3ca64c5cbdce2c20c5b181b40550b4bL314-R317)\r\n\r\n### Logging Simplification:\r\n* [`src/service.ts`](diffhunk://#diff-84b68bce2abfcb25c3328df0286963d7dacc924940adc41923bf4f502a6bc95aL88-R96): Replaced `runtime.logger` with a direct `logger` import across the `KnowledgeService` class, reducing redundancy and simplifying logging throughout the service lifecycle methods (`start`, `stop`, etc.). [[1]](diffhunk://#diff-84b68bce2abfcb25c3328df0286963d7dacc924940adc41923bf4f502a6bc95aL88-R96) [[2]](diffhunk://#diff-84b68bce2abfcb25c3328df0286963d7dacc924940adc41923bf4f502a6bc95aL106-L179) [[3]](diffhunk://#diff-84b68bce2abfcb25c3328df0286963d7dacc924940adc41923bf4f502a6bc95aL208-R208)\n\n<!-- This is an auto-generated comment: release notes by coderabbit.ai -->\n## Summary by CodeRabbit\n\n* **Chores**\n  * Upgraded multiple dependencies to newer versions and reorganized development dependencies.\n  * Updated package version to 1.2.0.\n* **Refactor**\n  * Improved type safety and clarity in function signatures for text generation and embedding features.\n  * Updated logging to use a centralized logger instead of relying on the runtime's logger.\n  * Minor formatting improvements in configuration schemas.\n  * Made configuration validation more consistent with environment variable handling.\n* **Bug Fixes**\n  * Ensured configuration properties are always initialized with default values.\n<!-- end of auto-generated comment: release notes by coderabbit.ai -->",
+      "repository": "elizaos-plugins/plugin-knowledge",
+      "createdAt": "2025-07-10T20:37:26Z",
+      "mergedAt": "2025-07-10T20:55:12Z",
+      "additions": 1296,
+      "deletions": 80
+    },
+    {
+      "id": "PR_kwDOOu4gVs6gd-vM",
+      "title": "feat: optimize knowledge graph",
+      "author": "0xbbjoker",
+      "number": 35,
+      "body": "## Summary\r\n\r\nOptimizes knowledge graph performance and memory usage in the ElizaOS plugin-knowledge system.\r\n\r\n## Changes\r\n\r\n- Enhanced knowledge retrieval algorithms\r\n- Improved memory management for large knowledge bases  \r\n- Optimized database operations and query processing\r\n- Better error handling and type safety\r\n\r\n## Impact\r\n\r\n- Faster knowledge retrieval and indexing\r\n- Reduced memory footprint\r\n- Better scalability for large knowledge graphs\n\n<!-- This is an auto-generated comment: release notes by coderabbit.ai -->\n\n## Summary by CodeRabbit\n\n* **New Features**\n  * Introduced an optimized interactive knowledge graph for visualizing documents and fragments, with improved performance and usability.\n  * Added pagination and dynamic loading of graph nodes for large datasets.\n  * Enhanced node details view with improved text wrapping and scroll behavior.\n  * Added a legend and clear error/loading states for the knowledge graph.\n\n* **Improvements**\n  * Updated layout and styling for better readability and navigation within the knowledge tab.\n\n<!-- end of auto-generated comment: release notes by coderabbit.ai -->",
+      "repository": "elizaos-plugins/plugin-knowledge",
+      "createdAt": "2025-07-24T14:33:06Z",
+      "mergedAt": null,
+      "additions": 649,
+      "deletions": 14
+    },
+    {
+      "id": "PR_kwDOOu4gVs6hby6r",
+      "title": "fix: read knowledge path from runtime",
+      "author": "0xbbjoker",
+      "number": 36,
+      "body": "Read knowledge path from runtime settings to enable character based path configuration. \n\n<!-- This is an auto-generated comment: release notes by coderabbit.ai -->\n## Summary by CodeRabbit\n\n* **New Features**\n  * Improved document loading to allow specifying a custom knowledge path at runtime, offering greater flexibility in selecting document sources.\n  * Enhanced warning messages to provide clearer guidance when the knowledge directory is missing.\n\n* **Chores**\n  * Downgraded the \"zod\" dependency version for improved compatibility.\n  * Updated the package version to 1.2.1.\n<!-- end of auto-generated comment: release notes by coderabbit.ai -->",
+      "repository": "elizaos-plugins/plugin-knowledge",
+      "createdAt": "2025-07-30T21:23:40Z",
+      "mergedAt": "2025-07-30T21:47:53Z",
+      "additions": 148,
+      "deletions": 180
+    },
+    {
+      "id": "PR_kwDOOu4gVs6gZVsP",
+      "title": "Add Ollama as a supported provider for plugin-knowledge and embeddings",
+      "author": "david-dina",
+      "number": 34,
+      "body": "Added full support and compatibility for Ollama via plugin-ollama. Fully tested on Windows 10. \n\n<!-- This is an auto-generated comment: release notes by coderabbit.ai -->\n\n## Summary by CodeRabbit\n\n* **New Features**\n  * Added support for the Ollama AI provider for both text generation and text embedding.\n  * Ollama can now be selected as a provider in configuration options.\n\n* **Documentation**\n  * Updated setup instructions to include detailed guidance for integrating Ollama, including environment variables, troubleshooting tips, and API key notes.\n  * Expanded documentation to reflect Ollama as a valid provider in relevant sections.\n\n<!-- end of auto-generated comment: release notes by coderabbit.ai -->",
+      "repository": "elizaos-plugins/plugin-knowledge",
+      "createdAt": "2025-07-24T07:00:33Z",
+      "mergedAt": null,
+      "additions": 139,
+      "deletions": 16
+    },
+    {
+      "id": "PR_kwDOOu4gVs6dAZds",
+      "title": "\"runtime is required to configure\" refactor",
+      "author": "odilitime",
+      "number": 32,
+      "body": "and do configuration once when making the singleton object helps #29 \n\n<!-- This is an auto-generated comment: release notes by coderabbit.ai -->\n\n## Summary by CodeRabbit\n\n* **New Features**\n  * Added a new configuration option to control loading of documents on startup.\n  * Improved handling and consistency of boolean environment variable parsing for configuration flags.\n\n* **Refactor**\n  * Centralized and standardized configuration validation and retrieval across the application.\n  * Updated several public function signatures to require a runtime parameter for context-aware configuration.\n  * Streamlined plugin exports by removing dynamic initialization logic.\n\n* **Style**\n  * Enhanced logging to provide clearer information about configuration and operational status.\n\n<!-- end of auto-generated comment: release notes by coderabbit.ai -->",
+      "repository": "elizaos-plugins/plugin-knowledge",
+      "createdAt": "2025-07-02T03:28:35Z",
+      "mergedAt": "2025-07-02T16:07:12Z",
+      "additions": 133,
+      "deletions": 189
+    }
+  ],
+  "codeChanges": {
+    "additions": 1597,
+    "deletions": 453,
+    "files": 11,
+    "commitCount": 33
+  },
+  "completedItems": [
+    {
+      "title": "cleanup TS and bump packages",
+      "prNumber": 33,
+      "type": "refactor",
+      "body": "This pull request introduces updates to dependencies, refactors code to improve type safety, and simplifies logging in the `KnowledgeService` class. The most significant changes include upgrading dependencies in `package.json`, adding type ",
+      "files": [
+        ".github/workflows/npm-deploy.yml",
+        "bun.lock",
+        "package.json",
+        "src/config.ts",
+        "src/llm.ts",
+        "src/service.ts",
+        "src/types.ts"
+      ]
+    },
+    {
+      "title": "\"runtime is required to configure\" refactor",
+      "prNumber": 32,
+      "type": "refactor",
+      "body": "and do configuration once when making the singleton object helps #29 \n\n<!-- This is an auto-generated comment: release notes by coderabbit.ai -->\n\n## Summary by CodeRabbit\n\n* **New Features**\n  * Added a new configuration option to control ",
+      "files": [
+        "src/config.ts",
+        "src/document-processor.ts",
+        "src/index.ts",
+        "src/llm.ts",
+        "src/service.ts",
+        "src/types.ts"
+      ]
+    },
+    {
+      "title": "make looksLikeBase64 smarter",
+      "prNumber": 30,
+      "type": "other",
+      "body": "I have a small MD file that it just assumed was base64\n\n<!-- This is an auto-generated comment: release notes by coderabbit.ai -->\n\n## Summary by CodeRabbit\n\n* **Bug Fixes**\n  * Improved detection of Base64-encoded strings for more accurate",
+      "files": [
+        "src/utils.ts"
+      ]
+    },
+    {
+      "title": "fix: read knowledge path from runtime",
+      "prNumber": 36,
+      "type": "bugfix",
+      "body": "Read knowledge path from runtime settings to enable character based path configuration. \n\n<!-- This is an auto-generated comment: release notes by coderabbit.ai -->\n## Summary by CodeRabbit\n\n* **New Features**\n  * Improved document loading ",
+      "files": [
+        "bun.lock",
+        "package.json",
+        "src/docs-loader.ts",
+        "src/service.ts"
+      ]
+    }
+  ],
+  "topContributors": [
+    {
+      "username": "wtfsayo",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/82053242?u=98209a1f10456f42d4d2fa71db4d5bf4a672cbc3&v=4",
+      "totalScore": 3953.338690610112,
+      "prScore": 3889.772690610112,
+      "issueScore": 26.2,
+      "reviewScore": 28.5,
+      "commentScore": 8.866,
+      "summary": "wtfsayo: This month, wtfsayo drove substantial improvements across the `elizaos/eliza` repository, focusing on architectural modernization, developer tooling, and UI enhancements. They led several major refactors, including the implementation of standardized service interfaces (#5565), migrating from EventEmitter to the native EventTarget API (#5609), and enhancing the module loader for better core functionality (#5629). Additionally, wtfsayo fixed critical bugs in action chaining (#5490) and the forms plugin (#5488), redesigned key UI elements like the agent cards homepage (#5344), and automated code quality analysis workflows (#5532). Their work touched on all aspects of the codebase, with a primary focus on bug fixes, configuration, and testing to improve overall system reliability."
+    },
+    {
+      "username": "tcm390",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/60634884?u=c6c41679b8322eaa0c81f72e0b4ed95e80f0ac16&v=4",
+      "totalScore": 1219.5991530672056,
+      "prScore": 1214.3991530672056,
+      "issueScore": 0,
+      "reviewScore": 5,
+      "commentScore": 0.2,
+      "summary": "tcm390: Drove significant product evolution in the elizaos/eliza repository, delivering a critical V1 to V2 character conversion feature to support user migration (#5536). They executed several large-scale refactors, including a major cleanup of prompt logic that removed over 5,700 lines of code (#5528) and a system-wide update to standardize confirmation dialogs (#5444). Additionally, tcm390 improved core functionality by enhancing prompt formatting (#5525) and implementing an auto-resizing chat input for better usability (#5546). This activity across 48 merged PRs demonstrates a strong focus on feature development, code health, and user experience enhancements."
+    },
+    {
+      "username": "ChristopherTrimboli",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/27584221?u=0d816ce1dcdea8f925aba18bb710153d4a87a719&v=4",
+      "totalScore": 819.5305198746062,
+      "prScore": 693.8145198746062,
+      "issueScore": 0,
+      "reviewScore": 124.5,
+      "commentScore": 1.2159999999999997,
+      "summary": "ChristopherTrimboli: Spearheaded a significant technical modernization and refactoring effort across the `elizaos/eliza` monorepo, merging 11 pull requests. This work included replacing core dependencies like `execa` with `bun.Spawn` for improved performance (#5531) and overhauling the testing and runtime environment (#5556). Christopher also drove major cleanups, such as the removal of the `plugin-forms` package (#5527, -5.6k lines), and fixed a critical deployment issue preventing plugin actions from loading (#5624). His contributions show a primary focus on bug fixes and foundational improvements, with changes spanning core code, configuration, and test files."
+    },
+    {
+      "username": "lalalune",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/18633264?u=e2e906c3712c2506ebfa98df01c2cfdc50050b30&v=4",
+      "totalScore": 475.980660042897,
+      "prScore": 473.780660042897,
+      "issueScore": 2,
+      "reviewScore": 0,
+      "commentScore": 0.2,
+      "summary": "lalalune: Focused on significant feature development and architectural enhancements within the `elizaos/eliza` repository this month. They merged four substantial pull requests, introducing action chaining (#5436) and creating new packages for configs (#5508) and test utilities (#5507), which involved large-scale code changes. Lalalune also has a strong pipeline of new capabilities underway with seven open pull requests for features like vision and planning plugins. Their work was primarily centered on new feature development, modifying a mix of code, test, and configuration files."
+    },
+    {
+      "username": "0xbbjoker",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/54844437?u=90fe1762420de6ad493a1c1582f1f70c0d87d8e2&v=4",
+      "totalScore": 447.13507293505944,
+      "prScore": 383.8550729350594,
+      "issueScore": 0,
+      "reviewScore": 62,
+      "commentScore": 1.28,
+      "summary": "0xbbjoker focused on improving the developer and user experience within the ElizaOS ecosystem by shipping a mix of features and critical fixes. Their most impactful contribution was the addition of a new `plugin-quick-starter` template to the CLI (elizaos/eliza#5589), a significant feature that added over 1200 lines of code. They also resolved key issues, including improving the secret panel UX (#5501) and making the Ollama plugin conditional (#5594), while actively supporting peers with 10 PR reviews. This month's work shows a primary focus on bug fixes, complemented by significant feature development and refactoring efforts."
+    },
+    {
+      "username": "ai16z-demirix",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/188117230?u=424cd5b834584b3799da288712b3c4158c8032a1&v=4",
+      "totalScore": 318.3344090413869,
+      "prScore": 292.43440904138686,
+      "issueScore": 10,
+      "reviewScore": 14,
+      "commentScore": 1.9,
+      "summary": "ai16z-demirix: Focused on modernizing the project's testing infrastructure by migrating to Bun, a significant effort highlighted by the large-scale refactor in elizaos/eliza#5368 (+1166/-1518 lines). They also addressed several bugs, including a key fix for plugin loading on Windows (#5416), and remained engaged through 11 PR comments and 3 reviews. Their contributions were concentrated on improving developer tooling and project stability, with work primarily touching documentation, tests, and configuration files."
+    },
+    {
+      "username": "SYMBaiEX",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/192078165?u=a6e562521cc94448799ea50ebc1faeda3c3cef26&v=4",
+      "totalScore": 312.7755564720922,
+      "prScore": 290.7375564720922,
+      "issueScore": 12,
+      "reviewScore": 9,
+      "commentScore": 1.038,
+      "summary": "SYMBaiEX: This month, SYMBaiEX led a significant effort to improve documentation and address platform-specific bugs in the `elizaos/eliza` repository. Their most impactful contribution was a comprehensive documentation overhaul, merged via PR #5401, which introduced over 43,000 lines of new content. They also enhanced the developer experience by migrating the CLI to a new library for consistency (#5359) and fixing critical Windows plugin loading failures (#5437). Overall, their work was heavily concentrated on documentation, with additional focus on bug fixes and feature development."
+    },
+    {
+      "username": "yungalgo",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/113615973?u=92e0f29f7e2fbb8ce46ed13c51f692ca803de02d&v=4",
+      "totalScore": 230.80007887714953,
+      "prScore": 215.00407887714954,
+      "issueScore": 0,
+      "reviewScore": 13.5,
+      "commentScore": 2.296,
+      "summary": "yungalgo focused on improving the command-line interface (CLI) and project creation experience in the elizaos/eliza repository. They merged four bug fixes, most impactfully automating the installation of AI model plugins during project creation (#5335) and preventing database inheritance issues in nested projects (#5618). In addition to their merged work, they have four more CLI fixes currently open and were active in code review, leaving 12 comments on other pull requests. This activity, primarily classified as bug fixes and refactors, shows a clear focus on improving the usability and robustness of the developer tooling."
+    },
+    {
+      "username": "META-DREAMER",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/7143583?u=96f63f10e066a06d5ad592c8efc659e2b84a68fc&v=4",
+      "totalScore": 229.5439390535457,
+      "prScore": 228.60393905354567,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0.94,
+      "summary": "META-DREAMER: Drove a significant architectural update this month by implementing a multi-repository frontend in elizaos/elizaos.github.io via PR #143, a substantial effort adding over 11k lines of code. This work, which originated from their own issue #141, was followed by a massive cleanup initiative that removed over 258k lines of legacy scripts and data in PR #145. Their activity shows a primary focus on new feature development, testing, and large-scale refactoring, touching a mix of code, test, and configuration files."
+    },
+    {
+      "username": "linear",
+      "avatarUrl": "https://avatars.githubusercontent.com/in/20150?v=4",
+      "totalScore": 124,
+      "prScore": 0,
+      "issueScore": 124,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "linear: Focused on product definition and quality assurance this month by creating 25 issues in the elizaos/eliza repository. This work involved identifying and documenting numerous bugs to improve CLI stability and user experience, such as #5434 and #5432. They also played a key role in planning future work by creating a series of detailed ticket specifications for a new 'scenarios' feature (#5573-#5579)."
+    },
+    {
+      "username": "odilitime",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/16395496?u=c9bac48e632aae594a0d85aaf9e9c9c69b674d8b&v=4",
+      "totalScore": 116.5119947219064,
+      "prScore": 102.7119947219064,
+      "issueScore": 4.1,
+      "reviewScore": 9.5,
+      "commentScore": 0.2,
+      "summary": "odilitime: Focused on direct code contributions this month, primarily addressing bug fixes through 8 commits that modified 8 files (+745/-202 lines). Although no pull requests were merged, they also supported the team's efforts by providing one pull request approval."
+    },
+    {
+      "username": "reallesee",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/155267459?u=048a8021b60ccdd599d1389ec6bd3a07578a8cbf&v=4",
+      "totalScore": 90.00654753827452,
+      "prScore": 90.00654753827452,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "reallesee: Focused on repository maintenance and correctness this month, merging four small pull requests in the elizaos/eliza repository. Their work included updating a GitHub Actions dependency (elizaos/eliza#5412) and addressing several minor typos and inconsistencies. These changes touched a mix of code, tests, and documentation, reflecting a focus on overall repository health."
+    },
+    {
+      "username": "HashWarlock",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/64296537?u=1d8228a93c06c603e08d438677b3f736d6b1ab22&v=4",
+      "totalScore": 89.32621476425933,
+      "prScore": 89.32621476425933,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": null
+    },
+    {
+      "username": "bealers",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/6403055?u=8c40778251e25b92cdee727056415b6c0d1bcdc5&v=4",
+      "totalScore": 80.0210947252628,
+      "prScore": 79.1830947252628,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0.838,
+      "summary": "bealers: Focused on expanding the plugin ecosystem this month, making a significant contribution by adding the Mattermost plugin to the registry (elizaos-plugins/registry#188) with a substantial change of +2371/-6560 lines. They also showed forward-thinking by drafting a proposal for Docker infrastructure enhancements (elizaos/eliza#5583). In addition to their own code, they were active in discussions, leaving 5 PR comments and 2 issue comments. Their work was concentrated on documentation and configuration files, reflecting their focus on plugins and infrastructure."
+    },
+    {
+      "username": "alex-nax",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/82507604?u=b3af75d82f80ed83007a77c351a64bdd9e5d67de&v=4",
+      "totalScore": 67.0875477931522,
+      "prScore": 67.0875477931522,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "alex-nax: Focused on a significant refactoring effort within the elizaos/eliza repository this month. This work is captured in two open pull requests, #5491 and #5547, which propose substantial changes totaling +7645/-4191 lines across 180 files. The code changes indicate this refactor primarily impacted configuration files, tests, and documentation."
+    },
+    {
+      "username": "standujar",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/16385918?u=718bdcd1585be8447bdfffb8c11ce249baa7532d&v=4",
+      "totalScore": 63.53265363119013,
+      "prScore": 58.132653631190124,
+      "issueScore": 0,
+      "reviewScore": 5,
+      "commentScore": 0.4,
+      "summary": "standujar: Focused on bug fixes this month, merging a key pull request in the elizaos/eliza repository. Their work in PR #5384 removed duplicate middleware from the API router, resulting in a significant code cleanup (+176/-416 lines). This contribution demonstrates a focus on improving the stability and efficiency of the API."
+    },
+    {
+      "username": "wookosh",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/120273332?u=493e01d0863a55ed139425760447079b96ef931d&v=4",
+      "totalScore": 51.39320153494498,
+      "prScore": 46.89320153494498,
+      "issueScore": 0,
+      "reviewScore": 4.5,
+      "commentScore": 0,
+      "summary": "wookosh: Focused on resolving a critical build process issue this month by merging `elizaos/eliza#5555`. This key contribution fixed a bug where the `tsup` build was incorrectly wiping the `vite` build, ensuring the stability of the development pipeline. Their work consisted of 7 commits primarily modifying test and configuration files, showing a clear focus on bugfixes and testing."
+    },
+    {
+      "username": "borisudovicic",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/31806472?u=27713fbe603baae91ef519990facbacd6c23e93d&v=4",
+      "totalScore": 50,
+      "prScore": 0,
+      "issueScore": 50,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "borisudovicic: Focused on product definition and quality assurance within the elizaos/eliza repository by creating 14 issues to scope out new work and identify problems. Their efforts helped define key initiatives, including establishing security roles for wallets (#5386), setting up a rate-limited LLM endpoint (#5438), and creating a character data migrator (#5452). This activity demonstrates a focus on planning and improving the core `elizaos/eliza` application."
+    },
+    {
+      "username": "0xtc23",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/129641996?v=4",
+      "totalScore": 43.5437738965761,
+      "prScore": 43.5437738965761,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "0xtc23: This month, 0xtc23 initiated work to expand the project's AI model integrations by opening a pull request to add a new plugin for xAI Grok models (elizaos/eliza#5338). This contribution represents their primary focus on plugin development within the elizaos/eliza repository."
+    },
+    {
+      "username": "krishvsoni",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/67964054?u=fc3dd00f7631af909a4fa3ee22461bb0c63e53f4&v=4",
+      "totalScore": 41.2057738965761,
+      "prScore": 41.2057738965761,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "krishvsoni: Focused on feature development this month, opening a significant pull request to implement a new CLI documentation coverage validation system (elizaos/eliza#5492). This substantial contribution introduced over 1300 lines of code. The changes demonstrate a comprehensive approach, touching feature code, tests, and configuration files."
+    },
+    {
+      "username": "bundinho",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/8318762?u=610af9286ca8d85b5d3e7be15fe069597b1beddf&v=4",
+      "totalScore": 40.625773896576106,
+      "prScore": 40.4257738965761,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0.2,
+      "summary": "bundinho: Focused on significant tooling and configuration enhancements this month, opening a major pull request in elizaos/eliza (#5517) to introduce pm2. This substantial effort is reflected in 17 commits and extensive modifications across over 1,000 files (+108072/-23942 lines). Their work was primarily concentrated on bugfixes and updating configuration files."
+    },
+    {
+      "username": "Zatoryama",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/117825329?v=4",
+      "totalScore": 40.4257738965761,
+      "prScore": 40.4257738965761,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "Zatoryama: No activity this month."
+    },
+    {
+      "username": "xR0am",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/67987108?u=7bcf07efafb31c4804c54cf35d74ec3de7a1d330&v=4",
+      "totalScore": 40.3387738965761,
+      "prScore": 40.3387738965761,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "xR0am: Focused on new feature development this month, opening a pull request to add a 'mcp server' in the elizaos/elizaos.github.io repository (#148). This work-in-progress represents their primary contribution for the period."
+    },
+    {
+      "username": "cuongpo",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/61429471?u=4ee322b81464e6380a46388ff471c9247bb4cbd7&v=4",
+      "totalScore": 36.506248211863664,
+      "prScore": 36.506248211863664,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "cuongpo: Focused on expanding the plugin ecosystem by contributing to the plugin registry. They successfully merged one pull request to add `plugin-coti` (elizaos-plugins/registry#193) and have another similar addition in progress (elizaos-plugins/registry#192). Their work this month involved modifying configuration files to register these new plugins."
+    },
+    {
+      "username": "github-advanced-security",
+      "avatarUrl": "https://avatars.githubusercontent.com/in/57789?v=4",
+      "totalScore": 36,
+      "prScore": 0,
+      "issueScore": 0,
+      "reviewScore": 36,
+      "commentScore": 0,
+      "summary": "github-advanced-security: No activity this month."
+    },
+    {
+      "username": "Dangoz",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/71613713?u=1839f372422c7a5503a713dca22981490b4ea7da&v=4",
+      "totalScore": 33.74239089914137,
+      "prScore": 33.74239089914137,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "Dangoz: This month, Dangoz's efforts were concentrated on a single, impactful bugfix in the `elizaos/eliza` repository. They merged a substantial pull request (#5343) to fix how the BaseApiClient handles unwrapped server responses, a change that involved +29872/-3864 lines of code. This work, which touched both code and test files, represented their entire focus for the period."
+    },
+    {
+      "username": "superdevstar50",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/140016551?u=a28d6409e859583510c771e9ebcbcf72adea1e04&v=4",
+      "totalScore": 28.420720770839914,
+      "prScore": 28.420720770839914,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "superdevstar50: Focused on expanding the plugin ecosystem this month by adding the 'plugin-desearch' to the registry via PR elizaos-plugins/registry#187. This contribution consisted of a targeted update to a configuration file."
+    },
+    {
+      "username": "QuasiPlanets",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/196568543?u=e9348d1ce7224da005aa0cfd8cbc407cdfbe82ed&v=4",
+      "totalScore": 27.539891235220416,
+      "prScore": 27.539891235220416,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "QuasiPlanets: This month's activity was focused on a large-scale branch synchronization, resulting in one open pull request, elizaos/eliza#5585. This sync contained a substantial volume of changes (+13052/-6712 lines across 205 files). The modifications were concentrated entirely within tests and documentation."
+    },
+    {
+      "username": "david-dina",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/75289436?u=e17229d4e7d042ba3dac2414bccfd05caa004b28&v=4",
+      "totalScore": 26.602535394802405,
+      "prScore": 21.764535394802408,
+      "issueScore": 4,
+      "reviewScore": 0,
+      "commentScore": 0.838,
+      "summary": "david-dina: Contributed to product stability by identifying and reporting a bug in the `elizaos/eliza` repository. They opened issue #5530 to document an infinite loop affecting Windows systems. This was their sole contribution this month."
+    },
+    {
+      "username": "bowtiedbluefin",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/95500901?v=4",
+      "totalScore": 24.105274778438428,
+      "prScore": 23.90527477843843,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0.2,
+      "summary": "bowtiedbluefin: This month, bowtiedbluefin focused on feature work, opening a pull request to update the plugin installation logic in elizaos/eliza (#5464). They also contributed one comment to a pull request. The work on their open PR included modifications to both application code and tests."
+    },
+    {
+      "username": "imthatcarlos",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/20136572?u=1c65c44403457a7870138f8f23fa0ef27487fb62&v=4",
+      "totalScore": 23.404306144334054,
+      "prScore": 23.204306144334055,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0.2,
+      "summary": "imthatcarlos: This month, imthatcarlos's activity was focused on plugin management within the ecosystem. They published the `plugin-bonsai` by merging a configuration update in `elizaos-plugins/registry#191`. Their work was concentrated entirely on modifying configuration files."
+    },
+    {
+      "username": "sentdeed",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/158516648?u=0971b81093452af3b253c24a5f23e83d33322436&v=4",
+      "totalScore": 20.813306144334053,
+      "prScore": 20.813306144334053,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "sentdeed: Contributed a bugfix to the elizaos/eliza repository this month, merging one pull request (elizaos/eliza#5674) to correct a spelling error. This work consisted of a single commit with a one-line change."
+    },
+    {
+      "username": "germashevanton",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/28603211?v=4",
+      "totalScore": 17.392751502819134,
+      "prScore": 17.392751502819134,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "germashevanton: This month, germashevanton's activity was focused on expanding the plugin ecosystem. They opened a pull request to add the @elizaos/plugin-datai to the registry (elizaos-plugins/registry#185), which involved modifying a configuration file."
+    },
+    {
+      "username": "samarth30",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/48334430?u=1fc119a6c2deb8cf60448b4c8961cb21dc69baeb&v=4",
+      "totalScore": 12,
+      "prScore": 0,
+      "issueScore": 12,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "samarth30: Focused on planning and defining future work within the elizaos/eliza repository. They created two issues to outline potential projects: one for a hybrid plugin migration approach (#5376) and another for a \"Plugin-zapper\" (#5620)."
+    },
+    {
+      "username": "crStiv",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/189026468?u=8cb1c20025c00ee75f6587c86c309be0c904ba54&v=4",
+      "totalScore": 11.431306144334057,
+      "prScore": 11.431306144334057,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "crStiv: This month, crStiv contributed a minor documentation update, opening a pull request to fix a typo in the elizaos/eliza repository (elizaos/eliza#5679). This change consisted of a single commit modifying one line within a documentation file."
+    },
+    {
+      "username": "shuhaib112",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/211030292?v=4",
+      "totalScore": 11.428573590279973,
+      "prScore": 11.228573590279973,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0.2,
+      "summary": "shuhaib112: This month, their activity was focused on initiating new work in the elizaos/eliza repository. They opened pull request #5421 (\"Create Os\") and also made one comment on a pull request. There were no merged contributions during this period."
+    },
+    {
+      "username": "manuelbarbas",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/132930012?u=d5940aff33df08ec553161a27d386b67ab25f8dc&v=4",
+      "totalScore": 6.119573590279972,
+      "prScore": 6.119573590279972,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "manuelbarbas: This month, their sole contribution was opening a pull request to add a new plugin to the registry (elizaos-plugins/registry#190), which involved a minor configuration change."
+    },
+    {
+      "username": "1BDO",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/210645034?v=4",
+      "totalScore": 4.54,
+      "prScore": 0,
+      "issueScore": 4.2,
+      "reviewScore": 0,
+      "commentScore": 0.33999999999999997,
+      "summary": "1BDO: This month, 1BDO contributed by reporting a potential issue with the Google API in the `elizaos/eliza` repository (#5664). Their activity was centered on creating and commenting on this single issue."
+    },
+    {
+      "username": "iQiexie",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/63598014?v=4",
+      "totalScore": 4.34,
+      "prScore": 0,
+      "issueScore": 4,
+      "reviewScore": 0,
+      "commentScore": 0.33999999999999997,
+      "summary": "iQiexie: This month, iQiexie focused on improving documentation by identifying and reporting misleading information in the REST API documentation (elizaos/eliza#5370). While there were no code changes, they also engaged in project discussions through comments on one issue and one pull request. Their activity was centered on the developer experience of the elizaos/eliza repository."
+    },
+    {
+      "username": "RolandOne",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/38446707?v=4",
+      "totalScore": 4.3,
+      "prScore": 0,
+      "issueScore": 4.1,
+      "reviewScore": 0,
+      "commentScore": 0.2,
+      "summary": "RolandOne: Focused on quality assurance this month by identifying and reporting a bug in the Twitter plugin where the client failed to create (elizaos-plugins/plugin-twitter#36). Their activity was centered on ensuring the stability of the plugin ecosystem."
+    },
+    {
+      "username": "gcbsumid",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/909374?u=37f846cf6061061fd858eeca1210d5378a7bb65b&v=4",
+      "totalScore": 4.1,
+      "prScore": 0,
+      "issueScore": 4.1,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "gcbsumid: Focused on bug triage within the `elizaos/eliza` repository this month. They identified, reported, and resolved an issue concerning plugin loading failures (elizaos/eliza#5407). This activity indicates a focus on the stability of the plugin ecosystem."
+    },
+    {
+      "username": "Ovodo",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/107152769?u=875457368f5da28dd042a989613a3b38c9d008e2&v=4",
+      "totalScore": 4.1,
+      "prScore": 0,
+      "issueScore": 4.1,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "Ovodo: This month, Ovodo focused on identifying and reporting issues in the `elizaos-plugins/plugin-twitter` repository. They created two issues to document observed failures: `elizaos-plugins/plugin-twitter#38` concerning timeline fetching and `elizaos-plugins/plugin-twitter#31` related to a client initialization error. Ovodo also contributed to one issue discussion."
+    },
+    {
+      "username": "fuhaooo",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/65961439?u=159d211599f4eeba073594cb00c12b9a2b5d6351&v=4",
+      "totalScore": 4,
+      "prScore": 0,
+      "issueScore": 4,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "fuhaooo: This month, fuhaooo's contribution was focused on product stability by identifying a potential bug in the `elizaos/eliza` repository. They opened issue #5617 to report that the agent was not responding to messages in the front-end GUI."
+    },
+    {
+      "username": "0xFlicker",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/97764360?u=bb67e6690e171114f06a83fd0de9573efd0316b1&v=4",
+      "totalScore": 4,
+      "prScore": 0,
+      "issueScore": 4,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "0xFlicker: This month, 0xFlicker contributed to project health by identifying and closing an issue in the elizaos/eliza repository (#5425). They also participated in a pull request discussion with a single comment."
+    },
+    {
+      "username": "yasir23",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/46179498?u=89dcf261b397bb2930cbedce61e09b8df01998e6&v=4",
+      "totalScore": 2.2,
+      "prScore": 0,
+      "issueScore": 2,
+      "reviewScore": 0,
+      "commentScore": 0.2,
+      "summary": "yasir23: This month, yasir23 focused on identifying and reporting potential bugs. They opened an issue in elizaos-plugins/plugin-twitter#39 to flag an error with the SQL database integration. Their contributions also included participating in issue discussions with two comments, indicating a focus on the stability of the Twitter plugin."
+    },
+    {
+      "username": "scottrepreneur",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/1778380?u=fede4269023b94283a66b98872ce7f971a7999e7&v=4",
+      "totalScore": 2.2,
+      "prScore": 0,
+      "issueScore": 2,
+      "reviewScore": 0,
+      "commentScore": 0.2,
+      "summary": "scottrepreneur: Focused on product quality and maintenance this month by identifying and reporting issues. They reported a web client versioning bug that has since been resolved (elizaos/eliza#4924). Additionally, they opened an issue to update a dependency in the Farcaster plugin (elizaos-plugins/plugin-farcaster#7)."
+    },
+    {
+      "username": "nccuong-vikki",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/207505492?u=fa65b4f312a59d9ad78fe77a84ef56a282fe8786&v=4",
+      "totalScore": 2.2,
+      "prScore": 0,
+      "issueScore": 2,
+      "reviewScore": 0,
+      "commentScore": 0.2,
+      "summary": "nccuong-vikki: This month, their contribution was focused on identifying a potential integration issue, opening issue #32 in `elizaos-plugins/plugin-twitter` to report that an old plugin method was being called."
+    },
+    {
+      "username": "myst4",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/86130282?u=2aee3ed374a6ecd7ba99178257ec95e8690f239b&v=4",
+      "totalScore": 2,
+      "prScore": 0,
+      "issueScore": 2,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "myst4: This month, myst4 focused on identifying potential bugs, opening issue elizaos-plugins/plugin-twitter#30 to report a discrepancy where a documented configuration variable was not being used. Their activity, which also included two issue comments, was concentrated on the Twitter plugin."
+    },
+    {
+      "username": "monilpat",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/15067321?v=4",
+      "totalScore": 2,
+      "prScore": 0,
+      "issueScore": 2,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "monilpat: Focused on proposing new functionality this month by opening an issue in the elizaos/eliza repository. They suggested an enhancement to the LLM Judge with multi-level evaluation (elizaos/eliza#5637)."
+    },
+    {
+      "username": "microgift",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/127183857?u=dd78a53a0ba96950405732e1f2d906b9f3e36b34&v=4",
+      "totalScore": 2,
+      "prScore": 0,
+      "issueScore": 2,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "microgift: This month, their activity was centered on the `elizaos/auto.fun` repository. Their contribution was opening issue #521 to propose work on a new \"autofun smart contract\"."
+    },
+    {
+      "username": "hesreallyhim",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/172150522?u=e288991976c46b53437a5880e90be140634a8477&v=4",
+      "totalScore": 2,
+      "prScore": 0,
+      "issueScore": 2,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": null
+    },
+    {
+      "username": "XiongUp123",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/72595468?u=d5cee5d0668b9e06f0a065d05abc25b151290261&v=4",
+      "totalScore": 2,
+      "prScore": 0,
+      "issueScore": 2,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "XiongUp123: This month, XiongUp123 contributed by identifying a potential build problem, opening issue #5482 in elizaos/eliza to report a dependency installation failure."
+    },
+    {
+      "username": "Megamindmaster",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/31832268?u=d978dad8011f9cf56047430ba41aff01e4c1be66&v=4",
+      "totalScore": 2,
+      "prScore": 0,
+      "issueScore": 2,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "Megamindmaster: No activity this month."
+    }
+  ],
+  "newPRs": 6,
+  "mergedPRs": 4,
+  "newIssues": 1,
+  "closedIssues": 2,
+  "activeContributors": 13
+}

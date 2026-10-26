@@ -1,0 +1,751 @@
+1:"$Sreact.fragment"
+2:I[4817319,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"IntervalSelector"]
+3:I[6998365,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"LlmCopyButton"]
+13:I[3642796,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],""]
+14:I[3238488,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"StatCardsDisplay"]
+1d:I[4261541,["/eliza-leaderboard/_next/static/chunks/b33bcbdcb3f88354.js","/eliza-leaderboard/_next/static/chunks/8ba59154b6704904.js"],"OutletBoundary"]
+1e:"$Sreact.suspense"
+4:T580,## Why
+The provisioning-worker already calls `configureAppsDeployBackend()` on boot, but the apps deploy backend only activates once the `APPS_*`/`CONTAINERS_*` env is present in `/opt/eliza/cloud/.env.local`. That env was being hand-set on the box — exactly the manual step to eliminate (@standujar's "always think IaC / avoid manual"). This replaces it with a re-runnable script.
+
+## What
+`node packages/scripts/cloud/admin/arm-apps-daemon.mjs --host <cp> --ssh-key <key> --app-node <id:ip:cap> --base-domain apps-staging.elizacloud.ai --caddy-admin http://<node>:2019 --tenant-admin-dsn '<dsn>' --node-ssh-key-path <key-the-node-accepts>`
+
+- **Idempotent upsert**: deletes-then-appends each key, every other line untouched, so it's safe to re-run and never clobbers the agent/coding-fleet config. Backs up the env file once.
+- Restarts `eliza-provisioning-worker.service` and prints status + last log lines (secrets redacted in all output).
+- **`--dry-run`** prints the exact remote script without touching anything.
+- Mirrors `bootstrap-provisioning-worker-host.mjs` (operator SSH). Values come from flags fed by the `apps-shared` + per-env terraform outputs, so re-running after an infra change re-converges the box.
+
+Pairs with #8394 (Caddy front door). Verified: `node --check` clean, biome clean, dry-run renders a correct idempotent remote script. Inert until run with a real `--host`/`--ssh-key`.5:T564,## Why
+Arming the apps (Product 2) deploy backend meant **hand-SSHing the control plane** to set the `APPS_*`/`CONTAINERS_*` env in `cloud/.env.local`. @standujar's directive is "always think IaC / avoid manual" — and there's a second benefit: this needs **no operator SSH key added to any box**, because it reuses the **same `ELIZA_PROVISIONING_SSH_KEY`/`HOST` secrets the deploy workflow already uses**.
+
+## What
+`workflow_dispatch` → SSHes the env's provisioning host → **idempotent upsert** of the apps env (delete-then-append per key, every other line untouched, so the agent/coding-fleet config is never clobbered) → restarts `eliza-provisioning-worker.service` → prints status (secrets redacted).
+
+Inputs: `environment`, `app_node` (`id:ip:capacity`), optional `tenant_admin_dsn` (empty → daemon uses the seeded encrypted `tenant_db_clusters` row), optional `egress_proxy`. Base domain from `vars.APPS_BASE_DOMAIN`; Caddy admin URL derived from the app-node IP.
+
+Mirrors `packages/scripts/cloud/admin/arm-apps-daemon.mjs` (#8397) so a local run and a CI run produce the same box state. Completes the go-live trio with #8394 (Caddy front door).
+
+## Net
+After this + #8394 + a node replace, the full apps go-live is **all dispatchable** (terraform apply → arm → deploy) with zero manual SSH — anyone with repo access can run it, nothing hand-typed on a box.6:T53d,## Why
+The #8386 split moved `random_password.tenant_db_admin` from `apps-data-plane` → `apps-shared`, but the **per-env state still lists it**, so every `terraform init -lockfile=readonly` (plan/apply) fails with *"provider dependency changes detected"* — the apps-data-plane apply is fully blocked until the orphan is removed (details: #8321).
+
+## What
+A `workflow_dispatch` that runs a **state-only `terraform state rm`** — it never touches real infrastructure (no plan, no apply). Defaults to that exact orphan + `staging`, double-guarded (`confirm` must be the word `remove`), shares the `terraform-apps-hetzner` concurrency group so it can't race an apply, and checks the address is actually in state first (warns + skips if already gone). Inits **without** `-lockfile=readonly` here (only here) so terraform can load a state that references a now-dropped provider. Reusable for any future module-split orphan.
+
+## After this merges
+Dispatch it for staging (+ production) → the orphan clears → `terraform-apps-data-plane` plan/apply reconciles → I drive the rest of go-live by dispatch (apply `-replace=app_node[1]` so it boots with the merged Caddy → arm via #8398 → sample deploy). cc @standujar — this is the IaC version of the `state rm` from #8321; equivalent to running it by hand, just reviewable + repeatable.7:T978,## What
+Replaces the final `STAN:` TODO in the app-node cloud-init with the real ingress front door. Verified live: the staging app node (`167.233.112.155`, behind `*.apps-staging.elizacloud.ai`) currently answers **nothing on :80/:443** — ports open, no listener — so no per-app URL can serve until this lands + the node is replaced.
+
+Matches the contract the **merged** runtime code already targets:
+- **on-demand TLS** gated by cloud-api's ask endpoint (`/api/v1/apps-ingress/ask`) — **live-verified answering fail-closed on both `api-staging` and `api` prod** — so certs are only minted for a running container's shortid host or a verified+active managed custom domain (#8325/#8335);
+- **admin API on `:2019`** for the deploy flow's live route add/remove (`apps-ingress-provisioner`: idempotent POST by `@id`, DELETE on teardown) — exposed **only to `operator_ingress_cidrs`** via a new firewall rule (same tight allowlist as SSH, never public);
+- **`import /etc/caddy/apps.d/*.caddy`** so snapshot/reconcile tooling (the admin ingress-map emitter; #8351's client) composes additively;
+- deliberately **no terminal catch-all** in the base server — the deploy flow APPENDS routes, and a terminal handler would shadow every appended route (non-terminal routes pass through; unmatched hosts never pass the ask gate so they never get a cert anyway).
+
+## Config plumbing
+- New required var **`cloud_api_origin`** (validated `https://` origin, no default — staging pointing at prod's ask would mint certs against the wrong environment's state). Threaded through the workflow as `vars.APPS_CLOUD_API_ORIGIN` + preflight check. **Already set on both GH environments** (`https://api-staging.elizacloud.ai` / `https://api.elizacloud.ai`); tfvars examples updated.
+- Caddy from the official Cloudsmith repo (distro package lags); config written before install so first start picks it up; `apps.d/` pre-created with a placeholder so the import validates.
+
+## Rollout
+New nodes boot serving-ready. The **existing staging node** picks this up via the workflow's `replace` input (`user_data` is `ignore_changes` by design) — it runs no apps yet, so replacement is free. After replace: cert issuance + per-app routes work end-to-end with the merged deploy flow.
+
+cc @standujar — this is the missing leg of "apps up, start working on that again"; with it merged + a node replace, the staging apps lane serves real URLs.8:T3413,Bumps the npm_and_yarn group with 1 update in the /packages/cloud-services/operator directory: [esbuild](https://github.com/evanw/esbuild).
+
+Updates `esbuild` from 0.28.0 to 0.28.1
+<details>
+<summary>Release notes</summary>
+<p><em>Sourced from <a href="https://github.com/evanw/esbuild/releases">esbuild's releases</a>.</em></p>
+<blockquote>
+<h2>v0.28.1</h2>
+<ul>
+<li>
+<p>Disallow <code>\</code> in local development server HTTP requests (<a href="https://github.com/evanw/esbuild/security/advisories/GHSA-g7r4-m6w7-qqqr">GHSA-g7r4-m6w7-qqqr</a>)</p>
+<p>This release fixes a security issue where HTTP requests to esbuild's local development server could traverse outside of the serve directory on Windows using a <code>\</code> backslash character. It happened due to the use of Go's <code>path.Clean()</code> function, which only handles Unix-style <code>/</code> characters. HTTP requests with paths containing <code>\</code> are no longer allowed.</p>
+<p>Thanks to <a href="https://github.com/dellalibera"><code>@​dellalibera</code></a> for reporting this issue.</p>
+</li>
+<li>
+<p>Add integrity checks to the Deno API (<a href="https://github.com/evanw/esbuild/security/advisories/GHSA-gv7w-rqvm-qjhr">GHSA-gv7w-rqvm-qjhr</a>)</p>
+<p>The previous release of esbuild added integrity checks to esbuild's npm install script. This release also adds integrity checks to esbuild's Deno install script. Now esbuild's Deno API will also fail with an error if the downloaded esbuild binary contains something other than the expected content.</p>
+<p>Note that esbuild's Deno API installs from <code>registry.npmjs.org</code> by default, but allows the <code>NPM_CONFIG_REGISTRY</code> environment variable to override this with a custom package registry. This change means that the esbuild executable served by <code>NPM_CONFIG_REGISTRY</code> must now match the expected content.</p>
+<p>Thanks to <a href="https://github.com/sondt99"><code>@​sondt99</code></a> for reporting this issue.</p>
+</li>
+<li>
+<p>Avoid inlining <code>using</code> and <code>await using</code> declarations (<a href="https://redirect.github.com/evanw/esbuild/issues/4482">#4482</a>)</p>
+<p>Previously esbuild's minifier sometimes incorrectly inlined <code>using</code> and <code>await using</code> declarations into subsequent uses of that declaration, which then fails to dispose of the resource correctly. This bug happened because inlining was done for <code>let</code> and <code>const</code> declarations by avoiding doing it for <code>var</code> declarations, which no longer worked when more declaration types were added. Here's an example:</p>
+<pre lang="js"><code>// Original code
+{
+  using x = new Resource()
+  x.activate()
+}
+<p>// Old output (with --minify)<br />
+new Resource().activate();</p>
+<p>// New output (with --minify)<br />
+{using e=new Resource;e.activate()}<br />
+</code></pre></p>
+</li>
+<li>
+<p>Fix module evaluation when an error is thrown (<a href="https://redirect.github.com/evanw/esbuild/issues/4461">#4461</a>, <a href="https://redirect.github.com/evanw/esbuild/pull/4467">#4467</a>)</p>
+<p>If an error is thrown during module evaluation, esbuild previously didn't preserve the state of the module for subsequent module references. This was observable if <code>import()</code> or <code>require()</code> is used to import a module multiple times. The thrown error is supposed to be thrown by every call to <code>import()</code> or <code>require()</code>, not just the first. With this release, esbuild will now throw the same error every time you call <code>import()</code> or <code>require()</code> on a module that throws during its evaluation.</p>
+</li>
+<li>
+<p>Fix some edge cases around the <code>new</code> operator (<a href="https://redirect.github.com/evanw/esbuild/issues/4477">#4477</a>)</p>
+<p>Previously esbuild incorrectly printed certain edge cases involving complex expressions inside the target of a <code>new</code> expression (specifically an optional chain and/or a tagged template literal). The generated code for the <code>new</code> target was not correctly wrapped with parentheses, and either contained a syntax error or had different semantics. These edge cases have been fixed so that they now correctly wrap the <code>new</code> target in parentheses. Here is an example of some affected code:</p>
+<pre lang="js"><code>// Original code
+new (foo()`bar`)()
+new (foo()?.bar)()
+<p>// Old output<br />
+new foo()<code>bar</code>();<br />
+new (foo())?.bar();</p>
+<p></code></pre></p>
+</li>
+</ul>
+<!-- raw HTML omitted -->
+</blockquote>
+<p>... (truncated)</p>
+</details>
+<details>
+<summary>Changelog</summary>
+<p><em>Sourced from <a href="https://github.com/evanw/esbuild/blob/main/CHANGELOG.md">esbuild's changelog</a>.</em></p>
+<blockquote>
+<h2>0.28.1</h2>
+<ul>
+<li>
+<p>Disallow <code>\</code> in local development server HTTP requests (<a href="https://github.com/evanw/esbuild/security/advisories/GHSA-g7r4-m6w7-qqqr">GHSA-g7r4-m6w7-qqqr</a>)</p>
+<p>This release fixes a security issue where HTTP requests to esbuild's local development server could traverse outside of the serve directory on Windows using a <code>\</code> backslash character. It happened due to the use of Go's <code>path.Clean()</code> function, which only handles Unix-style <code>/</code> characters. HTTP requests with paths containing <code>\</code> are no longer allowed.</p>
+<p>Thanks to <a href="https://github.com/dellalibera"><code>@​dellalibera</code></a> for reporting this issue.</p>
+</li>
+<li>
+<p>Add integrity checks to the Deno API (<a href="https://github.com/evanw/esbuild/security/advisories/GHSA-gv7w-rqvm-qjhr">GHSA-gv7w-rqvm-qjhr</a>)</p>
+<p>The previous release of esbuild added integrity checks to esbuild's npm install script. This release also adds integrity checks to esbuild's Deno install script. Now esbuild's Deno API will also fail with an error if the downloaded esbuild binary contains something other than the expected content.</p>
+<p>Note that esbuild's Deno API installs from <code>registry.npmjs.org</code> by default, but allows the <code>NPM_CONFIG_REGISTRY</code> environment variable to override this with a custom package registry. This change means that the esbuild executable served by <code>NPM_CONFIG_REGISTRY</code> must now match the expected content.</p>
+<p>Thanks to <a href="https://github.com/sondt99"><code>@​sondt99</code></a> for reporting this issue.</p>
+</li>
+<li>
+<p>Avoid inlining <code>using</code> and <code>await using</code> declarations (<a href="https://redirect.github.com/evanw/esbuild/issues/4482">#4482</a>)</p>
+<p>Previously esbuild's minifier sometimes incorrectly inlined <code>using</code> and <code>await using</code> declarations into subsequent uses of that declaration, which then fails to dispose of the resource correctly. This bug happened because inlining was done for <code>let</code> and <code>const</code> declarations by avoiding doing it for <code>var</code> declarations, which no longer worked when more declaration types were added. Here's an example:</p>
+<pre lang="js"><code>// Original code
+{
+  using x = new Resource()
+  x.activate()
+}
+<p>// Old output (with --minify)<br />
+new Resource().activate();</p>
+<p>// New output (with --minify)<br />
+{using e=new Resource;e.activate()}<br />
+</code></pre></p>
+</li>
+<li>
+<p>Fix module evaluation when an error is thrown (<a href="https://redirect.github.com/evanw/esbuild/issues/4461">#4461</a>, <a href="https://redirect.github.com/evanw/esbuild/pull/4467">#4467</a>)</p>
+<p>If an error is thrown during module evaluation, esbuild previously didn't preserve the state of the module for subsequent module references. This was observable if <code>import()</code> or <code>require()</code> is used to import a module multiple times. The thrown error is supposed to be thrown by every call to <code>import()</code> or <code>require()</code>, not just the first. With this release, esbuild will now throw the same error every time you call <code>import()</code> or <code>require()</code> on a module that throws during its evaluation.</p>
+</li>
+<li>
+<p>Fix some edge cases around the <code>new</code> operator (<a href="https://redirect.github.com/evanw/esbuild/issues/4477">#4477</a>)</p>
+<p>Previously esbuild incorrectly printed certain edge cases involving complex expressions inside the target of a <code>new</code> expression (specifically an optional chain and/or a tagged template literal). The generated code for the <code>new</code> target was not correctly wrapped with parentheses, and either contained a syntax error or had different semantics. These edge cases have been fixed so that they now correctly wrap the <code>new</code> target in parentheses. Here is an example of some affected code:</p>
+<pre lang="js"><code>// Original code
+new (foo()`bar`)()
+new (foo()?.bar)()
+<p>// Old output<br />
+new foo()<code>bar</code>();<br />
+new (foo())?.bar();<br />
+</code></pre></p>
+</li>
+</ul>
+<!-- raw HTML omitted -->
+</blockquote>
+<p>... (truncated)</p>
+</details>
+<details>
+<summary>Commits</summary>
+<ul>
+<li><a href="https://github.com/evanw/esbuild/commit/bb9db84c02433fbe37b3509f53f9f3e3cc48725e"><code>bb9db84</code></a> publish 0.28.1 to npm</li>
+<li><a href="https://github.com/evanw/esbuild/commit/9ff053e53b8eeb990f59355dbea365277ac45ee2"><code>9ff053e</code></a> security: add integrity checks to the Deno API</li>
+<li><a href="https://github.com/evanw/esbuild/commit/0a9bf2135b67c7e28989a5ba19f0f000805a5ab5"><code>0a9bf21</code></a> enforce non-negative size in gzip parser</li>
+<li><a href="https://github.com/evanw/esbuild/commit/e2a1a7132058ee067fe736eac15f695861b8654e"><code>e2a1a71</code></a> security: forbid <code>\\</code> in local dev server requests</li>
+<li><a href="https://github.com/evanw/esbuild/commit/83a2cbfc35809f4fd5152da59572d7bed7739d78"><code>83a2cbf</code></a> fix <a href="https://redirect.github.com/evanw/esbuild/issues/4482">#4482</a>: don't inline <code>using</code> declarations</li>
+<li><a href="https://github.com/evanw/esbuild/commit/308ad745d824c77bc607603451b257d0f2fd9a38"><code>308ad74</code></a> fix <a href="https://redirect.github.com/evanw/esbuild/issues/4471">#4471</a>: renaming of nested <code>var</code> declarations</li>
+<li><a href="https://github.com/evanw/esbuild/commit/f013f5f99a015bce92ec48d49181d4ad3177b29b"><code>f013f5f</code></a> fix some typos</li>
+<li><a href="https://github.com/evanw/esbuild/commit/aafd6e48b1088336a5f5a17e930be7e840d43d8c"><code>aafd6e4</code></a> chore: fix some minor issues in comments (<a href="https://redirect.github.com/evanw/esbuild/issues/4462">#4462</a>)</li>
+<li><a href="https://github.com/evanw/esbuild/commit/15300c30b5e22f7cfcbed850c246d35095658386"><code>15300c3</code></a> follow up: cjs evaluation fixes</li>
+<li><a href="https://github.com/evanw/esbuild/commit/1bda0c31d7697c0af44b3ab39b81e599e559a395"><code>1bda0c3</code></a> fix <a href="https://redirect.github.com/evanw/esbuild/issues/4461">#4461</a>, fix <a href="https://redirect.github.com/evanw/esbuild/issues/4467">#4467</a>: esm evaluation fixes</li>
+<li>Additional commits viewable in <a href="https://github.com/evanw/esbuild/compare/v0.28.0...v0.28.1">compare view</a></li>
+</ul>
+</details>
+<br />
+
+
+[![Dependabot compatibility score](https://dependabot-badges.githubapp.com/badges/compatibility_score?dependency-name=esbuild&package-manager=npm_and_yarn&previous-version=0.28.0&new-version=0.28.1)](https://docs.github.com/en/github/managing-security-vulnerabilities/about-dependabot-security-updates#about-compatibility-scores)
+
+Dependabot will resolve any conflicts with this PR as long as you don't alter it yourself. You can also trigger a rebase manually by commenting `@dependabot rebase`.
+
+[//]: # (dependabot-automerge-start)
+[//]: # (dependabot-automerge-end)
+
+---
+
+<details>
+<summary>Dependabot commands and options</summary>
+<br />
+
+You can trigger Dependabot actions by commenting on this PR:
+- `@dependabot rebase` will rebase this PR
+- `@dependabot recreate` will recreate this PR, overwriting any edits that have been made to it
+- `@dependabot show <dependency name> ignore conditions` will show all of the ignore conditions of the specified dependency
+- `@dependabot ignore <dependency name> major version` will close this group update PR and stop Dependabot creating any more for the specific dependency's major version (unless you unignore this specific dependency's major version or upgrade to it yourself)
+- `@dependabot ignore <dependency name> minor version` will close this group update PR and stop Dependabot creating any more for the specific dependency's minor version (unless you unignore this specific dependency's minor version or upgrade to it yourself)
+- `@dependabot ignore <dependency name>` will close this group update PR and stop Dependabot creating any more for the specific dependency (unless you unignore this specific dependency or upgrade to it yourself)
+- `@dependabot unignore <dependency name>` will remove all of the ignore conditions of the specified dependency
+- `@dependabot unignore <dependency name> <ignore condition>` will remove the ignore condition of the specified dependency and ignore conditions
+You can disable automated security fix PRs for this repo from the [Security Alerts page](https://github.com/elizaOS/eliza/network/alerts).
+
+</details>9:T71b,Last cloud-init gap from tonight's prod CP migration. We had to install headscale by hand on the new CP (curl deb + dpkg -i + chown state dir). Now the package install + systemd unit + state dir come from cloud-init's `packages:` list. The runcmd stops the package's auto-started service so it doesn't bind with a fresh empty DB before the operator overlays the prior CP's config + state.
+
+Env-specific bits (`server_url`, SQLite db, noise_private.key) stay an operator handoff — same shape as `cloud/.env.local`. The exact migration runbook is documented in the module's README so the next CP rebuild follows it instead of rediscovering it from scratch.
+
+## What's still NOT in cloud-init (intentionally)
+
+- `config.yaml` overlay — env-specific (`server_url` per CP hostname). Operator copies + sed adjusts on first deploy.
+- `/var/lib/headscale/db.sqlite` + `noise_private.key` — operator copies from prior CP to preserve users / API keys / pre-auth keys.
+
+## What was NOT a gap
+
+Checked the deploy workflow (`deploy-eliza-provisioning-worker.yml`): it already runs `bun install --no-save --ignore-scripts`, manually creates the `@elizaos/cloud-shared` symlink, runs `bun run build:core`, and the plugin-sql `@elizaos/core` symlink. The manual deploy we did tonight was only because `ELIZA_PROVISIONING_SSH_KEY` secret pointed at the OLD CP's key — once we set it correctly the workflow ran green end-to-end.
+
+## Test plan
+
+- [x] terraform fmt -check + validate green locally
+- [ ] CI validate green
+- [ ] On next CP rebuild (some future Phase 6 / staging-CP re-image), confirm `apt list --installed | grep headscale` returns 0.28.0+ from default Ubuntu repo, `/var/lib/headscale` exists owned by headscale user, `systemctl is-active headscale` returns `inactive` (waiting for operator to copy config + state)a:T289f,Bumps the uv group with 1 update in the /packages/benchmarks/OSWorld directory: [pypdf](https://github.com/py-pdf/pypdf).
+
+Updates `pypdf` from 6.10.2 to 6.12.0
+<details>
+<summary>Release notes</summary>
+<p><em>Sourced from <a href="https://github.com/py-pdf/pypdf/releases">pypdf's releases</a>.</em></p>
+<blockquote>
+<h2>Version 6.12.0, 2026-05-21</h2>
+<h2>What's new</h2>
+<h3>Security (SEC)</h3>
+<ul>
+<li>Disallow cross-reference streams with zero-only width values (<a href="https://redirect.github.com/py-pdf/pypdf/issues/3791">#3791</a>) by <a href="https://github.com/stefan6419846"><code>@​stefan6419846</code></a></li>
+<li>Avoid excessive whitespace in layout mode text extraction (<a href="https://redirect.github.com/py-pdf/pypdf/issues/3790">#3790</a>) by <a href="https://github.com/stefan6419846"><code>@​stefan6419846</code></a></li>
+</ul>
+<h3>New Features (ENH)</h3>
+<ul>
+<li>Implement SASLprep (RFC 4013) for AES-256 password normalization (<a href="https://redirect.github.com/py-pdf/pypdf/issues/3780">#3780</a>) by <a href="https://github.com/adityamoolya"><code>@​adityamoolya</code></a></li>
+<li>CID font resource from font file to encode more characters (<a href="https://redirect.github.com/py-pdf/pypdf/issues/3652">#3652</a>) by <a href="https://github.com/PJBrs"><code>@​PJBrs</code></a></li>
+</ul>
+<h3>Performance Improvements (PI)</h3>
+<ul>
+<li>Optimize retrieval of named destinatinos in reader (<a href="https://redirect.github.com/py-pdf/pypdf/issues/3442">#3442</a>) by <a href="https://github.com/larsga"><code>@​larsga</code></a></li>
+</ul>
+<h3>Bug Fixes (BUG)</h3>
+<ul>
+<li>Fix TreeObject.insert_child KeyError on fresh children (<a href="https://redirect.github.com/py-pdf/pypdf/issues/3786">#3786</a>) by <a href="https://github.com/Abzaek"><code>@​Abzaek</code></a></li>
+</ul>
+<h3>Robustness (ROB)</h3>
+<ul>
+<li>AppearanceStream: Also honor user-set font name when not flattening annotations (<a href="https://redirect.github.com/py-pdf/pypdf/issues/3781">#3781</a>) by <a href="https://github.com/PJBrs"><code>@​PJBrs</code></a></li>
+</ul>
+<h3>Documentation (DOC)</h3>
+<ul>
+<li>Block encrypting writer in incremental mode (<a href="https://redirect.github.com/py-pdf/pypdf/issues/3789">#3789</a>) by <a href="https://github.com/stefan6419846"><code>@​stefan6419846</code></a></li>
+</ul>
+<p><a href="https://github.com/py-pdf/pypdf/compare/6.11.0...6.12.0">Full Changelog</a></p>
+<h2>Version 6.11.0, 2026-05-09</h2>
+<h2>What's new</h2>
+<h3>New Features (ENH)</h3>
+<ul>
+<li>Initialise a Font from an embedded font file (<a href="https://redirect.github.com/py-pdf/pypdf/issues/3704">#3704</a>) by <a href="https://github.com/PJBrs"><code>@​PJBrs</code></a></li>
+</ul>
+<h3>Robustness (ROB)</h3>
+<ul>
+<li>Allow to fix AES padding length in non-strict mode (<a href="https://redirect.github.com/py-pdf/pypdf/issues/3742">#3742</a>) by <a href="https://github.com/stefan6419846"><code>@​stefan6419846</code></a></li>
+</ul>
+<h3>Developer Experience (DEV)</h3>
+<ul>
+<li>Enable PyPy testing again (<a href="https://redirect.github.com/py-pdf/pypdf/issues/3752">#3752</a>) by <a href="https://github.com/stefan6419846"><code>@​stefan6419846</code></a></li>
+<li>Align mypy Makefile target with strict mode (<a href="https://redirect.github.com/py-pdf/pypdf/issues/3690">#3690</a>) by <a href="https://github.com/costajohnt"><code>@​costajohnt</code></a></li>
+</ul>
+<p><a href="https://github.com/py-pdf/pypdf/compare/6.10.2...6.11.0">Full Changelog</a></p>
+</blockquote>
+</details>
+<details>
+<summary>Changelog</summary>
+<p><em>Sourced from <a href="https://github.com/py-pdf/pypdf/blob/main/CHANGELOG.md">pypdf's changelog</a>.</em></p>
+<blockquote>
+<h2>Version 6.12.0, 2026-05-21</h2>
+<h3>Security (SEC)</h3>
+<ul>
+<li>Disallow cross-reference streams with zero-only width values (<a href="https://redirect.github.com/py-pdf/pypdf/issues/3791">#3791</a>)</li>
+<li>Avoid excessive whitespace in layout mode text extraction (<a href="https://redirect.github.com/py-pdf/pypdf/issues/3790">#3790</a>)</li>
+</ul>
+<h3>New Features (ENH)</h3>
+<ul>
+<li>Implement SASLprep (RFC 4013) for AES-256 password normalization (<a href="https://redirect.github.com/py-pdf/pypdf/issues/3780">#3780</a>)</li>
+<li>CID font resource from font file to encode more characters (<a href="https://redirect.github.com/py-pdf/pypdf/issues/3652">#3652</a>)</li>
+</ul>
+<h3>Performance Improvements (PI)</h3>
+<ul>
+<li>Optimize retrieval of named destinatinos in reader (<a href="https://redirect.github.com/py-pdf/pypdf/issues/3442">#3442</a>)</li>
+</ul>
+<h3>Bug Fixes (BUG)</h3>
+<ul>
+<li>Fix TreeObject.insert_child KeyError on fresh children (<a href="https://redirect.github.com/py-pdf/pypdf/issues/3786">#3786</a>)</li>
+</ul>
+<h3>Robustness (ROB)</h3>
+<ul>
+<li>AppearanceStream: Also honor user-set font name when not flattening annotations (<a href="https://redirect.github.com/py-pdf/pypdf/issues/3781">#3781</a>)</li>
+</ul>
+<h3>Documentation (DOC)</h3>
+<ul>
+<li>Block encrypting writer in incremental mode (<a href="https://redirect.github.com/py-pdf/pypdf/issues/3789">#3789</a>)</li>
+</ul>
+<p><a href="https://github.com/py-pdf/pypdf/compare/6.11.0...6.12.0">Full Changelog</a></p>
+<h2>Version 6.11.0, 2026-05-09</h2>
+<h3>New Features (ENH)</h3>
+<ul>
+<li>Initialise a Font from an embedded font file (<a href="https://redirect.github.com/py-pdf/pypdf/issues/3704">#3704</a>)</li>
+</ul>
+<h3>Robustness (ROB)</h3>
+<ul>
+<li>Allow to fix AES padding length in non-strict mode (<a href="https://redirect.github.com/py-pdf/pypdf/issues/3742">#3742</a>)</li>
+</ul>
+<h3>Developer Experience (DEV)</h3>
+<ul>
+<li>Enable PyPy testing again (<a href="https://redirect.github.com/py-pdf/pypdf/issues/3752">#3752</a>)</li>
+<li>Align mypy Makefile target with strict mode (<a href="https://redirect.github.com/py-pdf/pypdf/issues/3690">#3690</a>)</li>
+</ul>
+<p><a href="https://github.com/py-pdf/pypdf/compare/6.10.2...6.11.0">Full Changelog</a></p>
+</blockquote>
+</details>
+<details>
+<summary>Commits</summary>
+<ul>
+<li><a href="https://github.com/py-pdf/pypdf/commit/08eb1435ef2e4d1e3d5fe90636c3cee7aa6f4470"><code>08eb143</code></a> REL: 6.12.0</li>
+<li><a href="https://github.com/py-pdf/pypdf/commit/507d7c9aa6ea83389b954b9c3c0c528fe5d5da70"><code>507d7c9</code></a> SEC: Disallow cross-reference streams with zero-only width values (<a href="https://redirect.github.com/py-pdf/pypdf/issues/3791">#3791</a>)</li>
+<li><a href="https://github.com/py-pdf/pypdf/commit/9d2747057c4afc06ccc0fc6244a3915ba6ea6f0b"><code>9d27470</code></a> SEC: Avoid excessive whitespace in layout mode text extraction (<a href="https://redirect.github.com/py-pdf/pypdf/issues/3790">#3790</a>)</li>
+<li><a href="https://github.com/py-pdf/pypdf/commit/0a8e699d33ff1d82fae17b7cfa6d01b822be50b2"><code>0a8e699</code></a> DOC: Block encrypting writer in incremental mode (<a href="https://redirect.github.com/py-pdf/pypdf/issues/3789">#3789</a>)</li>
+<li><a href="https://github.com/py-pdf/pypdf/commit/541ebd4e6e0c23dd90f5723210b585655d2a9519"><code>541ebd4</code></a> DEV: Update idna from version 3.10 to 3.15</li>
+<li><a href="https://github.com/py-pdf/pypdf/commit/de405a8d3fc7156140570b03dc1db95f85fe1159"><code>de405a8</code></a> DEV: Update idna from version 3.10 to 3.15</li>
+<li><a href="https://github.com/py-pdf/pypdf/commit/a2b90f978e97828cb2254fb146d5194727c79171"><code>a2b90f9</code></a> ROB: AppearanceStream: Also honor user-set font name when not flattening anno...</li>
+<li><a href="https://github.com/py-pdf/pypdf/commit/22bd60f913c0fe3b0354d73911d202dfc1a1acf8"><code>22bd60f</code></a> MAINT: Tiny change of comments (<a href="https://redirect.github.com/py-pdf/pypdf/issues/3787">#3787</a>)</li>
+<li><a href="https://github.com/py-pdf/pypdf/commit/29953925e9ca8ec6f941ae7efbaf2829cbd51b35"><code>2995392</code></a> ENH: Implement SASLprep (RFC 4013) for AES-256 password normalization (<a href="https://redirect.github.com/py-pdf/pypdf/issues/3780">#3780</a>)</li>
+<li><a href="https://github.com/py-pdf/pypdf/commit/e044789d4ad8b6c370f6cee5b563579a2b832784"><code>e044789</code></a> TST: Disable PyPy update checks after image update</li>
+<li>Additional commits viewable in <a href="https://github.com/py-pdf/pypdf/compare/6.10.2...6.12.0">compare view</a></li>
+</ul>
+</details>
+<br />
+
+
+[![Dependabot compatibility score](https://dependabot-badges.githubapp.com/badges/compatibility_score?dependency-name=pypdf&package-manager=uv&previous-version=6.10.2&new-version=6.12.0)](https://docs.github.com/en/github/managing-security-vulnerabilities/about-dependabot-security-updates#about-compatibility-scores)
+
+Dependabot will resolve any conflicts with this PR as long as you don't alter it yourself. You can also trigger a rebase manually by commenting `@dependabot rebase`.
+
+[//]: # (dependabot-automerge-start)
+[//]: # (dependabot-automerge-end)
+
+---
+
+<details>
+<summary>Dependabot commands and options</summary>
+<br />
+
+You can trigger Dependabot actions by commenting on this PR:
+- `@dependabot rebase` will rebase this PR
+- `@dependabot recreate` will recreate this PR, overwriting any edits that have been made to it
+- `@dependabot show <dependency name> ignore conditions` will show all of the ignore conditions of the specified dependency
+- `@dependabot ignore <dependency name> major version` will close this group update PR and stop Dependabot creating any more for the specific dependency's major version (unless you unignore this specific dependency's major version or upgrade to it yourself)
+- `@dependabot ignore <dependency name> minor version` will close this group update PR and stop Dependabot creating any more for the specific dependency's minor version (unless you unignore this specific dependency's minor version or upgrade to it yourself)
+- `@dependabot ignore <dependency name>` will close this group update PR and stop Dependabot creating any more for the specific dependency (unless you unignore this specific dependency or upgrade to it yourself)
+- `@dependabot unignore <dependency name>` will remove all of the ignore conditions of the specified dependency
+- `@dependabot unignore <dependency name> <ignore condition>` will remove the ignore condition of the specified dependency and ignore conditions
+You can disable automated security fix PRs for this repo from the [Security Alerts page](https://github.com/elizaOS/eliza/network/alerts).
+
+</details>b:T69a,# Overall Project Summary (Jun 12, 2026)
+
+Development on June 12 focused on stabilizing the Eliza Cloud infrastructure, specifically finalizing app-node ingress configurations and streamlining control-plane provisioning. While the infrastructure is largely verified on staging, the team is now coordinating final configuration updates and pipeline arming to reach end-to-end go-live readiness.
+
+## 🚨 Needs Attention 
+- **Blocked Issues/PRs**: [elizaos/eliza#8321](https://github.com/elizaos/eliza/issues/8321) - The project is awaiting a `join_mode` configuration update for the staging tenant and the final arming of the build-from-repo pipeline to achieve full go-live.
+
+## ✅ Completed Work
+
+**Cloud Infrastructure & Ingress**
+*   Finalized the app-node cloud-init configuration by implementing Caddy as the front-door ingress ([elizaos/eliza#8394](https://github.com/elizaos/eliza/pull/8394)).
+*   Improved control-plane reliability by automating Headscale installation within the cloud-init bootstrap process ([elizaos/eliza#8393](https://github.com/elizaos/eliza/pull/8393)).
+
+## 🏗️ Work in Progress
+
+**New Pull Requests**
+*   **elizaos/eliza**:
+    *   [#8399](https://github.com/elizaos/eliza/pull/8399): Dependency update for `esbuild` (0.28.0 to 0.28.1).
+    *   [#8396](https://github.com/elizaos/eliza/pull/8396): Dependency update for `pypdf` (6.10.2 to 6.12.0).
+    *   [#8395](https://github.com/elizaos/eliza/pull/8395): Added EvoLink support to the `plugin-openai` package.
+
+**Active Discussions**
+*   [elizaos/eliza#8321](https://github.com/elizaos/eliza/issues/8321): Ongoing coordination regarding staging tenant configuration and provisioning worker stability.0:{"buildId":"US8XLB_zHXYj_PVAECGcd","rsc":["$","$1","c",{"children":[["$","div",null,{"className":"container mx-auto px-6 py-8 md:px-8","children":["$","div",null,{"className":"mx-auto max-w-4xl","children":[["$","div",null,{"className":"mb-4 flex flex-col justify-between sm:flex-row","children":[["$","$L2",null,{"currentInterval":"day","currentDate":"2026-06-12"}],["$","$L3",null,{"metrics":{"date":"2026-06-12","interval":{"intervalStart":"$D2026-06-12T00:00:00.000Z","intervalEnd":"$D2026-06-13T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":8,"merged":2,"total":8},"issues":{"new":0,"closed":0,"total":0},"activeContributors":9,"codeChanges":{"additions":138,"deletions":2,"files":8,"commitCount":33},"topContributors":[{"username":"NubsCarson","avatarUrl":"https://avatars.githubusercontent.com/u/192162056?u=d2be9082dbee60fcbad21d32bf6e662ab1af3674&v=4","totalScore":82.92300170153148,"prScore":82.48500170153147,"issueScore":0,"reviewScore":0,"commentScore":0.43799999999999994,"summary":"NubsCarson: Focused on strengthening infrastructure and deployment automation for elizaos/eliza, successfully merging four PRs (#8400, #8398, #8397, #8394) that implemented a Caddy front door and idempotent daemon-arming scripts. Their work involved 598 lines of code changes primarily centered on configuration and infrastructure, supported by 6 total comments across PRs and issues."},{"username":"greptile-apps","avatarUrl":"https://avatars.githubusercontent.com/in/867647?v=4","totalScore":58.5,"prScore":0,"issueScore":0,"reviewScore":58.5,"commentScore":0,"summary":"greptile-apps: No activity today."},{"username":"EvoLinkAI","avatarUrl":"https://avatars.githubusercontent.com/u/253253881?u=2824dc86ac92eb07afc48ac43213a31cba6432e6&v=4","totalScore":29.523581822961965,"prScore":29.523581822961965,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"EvoLinkAI: Focused on expanding integration capabilities by opening PR #8395 in elizaos/eliza to add EvoLink support to the plugin-openai. This effort involved modifying 7 files with 151 total line changes, reflecting a balanced approach across code, testing, documentation, and configuration."},{"username":"standujar","avatarUrl":"https://avatars.githubusercontent.com/u/16385918?u=718bdcd1585be8447bdfffb8c11ce249baa7532d&v=4","totalScore":29.21718963391826,"prScore":29.21718963391826,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"standujar: Focused on infrastructure stability by successfully implementing headscale installation within the control-plane cloud-init via PR #8393. This work, which involved 86 lines of modifications across four files, centered entirely on bugfix efforts and documentation updates."},{"username":"2-A-M","avatarUrl":"https://avatars.githubusercontent.com/u/96268540?u=39ce724443b5cd500fc28905812cdba16e3181a7&v=4","totalScore":0.33999999999999997,"prScore":0,"issueScore":0,"reviewScore":0,"commentScore":0.33999999999999997,"summary":"2-A-M: Focused on advancing project development through 5 commits across 14 files (+875/-156 lines) while providing 2 PR comments to support team collaboration. Their work was primarily dedicated to feature implementation, complemented by targeted bug fixes and testing efforts."},{"username":"xavier-arosemena","avatarUrl":"https://avatars.githubusercontent.com/u/212006378?u=51d17beade4934c79b0113de803fc1ef713b0c89&v=4","totalScore":0.2,"prScore":0,"issueScore":0,"reviewScore":0,"commentScore":0.2,"summary":"xavier-arosemena: Focused on feature development, contributing 51 lines of code across two files through a single commit. They also provided a pull request comment to support ongoing collaborative efforts."},{"username":"bluetieroperations-create","avatarUrl":"https://avatars.githubusercontent.com/u/270213615?v=4","totalScore":0.2,"prScore":0,"issueScore":0,"reviewScore":0,"commentScore":0.2,"summary":"bluetieroperations-create: Focused on codebase maintenance and feature development, contributing 4 commits across 4 files with a net addition of 111 lines of code. Their activity was primarily directed toward other work and feature implementation, supported by a single pull request comment."}],"focusAreas":[{"area":"cloud-infra","count":6},{"area":".github/workflows","count":1}],"topIssues":[],"topPullRequests":[{"id":"PR_kwDOMT5cIs7l6Xts","title":"chore(scripts): idempotent apps-daemon arming script (IaC, not hand-editing)","author":"NubsCarson","number":8397,"body":"$4","repository":"elizaos/eliza","createdAt":"2026-06-12T20:16:09Z","mergedAt":"2026-06-13T00:07:54Z","additions":159,"deletions":0},{"id":"PR_kwDOMT5cIs7l4u_w","title":"Add EvoLink support to plugin-openai","author":"EvoLinkAI","number":8395,"body":"## Summary\n- allow @elizaos/plugin-openai to auto-enable with EVOLINK_API_KEY\n- resolve EvoLink's OpenAI-compatible base URL and default text model when only EvoLink settings are present\n- document EvoLink env vars and expose them in pluginParameters\n\n## Validation\n- bun install --no-save\n- bun run --cwd packages/core build\n- bunx vitest run --config vitest.config.ts __tests__/cerebras-config.shape.test.ts __tests__/auto-enable.test.ts (from plugins/plugin-openai) => 2 files / 17 tests passed\n- bun run --cwd plugins/plugin-openai typecheck\n- bunx @biomejs/biome check plugins/plugin-openai/README.md plugins/plugin-openai/auto-enable.ts plugins/plugin-openai/index.ts plugins/plugin-openai/utils/config.ts plugins/plugin-openai/__tests__/cerebras-config.shape.test.ts plugins/plugin-openai/__tests__/auto-enable.test.ts\n- bun run --cwd plugins/plugin-openai build\n- git diff --check\n- rg \"evolink/auto|api\\.evolink\\.ai/v1|api\\.evolink\\.ai\" plugins/plugin-openai (no matches)","repository":"elizaos/eliza","createdAt":"2026-06-12T18:54:33Z","mergedAt":"2026-06-16T02:42:06Z","additions":145,"deletions":6},{"id":"PR_kwDOMT5cIs7l7MI8","title":"ci(infra): dispatchable workflow to arm the apps daemon (no operator SSH needed)","author":"NubsCarson","number":8398,"body":"$5","repository":"elizaos/eliza","createdAt":"2026-06-12T20:57:38Z","mergedAt":"2026-06-13T00:07:50Z","additions":124,"deletions":0},{"id":"PR_kwDOMT5cIs7l8Q3G","title":"ci(infra): one-shot workflow to remove an orphaned apps-data-plane state entry","author":"NubsCarson","number":8400,"body":"$6","repository":"elizaos/eliza","createdAt":"2026-06-12T22:02:46Z","mergedAt":"2026-06-13T00:07:45Z","additions":96,"deletions":0},{"id":"PR_kwDOMT5cIs7l4uqh","title":"feat(infra): install Caddy front door in app-node cloud-init (last apps-lane TODO)","author":"NubsCarson","number":8394,"body":"$7","repository":"elizaos/eliza","createdAt":"2026-06-12T18:54:20Z","mergedAt":"2026-06-12T20:58:50Z","additions":95,"deletions":2},{"id":"PR_kwDOMT5cIs7l7YV_","title":"chore(deps-dev): bump esbuild from 0.28.0 to 0.28.1 in /packages/cloud-services/operator in the npm_and_yarn group across 1 directory","author":"dependabot","number":8399,"body":"$8","repository":"elizaos/eliza","createdAt":"2026-06-12T21:08:14Z","mergedAt":"2026-06-15T15:47:38Z","additions":83,"deletions":29},{"id":"PR_kwDOMT5cIs7lzq2p","title":"fix(infra): install headscale in control-plane cloud-init","author":"standujar","number":8393,"body":"$9","repository":"elizaos/eliza","createdAt":"2026-06-12T14:55:55Z","mergedAt":"2026-06-12T14:57:26Z","additions":43,"deletions":0},{"id":"PR_kwDOMT5cIs7l5OQv","title":"chore(deps): bump pypdf from 6.10.2 to 6.12.0 in /packages/benchmarks/OSWorld in the uv group across 1 directory","author":"dependabot","number":8396,"body":"$a","repository":"elizaos/eliza","createdAt":"2026-06-12T19:18:36Z","mergedAt":null,"additions":26,"deletions":23}],"detailedContributorSummaries":{"2-A-M":"2-A-M: Focused on advancing project development through 5 commits across 14 files (+875/-156 lines) while providing 2 PR comments to support team collaboration. Their work was primarily dedicated to feature implementation, complemented by targeted bug fixes and testing efforts.","EvoLinkAI":"EvoLinkAI: Focused on expanding integration capabilities by opening PR #8395 in elizaos/eliza to add EvoLink support to the plugin-openai. This effort involved modifying 7 files with 151 total line changes, reflecting a balanced approach across code, testing, documentation, and configuration.","NubsCarson":"NubsCarson: Focused on strengthening infrastructure and deployment automation for elizaos/eliza, successfully merging four PRs (#8400, #8398, #8397, #8394) that implemented a Caddy front door and idempotent daemon-arming scripts. Their work involved 598 lines of code changes primarily centered on configuration and infrastructure, supported by 6 total comments across PRs and issues.","bluetieroperations-create":"bluetieroperations-create: Focused on codebase maintenance and feature development, contributing 4 commits across 4 files with a net addition of 111 lines of code. Their activity was primarily directed toward other work and feature implementation, supported by a single pull request comment.","greptile-apps":"greptile-apps: No activity today.","standujar":"standujar: Focused on infrastructure stability by successfully implementing headscale installation within the control-plane cloud-init via PR #8393. This work, which involved 86 lines of modifications across four files, centered entirely on bugfix efforts and documentation updates.","xavier-arosemena":"xavier-arosemena: Focused on feature development, contributing 51 lines of code across two files through a single commit. They also provided a pull request comment to support ongoing collaborative efforts."}},"summaryContent":"$b","className":"self-end sm:self-start"}]]}],"$Lc","$Ld","$Le"]}]}],["$Lf","$L10","$L11"],"$L12"]}],"loading":null,"isPartial":false}
+c:["$","div",null,{"className":"mb-6","children":["$","div",null,{"className":"flex items-center justify-between","children":[[["$","$L13",null,{"href":"/summary/day/2026-06-11","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left mr-2 h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"children":"Previous"}],false],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$L13",null,{"href":"/summary/day/2026-06-11","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Previous"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]],["$","div",null,{"className":"flex flex-col items-center","children":[["$","div",null,{"className":"text-sm font-medium text-gray-500","children":["Daily"," Summary"]}],["$","time",null,{"dateTime":"2026-06-12","className":"text-md font-bold","children":"Jun 12, 2026"}]]}],[["$","$L13",null,{"href":"/summary/day/2026-06-13","children":[false,["$","span",null,{"children":"Next"}],["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right ml-2 h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}]],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$L13",null,{"href":"/summary/day/2026-06-13","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Next"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]]]}]}]
+15:T580,## Why
+The provisioning-worker already calls `configureAppsDeployBackend()` on boot, but the apps deploy backend only activates once the `APPS_*`/`CONTAINERS_*` env is present in `/opt/eliza/cloud/.env.local`. That env was being hand-set on the box — exactly the manual step to eliminate (@standujar's "always think IaC / avoid manual"). This replaces it with a re-runnable script.
+
+## What
+`node packages/scripts/cloud/admin/arm-apps-daemon.mjs --host <cp> --ssh-key <key> --app-node <id:ip:cap> --base-domain apps-staging.elizacloud.ai --caddy-admin http://<node>:2019 --tenant-admin-dsn '<dsn>' --node-ssh-key-path <key-the-node-accepts>`
+
+- **Idempotent upsert**: deletes-then-appends each key, every other line untouched, so it's safe to re-run and never clobbers the agent/coding-fleet config. Backs up the env file once.
+- Restarts `eliza-provisioning-worker.service` and prints status + last log lines (secrets redacted in all output).
+- **`--dry-run`** prints the exact remote script without touching anything.
+- Mirrors `bootstrap-provisioning-worker-host.mjs` (operator SSH). Values come from flags fed by the `apps-shared` + per-env terraform outputs, so re-running after an infra change re-converges the box.
+
+Pairs with #8394 (Caddy front door). Verified: `node --check` clean, biome clean, dry-run renders a correct idempotent remote script. Inert until run with a real `--host`/`--ssh-key`.16:T564,## Why
+Arming the apps (Product 2) deploy backend meant **hand-SSHing the control plane** to set the `APPS_*`/`CONTAINERS_*` env in `cloud/.env.local`. @standujar's directive is "always think IaC / avoid manual" — and there's a second benefit: this needs **no operator SSH key added to any box**, because it reuses the **same `ELIZA_PROVISIONING_SSH_KEY`/`HOST` secrets the deploy workflow already uses**.
+
+## What
+`workflow_dispatch` → SSHes the env's provisioning host → **idempotent upsert** of the apps env (delete-then-append per key, every other line untouched, so the agent/coding-fleet config is never clobbered) → restarts `eliza-provisioning-worker.service` → prints status (secrets redacted).
+
+Inputs: `environment`, `app_node` (`id:ip:capacity`), optional `tenant_admin_dsn` (empty → daemon uses the seeded encrypted `tenant_db_clusters` row), optional `egress_proxy`. Base domain from `vars.APPS_BASE_DOMAIN`; Caddy admin URL derived from the app-node IP.
+
+Mirrors `packages/scripts/cloud/admin/arm-apps-daemon.mjs` (#8397) so a local run and a CI run produce the same box state. Completes the go-live trio with #8394 (Caddy front door).
+
+## Net
+After this + #8394 + a node replace, the full apps go-live is **all dispatchable** (terraform apply → arm → deploy) with zero manual SSH — anyone with repo access can run it, nothing hand-typed on a box.17:T53d,## Why
+The #8386 split moved `random_password.tenant_db_admin` from `apps-data-plane` → `apps-shared`, but the **per-env state still lists it**, so every `terraform init -lockfile=readonly` (plan/apply) fails with *"provider dependency changes detected"* — the apps-data-plane apply is fully blocked until the orphan is removed (details: #8321).
+
+## What
+A `workflow_dispatch` that runs a **state-only `terraform state rm`** — it never touches real infrastructure (no plan, no apply). Defaults to that exact orphan + `staging`, double-guarded (`confirm` must be the word `remove`), shares the `terraform-apps-hetzner` concurrency group so it can't race an apply, and checks the address is actually in state first (warns + skips if already gone). Inits **without** `-lockfile=readonly` here (only here) so terraform can load a state that references a now-dropped provider. Reusable for any future module-split orphan.
+
+## After this merges
+Dispatch it for staging (+ production) → the orphan clears → `terraform-apps-data-plane` plan/apply reconciles → I drive the rest of go-live by dispatch (apply `-replace=app_node[1]` so it boots with the merged Caddy → arm via #8398 → sample deploy). cc @standujar — this is the IaC version of the `state rm` from #8321; equivalent to running it by hand, just reviewable + repeatable.18:T978,## What
+Replaces the final `STAN:` TODO in the app-node cloud-init with the real ingress front door. Verified live: the staging app node (`167.233.112.155`, behind `*.apps-staging.elizacloud.ai`) currently answers **nothing on :80/:443** — ports open, no listener — so no per-app URL can serve until this lands + the node is replaced.
+
+Matches the contract the **merged** runtime code already targets:
+- **on-demand TLS** gated by cloud-api's ask endpoint (`/api/v1/apps-ingress/ask`) — **live-verified answering fail-closed on both `api-staging` and `api` prod** — so certs are only minted for a running container's shortid host or a verified+active managed custom domain (#8325/#8335);
+- **admin API on `:2019`** for the deploy flow's live route add/remove (`apps-ingress-provisioner`: idempotent POST by `@id`, DELETE on teardown) — exposed **only to `operator_ingress_cidrs`** via a new firewall rule (same tight allowlist as SSH, never public);
+- **`import /etc/caddy/apps.d/*.caddy`** so snapshot/reconcile tooling (the admin ingress-map emitter; #8351's client) composes additively;
+- deliberately **no terminal catch-all** in the base server — the deploy flow APPENDS routes, and a terminal handler would shadow every appended route (non-terminal routes pass through; unmatched hosts never pass the ask gate so they never get a cert anyway).
+
+## Config plumbing
+- New required var **`cloud_api_origin`** (validated `https://` origin, no default — staging pointing at prod's ask would mint certs against the wrong environment's state). Threaded through the workflow as `vars.APPS_CLOUD_API_ORIGIN` + preflight check. **Already set on both GH environments** (`https://api-staging.elizacloud.ai` / `https://api.elizacloud.ai`); tfvars examples updated.
+- Caddy from the official Cloudsmith repo (distro package lags); config written before install so first start picks it up; `apps.d/` pre-created with a placeholder so the import validates.
+
+## Rollout
+New nodes boot serving-ready. The **existing staging node** picks this up via the workflow's `replace` input (`user_data` is `ignore_changes` by design) — it runs no apps yet, so replacement is free. After replace: cert issuance + per-app routes work end-to-end with the merged deploy flow.
+
+cc @standujar — this is the missing leg of "apps up, start working on that again"; with it merged + a node replace, the staging apps lane serves real URLs.19:T3413,Bumps the npm_and_yarn group with 1 update in the /packages/cloud-services/operator directory: [esbuild](https://github.com/evanw/esbuild).
+
+Updates `esbuild` from 0.28.0 to 0.28.1
+<details>
+<summary>Release notes</summary>
+<p><em>Sourced from <a href="https://github.com/evanw/esbuild/releases">esbuild's releases</a>.</em></p>
+<blockquote>
+<h2>v0.28.1</h2>
+<ul>
+<li>
+<p>Disallow <code>\</code> in local development server HTTP requests (<a href="https://github.com/evanw/esbuild/security/advisories/GHSA-g7r4-m6w7-qqqr">GHSA-g7r4-m6w7-qqqr</a>)</p>
+<p>This release fixes a security issue where HTTP requests to esbuild's local development server could traverse outside of the serve directory on Windows using a <code>\</code> backslash character. It happened due to the use of Go's <code>path.Clean()</code> function, which only handles Unix-style <code>/</code> characters. HTTP requests with paths containing <code>\</code> are no longer allowed.</p>
+<p>Thanks to <a href="https://github.com/dellalibera"><code>@​dellalibera</code></a> for reporting this issue.</p>
+</li>
+<li>
+<p>Add integrity checks to the Deno API (<a href="https://github.com/evanw/esbuild/security/advisories/GHSA-gv7w-rqvm-qjhr">GHSA-gv7w-rqvm-qjhr</a>)</p>
+<p>The previous release of esbuild added integrity checks to esbuild's npm install script. This release also adds integrity checks to esbuild's Deno install script. Now esbuild's Deno API will also fail with an error if the downloaded esbuild binary contains something other than the expected content.</p>
+<p>Note that esbuild's Deno API installs from <code>registry.npmjs.org</code> by default, but allows the <code>NPM_CONFIG_REGISTRY</code> environment variable to override this with a custom package registry. This change means that the esbuild executable served by <code>NPM_CONFIG_REGISTRY</code> must now match the expected content.</p>
+<p>Thanks to <a href="https://github.com/sondt99"><code>@​sondt99</code></a> for reporting this issue.</p>
+</li>
+<li>
+<p>Avoid inlining <code>using</code> and <code>await using</code> declarations (<a href="https://redirect.github.com/evanw/esbuild/issues/4482">#4482</a>)</p>
+<p>Previously esbuild's minifier sometimes incorrectly inlined <code>using</code> and <code>await using</code> declarations into subsequent uses of that declaration, which then fails to dispose of the resource correctly. This bug happened because inlining was done for <code>let</code> and <code>const</code> declarations by avoiding doing it for <code>var</code> declarations, which no longer worked when more declaration types were added. Here's an example:</p>
+<pre lang="js"><code>// Original code
+{
+  using x = new Resource()
+  x.activate()
+}
+<p>// Old output (with --minify)<br />
+new Resource().activate();</p>
+<p>// New output (with --minify)<br />
+{using e=new Resource;e.activate()}<br />
+</code></pre></p>
+</li>
+<li>
+<p>Fix module evaluation when an error is thrown (<a href="https://redirect.github.com/evanw/esbuild/issues/4461">#4461</a>, <a href="https://redirect.github.com/evanw/esbuild/pull/4467">#4467</a>)</p>
+<p>If an error is thrown during module evaluation, esbuild previously didn't preserve the state of the module for subsequent module references. This was observable if <code>import()</code> or <code>require()</code> is used to import a module multiple times. The thrown error is supposed to be thrown by every call to <code>import()</code> or <code>require()</code>, not just the first. With this release, esbuild will now throw the same error every time you call <code>import()</code> or <code>require()</code> on a module that throws during its evaluation.</p>
+</li>
+<li>
+<p>Fix some edge cases around the <code>new</code> operator (<a href="https://redirect.github.com/evanw/esbuild/issues/4477">#4477</a>)</p>
+<p>Previously esbuild incorrectly printed certain edge cases involving complex expressions inside the target of a <code>new</code> expression (specifically an optional chain and/or a tagged template literal). The generated code for the <code>new</code> target was not correctly wrapped with parentheses, and either contained a syntax error or had different semantics. These edge cases have been fixed so that they now correctly wrap the <code>new</code> target in parentheses. Here is an example of some affected code:</p>
+<pre lang="js"><code>// Original code
+new (foo()`bar`)()
+new (foo()?.bar)()
+<p>// Old output<br />
+new foo()<code>bar</code>();<br />
+new (foo())?.bar();</p>
+<p></code></pre></p>
+</li>
+</ul>
+<!-- raw HTML omitted -->
+</blockquote>
+<p>... (truncated)</p>
+</details>
+<details>
+<summary>Changelog</summary>
+<p><em>Sourced from <a href="https://github.com/evanw/esbuild/blob/main/CHANGELOG.md">esbuild's changelog</a>.</em></p>
+<blockquote>
+<h2>0.28.1</h2>
+<ul>
+<li>
+<p>Disallow <code>\</code> in local development server HTTP requests (<a href="https://github.com/evanw/esbuild/security/advisories/GHSA-g7r4-m6w7-qqqr">GHSA-g7r4-m6w7-qqqr</a>)</p>
+<p>This release fixes a security issue where HTTP requests to esbuild's local development server could traverse outside of the serve directory on Windows using a <code>\</code> backslash character. It happened due to the use of Go's <code>path.Clean()</code> function, which only handles Unix-style <code>/</code> characters. HTTP requests with paths containing <code>\</code> are no longer allowed.</p>
+<p>Thanks to <a href="https://github.com/dellalibera"><code>@​dellalibera</code></a> for reporting this issue.</p>
+</li>
+<li>
+<p>Add integrity checks to the Deno API (<a href="https://github.com/evanw/esbuild/security/advisories/GHSA-gv7w-rqvm-qjhr">GHSA-gv7w-rqvm-qjhr</a>)</p>
+<p>The previous release of esbuild added integrity checks to esbuild's npm install script. This release also adds integrity checks to esbuild's Deno install script. Now esbuild's Deno API will also fail with an error if the downloaded esbuild binary contains something other than the expected content.</p>
+<p>Note that esbuild's Deno API installs from <code>registry.npmjs.org</code> by default, but allows the <code>NPM_CONFIG_REGISTRY</code> environment variable to override this with a custom package registry. This change means that the esbuild executable served by <code>NPM_CONFIG_REGISTRY</code> must now match the expected content.</p>
+<p>Thanks to <a href="https://github.com/sondt99"><code>@​sondt99</code></a> for reporting this issue.</p>
+</li>
+<li>
+<p>Avoid inlining <code>using</code> and <code>await using</code> declarations (<a href="https://redirect.github.com/evanw/esbuild/issues/4482">#4482</a>)</p>
+<p>Previously esbuild's minifier sometimes incorrectly inlined <code>using</code> and <code>await using</code> declarations into subsequent uses of that declaration, which then fails to dispose of the resource correctly. This bug happened because inlining was done for <code>let</code> and <code>const</code> declarations by avoiding doing it for <code>var</code> declarations, which no longer worked when more declaration types were added. Here's an example:</p>
+<pre lang="js"><code>// Original code
+{
+  using x = new Resource()
+  x.activate()
+}
+<p>// Old output (with --minify)<br />
+new Resource().activate();</p>
+<p>// New output (with --minify)<br />
+{using e=new Resource;e.activate()}<br />
+</code></pre></p>
+</li>
+<li>
+<p>Fix module evaluation when an error is thrown (<a href="https://redirect.github.com/evanw/esbuild/issues/4461">#4461</a>, <a href="https://redirect.github.com/evanw/esbuild/pull/4467">#4467</a>)</p>
+<p>If an error is thrown during module evaluation, esbuild previously didn't preserve the state of the module for subsequent module references. This was observable if <code>import()</code> or <code>require()</code> is used to import a module multiple times. The thrown error is supposed to be thrown by every call to <code>import()</code> or <code>require()</code>, not just the first. With this release, esbuild will now throw the same error every time you call <code>import()</code> or <code>require()</code> on a module that throws during its evaluation.</p>
+</li>
+<li>
+<p>Fix some edge cases around the <code>new</code> operator (<a href="https://redirect.github.com/evanw/esbuild/issues/4477">#4477</a>)</p>
+<p>Previously esbuild incorrectly printed certain edge cases involving complex expressions inside the target of a <code>new</code> expression (specifically an optional chain and/or a tagged template literal). The generated code for the <code>new</code> target was not correctly wrapped with parentheses, and either contained a syntax error or had different semantics. These edge cases have been fixed so that they now correctly wrap the <code>new</code> target in parentheses. Here is an example of some affected code:</p>
+<pre lang="js"><code>// Original code
+new (foo()`bar`)()
+new (foo()?.bar)()
+<p>// Old output<br />
+new foo()<code>bar</code>();<br />
+new (foo())?.bar();<br />
+</code></pre></p>
+</li>
+</ul>
+<!-- raw HTML omitted -->
+</blockquote>
+<p>... (truncated)</p>
+</details>
+<details>
+<summary>Commits</summary>
+<ul>
+<li><a href="https://github.com/evanw/esbuild/commit/bb9db84c02433fbe37b3509f53f9f3e3cc48725e"><code>bb9db84</code></a> publish 0.28.1 to npm</li>
+<li><a href="https://github.com/evanw/esbuild/commit/9ff053e53b8eeb990f59355dbea365277ac45ee2"><code>9ff053e</code></a> security: add integrity checks to the Deno API</li>
+<li><a href="https://github.com/evanw/esbuild/commit/0a9bf2135b67c7e28989a5ba19f0f000805a5ab5"><code>0a9bf21</code></a> enforce non-negative size in gzip parser</li>
+<li><a href="https://github.com/evanw/esbuild/commit/e2a1a7132058ee067fe736eac15f695861b8654e"><code>e2a1a71</code></a> security: forbid <code>\\</code> in local dev server requests</li>
+<li><a href="https://github.com/evanw/esbuild/commit/83a2cbfc35809f4fd5152da59572d7bed7739d78"><code>83a2cbf</code></a> fix <a href="https://redirect.github.com/evanw/esbuild/issues/4482">#4482</a>: don't inline <code>using</code> declarations</li>
+<li><a href="https://github.com/evanw/esbuild/commit/308ad745d824c77bc607603451b257d0f2fd9a38"><code>308ad74</code></a> fix <a href="https://redirect.github.com/evanw/esbuild/issues/4471">#4471</a>: renaming of nested <code>var</code> declarations</li>
+<li><a href="https://github.com/evanw/esbuild/commit/f013f5f99a015bce92ec48d49181d4ad3177b29b"><code>f013f5f</code></a> fix some typos</li>
+<li><a href="https://github.com/evanw/esbuild/commit/aafd6e48b1088336a5f5a17e930be7e840d43d8c"><code>aafd6e4</code></a> chore: fix some minor issues in comments (<a href="https://redirect.github.com/evanw/esbuild/issues/4462">#4462</a>)</li>
+<li><a href="https://github.com/evanw/esbuild/commit/15300c30b5e22f7cfcbed850c246d35095658386"><code>15300c3</code></a> follow up: cjs evaluation fixes</li>
+<li><a href="https://github.com/evanw/esbuild/commit/1bda0c31d7697c0af44b3ab39b81e599e559a395"><code>1bda0c3</code></a> fix <a href="https://redirect.github.com/evanw/esbuild/issues/4461">#4461</a>, fix <a href="https://redirect.github.com/evanw/esbuild/issues/4467">#4467</a>: esm evaluation fixes</li>
+<li>Additional commits viewable in <a href="https://github.com/evanw/esbuild/compare/v0.28.0...v0.28.1">compare view</a></li>
+</ul>
+</details>
+<br />
+
+
+[![Dependabot compatibility score](https://dependabot-badges.githubapp.com/badges/compatibility_score?dependency-name=esbuild&package-manager=npm_and_yarn&previous-version=0.28.0&new-version=0.28.1)](https://docs.github.com/en/github/managing-security-vulnerabilities/about-dependabot-security-updates#about-compatibility-scores)
+
+Dependabot will resolve any conflicts with this PR as long as you don't alter it yourself. You can also trigger a rebase manually by commenting `@dependabot rebase`.
+
+[//]: # (dependabot-automerge-start)
+[//]: # (dependabot-automerge-end)
+
+---
+
+<details>
+<summary>Dependabot commands and options</summary>
+<br />
+
+You can trigger Dependabot actions by commenting on this PR:
+- `@dependabot rebase` will rebase this PR
+- `@dependabot recreate` will recreate this PR, overwriting any edits that have been made to it
+- `@dependabot show <dependency name> ignore conditions` will show all of the ignore conditions of the specified dependency
+- `@dependabot ignore <dependency name> major version` will close this group update PR and stop Dependabot creating any more for the specific dependency's major version (unless you unignore this specific dependency's major version or upgrade to it yourself)
+- `@dependabot ignore <dependency name> minor version` will close this group update PR and stop Dependabot creating any more for the specific dependency's minor version (unless you unignore this specific dependency's minor version or upgrade to it yourself)
+- `@dependabot ignore <dependency name>` will close this group update PR and stop Dependabot creating any more for the specific dependency (unless you unignore this specific dependency or upgrade to it yourself)
+- `@dependabot unignore <dependency name>` will remove all of the ignore conditions of the specified dependency
+- `@dependabot unignore <dependency name> <ignore condition>` will remove the ignore condition of the specified dependency and ignore conditions
+You can disable automated security fix PRs for this repo from the [Security Alerts page](https://github.com/elizaOS/eliza/network/alerts).
+
+</details>1a:T71b,Last cloud-init gap from tonight's prod CP migration. We had to install headscale by hand on the new CP (curl deb + dpkg -i + chown state dir). Now the package install + systemd unit + state dir come from cloud-init's `packages:` list. The runcmd stops the package's auto-started service so it doesn't bind with a fresh empty DB before the operator overlays the prior CP's config + state.
+
+Env-specific bits (`server_url`, SQLite db, noise_private.key) stay an operator handoff — same shape as `cloud/.env.local`. The exact migration runbook is documented in the module's README so the next CP rebuild follows it instead of rediscovering it from scratch.
+
+## What's still NOT in cloud-init (intentionally)
+
+- `config.yaml` overlay — env-specific (`server_url` per CP hostname). Operator copies + sed adjusts on first deploy.
+- `/var/lib/headscale/db.sqlite` + `noise_private.key` — operator copies from prior CP to preserve users / API keys / pre-auth keys.
+
+## What was NOT a gap
+
+Checked the deploy workflow (`deploy-eliza-provisioning-worker.yml`): it already runs `bun install --no-save --ignore-scripts`, manually creates the `@elizaos/cloud-shared` symlink, runs `bun run build:core`, and the plugin-sql `@elizaos/core` symlink. The manual deploy we did tonight was only because `ELIZA_PROVISIONING_SSH_KEY` secret pointed at the OLD CP's key — once we set it correctly the workflow ran green end-to-end.
+
+## Test plan
+
+- [x] terraform fmt -check + validate green locally
+- [ ] CI validate green
+- [ ] On next CP rebuild (some future Phase 6 / staging-CP re-image), confirm `apt list --installed | grep headscale` returns 0.28.0+ from default Ubuntu repo, `/var/lib/headscale` exists owned by headscale user, `systemctl is-active headscale` returns `inactive` (waiting for operator to copy config + state)1b:T289f,Bumps the uv group with 1 update in the /packages/benchmarks/OSWorld directory: [pypdf](https://github.com/py-pdf/pypdf).
+
+Updates `pypdf` from 6.10.2 to 6.12.0
+<details>
+<summary>Release notes</summary>
+<p><em>Sourced from <a href="https://github.com/py-pdf/pypdf/releases">pypdf's releases</a>.</em></p>
+<blockquote>
+<h2>Version 6.12.0, 2026-05-21</h2>
+<h2>What's new</h2>
+<h3>Security (SEC)</h3>
+<ul>
+<li>Disallow cross-reference streams with zero-only width values (<a href="https://redirect.github.com/py-pdf/pypdf/issues/3791">#3791</a>) by <a href="https://github.com/stefan6419846"><code>@​stefan6419846</code></a></li>
+<li>Avoid excessive whitespace in layout mode text extraction (<a href="https://redirect.github.com/py-pdf/pypdf/issues/3790">#3790</a>) by <a href="https://github.com/stefan6419846"><code>@​stefan6419846</code></a></li>
+</ul>
+<h3>New Features (ENH)</h3>
+<ul>
+<li>Implement SASLprep (RFC 4013) for AES-256 password normalization (<a href="https://redirect.github.com/py-pdf/pypdf/issues/3780">#3780</a>) by <a href="https://github.com/adityamoolya"><code>@​adityamoolya</code></a></li>
+<li>CID font resource from font file to encode more characters (<a href="https://redirect.github.com/py-pdf/pypdf/issues/3652">#3652</a>) by <a href="https://github.com/PJBrs"><code>@​PJBrs</code></a></li>
+</ul>
+<h3>Performance Improvements (PI)</h3>
+<ul>
+<li>Optimize retrieval of named destinatinos in reader (<a href="https://redirect.github.com/py-pdf/pypdf/issues/3442">#3442</a>) by <a href="https://github.com/larsga"><code>@​larsga</code></a></li>
+</ul>
+<h3>Bug Fixes (BUG)</h3>
+<ul>
+<li>Fix TreeObject.insert_child KeyError on fresh children (<a href="https://redirect.github.com/py-pdf/pypdf/issues/3786">#3786</a>) by <a href="https://github.com/Abzaek"><code>@​Abzaek</code></a></li>
+</ul>
+<h3>Robustness (ROB)</h3>
+<ul>
+<li>AppearanceStream: Also honor user-set font name when not flattening annotations (<a href="https://redirect.github.com/py-pdf/pypdf/issues/3781">#3781</a>) by <a href="https://github.com/PJBrs"><code>@​PJBrs</code></a></li>
+</ul>
+<h3>Documentation (DOC)</h3>
+<ul>
+<li>Block encrypting writer in incremental mode (<a href="https://redirect.github.com/py-pdf/pypdf/issues/3789">#3789</a>) by <a href="https://github.com/stefan6419846"><code>@​stefan6419846</code></a></li>
+</ul>
+<p><a href="https://github.com/py-pdf/pypdf/compare/6.11.0...6.12.0">Full Changelog</a></p>
+<h2>Version 6.11.0, 2026-05-09</h2>
+<h2>What's new</h2>
+<h3>New Features (ENH)</h3>
+<ul>
+<li>Initialise a Font from an embedded font file (<a href="https://redirect.github.com/py-pdf/pypdf/issues/3704">#3704</a>) by <a href="https://github.com/PJBrs"><code>@​PJBrs</code></a></li>
+</ul>
+<h3>Robustness (ROB)</h3>
+<ul>
+<li>Allow to fix AES padding length in non-strict mode (<a href="https://redirect.github.com/py-pdf/pypdf/issues/3742">#3742</a>) by <a href="https://github.com/stefan6419846"><code>@​stefan6419846</code></a></li>
+</ul>
+<h3>Developer Experience (DEV)</h3>
+<ul>
+<li>Enable PyPy testing again (<a href="https://redirect.github.com/py-pdf/pypdf/issues/3752">#3752</a>) by <a href="https://github.com/stefan6419846"><code>@​stefan6419846</code></a></li>
+<li>Align mypy Makefile target with strict mode (<a href="https://redirect.github.com/py-pdf/pypdf/issues/3690">#3690</a>) by <a href="https://github.com/costajohnt"><code>@​costajohnt</code></a></li>
+</ul>
+<p><a href="https://github.com/py-pdf/pypdf/compare/6.10.2...6.11.0">Full Changelog</a></p>
+</blockquote>
+</details>
+<details>
+<summary>Changelog</summary>
+<p><em>Sourced from <a href="https://github.com/py-pdf/pypdf/blob/main/CHANGELOG.md">pypdf's changelog</a>.</em></p>
+<blockquote>
+<h2>Version 6.12.0, 2026-05-21</h2>
+<h3>Security (SEC)</h3>
+<ul>
+<li>Disallow cross-reference streams with zero-only width values (<a href="https://redirect.github.com/py-pdf/pypdf/issues/3791">#3791</a>)</li>
+<li>Avoid excessive whitespace in layout mode text extraction (<a href="https://redirect.github.com/py-pdf/pypdf/issues/3790">#3790</a>)</li>
+</ul>
+<h3>New Features (ENH)</h3>
+<ul>
+<li>Implement SASLprep (RFC 4013) for AES-256 password normalization (<a href="https://redirect.github.com/py-pdf/pypdf/issues/3780">#3780</a>)</li>
+<li>CID font resource from font file to encode more characters (<a href="https://redirect.github.com/py-pdf/pypdf/issues/3652">#3652</a>)</li>
+</ul>
+<h3>Performance Improvements (PI)</h3>
+<ul>
+<li>Optimize retrieval of named destinatinos in reader (<a href="https://redirect.github.com/py-pdf/pypdf/issues/3442">#3442</a>)</li>
+</ul>
+<h3>Bug Fixes (BUG)</h3>
+<ul>
+<li>Fix TreeObject.insert_child KeyError on fresh children (<a href="https://redirect.github.com/py-pdf/pypdf/issues/3786">#3786</a>)</li>
+</ul>
+<h3>Robustness (ROB)</h3>
+<ul>
+<li>AppearanceStream: Also honor user-set font name when not flattening annotations (<a href="https://redirect.github.com/py-pdf/pypdf/issues/3781">#3781</a>)</li>
+</ul>
+<h3>Documentation (DOC)</h3>
+<ul>
+<li>Block encrypting writer in incremental mode (<a href="https://redirect.github.com/py-pdf/pypdf/issues/3789">#3789</a>)</li>
+</ul>
+<p><a href="https://github.com/py-pdf/pypdf/compare/6.11.0...6.12.0">Full Changelog</a></p>
+<h2>Version 6.11.0, 2026-05-09</h2>
+<h3>New Features (ENH)</h3>
+<ul>
+<li>Initialise a Font from an embedded font file (<a href="https://redirect.github.com/py-pdf/pypdf/issues/3704">#3704</a>)</li>
+</ul>
+<h3>Robustness (ROB)</h3>
+<ul>
+<li>Allow to fix AES padding length in non-strict mode (<a href="https://redirect.github.com/py-pdf/pypdf/issues/3742">#3742</a>)</li>
+</ul>
+<h3>Developer Experience (DEV)</h3>
+<ul>
+<li>Enable PyPy testing again (<a href="https://redirect.github.com/py-pdf/pypdf/issues/3752">#3752</a>)</li>
+<li>Align mypy Makefile target with strict mode (<a href="https://redirect.github.com/py-pdf/pypdf/issues/3690">#3690</a>)</li>
+</ul>
+<p><a href="https://github.com/py-pdf/pypdf/compare/6.10.2...6.11.0">Full Changelog</a></p>
+</blockquote>
+</details>
+<details>
+<summary>Commits</summary>
+<ul>
+<li><a href="https://github.com/py-pdf/pypdf/commit/08eb1435ef2e4d1e3d5fe90636c3cee7aa6f4470"><code>08eb143</code></a> REL: 6.12.0</li>
+<li><a href="https://github.com/py-pdf/pypdf/commit/507d7c9aa6ea83389b954b9c3c0c528fe5d5da70"><code>507d7c9</code></a> SEC: Disallow cross-reference streams with zero-only width values (<a href="https://redirect.github.com/py-pdf/pypdf/issues/3791">#3791</a>)</li>
+<li><a href="https://github.com/py-pdf/pypdf/commit/9d2747057c4afc06ccc0fc6244a3915ba6ea6f0b"><code>9d27470</code></a> SEC: Avoid excessive whitespace in layout mode text extraction (<a href="https://redirect.github.com/py-pdf/pypdf/issues/3790">#3790</a>)</li>
+<li><a href="https://github.com/py-pdf/pypdf/commit/0a8e699d33ff1d82fae17b7cfa6d01b822be50b2"><code>0a8e699</code></a> DOC: Block encrypting writer in incremental mode (<a href="https://redirect.github.com/py-pdf/pypdf/issues/3789">#3789</a>)</li>
+<li><a href="https://github.com/py-pdf/pypdf/commit/541ebd4e6e0c23dd90f5723210b585655d2a9519"><code>541ebd4</code></a> DEV: Update idna from version 3.10 to 3.15</li>
+<li><a href="https://github.com/py-pdf/pypdf/commit/de405a8d3fc7156140570b03dc1db95f85fe1159"><code>de405a8</code></a> DEV: Update idna from version 3.10 to 3.15</li>
+<li><a href="https://github.com/py-pdf/pypdf/commit/a2b90f978e97828cb2254fb146d5194727c79171"><code>a2b90f9</code></a> ROB: AppearanceStream: Also honor user-set font name when not flattening anno...</li>
+<li><a href="https://github.com/py-pdf/pypdf/commit/22bd60f913c0fe3b0354d73911d202dfc1a1acf8"><code>22bd60f</code></a> MAINT: Tiny change of comments (<a href="https://redirect.github.com/py-pdf/pypdf/issues/3787">#3787</a>)</li>
+<li><a href="https://github.com/py-pdf/pypdf/commit/29953925e9ca8ec6f941ae7efbaf2829cbd51b35"><code>2995392</code></a> ENH: Implement SASLprep (RFC 4013) for AES-256 password normalization (<a href="https://redirect.github.com/py-pdf/pypdf/issues/3780">#3780</a>)</li>
+<li><a href="https://github.com/py-pdf/pypdf/commit/e044789d4ad8b6c370f6cee5b563579a2b832784"><code>e044789</code></a> TST: Disable PyPy update checks after image update</li>
+<li>Additional commits viewable in <a href="https://github.com/py-pdf/pypdf/compare/6.10.2...6.12.0">compare view</a></li>
+</ul>
+</details>
+<br />
+
+
+[![Dependabot compatibility score](https://dependabot-badges.githubapp.com/badges/compatibility_score?dependency-name=pypdf&package-manager=uv&previous-version=6.10.2&new-version=6.12.0)](https://docs.github.com/en/github/managing-security-vulnerabilities/about-dependabot-security-updates#about-compatibility-scores)
+
+Dependabot will resolve any conflicts with this PR as long as you don't alter it yourself. You can also trigger a rebase manually by commenting `@dependabot rebase`.
+
+[//]: # (dependabot-automerge-start)
+[//]: # (dependabot-automerge-end)
+
+---
+
+<details>
+<summary>Dependabot commands and options</summary>
+<br />
+
+You can trigger Dependabot actions by commenting on this PR:
+- `@dependabot rebase` will rebase this PR
+- `@dependabot recreate` will recreate this PR, overwriting any edits that have been made to it
+- `@dependabot show <dependency name> ignore conditions` will show all of the ignore conditions of the specified dependency
+- `@dependabot ignore <dependency name> major version` will close this group update PR and stop Dependabot creating any more for the specific dependency's major version (unless you unignore this specific dependency's major version or upgrade to it yourself)
+- `@dependabot ignore <dependency name> minor version` will close this group update PR and stop Dependabot creating any more for the specific dependency's minor version (unless you unignore this specific dependency's minor version or upgrade to it yourself)
+- `@dependabot ignore <dependency name>` will close this group update PR and stop Dependabot creating any more for the specific dependency (unless you unignore this specific dependency or upgrade to it yourself)
+- `@dependabot unignore <dependency name>` will remove all of the ignore conditions of the specified dependency
+- `@dependabot unignore <dependency name> <ignore condition>` will remove the ignore condition of the specified dependency and ignore conditions
+You can disable automated security fix PRs for this repo from the [Security Alerts page](https://github.com/elizaOS/eliza/network/alerts).
+
+</details>d:["$","div",null,{"className":"mb-8 space-y-6","children":[["$","$L14",null,{"metrics":{"date":"2026-06-12","interval":{"intervalStart":"$D2026-06-12T00:00:00.000Z","intervalEnd":"$D2026-06-13T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":8,"merged":2,"total":8},"issues":{"new":0,"closed":0,"total":0},"activeContributors":9,"codeChanges":{"additions":138,"deletions":2,"files":8,"commitCount":33},"topContributors":[{"username":"NubsCarson","avatarUrl":"https://avatars.githubusercontent.com/u/192162056?u=d2be9082dbee60fcbad21d32bf6e662ab1af3674&v=4","totalScore":82.92300170153148,"prScore":82.48500170153147,"issueScore":0,"reviewScore":0,"commentScore":0.43799999999999994,"summary":"NubsCarson: Focused on strengthening infrastructure and deployment automation for elizaos/eliza, successfully merging four PRs (#8400, #8398, #8397, #8394) that implemented a Caddy front door and idempotent daemon-arming scripts. Their work involved 598 lines of code changes primarily centered on configuration and infrastructure, supported by 6 total comments across PRs and issues."},{"username":"greptile-apps","avatarUrl":"https://avatars.githubusercontent.com/in/867647?v=4","totalScore":58.5,"prScore":0,"issueScore":0,"reviewScore":58.5,"commentScore":0,"summary":"greptile-apps: No activity today."},{"username":"EvoLinkAI","avatarUrl":"https://avatars.githubusercontent.com/u/253253881?u=2824dc86ac92eb07afc48ac43213a31cba6432e6&v=4","totalScore":29.523581822961965,"prScore":29.523581822961965,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"EvoLinkAI: Focused on expanding integration capabilities by opening PR #8395 in elizaos/eliza to add EvoLink support to the plugin-openai. This effort involved modifying 7 files with 151 total line changes, reflecting a balanced approach across code, testing, documentation, and configuration."},{"username":"standujar","avatarUrl":"https://avatars.githubusercontent.com/u/16385918?u=718bdcd1585be8447bdfffb8c11ce249baa7532d&v=4","totalScore":29.21718963391826,"prScore":29.21718963391826,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"standujar: Focused on infrastructure stability by successfully implementing headscale installation within the control-plane cloud-init via PR #8393. This work, which involved 86 lines of modifications across four files, centered entirely on bugfix efforts and documentation updates."},{"username":"2-A-M","avatarUrl":"https://avatars.githubusercontent.com/u/96268540?u=39ce724443b5cd500fc28905812cdba16e3181a7&v=4","totalScore":0.33999999999999997,"prScore":0,"issueScore":0,"reviewScore":0,"commentScore":0.33999999999999997,"summary":"2-A-M: Focused on advancing project development through 5 commits across 14 files (+875/-156 lines) while providing 2 PR comments to support team collaboration. Their work was primarily dedicated to feature implementation, complemented by targeted bug fixes and testing efforts."},{"username":"xavier-arosemena","avatarUrl":"https://avatars.githubusercontent.com/u/212006378?u=51d17beade4934c79b0113de803fc1ef713b0c89&v=4","totalScore":0.2,"prScore":0,"issueScore":0,"reviewScore":0,"commentScore":0.2,"summary":"xavier-arosemena: Focused on feature development, contributing 51 lines of code across two files through a single commit. They also provided a pull request comment to support ongoing collaborative efforts."},{"username":"bluetieroperations-create","avatarUrl":"https://avatars.githubusercontent.com/u/270213615?v=4","totalScore":0.2,"prScore":0,"issueScore":0,"reviewScore":0,"commentScore":0.2,"summary":"bluetieroperations-create: Focused on codebase maintenance and feature development, contributing 4 commits across 4 files with a net addition of 111 lines of code. Their activity was primarily directed toward other work and feature implementation, supported by a single pull request comment."}],"focusAreas":[{"area":"cloud-infra","count":6},{"area":".github/workflows","count":1}],"topIssues":[],"topPullRequests":[{"id":"PR_kwDOMT5cIs7l6Xts","title":"chore(scripts): idempotent apps-daemon arming script (IaC, not hand-editing)","author":"NubsCarson","number":8397,"body":"$15","repository":"elizaos/eliza","createdAt":"2026-06-12T20:16:09Z","mergedAt":"2026-06-13T00:07:54Z","additions":159,"deletions":0},{"id":"PR_kwDOMT5cIs7l4u_w","title":"Add EvoLink support to plugin-openai","author":"EvoLinkAI","number":8395,"body":"## Summary\n- allow @elizaos/plugin-openai to auto-enable with EVOLINK_API_KEY\n- resolve EvoLink's OpenAI-compatible base URL and default text model when only EvoLink settings are present\n- document EvoLink env vars and expose them in pluginParameters\n\n## Validation\n- bun install --no-save\n- bun run --cwd packages/core build\n- bunx vitest run --config vitest.config.ts __tests__/cerebras-config.shape.test.ts __tests__/auto-enable.test.ts (from plugins/plugin-openai) => 2 files / 17 tests passed\n- bun run --cwd plugins/plugin-openai typecheck\n- bunx @biomejs/biome check plugins/plugin-openai/README.md plugins/plugin-openai/auto-enable.ts plugins/plugin-openai/index.ts plugins/plugin-openai/utils/config.ts plugins/plugin-openai/__tests__/cerebras-config.shape.test.ts plugins/plugin-openai/__tests__/auto-enable.test.ts\n- bun run --cwd plugins/plugin-openai build\n- git diff --check\n- rg \"evolink/auto|api\\.evolink\\.ai/v1|api\\.evolink\\.ai\" plugins/plugin-openai (no matches)","repository":"elizaos/eliza","createdAt":"2026-06-12T18:54:33Z","mergedAt":"2026-06-16T02:42:06Z","additions":145,"deletions":6},{"id":"PR_kwDOMT5cIs7l7MI8","title":"ci(infra): dispatchable workflow to arm the apps daemon (no operator SSH needed)","author":"NubsCarson","number":8398,"body":"$16","repository":"elizaos/eliza","createdAt":"2026-06-12T20:57:38Z","mergedAt":"2026-06-13T00:07:50Z","additions":124,"deletions":0},{"id":"PR_kwDOMT5cIs7l8Q3G","title":"ci(infra): one-shot workflow to remove an orphaned apps-data-plane state entry","author":"NubsCarson","number":8400,"body":"$17","repository":"elizaos/eliza","createdAt":"2026-06-12T22:02:46Z","mergedAt":"2026-06-13T00:07:45Z","additions":96,"deletions":0},{"id":"PR_kwDOMT5cIs7l4uqh","title":"feat(infra): install Caddy front door in app-node cloud-init (last apps-lane TODO)","author":"NubsCarson","number":8394,"body":"$18","repository":"elizaos/eliza","createdAt":"2026-06-12T18:54:20Z","mergedAt":"2026-06-12T20:58:50Z","additions":95,"deletions":2},{"id":"PR_kwDOMT5cIs7l7YV_","title":"chore(deps-dev): bump esbuild from 0.28.0 to 0.28.1 in /packages/cloud-services/operator in the npm_and_yarn group across 1 directory","author":"dependabot","number":8399,"body":"$19","repository":"elizaos/eliza","createdAt":"2026-06-12T21:08:14Z","mergedAt":"2026-06-15T15:47:38Z","additions":83,"deletions":29},{"id":"PR_kwDOMT5cIs7lzq2p","title":"fix(infra): install headscale in control-plane cloud-init","author":"standujar","number":8393,"body":"$1a","repository":"elizaos/eliza","createdAt":"2026-06-12T14:55:55Z","mergedAt":"2026-06-12T14:57:26Z","additions":43,"deletions":0},{"id":"PR_kwDOMT5cIs7l5OQv","title":"chore(deps): bump pypdf from 6.10.2 to 6.12.0 in /packages/benchmarks/OSWorld in the uv group across 1 directory","author":"dependabot","number":8396,"body":"$1b","repository":"elizaos/eliza","createdAt":"2026-06-12T19:18:36Z","mergedAt":null,"additions":26,"deletions":23}],"detailedContributorSummaries":{"2-A-M":"2-A-M: Focused on advancing project development through 5 commits across 14 files (+875/-156 lines) while providing 2 PR comments to support team collaboration. Their work was primarily dedicated to feature implementation, complemented by targeted bug fixes and testing efforts.","EvoLinkAI":"EvoLinkAI: Focused on expanding integration capabilities by opening PR #8395 in elizaos/eliza to add EvoLink support to the plugin-openai. This effort involved modifying 7 files with 151 total line changes, reflecting a balanced approach across code, testing, documentation, and configuration.","NubsCarson":"NubsCarson: Focused on strengthening infrastructure and deployment automation for elizaos/eliza, successfully merging four PRs (#8400, #8398, #8397, #8394) that implemented a Caddy front door and idempotent daemon-arming scripts. Their work involved 598 lines of code changes primarily centered on configuration and infrastructure, supported by 6 total comments across PRs and issues.","bluetieroperations-create":"bluetieroperations-create: Focused on codebase maintenance and feature development, contributing 4 commits across 4 files with a net addition of 111 lines of code. Their activity was primarily directed toward other work and feature implementation, supported by a single pull request comment.","greptile-apps":"greptile-apps: No activity today.","standujar":"standujar: Focused on infrastructure stability by successfully implementing headscale installation within the control-plane cloud-init via PR #8393. This work, which involved 86 lines of modifications across four files, centered entirely on bugfix efforts and documentation updates.","xavier-arosemena":"xavier-arosemena: Focused on feature development, contributing 51 lines of code across two files through a single commit. They also provided a pull request comment to support ongoing collaborative efforts."}}}],"$L1c"]}]
+e:["$","div",null,{"className":"prose prose-sm mx-auto mt-8 dark:prose-invert sm:prose lg:prose-lg xl:prose-xl","children":[["$","p","p-0",{"children":"Development on June 12 focused on stabilizing the Eliza Cloud infrastructure, specifically finalizing app-node ingress configurations and streamlining control-plane provisioning. While the infrastructure is largely verified on staging, the team is now coordinating final configuration updates and pipeline arming to reach end-to-end go-live readiness."}],"\n",["$","h2","h2-0",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"🚨 Needs Attention","position":{"start":{"line":5,"column":4,"offset":398},"end":{"line":5,"column":22,"offset":416}}}],"position":{"start":{"line":5,"column":1,"offset":395},"end":{"line":5,"column":23,"offset":417}}},"children":"🚨 Needs Attention"}],"\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"Blocked Issues/PRs"}],": ",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/8321","children":"elizaos/eliza#8321"}]," - The project is awaiting a ",["$","code","code-0",{"children":"join_mode"}]," configuration update for the staging tenant and the final arming of the build-from-repo pipeline to achieve full go-live."]}],"\n"]}],"\n",["$","h2","h2-1",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"✅ Completed Work","position":{"start":{"line":8,"column":4,"offset":677},"end":{"line":8,"column":20,"offset":693}}}],"position":{"start":{"line":8,"column":1,"offset":674},"end":{"line":8,"column":20,"offset":693}}},"children":"✅ Completed Work"}],"\n",["$","p","p-1",{"children":["$","strong","strong-0",{"children":"Cloud Infrastructure & Ingress"}]}],"\n",["$","ul","ul-1",{"children":["\n",["$","li","li-0",{"children":["Finalized the app-node cloud-init configuration by implementing Caddy as the front-door ingress (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/8394","children":"elizaos/eliza#8394"}],")."]}],"\n",["$","li","li-1",{"children":["Improved control-plane reliability by automating Headscale installation within the cloud-init bootstrap process (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/8393","children":"elizaos/eliza#8393"}],")."]}],"\n"]}],"\n",["$","h2","h2-2",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"🏗️ Work in Progress","position":{"start":{"line":14,"column":4,"offset":1086},"end":{"line":14,"column":24,"offset":1106}}}],"position":{"start":{"line":14,"column":1,"offset":1083},"end":{"line":14,"column":24,"offset":1106}}},"children":"🏗️ Work in Progress"}],"\n",["$","p","p-2",{"children":["$","strong","strong-0",{"children":"New Pull Requests"}]}],"\n",["$","ul","ul-2",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"elizaos/eliza"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/8399","children":"#8399"}],": Dependency update for ",["$","code","code-0",{"children":"esbuild"}]," (0.28.0 to 0.28.1)."]}],"\n",["$","li","li-1",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/8396","children":"#8396"}],": Dependency update for ",["$","code","code-0",{"children":"pypdf"}]," (6.10.2 to 6.12.0)."]}],"\n",["$","li","li-2",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/8395","children":"#8395"}],": Added EvoLink support to the ",["$","code","code-0",{"children":"plugin-openai"}]," package."]}],"\n"]}],"\n"]}],"\n"]}],"\n",["$","p","p-3",{"children":["$","strong","strong-0",{"children":"Active Discussions"}]}],"\n",["$","ul","ul-3",{"children":["\n",["$","li","li-0",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/8321","children":"elizaos/eliza#8321"}],": Ongoing coordination regarding staging tenant configuration and provisioning worker stability."]}],"\n"]}]]}]
+f:["$","script","script-0",{"src":"/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","async":true}]
+10:["$","script","script-1",{"src":"/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","async":true}]
+11:["$","script","script-2",{"src":"/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js","async":true}]
+12:["$","$L1d",null,{"children":["$","$1e",null,{"name":"Next.MetadataOutlet","children":"$@1f"}]}]
+1c:["$","div",null,{"className":"rounded-lg border bg-card text-card-foreground shadow-sm","children":[["$","div",null,{"className":"flex flex-col space-y-1.5 p-6 py-4","children":["$","div",null,{"className":"tracking-tight text-sm font-medium","children":["$undefined","Code Changes"]}]}],["$","div",null,{"className":"p-6 pt-0","children":["$","div",null,{"className":"grid grid-cols-2 gap-4 md:grid-cols-4","children":[["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-git-commit-vertical h-5 w-5","aria-hidden":"true","children":[["$","path","1holv5",{"d":"M12 3v6"}],["$","circle","1v7zrd",{"cx":"12","cy":"12","r":"3"}],["$","path","a9ows0",{"d":"M12 15v6"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":33}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Commits"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-file-code h-5 w-5","aria-hidden":"true","children":[["$","path","1oefj6",{"d":"M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"}],["$","path","wfsgrz",{"d":"M14 2v5a1 1 0 0 0 1 1h5"}],["$","path","1tg20x",{"d":"M10 12.5 8 15l2 2.5"}],["$","path","yinavb",{"d":"m14 12.5 2 2.5-2 2.5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":8}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Files Changed"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-green-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-up h-5 w-5 text-green-500","aria-hidden":"true","children":[["$","path","hav0vg",{"d":"m5 12 7-7 7 7"}],["$","path","x0mq9r",{"d":"M12 19V5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-green-500","children":"+138"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Added"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-red-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-down h-5 w-5 text-red-500","aria-hidden":"true","children":[["$","path","s699le",{"d":"M12 5v14"}],["$","path","1idqje",{"d":"m19 12-7 7-7-7"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-red-500","children":"-2"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Deleted"}]]}]]}]]}]}]]}]
+1f:null

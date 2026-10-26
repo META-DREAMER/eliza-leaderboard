@@ -1,0 +1,284 @@
+{
+  "interval": {
+    "intervalStart": "2026-01-18T00:00:00.000Z",
+    "intervalEnd": "2026-01-25T00:00:00.000Z",
+    "intervalType": "week"
+  },
+  "repository": "elizaos/elizaos.github.io",
+  "overview": "From 2026-01-18 to 2026-01-25, elizaos/elizaos.github.io had 12 new PRs (2 merged), 4 new issues, and 6 active contributors.",
+  "topIssues": [
+    {
+      "id": "I_kwDONNAI987k6_O2",
+      "title": "fix: Overall summaries not generated for days with no repository activity",
+      "author": "madjin",
+      "number": 226,
+      "repository": "elizaos/elizaos.github.io",
+      "body": "## Problem\n\nOverall summary API endpoints return 404 for dates with no repository activity:\n- `/api/summaries/overall/day/2026-01-01.json` → 404 ❌\n- `/api/summaries/overall/day/2026-01-02.json` → 200 ✅\n\n## Expected Behavior\n\nThe API should return a summary for **every day the pipeline runs**, even if there's no activity:\n\n```json\n{\n  \"version\": \"1.0\",\n  \"type\": \"overall\",\n  \"interval\": \"day\",\n  \"date\": \"2026-01-01\",\n  \"generatedAt\": \"2026-01-02T00:00:00.000Z\",\n  \"contentFormat\": \"markdown\",\n  \"content\": \"No activity recorded for January 1, 2026.\"\n}\n```\n\n## Root Cause\n\n[`generateOverallSummaryForInterval()`](https://github.com/elizaOS/elizaos.github.io/blob/main/src/lib/pipelines/summarize/generateOverallSummary.ts#L70-L76) returns `null` when no repository summaries exist:\n\n```typescript\nconst repoSummaries = await getAllRepoSummariesForInterval(interval);\nif (repoSummaries.length === 0) {\n  intervalLogger?.debug(\n    `No repository summaries found for ${intervalType} of ${startDate}, skipping overall summary generation.`,\n  );\n  return null; // ← This causes the 404\n}\n```\n\n## Evidence\n\n```bash\n# Jan 1 had ZERO activity (New Year's Day)\n$ sqlite3 data/db.sqlite \"SELECT COUNT(*) FROM raw_pull_requests WHERE DATE(created_at) = '2026-01-01';\"\n0\n\n$ sqlite3 data/db.sqlite \"SELECT COUNT(*) FROM raw_issues WHERE DATE(created_at) = '2026-01-01';\"\n0\n\n# Database has monthly summary but NO daily summary\n$ sqlite3 data/db.sqlite \"SELECT date, interval_type, LENGTH(summary) FROM overall_summaries WHERE date = '2026-01-01';\"\n2026-01-01|month|4320\n```\n\n## Solution\n\nAlways generate a summary, even when `repoSummaries.length === 0`:\n\n```typescript\nconst repoSummaries = await getAllRepoSummariesForInterval(interval);\n\n// Generate summary even if no repo summaries exist\nconst summary = repoSummaries.length > 0\n  ? await generateOverallSummary(\n      repoSummaries,\n      aiSummaryConfig,\n      { startDate },\n      intervalType as RepoIntervalType,\n    )\n  : `No activity recorded for ${intervalType} of ${startDate}.`;\n\nif (\\!summary) {\n  intervalLogger?.debug(\n    `Overall summary generation resulted in no content for ${startDate}, skipping storage.`,\n  );\n  return;\n}\n\n// Store and export the summary...\n```\n\n## Impact\n\n- API consumers can't distinguish between \"no data\" and \"endpoint not generated\"\n- 404s break API contract that promises daily summaries\n- Inconsistent API behavior (some days exist, others don't)\n- Downstream tools must handle unexpected 404s\n\n## Design Philosophy\n\nPer the API documentation:\n> \"404 responses indicate artifacts not yet published.\"\n\nBut this should mean \"pipeline hasn't run yet\", NOT \"no activity that day\". If the pipeline runs daily, every day should have a summary—even if it says \"no activity.\"\n\n## References\n\n- API Documentation: https://elizaos.github.io/api\n- Generation code: `src/lib/pipelines/summarize/generateOverallSummary.ts:70-76`\n- OpenAPI spec: https://elizaos.github.io/openapi.json",
+      "createdAt": "2026-01-22T00:42:43Z",
+      "closedAt": "2026-01-22T01:03:39Z",
+      "state": "CLOSED",
+      "commentCount": 1
+    },
+    {
+      "id": "I_kwDONNAI987k6-8z",
+      "title": "fix: API index and contributor profiles not exported due to missing SITE_URL in run-pipelines workflow",
+      "author": "madjin",
+      "number": 225,
+      "repository": "elizaos/elizaos.github.io",
+      "body": "## Problem\n\nThe following API endpoints return 404 on production:\n- `/api/index.json`\n- `/api/contributors/{username}/profile.json` (all 1,433 contributor profiles)\n\nMeanwhile, these endpoints work fine:\n- `/api/leaderboard-*.json` ✅\n- `/api/summaries/**` ✅\n\n## Root Cause\n\nThe `run-pipelines.yml` workflow doesn't set the `SITE_URL` environment variable when running `bun run pipeline export-leaderboard`.\n\nWithout `SITE_URL`, the following functions skip exporting:\n- [`exportAPIIndex()`](https://github.com/elizaOS/elizaos.github.io/blob/main/src/lib/pipelines/export/exportLeaderboardAPI.ts#L1180-L1184) - skips with warning \"SITE_URL not configured\"\n- [`exportAllUserProfiles()`](https://github.com/elizaOS/elizaos.github.io/blob/main/src/lib/pipelines/export/exportLeaderboardAPI.ts#L1078-L1081) - skips with info \"Skipping user profiles: SITE_URL not configured\"\n\nThe files ARE generated locally during `deploy.yml` build (12MB of contributor profiles), but they're generated too late—after the pipelines have already run.\n\n## Evidence\n\n```bash\n# Files exist locally after build\n$ ls -lh out/api/\ndrwxr-xr-x 1435 jin jin   36M contributors/  # ← 404 on production\n-rw-r--r--    1 jin jin  4.0K index.json      # ← 404 on production\n-rw-r--r--    1 jin jin  2.6M leaderboard-lifetime.json  # ✅ works\n-rw-r--r--    1 jin jin   34K leaderboard-monthly.json   # ✅ works\ndrwxr-xr-x    5 jin jin  4.0K summaries/      # ✅ works\n```\n\n```bash\n# Production only has these\n$ curl -s https://elizaos.github.io/api/ | grep href\nhref=\"summaries/\"\nhref=\"leaderboard-lifetime.json\"\nhref=\"leaderboard-monthly.json\"\nhref=\"leaderboard-weekly.json\"\n```\n\n## Solution\n\nAdd SITE_URL to `run-pipelines.yml` env section:\n\n```yaml\nenv:\n  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}\n  OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}\n  PIPELINE_DATA_BRANCH: \"_data\"\n  DATA_DIR: \"data\"\n  SITE_URL: ${{ secrets.SITE_URL || 'https://elizaos.github.io' }}  # ← Add this\n  PIPELINE_CONFIG_FILE: ${{ secrets.PIPELINE_CONFIG_FILE || 'config/example.json' }}\n```\n\nOr detect it dynamically like `deploy.yml` does:\n```yaml\n- name: Determine site URL\n  id: site-config\n  run: |\n    if [[ \"${{ github.event.repository.name }}\" == *.github.io ]]; then\n      echo \"site_url=https://${{ github.repository_owner }}.github.io\" >> $GITHUB_OUTPUT\n    fi\n```\n\n## Impact\n\n- 12MB of contributor profile data not accessible via API\n- API discovery endpoint (`/api/index.json`) returns 404\n- Third-party tools can't discover API capabilities\n- Documentation references broken endpoints\n\n## References\n\n- API Documentation: https://elizaos.github.io/api\n- OpenAPI Spec: https://elizaos.github.io/openapi.json\n- Export code: `src/lib/pipelines/export/exportLeaderboardAPI.ts`",
+      "createdAt": "2026-01-22T00:42:10Z",
+      "closedAt": "2026-01-22T00:51:46Z",
+      "state": "CLOSED",
+      "commentCount": 1
+    },
+    {
+      "id": "I_kwDONNAI987k9GVL",
+      "title": "Stats files always have null contributor summaries due to pipeline ordering",
+      "author": "madjin",
+      "number": 228,
+      "repository": "elizaos/elizaos.github.io",
+      "body": "## Problem\n\nContributor summaries are always `null` in exported stats files (e.g., `data/elizaos_eliza/stats/day/stats_2026-01-20.json`), even when contributor summaries exist in the database.\n\n## Root Cause\n\nPipeline ordering issue in `.github/workflows/run-pipelines.yml`:\n\n1. **Job 1: `ingest-export`** (lines 60-146)\n   - Runs `bun run pipeline export` \n   - Generates stats files with `topContributors` array\n   - At this point, NO contributor summaries exist → all `summary` fields are `null`\n\n2. **Job 2: `generate-summaries`** (lines 148-340) \n   - Runs AFTER job 1 completes\n   - Generates contributor summaries and stores them in database\n   - Stats files are NEVER re-exported to pick up the new summaries\n\n## Evidence\n\n```bash\n# Stats file generated before summaries exist:\n$ cat data/elizaos_eliza/stats/day/stats_2026-01-16.json | jq '.topContributors[0]'\n{\n  \"username\": \"0xbbjoker\",\n  ...\n  \"summary\": null  # ← Always null\n}\n\n# But summary exists in database:\n$ sqlite3 data/db.sqlite \"SELECT LENGTH(summary) FROM user_summaries WHERE username = '0xbbjoker' AND date = '2026-01-16' AND interval_type = 'day';\"\n166  # ← Summary has 166 characters\n```\n\n## Solution\n\nRe-export stats files after contributor summaries are generated. Options:\n\n### Option 1: Add export step to generate-summaries job (Recommended)\nAfter line 261 in `.github/workflows/run-pipelines.yml`, add:\n```yaml\n- name: Re-export stats with contributor summaries\n  run: bun run pipeline export --days 7 -f\n```\n\n### Option 2: Separate job with dependency\nCreate a third job that runs after `generate-summaries` to re-export stats.\n\n## Impact\n\n- All contributor summaries in stats files are missing, even though they exist in the database\n- Frontend/API consumers see `summary: null` instead of rich contributor activity descriptions\n- Affects all interval types (day, week, month)\n\n## Related Files\n\n- `.github/workflows/run-pipelines.yml`\n- `src/lib/pipelines/export/queries.ts:114-165` (`getTopContributors` function)\n- `src/lib/pipelines/export/exportRepoStats.ts:17-97` (`exportRepoStatsForInterval` function)",
+      "createdAt": "2026-01-22T04:47:55Z",
+      "closedAt": "2026-01-22T05:50:04Z",
+      "state": "CLOSED",
+      "commentCount": 0
+    },
+    {
+      "id": "I_kwDONNAI987lN7MJ",
+      "title": "Untracked repositories table has 2x more columns than tracked repositories",
+      "author": "madjin",
+      "number": 230,
+      "repository": "elizaos/elizaos.github.io",
+      "body": "# Untracked repositories table has 2x more columns than tracked repositories\n\n## Current State\n\n**Tracked repos (8 columns):**\n- Core: `repoId`, `owner`, `name`, `description`\n- Metrics: `stars`, `forks`\n- Timestamps: `lastFetchedAt`, `lastUpdated`\n\n**Untracked repos (18 columns):**\n- Core: `repoId`, `owner`, `name`, `description`\n- Metrics: `stars`, `forks`, `watchers`\n- Metadata: `isArchived`, `primaryLanguage`\n- Timestamps: `lastUpdatedAt`, `lastPushedAt`, `lastFetchedAt`\n- Activity: `openPrCount`, `mergedPrCount`, `closedUnmergedPrCount`, `openIssueCount`, `closedIssueCount`\n- Score: `activityScore`\n\n## Issue\n\nThe \"lightweight\" untracked repos table has **18 columns** vs **8 columns** in tracked repos (2.25x more).\n\n## Why It Happened\n\n**Tracked repos**: Normalized architecture\n- Minimal `repositories` table\n- Separate `rawPullRequests`, `rawIssues`, `rawCommits` tables with full details\n\n**Untracked repos**: Denormalized architecture  \n- Everything in one table (no separate PR/issue tables)\n- Stores counts and scores directly\n\n## Potential Optimization\n\nCould reduce to **9 essential columns**:\n```sql\nrepoId, owner, name, description,\nstars, forks,\nlastUpdatedAt,  -- for delta detection\nactivityScore,  -- pre-computed\nlastFetchedAt\n```\n\n**Trade-offs:**\n- ✅ Simpler schema (9 vs 18 columns)\n- ✅ Matches tracked repos complexity\n- ❌ Lose tri-split PR/issue counts in DB (would need to recompute for UI)\n- ❌ Lose metadata (language, archived status)\n\n## Questions\n\n1. Do we need tri-split counts stored, or can we compute on-the-fly?\n2. Is `primaryLanguage` valuable for filtering/display?\n3. Is `isArchived` needed or already filtered during ingestion?\n\n## Non-Goal\n\nThis is not urgent - the denormalized approach works fine. Just documenting for future consideration.\n\n## References\n\n- Schema: `src/lib/data/schema.ts` lines 859-896\n- Discovery: `src/lib/pipelines/discoverUntrackedRepos.ts`\n",
+      "createdAt": "2026-01-23T03:17:50Z",
+      "closedAt": "2026-01-25T20:37:35Z",
+      "state": "CLOSED",
+      "commentCount": 0
+    }
+  ],
+  "topPRs": [
+    {
+      "id": "PR_kwDONNAI986-1m7c",
+      "title": "Consolidate untracked repos pipeline and fix DRY violations",
+      "author": "madjin",
+      "number": 231,
+      "body": "## Problem\n\nUsers have no visibility into repositories in their organizations that aren't being tracked for contributor analytics. With 35 tracked repos but 286 total repos across `elizaos` and `elizaos-plugins` orgs, there's a lot of \"dark matter\" - repos that exist but aren't on the radar.\n\n## Solution\n\nAdds **untracked repository discovery** feature that:\n\n- Discovers all repos in configured organizations\n- Shows basic stats: stars, forks, recent PR/issue activity\n- Calculates activity scores to surface active repos\n- Helps identify which repos might be worth adding to full tracking\n- Provides 360-degree view of org activity\n\n**UI:** New collapsible section on `/repos` page showing untracked repos with:\n- Repository metadata (description, language, stars)\n- Recent activity counts (PRs, issues in last 30 days)\n- Activity score ranking\n- Links to GitHub\n\n**Pipeline:** `bun run pipeline ingest-untracked`\n- Delta detection: only updates repos with changes\n- Efficient batch operations\n- Configurable org list and exclusion patterns\n\n## Configuration\n\n```json\n{\n  \"PIPELINE_UNTRACKED_REPOS\": {\n    \"enabled\": true,\n    \"organizations\": [\"elizaos\", \"elizaos-plugins\"],\n    \"excludeArchived\": true,\n    \"excludePatterns\": [\"deprecated-*\", \"test-*\"]\n  }\n}\n```\n\n## Implementation\n\nSingle-file pipeline (`discoverUntrackedRepos.ts`) using:\n- Log-scale activity scoring (prevents big repos from dominating)\n- Delta detection via `lastUpdatedAt` (skips unchanged repos)\n- Batch database operations\n- Existing codebase patterns and utilities\n\nCloses #230\n\n\n<!-- This is an auto-generated comment: release notes by coderabbit.ai -->\n\n## Summary by CodeRabbit\n\n* **New Features**\n  * Added untracked repository discovery to identify repositories from configured GitHub organizations not currently in the system\n  * New UI section displaying discovered untracked repositories with activity metrics, stats, and recent activity breakdown\n  * Repository stats button showing tracked vs untracked counts with quick navigation to untracked section\n  * Manual trigger option for discovering untracked repositories via workflow dispatch\n\n* **Chores**\n  * Added database storage for untracked repository data and metadata\n\n<sub>✏️ Tip: You can customize this high-level summary in your review settings.</sub>\n\n<!-- end of auto-generated comment: release notes by coderabbit.ai -->",
+      "repository": "elizaos/elizaos.github.io",
+      "createdAt": "2026-01-23T03:21:17Z",
+      "mergedAt": "2026-01-25T20:37:34Z",
+      "additions": 4629,
+      "deletions": 158
+    },
+    {
+      "id": "PR_kwDONNAI986-leEh",
+      "title": "Fix API issues: missing files and no-activity summaries",
+      "author": "madjin",
+      "number": 227,
+      "body": "## Summary\nFixes #225 and #226\n\n**Issue #225: Missing API files** (`/api/index.json`, `/api/contributors/*`)\n- Root cause: `run-pipelines.yml` workflow didn't set `SITE_URL` env var\n- Fix: Added dynamic site URL detection step (copied pattern from `deploy.yml`)\n- Now exports API index and contributor profiles correctly\n\n**Issue #226: Missing summaries for no-activity days**\n- Root cause: `generateOverallSummaryForInterval()` returned early when no repo summaries found\n- Fix: Generate simple \"No activity recorded\" message instead of skipping\n- Ensures every valid date returns 200 instead of 404\n\n## Changes\n- `.github/workflows/run-pipelines.yml`: Added SITE_URL detection step before API exports\n- `src/lib/pipelines/summarize/generateOverallSummary.ts`: Generate no-activity summaries\n\n## Test Plan\n- [ ] CI checks pass (build, typecheck, lint)\n- [ ] Manual workflow_dispatch run after merge\n- [ ] Verify `/api/index.json` exists\n- [ ] Verify `/api/contributors/*` files exist\n- [ ] Verify no-activity days return 200 with simple message\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\n<!-- greptile_comment -->\n\n<h3>Greptile Summary</h3>\n\n\nFixed two critical API issues preventing proper API functionality in production.\n\n**Issue #225 - Missing API Files**: Added dynamic `SITE_URL` detection step in `run-pipelines.yml` before API exports, mirroring the pattern already used in `deploy.yml`. Without this environment variable, the export functions (`exportAPIIndex()` and `exportAllUserProfiles()`) were silently skipping generation, resulting in 404s for `/api/index.json` and all 1,433 contributor profile endpoints. The fix correctly detects whether the repository is an org site (`*.github.io`) or project site and passes the appropriate URL to both export commands.\n\n**Issue #226 - Missing No-Activity Summaries**: Modified `generateOverallSummaryForInterval()` to generate simple \"No activity recorded for {date}\" messages instead of returning null when no repository summaries exist. This ensures consistent API behavior where every date the pipeline runs returns 200, distinguishing \"no activity that day\" from \"pipeline hasn't run yet\" (legitimate 404). The implementation correctly stores these no-activity summaries in the database and exports them to both markdown and JSON API formats.\n\nBoth fixes are minimal, well-targeted changes that address the root causes without introducing unnecessary complexity. The workflow change follows established patterns, and the summary generation maintains proper error handling and logging.\n\n<h3>Confidence Score: 5/5</h3>\n\n\n- Safe to merge - targeted fixes with minimal risk\n- Both changes are straightforward bug fixes addressing well-documented issues. The workflow change copies an established pattern from deploy.yml, and the summary generation logic correctly handles the empty-summaries case without affecting existing functionality. No breaking changes, security issues, or architectural concerns.\n- No files require special attention\n\n<h3>Important Files Changed</h3>\n\n\n\n\n| Filename | Overview |\n|----------|----------|\n| .github/workflows/run-pipelines.yml | Added SITE_URL detection step before API exports to fix missing API files. Implementation correctly mirrors deploy.yml pattern and provides env vars to both export commands. |\n| src/lib/pipelines/summarize/generateOverallSummary.ts | Modified to generate \"No activity recorded\" summaries instead of returning null for days with no repository activity, ensuring 200 responses for all valid dates. |\n\n</details>\n\n\n\n<h3>Sequence Diagram</h3>\n\n```mermaid\nsequenceDiagram\n    participant Workflow as run-pipelines.yml\n    participant SummaryStep as generateOverallSummary\n    participant ExportAPI as exportLeaderboardAPI\n    participant API as /api/* endpoints\n\n    Note over Workflow: Daily scheduled run (23:00 UTC)\n    \n    Workflow->>Workflow: Run summaries (repo → contributor → overall)\n    Workflow->>SummaryStep: Generate overall summaries\n    \n    alt No repository activity\n        SummaryStep->>SummaryStep: Check getAllRepoSummariesForInterval()\n        SummaryStep->>SummaryStep: repoSummaries.length === 0\n        SummaryStep->>SummaryStep: Generate \"No activity recorded\" message\n        SummaryStep->>API: Store summary (200 response)\n    else Has activity\n        SummaryStep->>SummaryStep: generateOverallSummary() with AI\n        SummaryStep->>API: Store summary (200 response)\n    end\n    \n    Workflow->>Workflow: Determine site URL (new step)\n    Note over Workflow: Detects *.github.io vs project repo\n    \n    Workflow->>ExportAPI: export-leaderboard (with SITE_URL env)\n    ExportAPI->>API: Generate /api/index.json\n    ExportAPI->>API: Generate /api/contributors/*/profile.json\n    ExportAPI->>API: Generate leaderboard-*.json\n    \n    Workflow->>ExportAPI: export-summaries (with SITE_URL env)\n    ExportAPI->>API: Export summary JSON files\n```\n\n<!-- greptile_other_comments_section -->\n\n<!-- /greptile_comment -->",
+      "repository": "elizaos/elizaos.github.io",
+      "createdAt": "2026-01-22T01:31:37Z",
+      "mergedAt": null,
+      "additions": 38,
+      "deletions": 15
+    },
+    {
+      "id": "PR_kwDONNAI986-DxnE",
+      "title": "chore(deps): bump ora from 7.0.1 to 9.0.0",
+      "author": "dependabot",
+      "number": 218,
+      "body": "Bumps [ora](https://github.com/sindresorhus/ora) from 7.0.1 to 9.0.0.\n<details>\n<summary>Release notes</summary>\n<p><em>Sourced from <a href=\"https://github.com/sindresorhus/ora/releases\">ora's releases</a>.</em></p>\n<blockquote>\n<h2>v9.0.0</h2>\n<h3>Breaking</h3>\n<ul>\n<li>Require Node.js 20  7aca06d</li>\n</ul>\n<h3>Fixes</h3>\n<ul>\n<li>Fix clearing in some cases  aa51538</li>\n<li>Fix <code>frame()</code> not displaying dynamic <code>prefixText</code>/<code>suffixText</code> from functions  0f19f57</li>\n<li>Fix multiline text exceeding console height leaving garbage when scrolling  45d30ad</li>\n</ul>\n<hr />\n<p><a href=\"https://github.com/sindresorhus/ora/compare/v8.2.0...v9.0.0\">https://github.com/sindresorhus/ora/compare/v8.2.0...v9.0.0</a></p>\n<h2>v8.2.0</h2>\n<ul>\n<li>Add support for <code>boolean</code> value for <code>color</code> option (<a href=\"https://redirect.github.com/sindresorhus/ora/issues/244\">#244</a>)  fe951e5</li>\n</ul>\n<hr />\n<p><a href=\"https://github.com/sindresorhus/ora/compare/v8.1.1...v8.2.0\">https://github.com/sindresorhus/ora/compare/v8.1.1...v8.2.0</a></p>\n<h2>v8.1.1</h2>\n<ul>\n<li>Fix animation speed when update methods are called very often  818ca34</li>\n<li>Fix handling of symbol being empty string in <code>stopAndPersist()</code> (<a href=\"https://redirect.github.com/sindresorhus/ora/issues/243\">#243</a>)  5117dfb</li>\n</ul>\n<p><a href=\"https://github.com/sindresorhus/ora/compare/v8.1.0...v8.1.1\">https://github.com/sindresorhus/ora/compare/v8.1.0...v8.1.1</a></p>\n<h2>v8.1.0</h2>\n<ul>\n<li>Update dependencies  fb0fced</li>\n</ul>\n<p><a href=\"https://github.com/sindresorhus/ora/compare/v8.0.1...v8.1.0\">https://github.com/sindresorhus/ora/compare/v8.0.1...v8.1.0</a></p>\n<h2>v8.0.1</h2>\n<ul>\n<li>Fix the process not exiting  89a1f31</li>\n</ul>\n<p><a href=\"https://github.com/sindresorhus/ora/compare/v8.0.0...v8.0.1\">https://github.com/sindresorhus/ora/compare/v8.0.0...v8.0.1</a></p>\n<h2>v8.0.0</h2>\n<h3>Breaking</h3>\n<ul>\n<li>Require Node.js 18  675590f</li>\n</ul>\n<h3>Improvements</h3>\n<ul>\n<li>Update dependencies 675590f</li>\n</ul>\n<p><a href=\"https://github.com/sindresorhus/ora/compare/v7.0.1...v8.0.0\">https://github.com/sindresorhus/ora/compare/v7.0.1...v8.0.0</a></p>\n</blockquote>\n</details>\n<details>\n<summary>Commits</summary>\n<ul>\n<li><a href=\"https://github.com/sindresorhus/ora/commit/20d4bdb708ff6a7d0c1be5ad00194b58a5cdb637\"><code>20d4bdb</code></a> 9.0.0</li>\n<li><a href=\"https://github.com/sindresorhus/ora/commit/7aca06d32ed91427358d7f257dab33bea84544b8\"><code>7aca06d</code></a> Require Node.js 20</li>\n<li><a href=\"https://github.com/sindresorhus/ora/commit/aa51538b92f49de2c57e34850c8f00f3d98b7a56\"><code>aa51538</code></a> Fix clearing in some cases</li>\n<li><a href=\"https://github.com/sindresorhus/ora/commit/9125620ea535723ab159ae328d6cb66cad032004\"><code>9125620</code></a> Add FAQs</li>\n<li><a href=\"https://github.com/sindresorhus/ora/commit/0f19f57cdff265151b58248e64481b60aeeacd22\"><code>0f19f57</code></a> Fix <code>frame()</code> not displaying dynamic prefixText/suffixText from functions</li>\n<li><a href=\"https://github.com/sindresorhus/ora/commit/45d30aded22bfd87431f16e0222e90ab88085c4f\"><code>45d30ad</code></a> Fix multiline text exceeding console height leaving garbage when scrolling</li>\n<li><a href=\"https://github.com/sindresorhus/ora/commit/79d0339e000cf956ba5581013f27bd86a41d56fc\"><code>79d0339</code></a> 8.2.0</li>\n<li><a href=\"https://github.com/sindresorhus/ora/commit/fe951e57c71fefde94f4d7205ce360e5568af06b\"><code>fe951e5</code></a> Add support for <code>boolean</code> value for <code>color</code> option (<a href=\"https://redirect.github.com/sindresorhus/ora/issues/244\">#244</a>)</li>\n<li><a href=\"https://github.com/sindresorhus/ora/commit/86aca37a324dcb010da5c04660e5c81a4d8f1f9d\"><code>86aca37</code></a> 8.1.1</li>\n<li><a href=\"https://github.com/sindresorhus/ora/commit/818ca34f1fd03d7652965d60cfb3205c29241757\"><code>818ca34</code></a> Fix frame handling</li>\n<li>Additional commits viewable in <a href=\"https://github.com/sindresorhus/ora/compare/v7.0.1...v9.0.0\">compare view</a></li>\n</ul>\n</details>\n<br />\n\n\n[![Dependabot compatibility score](https://dependabot-badges.githubapp.com/badges/compatibility_score?dependency-name=ora&package-manager=npm_and_yarn&previous-version=7.0.1&new-version=9.0.0)](https://docs.github.com/en/github/managing-security-vulnerabilities/about-dependabot-security-updates#about-compatibility-scores)\n\nDependabot will resolve any conflicts with this PR as long as you don't alter it yourself. You can also trigger a rebase manually by commenting `@dependabot rebase`.\n\n[//]: # (dependabot-automerge-start)\n[//]: # (dependabot-automerge-end)\n\n---\n\n<details>\n<summary>Dependabot commands and options</summary>\n<br />\n\nYou can trigger Dependabot actions by commenting on this PR:\n- `@dependabot rebase` will rebase this PR\n- `@dependabot recreate` will recreate this PR, overwriting any edits that have been made to it\n- `@dependabot merge` will merge this PR after your CI passes on it\n- `@dependabot squash and merge` will squash and merge this PR after your CI passes on it\n- `@dependabot cancel merge` will cancel a previously requested merge and block automerging\n- `@dependabot reopen` will reopen this PR if it is closed\n- `@dependabot close` will close this PR and stop Dependabot recreating it. You can achieve the same result by closing it manually\n- `@dependabot show <dependency name> ignore conditions` will show all of the ignore conditions of the specified dependency\n- `@dependabot ignore this major version` will close this PR and stop Dependabot creating any more for this major version (unless you reopen the PR or upgrade to it yourself)\n- `@dependabot ignore this minor version` will close this PR and stop Dependabot creating any more for this minor version (unless you reopen the PR or upgrade to it yourself)\n- `@dependabot ignore this dependency` will close this PR and stop Dependabot creating any more for this dependency (unless you reopen the PR or upgrade to it yourself)\n\n\n</details>\n\n<!-- greptile_comment -->\n\n<h3>Greptile Summary</h3>\n\n\nThis PR updates `ora` from 7.0.1 to 9.0.0, part of a larger dependency update batch. The major version bump introduces a breaking change requiring Node.js 20+, along with several bug fixes for clearing, dynamic text display, and multiline text handling.\n\n**Key observations:**\n- `ora` is declared in dependencies but **not imported or used anywhere** in the codebase\n- The project uses Bun (version 1.3.0) as its runtime, which has Node.js compatibility\n- CI/CD workflows use `bun-version: latest` for all jobs\n- No code changes required since the package is unused\n\n**Recommendation:** Consider removing `ora` from dependencies if it's genuinely unused, or document its intended future use.\n\n<h3>Confidence Score: 5/5</h3>\n\n\n- Safe to merge - dependency update for unused package with no runtime impact\n- The `ora` package is not imported or used anywhere in the codebase, making this update zero-risk. The Node.js 20+ requirement from ora v9 does not affect the project since it runs on Bun, and the package is never executed.\n- No files require special attention\n\n<h3>Important Files Changed</h3>\n\n\n\n\n| Filename | Overview |\n|----------|----------|\n| package.json | Updated `ora` from 7.0.1 to 9.0.0 - no breaking changes detected as package is unused in codebase |\n\n</details>\n\n\n\n<h3>Sequence Diagram</h3>\n\n```mermaid\nsequenceDiagram\n    participant D as Dependabot\n    participant P as package.json\n    participant CI as CI/CD (Bun)\n    \n    D->>P: Bump ora 7.0.1 → 9.0.0\n    Note over P: Version updated in dependencies\n    CI->>P: Install dependencies (bun install)\n    Note over CI: ora installed but not imported\n    Note over CI: No breaking changes impact build\n```\n\n<!-- greptile_other_comments_section -->\n\n<!-- /greptile_comment -->",
+      "repository": "elizaos/elizaos.github.io",
+      "createdAt": "2026-01-19T17:52:12Z",
+      "mergedAt": "2026-01-26T07:18:21Z",
+      "additions": 34,
+      "deletions": 40
+    },
+    {
+      "id": "PR_kwDONNAI9868vKVf",
+      "title": "fix: render markdown in profile summary card",
+      "author": "standujar",
+      "number": 202,
+      "body": "<!-- greptile_comment -->\n\n<h2>Greptile Overview</h2>\n\n### Greptile Summary\n\nThis PR enhances the profile summary card by adding markdown rendering support using `react-markdown` and `remark-gfm`. The change replaces plain text rendering with proper markdown formatting, allowing headers, lists, links, and other markdown elements in AI-generated contributor summaries to display correctly.\n\n**What Changed:**\n- Added `react-markdown` and `remark-gfm` imports\n- Replaced `<p>` element with `<div>` wrapped `<ReactMarkdown>` component\n- Added Tailwind Typography prose classes for consistent markdown styling\n- Configured prose classes to match the card's design system (custom spacing, colors for headings, dark mode support)\n\n**Integration with Codebase:**\nThe summary content is AI-generated markdown from the pipeline (see `src/lib/pipelines/summarize/aiContributorSummary.ts`), which produces structured markdown with headers, lists, and links. This change ensures that markdown renders correctly in the profile summary cards, matching the pattern already used in `SummaryContent.tsx` for full summary pages.\n\n**Security:**\n`react-markdown` is safe by default - it sanitizes HTML and only renders markdown elements unless explicitly configured with `rehype-raw` plugin (which is not used here). The summary data comes from the database, populated by server-side AI generation, so there's no user-controlled input risk.\n\n**Issue Found:**\nThe existing truncation logic (line 53) slices at character 300, which can break markdown syntax by cutting through links, headers, or other elements. This needs to be addressed with markdown-aware truncation or an alternative approach.\n\n### Confidence Score: 3/5\n\n- This PR is safe to merge with caution - the markdown rendering is implemented correctly, but the truncation logic will cause rendering issues for long lifetime summaries\n- Score of 3 reflects that while the core markdown rendering implementation is correct and secure (proper use of react-markdown with GFM support, appropriate styling), there is a logic bug where the existing character-based truncation will break markdown syntax. This issue only affects lifetime summaries longer than 300 characters when not expanded. The bug won't cause crashes or security issues, but will result in malformed markdown rendering. The positive aspects are: libraries are already in dependencies, security is handled correctly by react-markdown's default sanitization, styling matches the design system, and the pattern is consistent with other markdown rendering in the codebase.\n- src/components/summary-card.tsx - specifically the truncation logic at lines 48-54 which needs to be made markdown-aware\n\n<h3>Important Files Changed</h3>\n\n\n\nFile Analysis\n\n\n\n| Filename | Score | Overview |\n|----------|-------|----------|\n| src/components/summary-card.tsx | 3/5 | Adds markdown rendering to profile summaries but has a critical bug where character-based truncation can break markdown syntax mid-element |\n\n</details>\n\n\n\n<h3>Sequence Diagram</h3>\n\n```mermaid\nsequenceDiagram\n    participant User\n    participant ProfilePage as Profile Page\n    participant SummaryCard as Summary Card\n    participant ReactMarkdown as React Markdown\n    participant RemarkGFM as Remark GFM Plugin\n    \n    User->>ProfilePage: Visit /profile/[username]\n    ProfilePage->>ProfilePage: Fetch user data from DB\n    Note over ProfilePage: Includes lifetimeSummary,<br/>monthlySummaries,<br/>weeklySummaries\n    ProfilePage->>SummaryCard: Render with summaries prop\n    \n    alt Lifetime summary & length > 300\n        SummaryCard->>SummaryCard: Truncate at char 300\n        Note over SummaryCard: ⚠️ May break markdown syntax\n    end\n    \n    SummaryCard->>ReactMarkdown: Pass displayText\n    ReactMarkdown->>RemarkGFM: Process markdown with GFM\n    RemarkGFM->>ReactMarkdown: Return parsed AST\n    ReactMarkdown->>ReactMarkdown: Render to React elements\n    ReactMarkdown->>SummaryCard: Rendered markdown\n    SummaryCard->>User: Display formatted content\n    \n    alt User clicks \"Show more/less\"\n        User->>SummaryCard: Toggle isExpanded\n        SummaryCard->>SummaryCard: Re-render with full/truncated text\n    end\n```\n\n<!-- greptile_other_comments_section -->\n\n<!-- /greptile_comment -->",
+      "repository": "elizaos/elizaos.github.io",
+      "createdAt": "2026-01-12T16:16:22Z",
+      "mergedAt": "2026-01-21T10:35:49Z",
+      "additions": 8,
+      "deletions": 4
+    },
+    {
+      "id": "PR_kwDONNAI986-nMi_",
+      "title": "Fix: re-export stats after contributor summaries are generated",
+      "author": "madjin",
+      "number": 229,
+      "body": "## Summary\nFixes #228 \n\nStats files (`data/elizaos_eliza/stats/day/stats_*.json`) always had `summary: null` for contributors, even when summaries existed in the database. This was due to a pipeline ordering issue.\n\n## Problem\n\nThe workflow had stats being exported BEFORE contributor summaries were generated:\n\n1. `ingest-export` job → exports stats files (summaries don't exist yet → `summary: null`)\n2. `generate-summaries` job → creates contributor summaries\n3. Stats files never re-exported to include summaries\n\n## Solution\n\nAdded a re-export step after summary generation completes (line 293):\n\n```yaml\n- name: Re-export stats with contributor summaries\n  run: bun run pipeline export${{ env.start_date_arg }}${{ env.end_date_arg }}${{ github.event_name == 'schedule' && ' --days 2' || '' }} -f\n```\n\n**Behavior:**\n- **Scheduled runs**: Re-export last 2 days only (`--days 2`)\n- **Manual runs with date range**: Re-export the specified date range\n- **Manual runs without dates**: Re-export everything missing\n\n## Why Three Export Steps?\n\nThe workflow now has three export commands, each serving a purpose:\n\n1. **Line 119**: Export everything missing (respects manual date ranges)\n2. **Line 120**: Force re-export last 2 days for data completeness (April 2025 \"overlap\" feature)\n3. **Line 293 (NEW)**: Force re-export WITH summaries after generation\n\nThis preserves the existing \"overlap\" safety feature while ensuring summaries are included when available.\n\n## Test Plan\n- [ ] CI checks pass\n- [ ] Manual workflow run to verify summary inclusion\n- [ ] Verify scheduled runs only re-export 2 days\n- [ ] Verify manual runs with date range respect inputs\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\n<!-- greptile_comment -->\n\n<h2>Greptile Overview</h2>\n\n<h3>Greptile Summary</h3>\n\nFixes stats files missing contributor summaries by adding a re-export step after summary generation completes.\n\n**Key changes:**\n- Added re-export command on line 293 after all summary generation completes\n- For scheduled runs: re-exports last 2 days only (`--days 2`)\n- For manual runs: respects date range inputs or re-exports everything if no dates specified\n- Preserves existing \"overlap\" safety feature (line 120) for data completeness\n\n**Why this works:**\nThe original workflow exported stats BEFORE summaries existed (lines 119-120 in `ingest-export` job), resulting in `summary: null`. The new re-export step runs AFTER contributor summaries are generated in the `generate-summaries` job, ensuring stats files include the actual summary text.\n\n**Implementation is correct:**\n- Uses same date range environment variables (`${{ env.start_date_arg }}${{ env.end_date_arg }}`)\n- Applies `-f` flag to force overwrite of existing stats files\n- Conditional logic for scheduled runs (`--days 2`) matches existing pattern on line 120\n\n<h3>Confidence Score: 5/5</h3>\n\n- This PR is safe to merge with minimal risk\n- The change is a simple, well-documented addition that fixes a clear pipeline ordering bug. The new export command follows established patterns (uses same env vars, flags, and conditional logic as existing exports on lines 119-120), ensuring consistency. No breaking changes or risky operations introduced.\n- No files require special attention\n\n<h3>Important Files Changed</h3>\n\n\n\n\n| Filename | Overview |\n|----------|----------|\n| .github/workflows/run-pipelines.yml | Added re-export step after summary generation to include contributor summaries in stats files |\n\n</details>\n\n\n\n<h3>Sequence Diagram</h3>\n\n```mermaid\nsequenceDiagram\n    participant Workflow as GitHub Actions\n    participant IngestJob as ingest-export job\n    participant SummaryJob as generate-summaries job\n    participant DB as SQLite Database\n    participant DataFiles as Stats JSON Files\n\n    Note over Workflow: Workflow starts (scheduled/manual)\n    \n    Workflow->>IngestJob: Start job\n    activate IngestJob\n    \n    IngestJob->>DB: Run ingest pipeline\n    IngestJob->>DB: Run process pipeline\n    IngestJob->>DataFiles: Export stats (line 119)\n    Note right of DataFiles: summaries don't exist yet<br/>contributor.summary = null\n    \n    IngestJob->>DataFiles: Re-export last 2 days (line 120)\n    Note right of DataFiles: Still no summaries<br/>contributor.summary = null\n    \n    IngestJob->>Workflow: Job complete\n    deactivate IngestJob\n    \n    Workflow->>SummaryJob: Start job (needs: ingest-export)\n    activate SummaryJob\n    \n    SummaryJob->>DB: Import markdown summaries\n    SummaryJob->>DB: Generate repository summaries\n    SummaryJob->>DB: Generate contributor summaries\n    Note right of DB: Summaries now exist in DB\n    \n    SummaryJob->>DB: Generate overall summaries\n    \n    SummaryJob->>DataFiles: Re-export WITH summaries (line 293 NEW)\n    Note right of DataFiles: NOW includes summaries<br/>contributor.summary = actual text\n    \n    SummaryJob->>DataFiles: Export leaderboard JSON\n    SummaryJob->>DataFiles: Export summaries to JSON API\n    \n    SummaryJob->>Workflow: Job complete\n    deactivate SummaryJob\n```\n\n<!-- greptile_other_comments_section -->\n\n<!-- /greptile_comment -->",
+      "repository": "elizaos/elizaos.github.io",
+      "createdAt": "2026-01-22T05:29:17Z",
+      "mergedAt": "2026-01-22T05:50:02Z",
+      "additions": 4,
+      "deletions": 0
+    }
+  ],
+  "codeChanges": {
+    "additions": 12,
+    "deletions": 4,
+    "files": 2,
+    "commitCount": 25
+  },
+  "completedItems": [
+    {
+      "title": "fix: render markdown in profile summary card",
+      "prNumber": 202,
+      "type": "bugfix",
+      "body": "<!-- greptile_comment -->\n\n<h2>Greptile Overview</h2>\n\n### Greptile Summary\n\nThis PR enhances the profile summary card by adding markdown rendering support using `react-markdown` and `remark-gfm`. The change replaces plain text rendering wi",
+      "files": [
+        "src/components/summary-card.tsx"
+      ]
+    },
+    {
+      "title": "Fix: re-export stats after contributor summaries are generated",
+      "prNumber": 229,
+      "type": "bugfix",
+      "body": "## Summary\nFixes #228 \n\nStats files (`data/elizaos_eliza/stats/day/stats_*.json`) always had `summary: null` for contributors, even when summaries existed in the database. This was due to a pipeline ordering issue.\n\n## Problem\n\nThe workflow",
+      "files": [
+        ".github/workflows/run-pipelines.yml"
+      ]
+    }
+  ],
+  "topContributors": [
+    {
+      "username": "madjin",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/32600939?u=cdcf89f44c7a50906c7a80d889efa85023af2049&v=4",
+      "totalScore": 109.19647689935744,
+      "prScore": 89.45647689935743,
+      "issueScore": 14.2,
+      "reviewScore": 5,
+      "commentScore": 0.54,
+      "summary": "madjin: Focused on stabilizing the documentation site's data pipeline by identifying and resolving critical issues related to missing API files and null contributor summaries (#225, #226, #228). They successfully merged a fix to ensure stats are correctly re-exported after summary generation (#229) and addressed edge cases where no-activity days caused generation failures. Their work primarily centered on bug fixes and configuration improvements to ensure the reliability of the site's automated reporting and API indexing."
+    },
+    {
+      "username": "0xbbjoker",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/54844437?u=90fe1762420de6ad493a1c1582f1f70c0d87d8e2&v=4",
+      "totalScore": 109.08471056386475,
+      "prScore": 109.08471056386475,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "0xbbjoker: Focused on maintaining ecosystem stability and version alignment, notably resolving TypeScript compatibility errors for @elizaos/core 1.7.x in the Telegram plugin via PR #24. They also managed the release preparation for the Discord plugin, executing a version bump that involved significant code and configuration updates across 27 files in PR #44. Their work this week primarily centered on bug fixes and configuration management to ensure seamless integration across core plugin repositories."
+    },
+    {
+      "username": "hanzlamateen",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/10975502?u=53f23921078d9a27d96751373bb44f4bd2d58bf4&v=4",
+      "totalScore": 92.37709407952083,
+      "prScore": 92.37709407952083,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": null
+    },
+    {
+      "username": "odilitime",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/16395496?u=c9bac48e632aae594a0d85aaf9e9c9c69b674d8b&v=4",
+      "totalScore": 44.083773896576105,
+      "prScore": 43.5437738965761,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0.54,
+      "summary": "odilitime: Focused on a massive architectural overhaul of the elizaos/eliza core, specifically working on the V2.0.0 dynamic execution engine as seen in PR #6384. This high-impact effort involved substantial code modifications across over 1,800 files, totaling more than 100,000 lines of changes to test context-driven execution logic. Their work this week was primarily dedicated to large-scale bugfixes and feature development aimed at stabilizing the next major version of the engine."
+    },
+    {
+      "username": "standujar",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/16385918?u=718bdcd1585be8447bdfffb8c11ce249baa7532d&v=4",
+      "totalScore": 31.938,
+      "prScore": 0,
+      "issueScore": 0,
+      "reviewScore": 31.5,
+      "commentScore": 0.43799999999999994,
+      "summary": "standujar: Focused exclusively on large-scale bugfix work this week, executing substantial code modifications across 239 files with over 11,000 lines of total churn. They also played a significant role in quality assurance by providing 6 detailed pull request reviews, including three critical change requests and seven technical comments. Their primary impact centered on stabilizing the codebase through extensive file-level corrections and rigorous peer feedback."
+    },
+    {
+      "username": "matomoniwano",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/47988393?u=2e31304db3ca7b0a1f62bc26443c25ec34bb519d&v=4",
+      "totalScore": 29.89251334905818,
+      "prScore": 29.69251334905818,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0.2,
+      "summary": "matomoniwano: Focused on architectural expansion by developing a prototype for the RLM provider within the Eliza Python core, as seen in the ongoing work for PR #6383. This effort involved substantial modifications across 16 files (+610/-223 lines), prioritizing the foundational infrastructure required for this new integration. Their primary focus this week centered on configuration, documentation, and testing to ensure a robust framework for the prototype."
+    },
+    {
+      "username": "greptile-apps",
+      "avatarUrl": "https://avatars.githubusercontent.com/in/867647?v=4",
+      "totalScore": 27.2,
+      "prScore": 0,
+      "issueScore": 0,
+      "reviewScore": 27,
+      "commentScore": 0.2,
+      "summary": "greptile-apps: Focused exclusively on collaborative quality assurance this week, contributing five reviews and one pull request comment across the codebase. While no code was merged or issues opened, their activity centered on providing feedback and technical oversight through the review process. Their primary impact was driven by peer review and maintaining development standards rather than direct code contributions."
+    },
+    {
+      "username": "project-aeris-disaster-agent",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/242933833?v=4",
+      "totalScore": 14.346573590279972,
+      "prScore": 14.346573590279972,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": null
+    },
+    {
+      "username": "Xayaan",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/5237930?u=7840b286463bde982c8af8f389e61e26a01328cb&v=4",
+      "totalScore": 14.346573590279972,
+      "prScore": 14.346573590279972,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": null
+    },
+    {
+      "username": "shuhaib112",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/211030292?v=4",
+      "totalScore": 9,
+      "prScore": 0,
+      "issueScore": 0,
+      "reviewScore": 9,
+      "commentScore": 0,
+      "summary": "shuhaib112: Focused on collaborative quality assurance by providing two reviews on open pull requests. This engagement indicates a focus on maintaining code standards and supporting peer contributions through technical feedback. Their primary activity this week centered on the review process rather than direct code implementation."
+    },
+    {
+      "username": "ChristopherTrimboli",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/27584221?u=de148a498b5af814e037c2975112fadd09df743f&v=4",
+      "totalScore": 5,
+      "prScore": 0,
+      "issueScore": 0,
+      "reviewScore": 5,
+      "commentScore": 0,
+      "summary": "ChristopherTrimboli: Focused on a mix of general maintenance and bugfix work this week, contributing eight commits that modified 50 files with a balanced volume of code changes (+489/-574 lines). They also supported the team's development flow by providing a pull request approval, ensuring continued progress on peer contributions. Their primary efforts were centered on system stability and addressing technical debt through various file updates."
+    },
+    {
+      "username": "borisudovicic",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/31806472?u=8935f4d43fd7e4eb9bf5ff92d54d4d2f8ac8a786&v=4",
+      "totalScore": 4,
+      "prScore": 0,
+      "issueScore": 4,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "borisudovicic: Focused on product refinement and feature definition for the elizaos/eliza ecosystem, driving the implementation of an agent discovery module (#6302) and establishing a standardized public agent link format (#6304). They also actively managed the platform's stability and user experience by identifying dashboard bugs (#6382) and proposing interface simplifications in the app builder (#6385). Their primary impact this week centered on project management and triaging issues related to the landing page and dashboard functionality."
+    },
+    {
+      "username": "lalalune",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/18633264?u=e2e906c3712c2506ebfa98df01c2cfdc50050b30&v=4",
+      "totalScore": 0.43799999999999994,
+      "prScore": 0,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0.43799999999999994,
+      "summary": "lalalune: Executed a massive codebase cleanup and restructuring, contributing a single high-impact commit that modified 776 files with over 74,000 total lines of changes. While they did not merge any pull requests, they remained engaged in the development process by providing three targeted comments on ongoing pull requests. Their primary focus this week was centered on large-scale repository maintenance and file-level refactoring."
+    }
+  ],
+  "newPRs": 12,
+  "mergedPRs": 2,
+  "newIssues": 4,
+  "closedIssues": 3,
+  "activeContributors": 6
+}

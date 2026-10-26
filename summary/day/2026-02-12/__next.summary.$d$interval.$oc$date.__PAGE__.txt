@@ -1,0 +1,1448 @@
+1:"$Sreact.fragment"
+2:I[4817319,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"IntervalSelector"]
+3:I[6998365,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"LlmCopyButton"]
+14:I[3642796,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],""]
+15:I[3238488,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"StatCardsDisplay"]
+21:I[4261541,["/eliza-leaderboard/_next/static/chunks/b33bcbdcb3f88354.js","/eliza-leaderboard/_next/static/chunks/8ba59154b6704904.js"],"OutletBoundary"]
+22:"$Sreact.suspense"
+4:Te73,### Problem Statement
+Currently, ElizaOS scenario testing lacks the ability to mock internal agent runtime calls (particularly LLM interactions) when testing via the API client. This makes it difficult to create deterministic tests for agent behavior and workflows.
+
+### Current Limitations
+- Global function mocks only work for code executed in the same process
+- No way to intercept `runtime.useModel` calls from the bootstrap plugin
+- Agent behavior is non-deterministic due to real LLM calls
+- Difficult to test specific agent decision paths and responses
+
+### Why Different Approach Was Needed
+
+The existing mocking system was designed for **code execution environments** (E2B sandbox and local `node -e` processes), where mocks are applied to the execution context. However, **agent testing** works differently:
+
+- **E2B/Local Execution**: Code runs in isolated processes/sandboxes where global mocks can be applied
+- **Agent Testing**: Agent runs as a service with API client interaction, requiring direct runtime method interception
+- **Architecture Gap**: The bootstrap plugin calls `runtime.useModel` internally, which can't be mocked through the execution environment approach
+
+This architectural difference necessitated a new approach that directly intercepts runtime methods rather than relying on execution context mocking.
+
+### Proposed Solution: Runtime Method Mocking
+
+We've implemented a new mocking approach that directly intercepts `IAgentRuntime` method calls:
+
+#### Key Components
+
+1. **MockEngine Enhancement**
+   - Added `runtimeMethodMocks` to support mocking runtime methods
+   - Priority system: `runtimeMethod` > `service` > `globalFunction`
+   - Direct method replacement on the runtime instance
+
+2. **Schema Updates**
+   - Extended `MockSchema` to include `runtimeMethod: z.string().optional()`
+   - Supports mocking any `IAgentRuntime` method (e.g., `useModel`, `getService`)
+
+3. **Conditional Matching**
+   - Matcher functions can inspect method arguments
+   - Example: `"return args[1] && args[1].prompt && args[1].prompt.includes('should respond')"`
+   - Supports complex conditional logic for when to apply mocks
+
+#### Usage Example
+
+```yaml
+setup:
+  mocks:
+    - runtimeMethod: "useModel"
+      method: "useModel"
+      when:
+        matcher: "return args[1] && args[1].prompt && args[1].prompt.includes('should respond')"
+      response: "<response><name>agent</name><reasoning>Mocked response</reasoning><action>RESPOND</action></response>"
+```
+
+#### Benefits
+
+1. **Deterministic Testing**: Replace LLM calls with static responses
+2. **Full Workflow Testing**: Test complete agent decision flows
+3. **Conditional Mocking**: Apply mocks based on specific conditions
+4. **Runtime Integration**: Works seamlessly with existing agent architecture
+5. **Backward Compatibility**: Existing mocks continue to work
+
+#### Implementation Steps
+
+- MockEngine runtime method support
+- Schema updates for runtimeMethod mocks
+- Conditional matching with matcher functions
+- Integration with scenario runner
+- Basic useModel mocking working
+- Add support for mocking other runtime methods (getService, etc.)
+- Create comprehensive test scenarios
+- Add documentation and examples
+- Consider adding mock recording/replay capabilities
+
+### Technical Details
+
+The implementation works by:
+1. Creating the `IAgentRuntime` instance in the scenario runner
+2. Applying mocks directly to the runtime object before agent initialization
+3. The bootstrap plugin receives the mocked runtime and uses the mocked methods
+4. Mocks are reverted after scenario completion
+
+This approach provides the foundation for robust, deterministic agent testing while maintaining the existing architecture.5:Tb74,# feat(scenarios): Add Step Count Evaluator
+
+Links: [Issue #5726](https://github.com/elizaOS/eliza/issues/5726)
+
+## Summary
+Add an evaluator that asserts on the number of agent/tool/action steps taken to complete a scenario step. This encourages concise trajectories and prevents thrashing.
+
+## Goals
+- Count actions/tools invoked during response generation for a step
+- Assert against `max_steps`, `min_steps`, optional `target_steps`
+
+## Acceptance Criteria
+1. New evaluator type `step_count`
+2. Step count derived from trajectory/action memories queried via `AgentRuntime.getMemories`
+3. Evaluator passes if within bounds and returns a clear message
+
+## Schema Changes
+Edit `packages/cli/src/commands/scenario/src/schema.ts`:
+
+```ts
+const StepCountEvaluationSchema = BaseEvaluationSchema.extend({
+  type: z.literal('step_count'),
+  max_steps: z.number().optional(),
+  min_steps: z.number().optional(),
+  target_steps: z.number().optional(),
+  // optional filter by action name prefix to scope counting
+  action_prefix: z.string().optional(),
+});
+```
+
+## Evaluation Implementation
+Leverage the existing `TrajectoryContainsActionEvaluator` patterns.
+
+```ts
+class StepCountEvaluator implements Evaluator {
+  async evaluate(params: EvaluationSchema, _runResult: ExecutionResult, runtime: AgentRuntime): Promise<EvaluationResult> {
+    if (params.type !== 'step_count') throw new Error('Mismatched evaluator');
+    try {
+      const memories = await runtime.getMemories({
+        tableName: 'messages', agentId: runtime.agentId, count: 200, unique: false,
+      });
+      const actionResults = memories.filter(m => m?.type === 'messages' && m.content?.type === 'action_result');
+      const filtered = params.action_prefix
+        ? actionResults.filter(m => (m.content?.actionName ?? '').startsWith(params.action_prefix!))
+        : actionResults;
+      const steps = filtered.length;
+
+      const tooMany = params.max_steps != null && steps > params.max_steps;
+      const tooFew = params.min_steps != null && steps < params.min_steps;
+      const success = !(tooMany || tooFew);
+      return {
+        success,
+        message: `Steps taken: ${steps} (min=${params.min_steps ?? '-'}, target=${params.target_steps ?? '-'}, max=${params.max_steps ?? '-'})`,
+      };
+    } catch (error: any) {
+      return { success: false, message: `Step count evaluation failed: ${error.message ?? String(error)}` };
+    }
+  }
+}
+```
+
+Register in `EvaluationEngine` constructor:
+
+```ts
+this.register('step_count', new StepCountEvaluator());
+```
+
+## Example Usage
+
+```yaml
+evaluations:
+  - type: step_count
+    max_steps: 3
+    action_prefix: "github-service."
+```
+
+## Tests
+- Unit: evaluator result on synthetic memories
+- Integration: scenario that triggers 1-2 simple actions and validates bound
+
+## Notes
+- Future enhancement: count only steps within the current scenario step window by tagging messages with a scenario/step id context field.
+
+
+6:Tdbc,# feat(scenarios): Add Consistency Evaluator
+
+Links: [Issue #5726](https://github.com/elizaOS/eliza/issues/5726)
+
+## Summary
+Add an evaluator that runs the same step multiple times and asserts consistency over a chosen metric (response content, length, execution time, token counts). Useful for detecting non-determinism and regression in prompt/rules.
+
+## Goals
+- Re-run a step N times
+- Compare result metrics across runs
+- Allow tolerance configuration
+
+## Acceptance Criteria
+1. New evaluator type `consistency_check`
+2. Supports metrics: `response_length` | `execution_time` | `token_count`
+3. Configurable `runs` (>=2) and `tolerance` (absolute or percentage)
+4. Consolidated pass/fail with clear variance message
+
+## Schema Changes
+Edit `packages/cli/src/commands/scenario/src/schema.ts`:
+
+```ts
+const ConsistencyEvaluationSchema = BaseEvaluationSchema.extend({
+  type: z.literal('consistency_check'),
+  runs: z.number().min(2),
+  metric: z.enum(['response_length', 'execution_time', 'token_count']),
+  tolerance: z.number().min(0), // if < 1 treat as proportion, else absolute
+});
+```
+
+## Orchestration Changes
+Add a helper to re-execute the current step within the selected environment provider without re-running the entire scenario:
+
+- Expose a `runSingleStep(step, scenarioContext)` on providers that mirrors the logic in `run`, returning an `ExecutionResult`.
+- In `EvaluationEngine`, when encountering `consistency_check`, call this helper to collect multiple `ExecutionResult`s for the same step.
+- Fallback: If helper is not implemented, re-run `run([step])` via a shim.
+
+## Evaluation Implementation
+
+```ts
+class ConsistencyEvaluator implements Evaluator {
+  constructor(private rerunStep: (times: number) => Promise<ExecutionResult[]>) {}
+
+  async evaluate(params: EvaluationSchema, runResult: ExecutionResult): Promise<EvaluationResult> {
+    if (params.type !== 'consistency_check') throw new Error('Mismatched evaluator');
+
+    const runs = await this.rerunStep(params.runs);
+    const values = runs.map(r => {
+      switch (params.metric) {
+        case 'response_length': return r.stdout.length;
+        case 'execution_time': return r.durationMs ?? 0;
+        case 'token_count': {
+          const llm = r.metrics?.llm ?? [];
+          return llm.reduce((sum, m) => sum + (m.totalTokens ?? (m.promptTokens ?? 0) + (m.completionTokens ?? 0)), 0);
+        }
+      }
+    });
+
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    const spread = max - min;
+    const baseline = values[0] || 1;
+    const proportion = baseline ? spread / baseline : spread;
+    const threshold = params.tolerance < 1 ? params.tolerance : params.tolerance / baseline;
+    const success = proportion <= threshold;
+
+    return {
+      success,
+      message: `Consistency ${success ? 'ok' : 'failed'} for ${params.metric}: min=${min}, max=${max}, spread=${spread}, tolerance=${params.tolerance}`,
+    };
+  }
+}
+```
+
+Register in `EvaluationEngine` with a provider-specific `rerunStep` function wired from the scenario runner.
+
+## Example Usage
+
+```yaml
+evaluations:
+  - type: consistency_check
+    runs: 3
+    metric: execution_time
+    tolerance: 0.2   # 20% spread allowed
+```
+
+## Tests
+- Unit: evaluator math on synthetic values
+- Integration: deterministic small prompt with low tolerance; non-deterministic with higher tolerance
+
+## Notes
+- This evaluator requires access to the step context. Implementation will pass a `rerunStep(times)` closure into the evaluator at construction time.
+
+
+7:Tc5e,# feat(scenarios): Add Cost Evaluator
+
+Links: [Issue #5726](https://github.com/elizaOS/eliza/issues/5726)
+
+## Summary
+Introduce an evaluator that asserts the estimated dollar cost of LLM usage per step. Cost is derived from token counts and a model price table.
+
+## Goals
+- Estimate cost (USD) for each step from recorded token metrics
+- Allow thresholds (`max_cost_usd`) to fail expensive runs
+- Support multiple models within a single step
+
+## Acceptance Criteria
+1. New evaluator type `llm_cost`
+2. Price table configurable via env or default map
+3. Evaluator passes if total step cost <= `max_cost_usd`
+4. Detailed message with model breakdown and total
+
+## Schema Changes
+Edit `packages/cli/src/commands/scenario/src/schema.ts`:
+
+```ts
+const LlmCostEvaluationSchema = BaseEvaluationSchema.extend({
+  type: z.literal('llm_cost'),
+  max_cost_usd: z.number(),
+});
+```
+
+## Pricing Source
+Add a small utility `packages/cli/src/commands/scenario/src/pricing.ts`:
+
+```ts
+export type ModelPricing = {
+  inputPer1K: number;    // USD per 1000 input tokens
+  outputPer1K: number;   // USD per 1000 output tokens
+};
+
+export const DEFAULT_MODEL_PRICING: Record<string, ModelPricing> = {
+  TEXT_SMALL: { inputPer1K: 0.15, outputPer1K: 0.60 },
+  TEXT_LARGE: { inputPer1K: 0.50, outputPer1K: 1.50 },
+  OBJECT_SMALL: { inputPer1K: 0.50, outputPer1K: 1.50 },
+};
+
+export function getPricing(modelType: string, overrides?: Record<string, ModelPricing>): ModelPricing | null {
+  const table = overrides ?? DEFAULT_MODEL_PRICING;
+  return table[modelType] ?? null;
+}
+```
+
+Allow overrides via `SCENARIO_MODEL_PRICING` env (JSON string) in a follow-up.
+
+## Evaluation Implementation
+Add to `EvaluationEngine`:
+
+```ts
+class LlmCostEvaluator implements Evaluator {
+  async evaluate(params: EvaluationSchema, runResult: ExecutionResult): Promise<EvaluationResult> {
+    if (params.type !== 'llm_cost') throw new Error('Mismatched evaluator');
+    const llm = runResult.metrics?.llm ?? [];
+    if (!llm.length) return { success: false, message: 'No LLM metrics found for cost calculation' };
+
+    const pricingOverrides = process.env.SCENARIO_MODEL_PRICING ? JSON.parse(process.env.SCENARIO_MODEL_PRICING) : undefined;
+    let total = 0;
+    for (const m of llm) {
+      const pricing = getPricing(m.modelType, pricingOverrides);
+      if (!pricing) continue;
+      const inTok = m.promptTokens ?? 0;
+      const outTok = m.completionTokens ?? 0;
+      total += (inTok / 1000) * pricing.inputPer1K + (outTok / 1000) * pricing.outputPer1K;
+    }
+
+    const success = total <= params.max_cost_usd;
+    return { success, message: `Estimated cost: $${total.toFixed(4)} (limit $${params.max_cost_usd.toFixed(4)})` };
+  }
+}
+```
+
+Register:
+
+```ts
+this.register('llm_cost', new LlmCostEvaluator());
+```
+
+## Example Usage
+
+```yaml
+evaluations:
+  - type: llm_cost
+    max_cost_usd: 0.05
+```
+
+## Tests
+- Unit: price math with multiple model records
+- Integration: with token_count metrics present and absent
+
+## Notes
+This builds on the Token Count evaluator and shared metrics capture. It complements mocking enhancements described in [Issue #5726](https://github.com/elizaOS/eliza/issues/5726).
+
+
+8:Tf93,# feat(scenarios): Add Token Count Evaluator
+
+Links: [Issue #5726](https://github.com/elizaOS/eliza/issues/5726)
+
+## Summary
+Add an evaluator to assert on input/output/total token counts for LLM calls used during a scenario step. This establishes cost-awareness and guardrails on prompt size and verbosity.
+
+## Goals
+- Track token counts for LLM interactions triggered by a step
+- Assert against `max_input_tokens`, `max_output_tokens`, optional `max_total_tokens`
+- Work across providers through `AgentRuntime.useModel` hooks
+
+## Acceptance Criteria
+1. New evaluator type `token_count`
+2. Instrumentation captures prompt/completion token counts per step
+3. Evaluator passes if counts are within configured maxima
+4. Messages include breakdown and model type(s)
+
+## Schema Changes
+Edit `packages/cli/src/commands/scenario/src/schema.ts`:
+
+```ts
+const TokenCountEvaluationSchema = BaseEvaluationSchema.extend({
+  type: z.literal('token_count'),
+  max_input_tokens: z.number().optional(),
+  max_output_tokens: z.number().optional(),
+  max_total_tokens: z.number().optional(),
+});
+
+// Add to EvaluationSchema union
+```
+
+## Runtime Integration
+We will attach a per-step metrics accumulator that the evaluators can read via `ExecutionResult` metadata. Minimal, provider-agnostic approach:
+
+### ExecutionResult extension
+Edit `packages/cli/src/commands/scenario/src/providers.ts`:
+
+```ts
+export interface ExecutionResult {
+  // ...existing
+  metrics?: {
+    llm?: Array<{
+      modelType: string;
+      promptTokens?: number;
+      completionTokens?: number;
+      totalTokens?: number;
+      provider?: string;
+    }>;
+  };
+}
+```
+
+### Capturing tokens
+Add a light hook layer around `AgentRuntime.useModel` during scenario runs:
+
+- In `runtime-factory.ts`, wrap the runtime instance for scenarios with a proxy that:
+  - Intercepts `useModel`
+  - If params include a prompt or known text fields, call tokenizer via `ModelType.TEXT_TOKENIZER_ENCODE` to estimate prompt tokens
+  - After result, estimate output tokens similarly
+  - Push a record into `currentStepMetrics.llm[]`
+
+Note: If a tokenizer is not available, fall back to heuristic length/4 estimate. Keep it optional so normal runs are unaffected.
+
+## Evaluation Implementation
+Add to `EvaluationEngine`:
+
+```ts
+class TokenCountEvaluator implements Evaluator {
+  async evaluate(params: EvaluationSchema, runResult: ExecutionResult): Promise<EvaluationResult> {
+    if (params.type !== 'token_count') throw new Error('Mismatched evaluator');
+    const llm = runResult.metrics?.llm ?? [];
+    if (!llm.length) {
+      return { success: false, message: 'No LLM token metrics found for this step' };
+    }
+    const totals = llm.reduce((acc, m) => ({
+      prompt: acc.prompt + (m.promptTokens ?? 0),
+      completion: acc.completion + (m.completionTokens ?? 0),
+      total: acc.total + (m.totalTokens ?? ((m.promptTokens ?? 0) + (m.completionTokens ?? 0))),
+    }), { prompt: 0, completion: 0, total: 0 });
+
+    const tooManyInput = params.max_input_tokens != null && totals.prompt > params.max_input_tokens;
+    const tooManyOutput = params.max_output_tokens != null && totals.completion > params.max_output_tokens;
+    const tooManyTotal = params.max_total_tokens != null && totals.total > params.max_total_tokens;
+
+    const success = !(tooManyInput || tooManyOutput || tooManyTotal);
+    return {
+      success,
+      message: `Tokens — input:${totals.prompt}, output:${totals.completion}, total:${totals.total}`,
+    };
+  }
+}
+```
+
+Register in constructor:
+
+```ts
+this.register('token_count', new TokenCountEvaluator());
+```
+
+## Example Usage
+
+```yaml
+evaluations:
+  - type: token_count
+    max_input_tokens: 2000
+    max_output_tokens: 1000
+    max_total_tokens: 2500
+```
+
+## Tests
+- Unit: evaluator aggregation logic
+- Integration: scenario with a small prompt + enforced limits; tokenizer present and absent
+
+## Notes
+- This is complementary to a Cost evaluator which can derive cost from token metrics and model price tables.
+
+
+9:T134d,… replies
+
+This commit addresses multiple critical bugs discovered during comprehensive testing:
+
+**1. Fix infinite auth retry loop (src/base.ts)**
+- Added error throwing when authentication succeeds but verification fails
+- Prevents infinite loop when credentials are valid but verification returns false
+- Preserves existing exponential backoff and 3-retry limit
+
+**2. Implement media upload support (5 files)**
+- src/post.ts: Added media upload via v1.uploadMedia() before posting
+- src/services/PostService.ts: Added same media upload logic for service layer
+- src/utils.ts: Added mediaIds parameter to sendTweet()
+- src/client/client.ts: Added mediaIds parameter to sendTweet()
+- src/client/tweets.ts: Updated createCreateTweetRequest() to use media_ids
+- Uses Twitter API v1 for media upload (v2 doesn't support it)
+- Successfully tested with images and videos
+
+**3. Fix mention reply functionality (src/interactions.ts)**
+- Added check for messageService availability before calling it
+- Prevents crash when messageService is undefined
+- Implemented TWITTER_AUTO_RESPOND_MENTIONS setting check
+- Implemented TWITTER_AUTO_RESPOND_REPLIES setting check
+- Added logic to distinguish between mentions and replies
+- Added logging when tweets are skipped due to settings
+
+All fixes have been tested and build successfully.
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+## Summary by CodeRabbit
+
+* **New Features**
+  * Tweets can attach uploaded media via stable media IDs.
+  * New AUTO_RESPOND settings to enable/disable auto-replies to mentions and replies.
+
+* **Bug Fixes**
+  * Stricter authentication verification during startup to surface failed verifications.
+  * Added safety checks to skip processing when required services are unavailable.
+  * Media upload now logs per-file results and continues on individual failures.
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->
+
+<!-- greptile_comment -->
+
+<h2>Greptile Overview</h2>
+
+<h3>Greptile Summary</h3>
+
+this PR addresses three critical bugs: authentication retry loops, media upload support, and mention reply handling
+
+**key changes:**
+- **auth fix (src/base.ts):** added error throwing when authentication succeeds but verification fails, preventing infinite retry loops
+- **media upload (5 files):** implemented media upload using Twitter API v1 (since v2 doesn't support it), uploads media first then passes `mediaIds` to tweet creation
+- **mention/reply handling (src/interactions.ts):** added `TWITTER_AUTO_RESPOND_MENTIONS` and `TWITTER_AUTO_RESPOND_REPLIES` settings, added `messageService` null check
+
+**critical issue found:**
+- the logic for distinguishing mentions from replies (line 514 in src/interactions.ts) is flawed - it treats any tweet with `inReplyToStatusId` as a "reply to us", even if it's actually a reply to someone else's tweet that mentions the bot. this needs to verify that `inReplyToStatusId` belongs to one of the bot's own tweets
+
+<h3>Confidence Score: 3/5</h3>
+
+- this PR is mostly safe but contains a logic bug in mention/reply classification that could cause incorrect filtering behavior
+- the auth fix and media upload implementation are solid, but the mention/reply distinction logic has a critical flaw that will misclassify tweets. the code won't crash but will filter tweets incorrectly based on the AUTO_RESPOND settings
+- src/interactions.ts requires attention to fix the mention/reply classification logic at line 514
+
+<h3>Important Files Changed</h3>
+
+
+
+
+| Filename | Overview |
+|----------|----------|
+| src/interactions.ts | added AUTO_RESPOND settings filtering and messageService null check, but mention/reply distinction logic is flawed |
+| src/base.ts | added error throwing when auth succeeds but verification fails, preventing infinite retry loop |
+| src/post.ts | implemented media upload using v1 API with proper error handling and logging |
+| src/services/PostService.ts | implemented media upload using v1 API, consistent with src/post.ts implementation |
+
+</details>
+
+
+
+<h3>Sequence Diagram</h3>
+
+```mermaid
+sequenceDiagram
+    participant Client as Client
+    participant Post as Post/PostService
+    participant TwitterV1 as Twitter API v1
+    participant TwitterV2 as Twitter API v2
+    
+    Note over Client,TwitterV2: Media Upload Flow
+    Client->>Post: post with mediaData
+    loop for each media file
+        Post->>TwitterV1: uploadMedia(buffer, mimeType)
+        TwitterV1-->>Post: mediaId
+        Post->>Post: collect mediaIds
+    end
+    Post->>TwitterV2: sendTweet(text, replyId, mediaData, false, mediaIds)
+    TwitterV2->>TwitterV2: create tweet with media_ids
+    TwitterV2-->>Post: tweet result
+    Post-->>Client: success
+```
+
+<sub>Last reviewed commit: f35351a</sub>
+
+<!-- greptile_other_comments_section -->
+
+<sub>(2/5) Greptile learns from your feedback when you react with thumbs up/down!</sub>
+
+<!-- /greptile_comment -->a:Tc0d,## Summary
+Expose REST API routes from `plugin-n8n-workflow` to enable direct frontend access for workflow CRUD, node catalog browsing, validation, and execution monitoring — without going through the agent NLP pipeline.
+
+This creates a dual-access architecture:
+- **Agent access**: NLP → actions (existing)
+- **Frontend access**: REST → routes (new)
+
+## Routes Added
+### Workflows
+- `GET /workflows` - List workflows for a user
+- `POST /workflows` - Create workflow with auto credential resolution
+- `GET /workflows/:id` - Get workflow details
+- `PUT /workflows/:id` - Update existing workflow
+- `DELETE /workflows/:id` - Delete workflow
+- `POST /workflows/:id/activate` - Activate workflow
+- `POST /workflows/:id/deactivate` - Deactivate workflow
+
+### Validation
+- `POST /workflows/validate` - Real-time workflow validation (nodes, parameters, inputs)
+
+### Nodes
+- `GET /nodes?q=...` - Search node catalog with relevance scoring
+- `GET /nodes/available` - Browse categorized catalog (supported/unsupported/utility)
+- `GET /nodes/:type` - Get node definition
+
+### Executions
+- `GET /executions` - List executions with filters (workflowId, status, limit, cursor)
+- `GET /executions/:id` - Get execution details
+
+## Implementation Details
+- **Route handlers** delegate to service layer (no business logic in handlers)
+- **Credential resolution** via existing `N8nCredentialBridge` (OAuth/API key mapping)
+- **Auto-positioning** nodes for workflow creation/updates
+- **ElizaOS integration**: Runtime auto-collects `plugin.routes` and prefixes with plugin name
+
+## Changes
+- Add route handlers in `src/routes/` (workflows, nodes, validation, executions)
+- Export `routes: n8nRoutes` from plugin (auto-collected by ElizaOS runtime)
+- Add `listByUser()` to `N8nCredentialStoreApi` for credential mapping
+- Add `getWorkflow()` and `listExecutions()` to `N8nWorkflowService`
+- Add `getAllNodes()` to catalog utils
+- Update mock service helper with new methods
+
+## Tests
+✅ **37 unit tests** across 4 files, 78 assertions, all passing:
+- `validation.test.ts` - 5 tests (valid/invalid workflows, missing fields)
+- `nodes.test.ts` - 8 tests (search, catalog, filtering, 404/400 errors)
+- `workflows.test.ts` - 16 tests (full CRUD, activation, validation, missing credentials)
+- `executions.test.ts` - 8 tests (list, filters, detail, errors)
+
+## Next Steps
+- [ ] Add e2e tests for Next.js catch-all route integration
+- [ ] Add retry execution endpoint (`POST /executions/:id/retry`)
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+* **New Features**
+  * Exposed REST API endpoints for workflow management (create, read, update, delete, activate, and deactivate operations)
+  * Added execution listing and detail retrieval endpoints with filtering support
+  * Integrated node catalog API with search and availability filtering
+  * Added workflow validation endpoint with detailed error reporting
+
+* **Tests**
+  * Comprehensive test coverage for all new API routes
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->b:T918,## Summary
+Rename crawl scripts to better reflect their purpose and reduce ambiguity in the data pipeline.
+
+## Changes
+### Script Renames
+- `crawl-schemas.ts` → `crawl-output-schemas.ts`
+  - Extracts output schemas from `__schema__/` directories in n8n-nodes-base
+  - Generates `schemaIndex.json` with 457+ node output schemas
+
+- `capture-trigger-schemas.ts` → `crawl-triggers-live.ts`
+  - Captures trigger schemas from **live n8n executions**
+  - Requires `N8N_HOST` + `N8N_API_KEY` environment variables
+  - Generates `triggerSchemaIndex.json`
+
+- `crawl-trigger-schemas.ts` → `crawl-triggers-static.ts`
+  - Extracts trigger schemas from **code + OpenAPI specs** (alternative method)
+  - No live n8n instance required
+
+### Documentation Updates
+- Update README.md with new script names
+- Update npm script `crawl:schemas` → runs `crawl-output-schemas.ts`
+- Update error messages and usage comments in scripts
+- Update crawl.ts orchestrator to use new names
+
+### Version Bump
+- `1.1.0` → `1.2.0` (minor version for refactor)
+
+## Benefits
+✅ **Clearer purpose**: Script names now describe what they do, not how  
+✅ **Easier onboarding**: New contributors can understand the pipeline at a glance  
+✅ **Consistent naming**: All crawl scripts follow `crawl-*` pattern  
+✅ **Reduced ambiguity**: "schemas" could mean input/output/trigger — now explicit
+
+## Testing
+No functional changes — renames only. Existing crawl functionality is preserved.
+
+## Notes
+- This PR will conflict with #16 (REST API routes) which accidentally included these renames. We can resolve by accepting this PR's renames and removing them from #16.
+- The `langchain-output-schemas.json` data update is also included (new schemas from latest crawl)
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+## Release Notes
+
+* **Documentation**
+  * Updated README to reflect reorganized data generation workflow with clearer script naming conventions.
+  * Improved trigger schema capture documentation.
+
+* **New Features**
+  * Added alternative static trigger schema extraction method from code and OpenAPI specs.
+
+* **Chores**
+  * Version bump to 1.2.0.
+  * Updated internal script references and configuration mappings.
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->c:Tb5a,On February 12, 2026, the ElizaOS project saw significant progress in refining its core testing framework with the closure of several issues related to scenario testing and evaluators in `elizaos/eliza`. Additionally, `elizaos-plugins/plugin-n8n-workflow` focused on internal script reorganization for clarity and introduced new API routes for workflow management. The `elizaos-plugins/plugin-twitter` repository had no development activity.
+
+## ✅ Completed Work
+- **Core Framework Enhancements & Testing Refinements**
+    - Enhanced scenario testing capabilities by closing an issue addressing the need for runtime method mocking for deterministic agent testing, improving reliability for LLM interactions. ([elizaos/eliza#5749](https://github.com/elizaos/eliza/issues/5749))
+    - Introduced new scenario evaluators, including a Token Count Evaluator ([elizaos/eliza#5758](https://github.com/elizaos/eliza/issues/5758)), a Cost Evaluator ([elizaos/eliza#5759](https://github.com/elizaos/eliza/issues/5759)), a Consistency Evaluator ([elizaos/eliza#5760](https://github.com/elizaos/eliza/issues/5760)), and a Step Count Evaluator ([elizaos/eliza#5761](https://github.com/elizaos/eliza/issues/5761)).
+- **Internal Script & Documentation Maintenance**
+    - Reorganized and renamed internal crawl scripts in `elizaos-plugins/plugin-n8n-workflow` for better descriptive accuracy, such as renaming `crawl-schemas.ts` to `crawl-output-schemas.ts`. ([elizaos-plugins/plugin-n8n-workflow#17](https://github.com/elizaos-plugins/plugin-n8n-workflow/pull/17))
+    - Performed changelog maintenance in `elizaos/eliza` by removing all references from the `CHANGELOG.md` file. ([elizaos/eliza#6495](https://github.com/elizaos/eliza/pull/6495))
+
+## 🏗️ Work in Progress
+- **New Pull Requests**
+    - **elizaos-plugins/plugin-n8n-workflow**
+        - Add REST API routes for workflow management: This pull request introduces new API endpoints to manage workflows. ([elizaos-plugins/plugin-n8n-workflow#16](https://github.com/elizaos-plugins/plugin-n8n-workflow/pull/16))
+
+## 🐞 Issue Triage
+- **Closed Issues**
+    - **elizaos/eliza**
+        - Enhanced Scenario Testing Capabilities: Closed an issue addressing the need for runtime method mocking to enable deterministic agent testing, particularly for LLM interactions. ([elizaos/eliza#5749](https://github.com/elizaos/eliza/issues/5749))
+        - New Scenario Evaluators Introduced: Resolved issues related to the implementation of several new evaluators for scenario testing, including a Token Count Evaluator ([elizaos/eliza#5758](https://github.com/elizaos/eliza/issues/5758)), a Cost Evaluator ([elizaos/eliza#5759](https://github.com/elizaos/eliza/issues/5759)), a Consistency Evaluator ([elizaos/eliza#5760](https://github.com/elizaos/eliza/issues/5760)), and a Step Count Evaluator ([elizaos/eliza#5761](https://github.com/elizaos/eliza/issues/5761)).0:{"buildId":"US8XLB_zHXYj_PVAECGcd","rsc":["$","$1","c",{"children":[["$","div",null,{"className":"container mx-auto px-6 py-8 md:px-8","children":["$","div",null,{"className":"mx-auto max-w-4xl","children":[["$","div",null,{"className":"mb-4 flex flex-col justify-between sm:flex-row","children":[["$","$L2",null,{"currentInterval":"day","currentDate":"2026-02-12"}],["$","$L3",null,{"metrics":{"date":"2026-02-12","interval":{"intervalStart":"$D2026-02-12T00:00:00.000Z","intervalEnd":"$D2026-02-13T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":4,"merged":2,"total":4},"issues":{"new":0,"closed":5,"total":5},"activeContributors":6,"codeChanges":{"additions":14,"deletions":36,"files":8,"commitCount":14},"topContributors":[{"username":"standujar","avatarUrl":"https://avatars.githubusercontent.com/u/16385918?u=718bdcd1585be8447bdfffb8c11ce249baa7532d&v=4","totalScore":81.35548968218932,"prScore":81.35548968218932,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"standujar: Focused on feature work and bug fixes, merging a PR to reorganize crawl scripts in elizaos-plugins/plugin-n8n-workflow (#17) and opening a new PR to add REST API routes for workflow management in the same repository (#16), while modifying 41 files with a primary focus on code and tests."},{"username":"2-A-M","avatarUrl":"https://avatars.githubusercontent.com/u/96268540?u=39ce724443b5cd500fc28905812cdba16e3181a7&v=4","totalScore":36.63501911726088,"prScore":36.63501911726088,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"2-A-M: Focused on critical bug fixes, resolving an authentication retry loop and implementing media upload functionality in elizaos-plugins/plugin-twitter via PR #48, which involved a substantial code change of over 5k lines. Their work today was entirely dedicated to bugfix efforts, primarily within code and configuration files."},{"username":"mcp97","avatarUrl":"https://avatars.githubusercontent.com/u/15067321?v=4","totalScore":21.901026915173976,"prScore":21.901026915173976,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"mcp97: Focused on documentation maintenance, merging a PR in elizaos/eliza (#6495) that removed outdated references, indicating a primary focus on other work within documentation."},{"username":"greptile-apps","avatarUrl":"https://avatars.githubusercontent.com/in/867647?v=4","totalScore":4.5,"prScore":0,"issueScore":0,"reviewScore":4.5,"commentScore":0,"summary":"greptile-apps: No activity today."},{"username":"odilitime","avatarUrl":"https://avatars.githubusercontent.com/u/16395496?u=c9bac48e632aae594a0d85aaf9e9c9c69b674d8b&v=4","totalScore":0.33999999999999997,"prScore":0,"issueScore":0,"reviewScore":0,"commentScore":0.33999999999999997,"summary":"odilitime: No activity today."}],"focusAreas":[{"area":"scripts","count":4},{"area":"src/data","count":1}],"topIssues":[{"id":"I_kwDOMT5cIs7FLaT0","title":"Implement Runtime Method Mocking for Deterministic Agent Testing","author":"monilpat","number":5749,"repository":"elizaos/eliza","body":"$4","createdAt":"2025-08-11T00:08:49Z","closedAt":"2026-02-12T22:43:03Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7FcGEm","title":"feat(scenarios): Add Step Count Evaluator","author":"monilpat","number":5761,"repository":"elizaos/eliza","body":"$5","createdAt":"2025-08-12T04:27:34Z","closedAt":"2026-02-12T22:43:05Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7FcGCu","title":"feat(scenarios): Add Consistency Evaluator","author":"monilpat","number":5760,"repository":"elizaos/eliza","body":"$6","createdAt":"2025-08-12T04:27:29Z","closedAt":"2026-02-12T22:43:05Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7FcGAc","title":"feat(scenarios): Add Cost Evaluator","author":"monilpat","number":5759,"repository":"elizaos/eliza","body":"$7","createdAt":"2025-08-12T04:27:23Z","closedAt":"2026-02-12T22:43:04Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7FcF-L","title":"feat(scenarios): Add Token Count Evaluator","author":"monilpat","number":5758,"repository":"elizaos/eliza","body":"$8","createdAt":"2025-08-12T04:27:18Z","closedAt":"2026-02-12T22:43:04Z","state":"CLOSED","commentCount":0}],"topPullRequests":[{"id":"PR_kwDONkwNcc7DaKfU","title":"fix: resolve auth retry loop, implement media upload, and fix mention…","author":"2-A-M","number":48,"body":"$9","repository":"elizaos-plugins/plugin-twitter","createdAt":"2026-02-12T22:16:59Z","mergedAt":"2026-02-13T07:57:49Z","additions":5217,"deletions":15},{"id":"PR_kwDORDL9tM7DREr_","title":"Add REST API routes for workflow management","author":"standujar","number":16,"body":"$a","repository":"elizaos-plugins/plugin-n8n-workflow","createdAt":"2026-02-12T12:28:58Z","mergedAt":"2026-02-16T17:40:38Z","additions":2566,"deletions":33},{"id":"PR_kwDORDL9tM7DRH7h","title":"chore: reorganize crawl scripts with descriptive names","author":"standujar","number":17,"body":"$b","repository":"elizaos-plugins/plugin-n8n-workflow","createdAt":"2026-02-12T12:32:47Z","mergedAt":"2026-02-12T12:34:48Z","additions":14,"deletions":13},{"id":"PR_kwDOMT5cIs7DaiYU","title":"chore(changelog): remove references","author":"mcp97","number":6495,"body":"## Summary\r\n- remove all references from `CHANGELOG.md`\r\n\r\n## Testing\r\n- not run (content-only change)\r\n","repository":"elizaos/eliza","createdAt":"2026-02-12T22:49:11Z","mergedAt":"2026-02-12T23:13:17Z","additions":0,"deletions":23}],"detailedContributorSummaries":{"2-A-M":"2-A-M: Focused on critical bug fixes, resolving an authentication retry loop and implementing media upload functionality in elizaos-plugins/plugin-twitter via PR #48, which involved a substantial code change of over 5k lines. Their work today was entirely dedicated to bugfix efforts, primarily within code and configuration files.","greptile-apps":"greptile-apps: No activity today.","mcp97":"mcp97: Focused on documentation maintenance, merging a PR in elizaos/eliza (#6495) that removed outdated references, indicating a primary focus on other work within documentation.","odilitime":"odilitime: No activity today.","standujar":"standujar: Focused on feature work and bug fixes, merging a PR to reorganize crawl scripts in elizaos-plugins/plugin-n8n-workflow (#17) and opening a new PR to add REST API routes for workflow management in the same repository (#16), while modifying 41 files with a primary focus on code and tests."}},"summaryContent":"$c","className":"self-end sm:self-start"}]]}],"$Ld","$Le","$Lf"]}]}],["$L10","$L11","$L12"],"$L13"]}],"loading":null,"isPartial":false}
+d:["$","div",null,{"className":"mb-6","children":["$","div",null,{"className":"flex items-center justify-between","children":[[["$","$L14",null,{"href":"/summary/day/2026-02-11","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left mr-2 h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"children":"Previous"}],false],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$L14",null,{"href":"/summary/day/2026-02-11","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Previous"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]],["$","div",null,{"className":"flex flex-col items-center","children":[["$","div",null,{"className":"text-sm font-medium text-gray-500","children":["Daily"," Summary"]}],["$","time",null,{"dateTime":"2026-02-12","className":"text-md font-bold","children":"Feb 12, 2026"}]]}],[["$","$L14",null,{"href":"/summary/day/2026-02-13","children":[false,["$","span",null,{"children":"Next"}],["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right ml-2 h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}]],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$L14",null,{"href":"/summary/day/2026-02-13","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Next"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]]]}]}]
+16:Te73,### Problem Statement
+Currently, ElizaOS scenario testing lacks the ability to mock internal agent runtime calls (particularly LLM interactions) when testing via the API client. This makes it difficult to create deterministic tests for agent behavior and workflows.
+
+### Current Limitations
+- Global function mocks only work for code executed in the same process
+- No way to intercept `runtime.useModel` calls from the bootstrap plugin
+- Agent behavior is non-deterministic due to real LLM calls
+- Difficult to test specific agent decision paths and responses
+
+### Why Different Approach Was Needed
+
+The existing mocking system was designed for **code execution environments** (E2B sandbox and local `node -e` processes), where mocks are applied to the execution context. However, **agent testing** works differently:
+
+- **E2B/Local Execution**: Code runs in isolated processes/sandboxes where global mocks can be applied
+- **Agent Testing**: Agent runs as a service with API client interaction, requiring direct runtime method interception
+- **Architecture Gap**: The bootstrap plugin calls `runtime.useModel` internally, which can't be mocked through the execution environment approach
+
+This architectural difference necessitated a new approach that directly intercepts runtime methods rather than relying on execution context mocking.
+
+### Proposed Solution: Runtime Method Mocking
+
+We've implemented a new mocking approach that directly intercepts `IAgentRuntime` method calls:
+
+#### Key Components
+
+1. **MockEngine Enhancement**
+   - Added `runtimeMethodMocks` to support mocking runtime methods
+   - Priority system: `runtimeMethod` > `service` > `globalFunction`
+   - Direct method replacement on the runtime instance
+
+2. **Schema Updates**
+   - Extended `MockSchema` to include `runtimeMethod: z.string().optional()`
+   - Supports mocking any `IAgentRuntime` method (e.g., `useModel`, `getService`)
+
+3. **Conditional Matching**
+   - Matcher functions can inspect method arguments
+   - Example: `"return args[1] && args[1].prompt && args[1].prompt.includes('should respond')"`
+   - Supports complex conditional logic for when to apply mocks
+
+#### Usage Example
+
+```yaml
+setup:
+  mocks:
+    - runtimeMethod: "useModel"
+      method: "useModel"
+      when:
+        matcher: "return args[1] && args[1].prompt && args[1].prompt.includes('should respond')"
+      response: "<response><name>agent</name><reasoning>Mocked response</reasoning><action>RESPOND</action></response>"
+```
+
+#### Benefits
+
+1. **Deterministic Testing**: Replace LLM calls with static responses
+2. **Full Workflow Testing**: Test complete agent decision flows
+3. **Conditional Mocking**: Apply mocks based on specific conditions
+4. **Runtime Integration**: Works seamlessly with existing agent architecture
+5. **Backward Compatibility**: Existing mocks continue to work
+
+#### Implementation Steps
+
+- MockEngine runtime method support
+- Schema updates for runtimeMethod mocks
+- Conditional matching with matcher functions
+- Integration with scenario runner
+- Basic useModel mocking working
+- Add support for mocking other runtime methods (getService, etc.)
+- Create comprehensive test scenarios
+- Add documentation and examples
+- Consider adding mock recording/replay capabilities
+
+### Technical Details
+
+The implementation works by:
+1. Creating the `IAgentRuntime` instance in the scenario runner
+2. Applying mocks directly to the runtime object before agent initialization
+3. The bootstrap plugin receives the mocked runtime and uses the mocked methods
+4. Mocks are reverted after scenario completion
+
+This approach provides the foundation for robust, deterministic agent testing while maintaining the existing architecture.17:Tb74,# feat(scenarios): Add Step Count Evaluator
+
+Links: [Issue #5726](https://github.com/elizaOS/eliza/issues/5726)
+
+## Summary
+Add an evaluator that asserts on the number of agent/tool/action steps taken to complete a scenario step. This encourages concise trajectories and prevents thrashing.
+
+## Goals
+- Count actions/tools invoked during response generation for a step
+- Assert against `max_steps`, `min_steps`, optional `target_steps`
+
+## Acceptance Criteria
+1. New evaluator type `step_count`
+2. Step count derived from trajectory/action memories queried via `AgentRuntime.getMemories`
+3. Evaluator passes if within bounds and returns a clear message
+
+## Schema Changes
+Edit `packages/cli/src/commands/scenario/src/schema.ts`:
+
+```ts
+const StepCountEvaluationSchema = BaseEvaluationSchema.extend({
+  type: z.literal('step_count'),
+  max_steps: z.number().optional(),
+  min_steps: z.number().optional(),
+  target_steps: z.number().optional(),
+  // optional filter by action name prefix to scope counting
+  action_prefix: z.string().optional(),
+});
+```
+
+## Evaluation Implementation
+Leverage the existing `TrajectoryContainsActionEvaluator` patterns.
+
+```ts
+class StepCountEvaluator implements Evaluator {
+  async evaluate(params: EvaluationSchema, _runResult: ExecutionResult, runtime: AgentRuntime): Promise<EvaluationResult> {
+    if (params.type !== 'step_count') throw new Error('Mismatched evaluator');
+    try {
+      const memories = await runtime.getMemories({
+        tableName: 'messages', agentId: runtime.agentId, count: 200, unique: false,
+      });
+      const actionResults = memories.filter(m => m?.type === 'messages' && m.content?.type === 'action_result');
+      const filtered = params.action_prefix
+        ? actionResults.filter(m => (m.content?.actionName ?? '').startsWith(params.action_prefix!))
+        : actionResults;
+      const steps = filtered.length;
+
+      const tooMany = params.max_steps != null && steps > params.max_steps;
+      const tooFew = params.min_steps != null && steps < params.min_steps;
+      const success = !(tooMany || tooFew);
+      return {
+        success,
+        message: `Steps taken: ${steps} (min=${params.min_steps ?? '-'}, target=${params.target_steps ?? '-'}, max=${params.max_steps ?? '-'})`,
+      };
+    } catch (error: any) {
+      return { success: false, message: `Step count evaluation failed: ${error.message ?? String(error)}` };
+    }
+  }
+}
+```
+
+Register in `EvaluationEngine` constructor:
+
+```ts
+this.register('step_count', new StepCountEvaluator());
+```
+
+## Example Usage
+
+```yaml
+evaluations:
+  - type: step_count
+    max_steps: 3
+    action_prefix: "github-service."
+```
+
+## Tests
+- Unit: evaluator result on synthetic memories
+- Integration: scenario that triggers 1-2 simple actions and validates bound
+
+## Notes
+- Future enhancement: count only steps within the current scenario step window by tagging messages with a scenario/step id context field.
+
+
+18:Tdbc,# feat(scenarios): Add Consistency Evaluator
+
+Links: [Issue #5726](https://github.com/elizaOS/eliza/issues/5726)
+
+## Summary
+Add an evaluator that runs the same step multiple times and asserts consistency over a chosen metric (response content, length, execution time, token counts). Useful for detecting non-determinism and regression in prompt/rules.
+
+## Goals
+- Re-run a step N times
+- Compare result metrics across runs
+- Allow tolerance configuration
+
+## Acceptance Criteria
+1. New evaluator type `consistency_check`
+2. Supports metrics: `response_length` | `execution_time` | `token_count`
+3. Configurable `runs` (>=2) and `tolerance` (absolute or percentage)
+4. Consolidated pass/fail with clear variance message
+
+## Schema Changes
+Edit `packages/cli/src/commands/scenario/src/schema.ts`:
+
+```ts
+const ConsistencyEvaluationSchema = BaseEvaluationSchema.extend({
+  type: z.literal('consistency_check'),
+  runs: z.number().min(2),
+  metric: z.enum(['response_length', 'execution_time', 'token_count']),
+  tolerance: z.number().min(0), // if < 1 treat as proportion, else absolute
+});
+```
+
+## Orchestration Changes
+Add a helper to re-execute the current step within the selected environment provider without re-running the entire scenario:
+
+- Expose a `runSingleStep(step, scenarioContext)` on providers that mirrors the logic in `run`, returning an `ExecutionResult`.
+- In `EvaluationEngine`, when encountering `consistency_check`, call this helper to collect multiple `ExecutionResult`s for the same step.
+- Fallback: If helper is not implemented, re-run `run([step])` via a shim.
+
+## Evaluation Implementation
+
+```ts
+class ConsistencyEvaluator implements Evaluator {
+  constructor(private rerunStep: (times: number) => Promise<ExecutionResult[]>) {}
+
+  async evaluate(params: EvaluationSchema, runResult: ExecutionResult): Promise<EvaluationResult> {
+    if (params.type !== 'consistency_check') throw new Error('Mismatched evaluator');
+
+    const runs = await this.rerunStep(params.runs);
+    const values = runs.map(r => {
+      switch (params.metric) {
+        case 'response_length': return r.stdout.length;
+        case 'execution_time': return r.durationMs ?? 0;
+        case 'token_count': {
+          const llm = r.metrics?.llm ?? [];
+          return llm.reduce((sum, m) => sum + (m.totalTokens ?? (m.promptTokens ?? 0) + (m.completionTokens ?? 0)), 0);
+        }
+      }
+    });
+
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    const spread = max - min;
+    const baseline = values[0] || 1;
+    const proportion = baseline ? spread / baseline : spread;
+    const threshold = params.tolerance < 1 ? params.tolerance : params.tolerance / baseline;
+    const success = proportion <= threshold;
+
+    return {
+      success,
+      message: `Consistency ${success ? 'ok' : 'failed'} for ${params.metric}: min=${min}, max=${max}, spread=${spread}, tolerance=${params.tolerance}`,
+    };
+  }
+}
+```
+
+Register in `EvaluationEngine` with a provider-specific `rerunStep` function wired from the scenario runner.
+
+## Example Usage
+
+```yaml
+evaluations:
+  - type: consistency_check
+    runs: 3
+    metric: execution_time
+    tolerance: 0.2   # 20% spread allowed
+```
+
+## Tests
+- Unit: evaluator math on synthetic values
+- Integration: deterministic small prompt with low tolerance; non-deterministic with higher tolerance
+
+## Notes
+- This evaluator requires access to the step context. Implementation will pass a `rerunStep(times)` closure into the evaluator at construction time.
+
+
+19:Tc5e,# feat(scenarios): Add Cost Evaluator
+
+Links: [Issue #5726](https://github.com/elizaOS/eliza/issues/5726)
+
+## Summary
+Introduce an evaluator that asserts the estimated dollar cost of LLM usage per step. Cost is derived from token counts and a model price table.
+
+## Goals
+- Estimate cost (USD) for each step from recorded token metrics
+- Allow thresholds (`max_cost_usd`) to fail expensive runs
+- Support multiple models within a single step
+
+## Acceptance Criteria
+1. New evaluator type `llm_cost`
+2. Price table configurable via env or default map
+3. Evaluator passes if total step cost <= `max_cost_usd`
+4. Detailed message with model breakdown and total
+
+## Schema Changes
+Edit `packages/cli/src/commands/scenario/src/schema.ts`:
+
+```ts
+const LlmCostEvaluationSchema = BaseEvaluationSchema.extend({
+  type: z.literal('llm_cost'),
+  max_cost_usd: z.number(),
+});
+```
+
+## Pricing Source
+Add a small utility `packages/cli/src/commands/scenario/src/pricing.ts`:
+
+```ts
+export type ModelPricing = {
+  inputPer1K: number;    // USD per 1000 input tokens
+  outputPer1K: number;   // USD per 1000 output tokens
+};
+
+export const DEFAULT_MODEL_PRICING: Record<string, ModelPricing> = {
+  TEXT_SMALL: { inputPer1K: 0.15, outputPer1K: 0.60 },
+  TEXT_LARGE: { inputPer1K: 0.50, outputPer1K: 1.50 },
+  OBJECT_SMALL: { inputPer1K: 0.50, outputPer1K: 1.50 },
+};
+
+export function getPricing(modelType: string, overrides?: Record<string, ModelPricing>): ModelPricing | null {
+  const table = overrides ?? DEFAULT_MODEL_PRICING;
+  return table[modelType] ?? null;
+}
+```
+
+Allow overrides via `SCENARIO_MODEL_PRICING` env (JSON string) in a follow-up.
+
+## Evaluation Implementation
+Add to `EvaluationEngine`:
+
+```ts
+class LlmCostEvaluator implements Evaluator {
+  async evaluate(params: EvaluationSchema, runResult: ExecutionResult): Promise<EvaluationResult> {
+    if (params.type !== 'llm_cost') throw new Error('Mismatched evaluator');
+    const llm = runResult.metrics?.llm ?? [];
+    if (!llm.length) return { success: false, message: 'No LLM metrics found for cost calculation' };
+
+    const pricingOverrides = process.env.SCENARIO_MODEL_PRICING ? JSON.parse(process.env.SCENARIO_MODEL_PRICING) : undefined;
+    let total = 0;
+    for (const m of llm) {
+      const pricing = getPricing(m.modelType, pricingOverrides);
+      if (!pricing) continue;
+      const inTok = m.promptTokens ?? 0;
+      const outTok = m.completionTokens ?? 0;
+      total += (inTok / 1000) * pricing.inputPer1K + (outTok / 1000) * pricing.outputPer1K;
+    }
+
+    const success = total <= params.max_cost_usd;
+    return { success, message: `Estimated cost: $${total.toFixed(4)} (limit $${params.max_cost_usd.toFixed(4)})` };
+  }
+}
+```
+
+Register:
+
+```ts
+this.register('llm_cost', new LlmCostEvaluator());
+```
+
+## Example Usage
+
+```yaml
+evaluations:
+  - type: llm_cost
+    max_cost_usd: 0.05
+```
+
+## Tests
+- Unit: price math with multiple model records
+- Integration: with token_count metrics present and absent
+
+## Notes
+This builds on the Token Count evaluator and shared metrics capture. It complements mocking enhancements described in [Issue #5726](https://github.com/elizaOS/eliza/issues/5726).
+
+
+1a:Tf93,# feat(scenarios): Add Token Count Evaluator
+
+Links: [Issue #5726](https://github.com/elizaOS/eliza/issues/5726)
+
+## Summary
+Add an evaluator to assert on input/output/total token counts for LLM calls used during a scenario step. This establishes cost-awareness and guardrails on prompt size and verbosity.
+
+## Goals
+- Track token counts for LLM interactions triggered by a step
+- Assert against `max_input_tokens`, `max_output_tokens`, optional `max_total_tokens`
+- Work across providers through `AgentRuntime.useModel` hooks
+
+## Acceptance Criteria
+1. New evaluator type `token_count`
+2. Instrumentation captures prompt/completion token counts per step
+3. Evaluator passes if counts are within configured maxima
+4. Messages include breakdown and model type(s)
+
+## Schema Changes
+Edit `packages/cli/src/commands/scenario/src/schema.ts`:
+
+```ts
+const TokenCountEvaluationSchema = BaseEvaluationSchema.extend({
+  type: z.literal('token_count'),
+  max_input_tokens: z.number().optional(),
+  max_output_tokens: z.number().optional(),
+  max_total_tokens: z.number().optional(),
+});
+
+// Add to EvaluationSchema union
+```
+
+## Runtime Integration
+We will attach a per-step metrics accumulator that the evaluators can read via `ExecutionResult` metadata. Minimal, provider-agnostic approach:
+
+### ExecutionResult extension
+Edit `packages/cli/src/commands/scenario/src/providers.ts`:
+
+```ts
+export interface ExecutionResult {
+  // ...existing
+  metrics?: {
+    llm?: Array<{
+      modelType: string;
+      promptTokens?: number;
+      completionTokens?: number;
+      totalTokens?: number;
+      provider?: string;
+    }>;
+  };
+}
+```
+
+### Capturing tokens
+Add a light hook layer around `AgentRuntime.useModel` during scenario runs:
+
+- In `runtime-factory.ts`, wrap the runtime instance for scenarios with a proxy that:
+  - Intercepts `useModel`
+  - If params include a prompt or known text fields, call tokenizer via `ModelType.TEXT_TOKENIZER_ENCODE` to estimate prompt tokens
+  - After result, estimate output tokens similarly
+  - Push a record into `currentStepMetrics.llm[]`
+
+Note: If a tokenizer is not available, fall back to heuristic length/4 estimate. Keep it optional so normal runs are unaffected.
+
+## Evaluation Implementation
+Add to `EvaluationEngine`:
+
+```ts
+class TokenCountEvaluator implements Evaluator {
+  async evaluate(params: EvaluationSchema, runResult: ExecutionResult): Promise<EvaluationResult> {
+    if (params.type !== 'token_count') throw new Error('Mismatched evaluator');
+    const llm = runResult.metrics?.llm ?? [];
+    if (!llm.length) {
+      return { success: false, message: 'No LLM token metrics found for this step' };
+    }
+    const totals = llm.reduce((acc, m) => ({
+      prompt: acc.prompt + (m.promptTokens ?? 0),
+      completion: acc.completion + (m.completionTokens ?? 0),
+      total: acc.total + (m.totalTokens ?? ((m.promptTokens ?? 0) + (m.completionTokens ?? 0))),
+    }), { prompt: 0, completion: 0, total: 0 });
+
+    const tooManyInput = params.max_input_tokens != null && totals.prompt > params.max_input_tokens;
+    const tooManyOutput = params.max_output_tokens != null && totals.completion > params.max_output_tokens;
+    const tooManyTotal = params.max_total_tokens != null && totals.total > params.max_total_tokens;
+
+    const success = !(tooManyInput || tooManyOutput || tooManyTotal);
+    return {
+      success,
+      message: `Tokens — input:${totals.prompt}, output:${totals.completion}, total:${totals.total}`,
+    };
+  }
+}
+```
+
+Register in constructor:
+
+```ts
+this.register('token_count', new TokenCountEvaluator());
+```
+
+## Example Usage
+
+```yaml
+evaluations:
+  - type: token_count
+    max_input_tokens: 2000
+    max_output_tokens: 1000
+    max_total_tokens: 2500
+```
+
+## Tests
+- Unit: evaluator aggregation logic
+- Integration: scenario with a small prompt + enforced limits; tokenizer present and absent
+
+## Notes
+- This is complementary to a Cost evaluator which can derive cost from token metrics and model price tables.
+
+
+1b:T134d,… replies
+
+This commit addresses multiple critical bugs discovered during comprehensive testing:
+
+**1. Fix infinite auth retry loop (src/base.ts)**
+- Added error throwing when authentication succeeds but verification fails
+- Prevents infinite loop when credentials are valid but verification returns false
+- Preserves existing exponential backoff and 3-retry limit
+
+**2. Implement media upload support (5 files)**
+- src/post.ts: Added media upload via v1.uploadMedia() before posting
+- src/services/PostService.ts: Added same media upload logic for service layer
+- src/utils.ts: Added mediaIds parameter to sendTweet()
+- src/client/client.ts: Added mediaIds parameter to sendTweet()
+- src/client/tweets.ts: Updated createCreateTweetRequest() to use media_ids
+- Uses Twitter API v1 for media upload (v2 doesn't support it)
+- Successfully tested with images and videos
+
+**3. Fix mention reply functionality (src/interactions.ts)**
+- Added check for messageService availability before calling it
+- Prevents crash when messageService is undefined
+- Implemented TWITTER_AUTO_RESPOND_MENTIONS setting check
+- Implemented TWITTER_AUTO_RESPOND_REPLIES setting check
+- Added logic to distinguish between mentions and replies
+- Added logging when tweets are skipped due to settings
+
+All fixes have been tested and build successfully.
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+## Summary by CodeRabbit
+
+* **New Features**
+  * Tweets can attach uploaded media via stable media IDs.
+  * New AUTO_RESPOND settings to enable/disable auto-replies to mentions and replies.
+
+* **Bug Fixes**
+  * Stricter authentication verification during startup to surface failed verifications.
+  * Added safety checks to skip processing when required services are unavailable.
+  * Media upload now logs per-file results and continues on individual failures.
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->
+
+<!-- greptile_comment -->
+
+<h2>Greptile Overview</h2>
+
+<h3>Greptile Summary</h3>
+
+this PR addresses three critical bugs: authentication retry loops, media upload support, and mention reply handling
+
+**key changes:**
+- **auth fix (src/base.ts):** added error throwing when authentication succeeds but verification fails, preventing infinite retry loops
+- **media upload (5 files):** implemented media upload using Twitter API v1 (since v2 doesn't support it), uploads media first then passes `mediaIds` to tweet creation
+- **mention/reply handling (src/interactions.ts):** added `TWITTER_AUTO_RESPOND_MENTIONS` and `TWITTER_AUTO_RESPOND_REPLIES` settings, added `messageService` null check
+
+**critical issue found:**
+- the logic for distinguishing mentions from replies (line 514 in src/interactions.ts) is flawed - it treats any tweet with `inReplyToStatusId` as a "reply to us", even if it's actually a reply to someone else's tweet that mentions the bot. this needs to verify that `inReplyToStatusId` belongs to one of the bot's own tweets
+
+<h3>Confidence Score: 3/5</h3>
+
+- this PR is mostly safe but contains a logic bug in mention/reply classification that could cause incorrect filtering behavior
+- the auth fix and media upload implementation are solid, but the mention/reply distinction logic has a critical flaw that will misclassify tweets. the code won't crash but will filter tweets incorrectly based on the AUTO_RESPOND settings
+- src/interactions.ts requires attention to fix the mention/reply classification logic at line 514
+
+<h3>Important Files Changed</h3>
+
+
+
+
+| Filename | Overview |
+|----------|----------|
+| src/interactions.ts | added AUTO_RESPOND settings filtering and messageService null check, but mention/reply distinction logic is flawed |
+| src/base.ts | added error throwing when auth succeeds but verification fails, preventing infinite retry loop |
+| src/post.ts | implemented media upload using v1 API with proper error handling and logging |
+| src/services/PostService.ts | implemented media upload using v1 API, consistent with src/post.ts implementation |
+
+</details>
+
+
+
+<h3>Sequence Diagram</h3>
+
+```mermaid
+sequenceDiagram
+    participant Client as Client
+    participant Post as Post/PostService
+    participant TwitterV1 as Twitter API v1
+    participant TwitterV2 as Twitter API v2
+    
+    Note over Client,TwitterV2: Media Upload Flow
+    Client->>Post: post with mediaData
+    loop for each media file
+        Post->>TwitterV1: uploadMedia(buffer, mimeType)
+        TwitterV1-->>Post: mediaId
+        Post->>Post: collect mediaIds
+    end
+    Post->>TwitterV2: sendTweet(text, replyId, mediaData, false, mediaIds)
+    TwitterV2->>TwitterV2: create tweet with media_ids
+    TwitterV2-->>Post: tweet result
+    Post-->>Client: success
+```
+
+<sub>Last reviewed commit: f35351a</sub>
+
+<!-- greptile_other_comments_section -->
+
+<sub>(2/5) Greptile learns from your feedback when you react with thumbs up/down!</sub>
+
+<!-- /greptile_comment -->1c:Tc0d,## Summary
+Expose REST API routes from `plugin-n8n-workflow` to enable direct frontend access for workflow CRUD, node catalog browsing, validation, and execution monitoring — without going through the agent NLP pipeline.
+
+This creates a dual-access architecture:
+- **Agent access**: NLP → actions (existing)
+- **Frontend access**: REST → routes (new)
+
+## Routes Added
+### Workflows
+- `GET /workflows` - List workflows for a user
+- `POST /workflows` - Create workflow with auto credential resolution
+- `GET /workflows/:id` - Get workflow details
+- `PUT /workflows/:id` - Update existing workflow
+- `DELETE /workflows/:id` - Delete workflow
+- `POST /workflows/:id/activate` - Activate workflow
+- `POST /workflows/:id/deactivate` - Deactivate workflow
+
+### Validation
+- `POST /workflows/validate` - Real-time workflow validation (nodes, parameters, inputs)
+
+### Nodes
+- `GET /nodes?q=...` - Search node catalog with relevance scoring
+- `GET /nodes/available` - Browse categorized catalog (supported/unsupported/utility)
+- `GET /nodes/:type` - Get node definition
+
+### Executions
+- `GET /executions` - List executions with filters (workflowId, status, limit, cursor)
+- `GET /executions/:id` - Get execution details
+
+## Implementation Details
+- **Route handlers** delegate to service layer (no business logic in handlers)
+- **Credential resolution** via existing `N8nCredentialBridge` (OAuth/API key mapping)
+- **Auto-positioning** nodes for workflow creation/updates
+- **ElizaOS integration**: Runtime auto-collects `plugin.routes` and prefixes with plugin name
+
+## Changes
+- Add route handlers in `src/routes/` (workflows, nodes, validation, executions)
+- Export `routes: n8nRoutes` from plugin (auto-collected by ElizaOS runtime)
+- Add `listByUser()` to `N8nCredentialStoreApi` for credential mapping
+- Add `getWorkflow()` and `listExecutions()` to `N8nWorkflowService`
+- Add `getAllNodes()` to catalog utils
+- Update mock service helper with new methods
+
+## Tests
+✅ **37 unit tests** across 4 files, 78 assertions, all passing:
+- `validation.test.ts` - 5 tests (valid/invalid workflows, missing fields)
+- `nodes.test.ts` - 8 tests (search, catalog, filtering, 404/400 errors)
+- `workflows.test.ts` - 16 tests (full CRUD, activation, validation, missing credentials)
+- `executions.test.ts` - 8 tests (list, filters, detail, errors)
+
+## Next Steps
+- [ ] Add e2e tests for Next.js catch-all route integration
+- [ ] Add retry execution endpoint (`POST /executions/:id/retry`)
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+* **New Features**
+  * Exposed REST API endpoints for workflow management (create, read, update, delete, activate, and deactivate operations)
+  * Added execution listing and detail retrieval endpoints with filtering support
+  * Integrated node catalog API with search and availability filtering
+  * Added workflow validation endpoint with detailed error reporting
+
+* **Tests**
+  * Comprehensive test coverage for all new API routes
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->1d:T918,## Summary
+Rename crawl scripts to better reflect their purpose and reduce ambiguity in the data pipeline.
+
+## Changes
+### Script Renames
+- `crawl-schemas.ts` → `crawl-output-schemas.ts`
+  - Extracts output schemas from `__schema__/` directories in n8n-nodes-base
+  - Generates `schemaIndex.json` with 457+ node output schemas
+
+- `capture-trigger-schemas.ts` → `crawl-triggers-live.ts`
+  - Captures trigger schemas from **live n8n executions**
+  - Requires `N8N_HOST` + `N8N_API_KEY` environment variables
+  - Generates `triggerSchemaIndex.json`
+
+- `crawl-trigger-schemas.ts` → `crawl-triggers-static.ts`
+  - Extracts trigger schemas from **code + OpenAPI specs** (alternative method)
+  - No live n8n instance required
+
+### Documentation Updates
+- Update README.md with new script names
+- Update npm script `crawl:schemas` → runs `crawl-output-schemas.ts`
+- Update error messages and usage comments in scripts
+- Update crawl.ts orchestrator to use new names
+
+### Version Bump
+- `1.1.0` → `1.2.0` (minor version for refactor)
+
+## Benefits
+✅ **Clearer purpose**: Script names now describe what they do, not how  
+✅ **Easier onboarding**: New contributors can understand the pipeline at a glance  
+✅ **Consistent naming**: All crawl scripts follow `crawl-*` pattern  
+✅ **Reduced ambiguity**: "schemas" could mean input/output/trigger — now explicit
+
+## Testing
+No functional changes — renames only. Existing crawl functionality is preserved.
+
+## Notes
+- This PR will conflict with #16 (REST API routes) which accidentally included these renames. We can resolve by accepting this PR's renames and removing them from #16.
+- The `langchain-output-schemas.json` data update is also included (new schemas from latest crawl)
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+## Release Notes
+
+* **Documentation**
+  * Updated README to reflect reorganized data generation workflow with clearer script naming conventions.
+  * Improved trigger schema capture documentation.
+
+* **New Features**
+  * Added alternative static trigger schema extraction method from code and OpenAPI specs.
+
+* **Chores**
+  * Version bump to 1.2.0.
+  * Updated internal script references and configuration mappings.
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->e:["$","div",null,{"className":"mb-8 space-y-6","children":[["$","$L15",null,{"metrics":{"date":"2026-02-12","interval":{"intervalStart":"$D2026-02-12T00:00:00.000Z","intervalEnd":"$D2026-02-13T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":4,"merged":2,"total":4},"issues":{"new":0,"closed":5,"total":5},"activeContributors":6,"codeChanges":{"additions":14,"deletions":36,"files":8,"commitCount":14},"topContributors":[{"username":"standujar","avatarUrl":"https://avatars.githubusercontent.com/u/16385918?u=718bdcd1585be8447bdfffb8c11ce249baa7532d&v=4","totalScore":81.35548968218932,"prScore":81.35548968218932,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"standujar: Focused on feature work and bug fixes, merging a PR to reorganize crawl scripts in elizaos-plugins/plugin-n8n-workflow (#17) and opening a new PR to add REST API routes for workflow management in the same repository (#16), while modifying 41 files with a primary focus on code and tests."},{"username":"2-A-M","avatarUrl":"https://avatars.githubusercontent.com/u/96268540?u=39ce724443b5cd500fc28905812cdba16e3181a7&v=4","totalScore":36.63501911726088,"prScore":36.63501911726088,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"2-A-M: Focused on critical bug fixes, resolving an authentication retry loop and implementing media upload functionality in elizaos-plugins/plugin-twitter via PR #48, which involved a substantial code change of over 5k lines. Their work today was entirely dedicated to bugfix efforts, primarily within code and configuration files."},{"username":"mcp97","avatarUrl":"https://avatars.githubusercontent.com/u/15067321?v=4","totalScore":21.901026915173976,"prScore":21.901026915173976,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"mcp97: Focused on documentation maintenance, merging a PR in elizaos/eliza (#6495) that removed outdated references, indicating a primary focus on other work within documentation."},{"username":"greptile-apps","avatarUrl":"https://avatars.githubusercontent.com/in/867647?v=4","totalScore":4.5,"prScore":0,"issueScore":0,"reviewScore":4.5,"commentScore":0,"summary":"greptile-apps: No activity today."},{"username":"odilitime","avatarUrl":"https://avatars.githubusercontent.com/u/16395496?u=c9bac48e632aae594a0d85aaf9e9c9c69b674d8b&v=4","totalScore":0.33999999999999997,"prScore":0,"issueScore":0,"reviewScore":0,"commentScore":0.33999999999999997,"summary":"odilitime: No activity today."}],"focusAreas":[{"area":"scripts","count":4},{"area":"src/data","count":1}],"topIssues":[{"id":"I_kwDOMT5cIs7FLaT0","title":"Implement Runtime Method Mocking for Deterministic Agent Testing","author":"monilpat","number":5749,"repository":"elizaos/eliza","body":"$16","createdAt":"2025-08-11T00:08:49Z","closedAt":"2026-02-12T22:43:03Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7FcGEm","title":"feat(scenarios): Add Step Count Evaluator","author":"monilpat","number":5761,"repository":"elizaos/eliza","body":"$17","createdAt":"2025-08-12T04:27:34Z","closedAt":"2026-02-12T22:43:05Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7FcGCu","title":"feat(scenarios): Add Consistency Evaluator","author":"monilpat","number":5760,"repository":"elizaos/eliza","body":"$18","createdAt":"2025-08-12T04:27:29Z","closedAt":"2026-02-12T22:43:05Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7FcGAc","title":"feat(scenarios): Add Cost Evaluator","author":"monilpat","number":5759,"repository":"elizaos/eliza","body":"$19","createdAt":"2025-08-12T04:27:23Z","closedAt":"2026-02-12T22:43:04Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7FcF-L","title":"feat(scenarios): Add Token Count Evaluator","author":"monilpat","number":5758,"repository":"elizaos/eliza","body":"$1a","createdAt":"2025-08-12T04:27:18Z","closedAt":"2026-02-12T22:43:04Z","state":"CLOSED","commentCount":0}],"topPullRequests":[{"id":"PR_kwDONkwNcc7DaKfU","title":"fix: resolve auth retry loop, implement media upload, and fix mention…","author":"2-A-M","number":48,"body":"$1b","repository":"elizaos-plugins/plugin-twitter","createdAt":"2026-02-12T22:16:59Z","mergedAt":"2026-02-13T07:57:49Z","additions":5217,"deletions":15},{"id":"PR_kwDORDL9tM7DREr_","title":"Add REST API routes for workflow management","author":"standujar","number":16,"body":"$1c","repository":"elizaos-plugins/plugin-n8n-workflow","createdAt":"2026-02-12T12:28:58Z","mergedAt":"2026-02-16T17:40:38Z","additions":2566,"deletions":33},{"id":"PR_kwDORDL9tM7DRH7h","title":"chore: reorganize crawl scripts with descriptive names","author":"standujar","number":17,"body":"$1d","repository":"elizaos-plugins/plugin-n8n-workflow","createdAt":"2026-02-12T12:32:47Z","mergedAt":"2026-02-12T12:34:48Z","additions":14,"deletions":13},{"id":"PR_kwDOMT5cIs7DaiYU","title":"chore(changelog): remove references","author":"mcp97","number":6495,"body":"## Summary\r\n- remove all references from `CHANGELOG.md`\r\n\r\n## Testing\r\n- not run (content-only change)\r\n","repository":"elizaos/eliza","createdAt":"2026-02-12T22:49:11Z","mergedAt":"2026-02-12T23:13:17Z","additions":0,"deletions":23}],"detailedContributorSummaries":{"2-A-M":"2-A-M: Focused on critical bug fixes, resolving an authentication retry loop and implementing media upload functionality in elizaos-plugins/plugin-twitter via PR #48, which involved a substantial code change of over 5k lines. Their work today was entirely dedicated to bugfix efforts, primarily within code and configuration files.","greptile-apps":"greptile-apps: No activity today.","mcp97":"mcp97: Focused on documentation maintenance, merging a PR in elizaos/eliza (#6495) that removed outdated references, indicating a primary focus on other work within documentation.","odilitime":"odilitime: No activity today.","standujar":"standujar: Focused on feature work and bug fixes, merging a PR to reorganize crawl scripts in elizaos-plugins/plugin-n8n-workflow (#17) and opening a new PR to add REST API routes for workflow management in the same repository (#16), while modifying 41 files with a primary focus on code and tests."}}}],"$L1e"]}]
+f:["$","div",null,{"className":"prose prose-sm mx-auto mt-8 dark:prose-invert sm:prose lg:prose-lg xl:prose-xl","children":[["$","p","p-0",{"children":["On February 12, 2026, the ElizaOS project saw significant progress in refining its core testing framework with the closure of several issues related to scenario testing and evaluators in ",["$","code","code-0",{"children":"elizaos/eliza"}],". Additionally, ",["$","code","code-1",{"children":"elizaos-plugins/plugin-n8n-workflow"}]," focused on internal script reorganization for clarity and introduced new API routes for workflow management. The ",["$","code","code-2",{"children":"elizaos-plugins/plugin-twitter"}]," repository had no development activity."]}],"\n",["$","h2","h2-0",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"✅ Completed Work","position":{"start":{"line":3,"column":4,"offset":446},"end":{"line":3,"column":20,"offset":462}}}],"position":{"start":{"line":3,"column":1,"offset":443},"end":{"line":3,"column":20,"offset":462}}},"children":"✅ Completed Work"}],"\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"Core Framework Enhancements & Testing Refinements"}],"\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["Enhanced scenario testing capabilities by closing an issue addressing the need for runtime method mocking for deterministic agent testing, improving reliability for LLM interactions. (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/5749","children":"elizaos/eliza#5749"}],")"]}],"\n",["$","li","li-1",{"children":["Introduced new scenario evaluators, including a Token Count Evaluator (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/5758","children":"elizaos/eliza#5758"}],"), a Cost Evaluator (",["$","a","a-1",{"href":"https://github.com/elizaos/eliza/issues/5759","children":"elizaos/eliza#5759"}],"), a Consistency Evaluator (",["$","a","a-2",{"href":"https://github.com/elizaos/eliza/issues/5760","children":"elizaos/eliza#5760"}],"), and a Step Count Evaluator (",["$","a","a-3",{"href":"https://github.com/elizaos/eliza/issues/5761","children":"elizaos/eliza#5761"}],")."]}],"\n"]}],"\n"]}],"\n",["$","li","li-1",{"children":[["$","strong","strong-0",{"children":"Internal Script & Documentation Maintenance"}],"\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["Reorganized and renamed internal crawl scripts in ",["$","code","code-0",{"children":"elizaos-plugins/plugin-n8n-workflow"}]," for better descriptive accuracy, such as renaming ",["$","code","code-1",{"children":"crawl-schemas.ts"}]," to ",["$","code","code-2",{"children":"crawl-output-schemas.ts"}],". (",["$","a","a-0",{"href":"https://github.com/elizaos-plugins/plugin-n8n-workflow/pull/17","children":"elizaos-plugins/plugin-n8n-workflow#17"}],")"]}],"\n",["$","li","li-1",{"children":["Performed changelog maintenance in ",["$","code","code-0",{"children":"elizaos/eliza"}]," by removing all references from the ",["$","code","code-1",{"children":"CHANGELOG.md"}]," file. (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/6495","children":"elizaos/eliza#6495"}],")"]}],"\n"]}],"\n"]}],"\n"]}],"\n",["$","h2","h2-1",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"🏗️ Work in Progress","position":{"start":{"line":11,"column":4,"offset":1736},"end":{"line":11,"column":24,"offset":1756}}}],"position":{"start":{"line":11,"column":1,"offset":1733},"end":{"line":11,"column":24,"offset":1756}}},"children":"🏗️ Work in Progress"}],"\n",["$","ul","ul-1",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"New Pull Requests"}],"\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"elizaos-plugins/plugin-n8n-workflow"}],"\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["Add REST API routes for workflow management: This pull request introduces new API endpoints to manage workflows. (",["$","a","a-0",{"href":"https://github.com/elizaos-plugins/plugin-n8n-workflow/pull/16","children":"elizaos-plugins/plugin-n8n-workflow#16"}],")"]}],"\n"]}],"\n"]}],"\n"]}],"\n"]}],"\n"]}],"\n","$L1f","\n","$L20"]}]
+10:["$","script","script-0",{"src":"/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","async":true}]
+11:["$","script","script-1",{"src":"/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","async":true}]
+12:["$","script","script-2",{"src":"/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js","async":true}]
+13:["$","$L21",null,{"children":["$","$22",null,{"name":"Next.MetadataOutlet","children":"$@23"}]}]
+1e:["$","div",null,{"className":"rounded-lg border bg-card text-card-foreground shadow-sm","children":[["$","div",null,{"className":"flex flex-col space-y-1.5 p-6 py-4","children":["$","div",null,{"className":"tracking-tight text-sm font-medium","children":["$undefined","Code Changes"]}]}],["$","div",null,{"className":"p-6 pt-0","children":["$","div",null,{"className":"grid grid-cols-2 gap-4 md:grid-cols-4","children":[["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-git-commit-vertical h-5 w-5","aria-hidden":"true","children":[["$","path","1holv5",{"d":"M12 3v6"}],["$","circle","1v7zrd",{"cx":"12","cy":"12","r":"3"}],["$","path","a9ows0",{"d":"M12 15v6"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":14}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Commits"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-file-code h-5 w-5","aria-hidden":"true","children":[["$","path","1oefj6",{"d":"M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"}],["$","path","wfsgrz",{"d":"M14 2v5a1 1 0 0 0 1 1h5"}],["$","path","1tg20x",{"d":"M10 12.5 8 15l2 2.5"}],["$","path","yinavb",{"d":"m14 12.5 2 2.5-2 2.5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":8}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Files Changed"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-green-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-up h-5 w-5 text-green-500","aria-hidden":"true","children":[["$","path","hav0vg",{"d":"m5 12 7-7 7 7"}],["$","path","x0mq9r",{"d":"M12 19V5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-green-500","children":"+14"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Added"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-red-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-down h-5 w-5 text-red-500","aria-hidden":"true","children":[["$","path","s699le",{"d":"M12 5v14"}],["$","path","1idqje",{"d":"m19 12-7 7-7-7"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-red-500","children":"-36"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Deleted"}]]}]]}]]}]}]]}]
+1f:["$","h2","h2-2",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"🐞 Issue Triage","position":{"start":{"line":16,"column":4,"offset":2061},"end":{"line":16,"column":19,"offset":2076}}}],"position":{"start":{"line":16,"column":1,"offset":2058},"end":{"line":16,"column":19,"offset":2076}}},"children":"🐞 Issue Triage"}]
+20:["$","ul","ul-2",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"Closed Issues"}],"\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"elizaos/eliza"}],"\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["Enhanced Scenario Testing Capabilities: Closed an issue addressing the need for runtime method mocking to enable deterministic agent testing, particularly for LLM interactions. (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/5749","children":"elizaos/eliza#5749"}],")"]}],"\n",["$","li","li-1",{"children":["New Scenario Evaluators Introduced: Resolved issues related to the implementation of several new evaluators for scenario testing, including a Token Count Evaluator (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/5758","children":"elizaos/eliza#5758"}],"), a Cost Evaluator (",["$","a","a-1",{"href":"https://github.com/elizaos/eliza/issues/5759","children":"elizaos/eliza#5759"}],"), a Consistency Evaluator (",["$","a","a-2",{"href":"https://github.com/elizaos/eliza/issues/5760","children":"elizaos/eliza#5760"}],"), and a Step Count Evaluator (",["$","a","a-3",{"href":"https://github.com/elizaos/eliza/issues/5761","children":"elizaos/eliza#5761"}],")."]}],"\n"]}],"\n"]}],"\n"]}],"\n"]}],"\n"]}]
+23:null

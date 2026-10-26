@@ -1,0 +1,836 @@
+{
+  "interval": {
+    "intervalStart": "2026-01-01T00:00:00.000Z",
+    "intervalEnd": "2026-02-01T00:00:00.000Z",
+    "intervalType": "month"
+  },
+  "repository": "elizaos/elizaos.github.io",
+  "overview": "From 2026-01-01 to 2026-02-01, elizaos/elizaos.github.io had 38 new PRs (30 merged), 14 new issues, and 9 active contributors.",
+  "topIssues": [
+    {
+      "id": "I_kwDONNAI987k6_O2",
+      "title": "fix: Overall summaries not generated for days with no repository activity",
+      "author": "madjin",
+      "number": 226,
+      "repository": "elizaos/elizaos.github.io",
+      "body": "## Problem\n\nOverall summary API endpoints return 404 for dates with no repository activity:\n- `/api/summaries/overall/day/2026-01-01.json` → 404 ❌\n- `/api/summaries/overall/day/2026-01-02.json` → 200 ✅\n\n## Expected Behavior\n\nThe API should return a summary for **every day the pipeline runs**, even if there's no activity:\n\n```json\n{\n  \"version\": \"1.0\",\n  \"type\": \"overall\",\n  \"interval\": \"day\",\n  \"date\": \"2026-01-01\",\n  \"generatedAt\": \"2026-01-02T00:00:00.000Z\",\n  \"contentFormat\": \"markdown\",\n  \"content\": \"No activity recorded for January 1, 2026.\"\n}\n```\n\n## Root Cause\n\n[`generateOverallSummaryForInterval()`](https://github.com/elizaOS/elizaos.github.io/blob/main/src/lib/pipelines/summarize/generateOverallSummary.ts#L70-L76) returns `null` when no repository summaries exist:\n\n```typescript\nconst repoSummaries = await getAllRepoSummariesForInterval(interval);\nif (repoSummaries.length === 0) {\n  intervalLogger?.debug(\n    `No repository summaries found for ${intervalType} of ${startDate}, skipping overall summary generation.`,\n  );\n  return null; // ← This causes the 404\n}\n```\n\n## Evidence\n\n```bash\n# Jan 1 had ZERO activity (New Year's Day)\n$ sqlite3 data/db.sqlite \"SELECT COUNT(*) FROM raw_pull_requests WHERE DATE(created_at) = '2026-01-01';\"\n0\n\n$ sqlite3 data/db.sqlite \"SELECT COUNT(*) FROM raw_issues WHERE DATE(created_at) = '2026-01-01';\"\n0\n\n# Database has monthly summary but NO daily summary\n$ sqlite3 data/db.sqlite \"SELECT date, interval_type, LENGTH(summary) FROM overall_summaries WHERE date = '2026-01-01';\"\n2026-01-01|month|4320\n```\n\n## Solution\n\nAlways generate a summary, even when `repoSummaries.length === 0`:\n\n```typescript\nconst repoSummaries = await getAllRepoSummariesForInterval(interval);\n\n// Generate summary even if no repo summaries exist\nconst summary = repoSummaries.length > 0\n  ? await generateOverallSummary(\n      repoSummaries,\n      aiSummaryConfig,\n      { startDate },\n      intervalType as RepoIntervalType,\n    )\n  : `No activity recorded for ${intervalType} of ${startDate}.`;\n\nif (\\!summary) {\n  intervalLogger?.debug(\n    `Overall summary generation resulted in no content for ${startDate}, skipping storage.`,\n  );\n  return;\n}\n\n// Store and export the summary...\n```\n\n## Impact\n\n- API consumers can't distinguish between \"no data\" and \"endpoint not generated\"\n- 404s break API contract that promises daily summaries\n- Inconsistent API behavior (some days exist, others don't)\n- Downstream tools must handle unexpected 404s\n\n## Design Philosophy\n\nPer the API documentation:\n> \"404 responses indicate artifacts not yet published.\"\n\nBut this should mean \"pipeline hasn't run yet\", NOT \"no activity that day\". If the pipeline runs daily, every day should have a summary—even if it says \"no activity.\"\n\n## References\n\n- API Documentation: https://elizaos.github.io/api\n- Generation code: `src/lib/pipelines/summarize/generateOverallSummary.ts:70-76`\n- OpenAPI spec: https://elizaos.github.io/openapi.json",
+      "createdAt": "2026-01-22T00:42:43Z",
+      "closedAt": "2026-01-22T01:03:39Z",
+      "state": "CLOSED",
+      "commentCount": 1
+    },
+    {
+      "id": "I_kwDONNAI987k6-8z",
+      "title": "fix: API index and contributor profiles not exported due to missing SITE_URL in run-pipelines workflow",
+      "author": "madjin",
+      "number": 225,
+      "repository": "elizaos/elizaos.github.io",
+      "body": "## Problem\n\nThe following API endpoints return 404 on production:\n- `/api/index.json`\n- `/api/contributors/{username}/profile.json` (all 1,433 contributor profiles)\n\nMeanwhile, these endpoints work fine:\n- `/api/leaderboard-*.json` ✅\n- `/api/summaries/**` ✅\n\n## Root Cause\n\nThe `run-pipelines.yml` workflow doesn't set the `SITE_URL` environment variable when running `bun run pipeline export-leaderboard`.\n\nWithout `SITE_URL`, the following functions skip exporting:\n- [`exportAPIIndex()`](https://github.com/elizaOS/elizaos.github.io/blob/main/src/lib/pipelines/export/exportLeaderboardAPI.ts#L1180-L1184) - skips with warning \"SITE_URL not configured\"\n- [`exportAllUserProfiles()`](https://github.com/elizaOS/elizaos.github.io/blob/main/src/lib/pipelines/export/exportLeaderboardAPI.ts#L1078-L1081) - skips with info \"Skipping user profiles: SITE_URL not configured\"\n\nThe files ARE generated locally during `deploy.yml` build (12MB of contributor profiles), but they're generated too late—after the pipelines have already run.\n\n## Evidence\n\n```bash\n# Files exist locally after build\n$ ls -lh out/api/\ndrwxr-xr-x 1435 jin jin   36M contributors/  # ← 404 on production\n-rw-r--r--    1 jin jin  4.0K index.json      # ← 404 on production\n-rw-r--r--    1 jin jin  2.6M leaderboard-lifetime.json  # ✅ works\n-rw-r--r--    1 jin jin   34K leaderboard-monthly.json   # ✅ works\ndrwxr-xr-x    5 jin jin  4.0K summaries/      # ✅ works\n```\n\n```bash\n# Production only has these\n$ curl -s https://elizaos.github.io/api/ | grep href\nhref=\"summaries/\"\nhref=\"leaderboard-lifetime.json\"\nhref=\"leaderboard-monthly.json\"\nhref=\"leaderboard-weekly.json\"\n```\n\n## Solution\n\nAdd SITE_URL to `run-pipelines.yml` env section:\n\n```yaml\nenv:\n  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}\n  OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}\n  PIPELINE_DATA_BRANCH: \"_data\"\n  DATA_DIR: \"data\"\n  SITE_URL: ${{ secrets.SITE_URL || 'https://elizaos.github.io' }}  # ← Add this\n  PIPELINE_CONFIG_FILE: ${{ secrets.PIPELINE_CONFIG_FILE || 'config/example.json' }}\n```\n\nOr detect it dynamically like `deploy.yml` does:\n```yaml\n- name: Determine site URL\n  id: site-config\n  run: |\n    if [[ \"${{ github.event.repository.name }}\" == *.github.io ]]; then\n      echo \"site_url=https://${{ github.repository_owner }}.github.io\" >> $GITHUB_OUTPUT\n    fi\n```\n\n## Impact\n\n- 12MB of contributor profile data not accessible via API\n- API discovery endpoint (`/api/index.json`) returns 404\n- Third-party tools can't discover API capabilities\n- Documentation references broken endpoints\n\n## References\n\n- API Documentation: https://elizaos.github.io/api\n- OpenAPI Spec: https://elizaos.github.io/openapi.json\n- Export code: `src/lib/pipelines/export/exportLeaderboardAPI.ts`",
+      "createdAt": "2026-01-22T00:42:10Z",
+      "closedAt": "2026-01-22T00:51:46Z",
+      "state": "CLOSED",
+      "commentCount": 1
+    },
+    {
+      "id": "I_kwDONNAI987iXiCd",
+      "title": "feat: extend grouped org/repo format to day/week/month summaries",
+      "author": "madjin",
+      "number": 200,
+      "repository": "elizaos/elizaos.github.io",
+      "body": "## Summary\n\nPR #193 introduced grouped org/repo format for lifetime summaries to improve readability for contributors with many PRs across multiple repositories.\n\nThis issue proposes extending the same format to day/week/month summaries for consistency.\n\n## Current State (verified from code)\n\n**Lifetime summaries** (new format):\n```\nPULL REQUESTS:\n- Merged: 3 PRs:\n  - elizaos/eliza (3 PRs): #6197 \"fix markdown spacing\" (+10/-5), #6202 \"migrate SQL plugin\" (+50/-10), #6209 \"parallel action\" (+200/-50)\n```\n\n**Day/week/month summaries** (old format with redundant repo names):\n```\nPULL REQUESTS:\n- Merged: 3 PRs: elizaos/eliza#6197 \"fix markdown spacing\" (+10/-5 lines), elizaos/eliza#6202 \"migrate SQL plugin\" (+50/-10 lines), elizaos/eliza#6209 \"parallel action\" (+200/-50 lines)\n```\n\nThe repo name `elizaos/eliza` is repeated for every PR. This is verified from `aiContributorSummary.ts` line 153:\n```typescript\nreturn `${pr.repository}#${pr.number} ...`;\n```\n\n## Proposed Change\n\nApply the same grouped format to all intervals to eliminate redundancy.\n\n## Benefits\n\n1. **Eliminates redundancy** - Repo name appears once per repo, not per PR\n2. **Consistency** - Same format across all summary types  \n3. **Clearer repo distribution** - AI can see at a glance where work is concentrated\n4. **Token efficiency** - Fewer tokens wasted on repeated org/repo strings\n\n## Implementation\n\nModify `formatContributorPrompt()` in `src/lib/pipelines/summarize/aiContributorSummary.ts`:\n- Remove the `intervalType === \"lifetime\"` condition\n- Apply grouped format unconditionally\n\n## Testing\n\n- Generate summaries for various intervals and contributor activity levels\n- Verify AI output quality is maintained or improved",
+      "createdAt": "2026-01-09T17:48:39Z",
+      "closedAt": "2026-01-11T04:24:02Z",
+      "state": "CLOSED",
+      "commentCount": 0
+    },
+    {
+      "id": "I_kwDONNAI987iW2lp",
+      "title": "feat: Make character class thresholds configurable",
+      "author": "madjin",
+      "number": 199,
+      "repository": "elizaos/elizaos.github.io",
+      "body": "## Summary\n\nMove character class thresholds from hardcoded values to `config/example.json` for per-deployment customization.\n\n## Current State\n\nThresholds are hardcoded in `src/lib/pipelines/export/exportLeaderboardAPI.ts`:\n\n```typescript\nconst types = [\n  { key: \"prs\", name: \"Builder\", threshold: 50 },\n  { key: \"issues\", name: \"Hunter\", threshold: 25 },\n];\nconst hasHighReviews = distribution.reviews.percentage >= 25;\n```\n\n## Proposed Config\n\n```json\n{\n  \"characterSystem\": {\n    \"thresholds\": {\n      \"builder\": { \"prs\": 50 },\n      \"hunter\": { \"issues\": 25 },\n      \"maintainer\": { \"reviews\": 25 },\n      \"scribe\": { \"docsFocus\": 40 }\n    },\n    \"tiers\": {\n      \"beginner\": 0,\n      \"regular\": 50,\n      \"active\": 200,\n      \"veteran\": 500,\n      \"elite\": 1000,\n      \"legend\": 5000\n    }\n  }\n}\n```\n\n## Benefits\n\n- Fork-friendly: Different orgs have different contribution patterns\n- PM-friendly: No code changes to tune thresholds\n- Consistent with existing config patterns (scoring rules, bot exclusions)\n\n## Acceptance Criteria\n\n- [ ] Add characterSystem section to config schema\n- [ ] Load thresholds from config in deriveCharacterClass()\n- [ ] Update documentation\n- [ ] Add example config values\n\n## Related\n\n- PR #193 added documentation noting this as future work",
+      "createdAt": "2026-01-09T16:49:40Z",
+      "closedAt": null,
+      "state": "OPEN",
+      "commentCount": 0
+    },
+    {
+      "id": "I_kwDONNAI987iW2Kr",
+      "title": "feat: Allow class respec with history preservation",
+      "author": "madjin",
+      "number": 198,
+      "repository": "elizaos/elizaos.github.io",
+      "body": "## Summary\n\nAllow users to change their class while preserving history for lore.\n\n## Rules\n\n- Respec has a cooldown period (e.g., once per month)\n- Previous class is recorded in history\n- Lore displays journey: \"Once a Builder, now walks the Scribe path\"\n- Only can respec to classes you qualify for based on activity\n\n## API\n\n```\nPOST /api/users/{username}/respec\n{\n  \"targetClass\": \"Scribe\"\n}\n```\n\nReturns error if:\n- Cooldown not met\n- User doesn't qualify for target class\n\n## Acceptance Criteria\n\n- [ ] Respec endpoint with cooldown check\n- [ ] Qualification validation for target class\n- [ ] History recording on respec\n- [ ] UI for respec on profile page\n\n## Related\n\n- Depends on #194 (Orders & Evolution system)\n- Depends on lore recording (#196)",
+      "createdAt": "2026-01-09T16:49:07Z",
+      "closedAt": null,
+      "state": "OPEN",
+      "commentCount": 0
+    }
+  ],
+  "topPRs": [
+    {
+      "id": "PR_kwDONNAI986-1m7c",
+      "title": "Consolidate untracked repos pipeline and fix DRY violations",
+      "author": "madjin",
+      "number": 231,
+      "body": "## Problem\n\nUsers have no visibility into repositories in their organizations that aren't being tracked for contributor analytics. With 35 tracked repos but 286 total repos across `elizaos` and `elizaos-plugins` orgs, there's a lot of \"dark matter\" - repos that exist but aren't on the radar.\n\n## Solution\n\nAdds **untracked repository discovery** feature that:\n\n- Discovers all repos in configured organizations\n- Shows basic stats: stars, forks, recent PR/issue activity\n- Calculates activity scores to surface active repos\n- Helps identify which repos might be worth adding to full tracking\n- Provides 360-degree view of org activity\n\n**UI:** New collapsible section on `/repos` page showing untracked repos with:\n- Repository metadata (description, language, stars)\n- Recent activity counts (PRs, issues in last 30 days)\n- Activity score ranking\n- Links to GitHub\n\n**Pipeline:** `bun run pipeline ingest-untracked`\n- Delta detection: only updates repos with changes\n- Efficient batch operations\n- Configurable org list and exclusion patterns\n\n## Configuration\n\n```json\n{\n  \"PIPELINE_UNTRACKED_REPOS\": {\n    \"enabled\": true,\n    \"organizations\": [\"elizaos\", \"elizaos-plugins\"],\n    \"excludeArchived\": true,\n    \"excludePatterns\": [\"deprecated-*\", \"test-*\"]\n  }\n}\n```\n\n## Implementation\n\nSingle-file pipeline (`discoverUntrackedRepos.ts`) using:\n- Log-scale activity scoring (prevents big repos from dominating)\n- Delta detection via `lastUpdatedAt` (skips unchanged repos)\n- Batch database operations\n- Existing codebase patterns and utilities\n\nCloses #230\n\n\n<!-- This is an auto-generated comment: release notes by coderabbit.ai -->\n\n## Summary by CodeRabbit\n\n* **New Features**\n  * Added untracked repository discovery to identify repositories from configured GitHub organizations not currently in the system\n  * New UI section displaying discovered untracked repositories with activity metrics, stats, and recent activity breakdown\n  * Repository stats button showing tracked vs untracked counts with quick navigation to untracked section\n  * Manual trigger option for discovering untracked repositories via workflow dispatch\n\n* **Chores**\n  * Added database storage for untracked repository data and metadata\n\n<sub>✏️ Tip: You can customize this high-level summary in your review settings.</sub>\n\n<!-- end of auto-generated comment: release notes by coderabbit.ai -->",
+      "repository": "elizaos/elizaos.github.io",
+      "createdAt": "2026-01-23T03:21:17Z",
+      "mergedAt": "2026-01-25T20:37:34Z",
+      "additions": 4629,
+      "deletions": 158
+    },
+    {
+      "id": "PR_kwDONNAI986guiwB",
+      "title": "Feature/mcp server",
+      "author": "xR0am",
+      "number": 148,
+      "body": "# 🚀 Add MCP ElizaOS Data Server - Real-time Plugin & Repository Analytics\r\n\r\n## Overview\r\nThis PR introduces a complete MCP (Model Context Protocol) server that exposes ElizaOS ecosystem data through real-time API endpoints. The server is distributable via `npx` and provides structured access to plugin statistics, repository metadata, and ecosystem analytics.\r\n\r\n## 🎯 Key Features\r\n\r\n**Real Data Integration**\r\n- ✅ Fetches live data from `https://elizaos.github.io/data/`\r\n- ✅ Dynamic plugin discovery through HTML parsing\r\n- ✅ Real-time statistics from daily stats JSON files\r\n- ✅ Zero mock data - all endpoints use actual ElizaOS data\r\n- ✅ Graceful error handling for network issues\r\n\r\n**MCP Framework Implementation**\r\n- ✅ Built with `mcp-framework` for automatic tool discovery\r\n- ✅ STDIO transport (default) for seamless client integration\r\n- ✅ Standalone tool files in `src/tools/` directory\r\n- ✅ Zod schemas with comprehensive descriptions\r\n- ✅ Type-safe with `MCPInput<this>` pattern\r\n\r\n**NPX Distribution Ready**\r\n- ✅ Packaged for `npx mcp-elizaos-data` installation\r\n- ✅ TypeScript build process with validation\r\n- ✅ Works with MCP clients (Cursor, Claude Desktop, etc.)\r\n- ✅ Simple configuration via `mcp-config-example.json`\r\n\r\n## 🛠️ Core Tools Implemented\r\n\r\n| Tool | Description | Real Data Source |\r\n|------|-------------|------------------|\r\n| `list_available_plugins` | List all plugins with filtering & sorting | `elizaos-plugins_plugin-*` directories |\r\n| `get_plugin_stats` | Fetch plugin statistics & activity | Daily stats JSON files |\r\n| `get_repository_data` | Repository metadata & contributors | Repository directories |\r\n| `get_summary_data` | Ecosystem overview & trends | Summary/dump directories |\r\n\r\n## 📊 Example Usage\r\n\r\n**List Blockchain Plugins:**\r\n```json\r\n{\r\n  \"total_plugins\": 2,\r\n  \"plugins\": [\r\n    {\r\n      \"name\": \"plugin-evm\",\r\n      \"directory\": \"elizaos-plugins_plugin-evm\", \r\n      \"status\": \"active\"\r\n    },\r\n    {\r\n      \"name\": \"plugin-solana\",\r\n      \"directory\": \"elizaos-plugins_plugin-solana\",\r\n      \"status\": \"active\"\r\n    }\r\n  ],\r\n  \"categories\": [\"blockchain\", \"social\", \"ai\", \"automation\", \"integration\", \"data\"],\r\n  \"filter_applied\": \"blockchain\",\r\n  \"source\": \"Real data from ElizaOS GitHub Pages\"\r\n}",
+      "repository": "elizaos/elizaos.github.io",
+      "createdAt": "2025-07-26T04:00:43Z",
+      "mergedAt": null,
+      "additions": 2887,
+      "deletions": 0
+    },
+    {
+      "id": "PR_kwDONNAI9868OkKl",
+      "title": "feat: add MMORPG-style character system to leaderboard API",
+      "author": "madjin",
+      "number": 193,
+      "body": "Enhance leaderboard API with comprehensive character progression system inspired by Ragnarok Online:\r\n\r\n## Phase 1: Enhanced Focus Areas with Rankings\r\n- Transform focus areas from simple tags to rich objects with scores, percentages, and global rankings\r\n- Add FocusAreaDetail interface with tag, score, percentage, rank, and totalInArea\r\n- Calculate global rankings across all contributors per focus area\r\n- Show expertise distribution (e.g., \"#3 in Frontend out of 45 contributors\")\r\n\r\n## Phase 2: Lifetime Summary Endpoint\r\n- Add /api/summaries/contributors/{username}/lifetime.json endpoint for all-time summaries\r\n- Update schema to support \"lifetime\" interval type in user_summaries table\r\n- Create database migration (0014_add_lifetime_interval.sql)\r\n- Add --lifetime CLI flag for opt-in generation\r\n- Implement generateLifetimeSummary pipeline with all-time metrics\r\n\r\n## Phase 3: MMORPG Character Sheet Score Breakdown\r\n- Add ScoreBreakdown interface with tier, percentile, characterClass, and distribution\r\n- Implement 6-tier progression system: beginner → regular → active → veteran → elite → legend\r\n- Calculate percentile rankings showing relative standing among all contributors\r\n- Auto-derive character classes from behavior patterns:\r\n  * Author (PRs ≥50%), Reviewer (Reviews ≥30%), Advocate (Issues ≥25%), Discussant (Comments ≥20%)\r\n  * Hybrid classes: Maintainer (Author + Reviewer), and dynamic combinations\r\n- Show contribution distribution as percentages (Code Author, Problem Finder, Code Reviewer, Discussant)\r\n\r\n## Phase 4: User Profile Endpoint\r\n- Add /api/contributors/{username}/profile.json endpoint\r\n- Query complete character sheet for any user by username\r\n- Include ranks across all time periods (monthly, weekly, lifetime)\r\n- Provide links to all summaries and resources\r\n- Much faster than downloading entire leaderboard\r\n\r\n## Technical Changes\r\n- Update OpenAPI spec with new endpoints and schemas\r\n- Add comprehensive API documentation with example responses\r\n- Update CLI to support lifetime interval generation\r\n- Export individual user profiles during leaderboard generation\r\n- Add .gitignore entry for docs/ folder\n\n<!-- greptile_comment -->\n\n<h2>Greptile Overview</h2>\n\n<h2>Greptile Overview</h2>\n\n### Greptile Summary\n\nThis PR implements a comprehensive MMORPG-inspired character progression system for the leaderboard API, adding lifetime summaries, enhanced focus areas with rankings, score breakdowns with tiers and percentiles, character classes, and individual user profile endpoints.\n\n## Key Changes\n\n**Phase 1 - Lifetime Summaries**: Added database support and pipeline logic for all-time contributor summaries via new `lifetime` interval type. Contributors can opt-in via `--lifetime` CLI flag. Summaries are stored at simplified paths (`/api/summaries/contributors/{username}/lifetime.json`).\n\n**Phase 2 - Enhanced Focus Areas**: Transformed simple tags into rich objects with scores, percentages, and global rankings. Each contributor now shows their rank within each expertise area (e.g., \"#3 in Frontend out of 45 contributors\").\n\n**Phase 3 - MMORPG Character System**: Added comprehensive score breakdowns with:\n- 6-tier progression (beginner → legend)\n- Percentile rankings among all contributors  \n- Auto-derived character classes based on behavior (Author, Reviewer, Maintainer, etc.)\n- Contribution distribution as percentages\n\n**Phase 4 - User Profiles**: New `/api/contributors/{username}/profile.json` endpoint providing complete character sheets with ranks across all time periods, focus areas, achievements, and links to related resources.\n\n## Architecture\n\nThe implementation follows existing pipeline patterns, extending the summarize and export stages. Database schema properly migrated to support lifetime interval. All enrichment data is fetched in batches and mapped efficiently. Profile generation reuses leaderboard data to avoid duplicate queries.\n\n## Issues Found\n\n- **[P0] Critical**: `.gitignore` syntax error prevents `docs/` from being ignored correctly\n- **[P1] Urgent**: Logic bug in contributor type classification makes \"reviewer\" type unreachable\n\n### Confidence Score: 3/5\n\n- Not safe to merge without fixes - contains one critical syntax error and one logic bug affecting core functionality\n- The PR has two blocking issues: (1) a P0 syntax error in .gitignore that will cause the docs/ directory to not be ignored, potentially committing generated files, and (2) a P1 logic error in contributor type classification where the \"reviewer\" type is unreachable due to incorrect condition ordering. While the overall implementation is well-structured and follows existing patterns, these bugs affect core functionality and must be fixed before merge.\n- .gitignore (P0 syntax error) and src/lib/pipelines/export/exportLeaderboardAPI.ts (P1 logic bug in contributor classification)\n\n<h3>Important Files Changed</h3>\n\n\n\nFile Analysis\n\n\n\n| Filename | Score | Overview |\n|----------|-------|----------|\n| .gitignore | 2/5 | Critical syntax error: missing newline causes docs/ directory to not be ignored correctly |\n| cli/analyze-pipeline.ts | 5/5 | Added --lifetime flag support with correct opt-in behavior; lifetime excluded from default intervals |\n| drizzle/0014_add_lifetime_interval.sql | 5/5 | Clean migration adding 'lifetime' to interval_type enum; properly preserves data and recreates indexes |\n| src/lib/data/schema.ts | 5/5 | Added 'lifetime' to interval type enum matching migration; straightforward schema update |\n| src/lib/fsHelpers.ts | 5/5 | Added special handling for lifetime summaries with simplified path structure; proper type casting |\n| src/lib/pipelines/summarize/generateLifetimeSummary.ts | 5/5 | New lifetime summary pipeline with all-time metrics; follows existing patterns correctly |\n| src/lib/pipelines/summarize/aiContributorSummary.ts | 5/5 | Extended to support lifetime interval using month model as fallback; proper handling added |\n| src/lib/pipelines/summarize/context.ts | 5/5 | Updated type definitions to include lifetime in enabled intervals; minimal necessary change |\n| src/lib/pipelines/summarize/index.ts | 5/5 | Integrated lifetime summaries into pipeline sequence; proper destructuring of results |\n| src/lib/pipelines/export/exportLeaderboardAPI.ts | 3/5 | Major feature additions (MMORPG system, profiles, rankings); contains logic bug in contributor type classification |\n| public/openapi.json | 5/5 | Added profile endpoint schema and UserProfileResponse definition; comprehensive OpenAPI spec |\n| src/app/api/page.tsx | 5/5 | Enhanced API documentation with new endpoints and detailed examples; moved to server-side rendering |\n\n</details>\n\n\n\n<h3>Sequence Diagram</h3>\n\n```mermaid\nsequenceDiagram\n    participant CLI as CLI (analyze-pipeline.ts)\n    participant Pipeline as Summarize Pipeline\n    participant Lifetime as generateLifetimeSummary\n    participant AI as aiContributorSummary\n    participant DB as Database (SQLite)\n    participant FS as File System\n    participant Export as exportLeaderboardAPI\n    participant Profile as User Profile Export\n\n    Note over CLI,Profile: Phase 1: Lifetime Summary Generation\n    CLI->>Pipeline: summarize --lifetime flag\n    Pipeline->>Lifetime: generateLifetimeContributorSummaries\n    Lifetime->>DB: getAllActiveContributors()\n    DB-->>Lifetime: List of usernames\n    \n    loop For each contributor\n        Lifetime->>DB: checkExistingLifetimeSummary(username)\n        DB-->>Lifetime: exists or not\n        alt Summary doesn't exist or overwrite=true\n            Lifetime->>DB: getContributorMetrics(2020-01-01 to now)\n            DB-->>Lifetime: All-time metrics\n            Lifetime->>AI: generateAISummaryForContributor(metrics, \"lifetime\")\n            AI->>AI: Use \"month\" model for lifetime\n            AI-->>Lifetime: AI-generated summary\n            Lifetime->>DB: storeLifetimeSummary(username, date, summary)\n            Lifetime->>FS: Write lifetime.md\n            Lifetime->>FS: writeSummaryToAPI (lifetime.json)\n        end\n    end\n\n    Note over CLI,Profile: Phase 2: Leaderboard & Profile Export\n    CLI->>Export: exportAllLeaderboardAPIs()\n    \n    Export->>DB: Query userDailyScores with date ranges\n    Export->>DB: getUserWallets(usernames)\n    Export->>DB: getUserFocusAreas(usernames)\n    Export->>Export: calculateFocusAreaRankings()\n    Export->>DB: getUserAchievements(usernames)\n    Export->>DB: computeContributorProfiles(usernames)\n    \n    Export->>Export: Calculate score breakdowns\n    Export->>Export: deriveCharacterClass()\n    Export->>Export: calculateTier()\n    Export->>Export: calculatePercentile()\n    \n    Export->>FS: Write leaderboard-monthly.json\n    Export->>FS: Write leaderboard-weekly.json\n    Export->>FS: Write leaderboard-lifetime.json\n    \n    Export->>Profile: exportAllUserProfiles()\n    \n    loop For each user\n        Profile->>Export: getLeaderboardData (lifetime)\n        Export-->>Profile: User entry with full character sheet\n        Profile->>Profile: getUserRanks (monthly, weekly, lifetime)\n        Profile->>FS: Write /api/contributors/{username}/profile.json\n    end\n```\n\n<h3>Important Files Changed</h3>\n\n\n\nFile Analysis\n\n\n\n| Filename | Score | Overview |\n|----------|-------|----------|\n| .gitignore | 2/5 | Critical syntax error: missing newline causes docs/ directory to not be ignored correctly |\n| cli/analyze-pipeline.ts | 5/5 | Added --lifetime flag support with correct opt-in behavior; lifetime excluded from default intervals |\n| drizzle/0014_add_lifetime_interval.sql | 5/5 | Clean migration adding 'lifetime' to interval_type enum; properly preserves data and recreates indexes |\n| src/lib/data/schema.ts | 5/5 | Added 'lifetime' to interval type enum matching migration; straightforward schema update |\n| src/lib/fsHelpers.ts | 5/5 | Added special handling for lifetime summaries with simplified path structure; proper type casting |\n| src/lib/pipelines/summarize/generateLifetimeSummary.ts | 5/5 | New lifetime summary pipeline with all-time metrics; follows existing patterns correctly |\n| src/lib/pipelines/summarize/aiContributorSummary.ts | 5/5 | Extended to support lifetime interval using month model as fallback; proper handling added |\n| src/lib/pipelines/summarize/context.ts | 5/5 | Updated type definitions to include lifetime in enabled intervals; minimal necessary change |\n| src/lib/pipelines/summarize/index.ts | 5/5 | Integrated lifetime summaries into pipeline sequence; proper destructuring of results |\n| src/lib/pipelines/export/exportLeaderboardAPI.ts | 3/5 | Major feature additions (MMORPG system, profiles, rankings); contains logic bug in contributor type classification |\n| public/openapi.json | 5/5 | Added profile endpoint schema and UserProfileResponse definition; comprehensive OpenAPI spec |\n| src/app/api/page.tsx | 5/5 | Enhanced API documentation with new endpoints and detailed examples; moved to server-side rendering |\n\n</details>\n\n\n\n<h3>Sequence Diagram</h3>\n\n```mermaid\nsequenceDiagram\n    participant CLI as CLI (analyze-pipeline.ts)\n    participant Pipeline as Summarize Pipeline\n    participant Lifetime as generateLifetimeSummary\n    participant AI as aiContributorSummary\n    participant DB as Database (SQLite)\n    participant FS as File System\n    participant Export as exportLeaderboardAPI\n    participant Profile as User Profile Export\n\n    Note over CLI,Profile: Phase 1: Lifetime Summary Generation\n    CLI->>Pipeline: summarize --lifetime flag\n    Pipeline->>Lifetime: generateLifetimeContributorSummaries\n    Lifetime->>DB: getAllActiveContributors()\n    DB-->>Lifetime: List of usernames\n    \n    loop For each contributor\n        Lifetime->>DB: checkExistingLifetimeSummary(username)\n        DB-->>Lifetime: exists or not\n        alt Summary doesn't exist or overwrite=true\n            Lifetime->>DB: getContributorMetrics(2020-01-01 to now)\n            DB-->>Lifetime: All-time metrics\n            Lifetime->>AI: generateAISummaryForContributor(metrics, \"lifetime\")\n            AI->>AI: Use \"month\" model for lifetime\n            AI-->>Lifetime: AI-generated summary\n            Lifetime->>DB: storeLifetimeSummary(username, date, summary)\n            Lifetime->>FS: Write lifetime.md\n            Lifetime->>FS: writeSummaryToAPI (lifetime.json)\n        end\n    end\n\n    Note over CLI,Profile: Phase 2: Leaderboard & Profile Export\n    CLI->>Export: exportAllLeaderboardAPIs()\n    \n    Export->>DB: Query userDailyScores with date ranges\n    Export->>DB: getUserWallets(usernames)\n    Export->>DB: getUserFocusAreas(usernames)\n    Export->>Export: calculateFocusAreaRankings()\n    Export->>DB: getUserAchievements(usernames)\n    Export->>DB: computeContributorProfiles(usernames)\n    \n    Export->>Export: Calculate score breakdowns\n    Export->>Export: deriveCharacterClass()\n    Export->>Export: calculateTier()\n    Export->>Export: calculatePercentile()\n    \n    Export->>FS: Write leaderboard-monthly.json\n    Export->>FS: Write leaderboard-weekly.json\n    Export->>FS: Write leaderboard-lifetime.json\n    \n    Export->>Profile: exportAllUserProfiles()\n    \n    loop For each user\n        Profile->>Export: getLeaderboardData (lifetime)\n        Export-->>Profile: User entry with full character sheet\n        Profile->>Profile: getUserRanks (monthly, weekly, lifetime)\n        Profile->>FS: Write /api/contributors/{username}/profile.json\n    end\n```\n\n<!-- greptile_other_comments_section -->\n\n<!-- /greptile_comment -->",
+      "repository": "elizaos/elizaos.github.io",
+      "createdAt": "2026-01-09T00:09:24Z",
+      "mergedAt": "2026-01-10T21:52:21Z",
+      "additions": 2728,
+      "deletions": 189
+    },
+    {
+      "id": "PR_kwDONNAI986_urD3",
+      "title": "feat: add MCP server for GitHub Analytics API",
+      "author": "madjin",
+      "number": 238,
+      "body": "## Summary\n\nMCP server for GitHub contributor analytics that queries the SQLite database directly. Includes **quality validation** and **coverage discovery** tools.\n\nBased on [PR #148](https://github.com/elizaOS/elizaos.github.io/pull/148) by @xR0am, reimplemented with:\n- Official MCP SDK (instead of mcp-framework)\n- DB-direct mode for full query flexibility\n- 14 tools following MCP naming conventions\n\n## Tools (14)\n\n### Core Analytics (9)\n\n| Tool | Description |\n|------|-------------|\n| `get_stats` | Project overview |\n| `list_repos` | Tracked repositories |\n| `list_contributors` | Top contributors by period |\n| `get_contributor` | Full profile with scores |\n| `get_summary` | AI summaries |\n| `find_contributors` | Search by tier/focus |\n| `list_prs` | Query PRs |\n| `list_issues` | Query issues |\n| `get_activity` | Recent activity feed |\n\n### Quality Validation (4)\n\n| Tool | Detects |\n|------|---------|\n| `list_reviews` | Rubber-stamping, low-effort approvals |\n| `list_comments` | Duplicate/short comments |\n| `get_file_changes` | Docs-only contributors, PR padding |\n| `get_reactions` | Community sentiment, collusion |\n\n### Coverage & Discovery (1)\n\n| Tool | Description |\n|------|-------------|\n| `list_untracked_repos` | 286 repos in org not being scored |\n\n## Setup\n\n```bash\nexport MCP_DB_PATH=/path/to/db.sqlite\nnpx mcp-github-analytics\n```\n\n## Test plan\n- [x] Build passes\n- [x] All 14 tools tested against real database\n- [x] Quality metrics return useful data\n- [x] Untracked repos tool finds 286 repos, 31 with recent activity\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\n<!-- This is an auto-generated comment: release notes by coderabbit.ai -->\n\n## Summary by CodeRabbit\n\n* **New Features**\n  * Introduced GitHub Analytics MCP package with 14+ tools for querying repository, contributor, and activity data\n  * Added analytics capabilities: repository statistics, contributor profiles, pull requests/issues tracking, code review metrics, file change analysis, and reaction summaries\n  * Implemented contributor search and filtering by performance tier and expertise areas\n\n* **Documentation**\n  * Added comprehensive setup and configuration documentation for the analytics package\n\n<sub>✏️ Tip: You can customize this high-level summary in your review settings.</sub>\n\n<!-- end of auto-generated comment: release notes by coderabbit.ai -->",
+      "repository": "elizaos/elizaos.github.io",
+      "createdAt": "2026-01-28T00:20:13Z",
+      "mergedAt": "2026-01-28T05:21:34Z",
+      "additions": 1891,
+      "deletions": 0
+    },
+    {
+      "id": "PR_kwDONNAI9869T06A",
+      "title": "feat: enhance API documentation with examples and improved UX",
+      "author": "madjin",
+      "number": 213,
+      "body": "## Summary\nComprehensive enhancement of the API documentation page to make it production-ready for AI agents and developers.\n\n### OpenAPI Spec Improvements\n- ✅ Added complete JSON response examples to all endpoints\n- ✅ Added realistic 200, 404, and 400 response structures\n- ✅ Added examples for `leaderboard-weekly` and `leaderboard-lifetime` endpoints\n- ✅ Added examples for summary index endpoints and dated snapshots\n\n### API Page UX Improvements\n- ✅ Replaced accordion UI with flat, README-style layout for better scanability\n- ✅ Added custom zero-dependency syntax highlighting (bash/JavaScript/Python)\n- ✅ Highlight path variables (`{repoId}`, `{username}`, etc) with blue badges\n- ✅ Added clickable section anchors with hover links for deep linking\n- ✅ Improved clipboard copy to always include response examples (even when collapsed)\n- ✅ Made response examples collapsible to balance visibility and clutter\n- ✅ Added visual distinction to section headers (borders, colors)\n- ✅ Moved action buttons (API Index, OpenAPI Spec, Copy) to header row\n\n### Dependencies\n- ✅ Removed unused @scalar packages from package.json\n\n## Test plan\n- [x] Verify API page loads at `/api`\n- [x] Check all response examples are visible when expanded\n- [x] Test clipboard copy includes all sections (params + responses)\n- [x] Verify path variables are highlighted in blue\n- [x] Test section anchor links work (e.g. `/api#summaries`)\n- [x] Confirm syntax highlighting works for all code examples\n- [x] Check that linter passes\n\n## Screenshots\nBefore: Accordion-based UI with no examples\nAfter: Flat layout with syntax highlighting and complete examples\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\n<!-- greptile_comment -->\n\n<h3>Greptile Summary</h3>\n\n\nThis PR transforms the API documentation page from an accordion-based UI to a production-ready, flat README-style layout with comprehensive enhancements. The OpenAPI specification now includes realistic JSON response examples for all endpoints (200, 404, 400 responses), making it immediately useful for AI agents and developers. The React component was completely rewritten to feature custom zero-dependency syntax highlighting for bash/JavaScript/Python, collapsible response sections for better scanability, and improved clipboard functionality that captures all endpoint details including examples even when collapsed. The workflow consolidation removes the separate `generate-summaries.yml` workflow and integrates summary generation steps directly into `run-pipelines.yml`, reducing maintenance overhead and simplifying the CI/CD pipeline structure.\n\n<h3>Confidence Score: 4/5</h3>\n\n\n- This PR is safe to merge with minimal risk - changes are primarily UI/documentation enhancements with no breaking changes\n- Score reflects well-structured implementation with proper React patterns, comprehensive test plan completion, and no breaking changes. Minor deduction for the complete component rewrite introducing significant new client-side code without automated tests, though the implementation follows React best practices and includes proper error handling\n- Pay close attention to `src/app/api/page.tsx` during manual testing to verify syntax highlighting, clipboard functionality, and collapsible sections work across browsers\n\n<h3>Important Files Changed</h3>\n\n\n\n\n| Filename | Overview |\n|----------|----------|\n| .github/workflows/run-pipelines.yml | Added summary import and export steps to consolidate workflows, improving maintainability |\n| public/openapi.json | Added comprehensive examples for all endpoints with realistic 200/404/400 responses, improving API documentation |\n| src/app/api/page.tsx | Complete rewrite with flat README-style layout, custom syntax highlighting, collapsible responses, and improved UX |\n\n</details>\n\n\n\n<h3>Sequence Diagram</h3>\n\n```mermaid\nsequenceDiagram\n    participant User as User Browser\n    participant Page as API Page Component\n    participant Spec as /openapi.json\n    participant Syntax as CodeBlock Component\n    participant Copy as PageCopyButton\n\n    User->>Page: Navigate to /api\n    Page->>Page: useEffect() runs\n    Page->>Spec: fetch(\"/openapi.json\")\n    Spec-->>Page: Return OpenAPI spec JSON\n    Page->>Page: Resolve $ref parameters\n    Page->>Page: setSpec(data), setLoading(false)\n    \n    Page->>Page: Group endpoints by tag\n    Page->>Page: Sort tags and endpoints\n    \n    loop For each tag section\n        Page->>Page: Render section with EndpointBlock\n        Page->>Page: renderPathWithVars() highlights {variables}\n        \n        alt User expands response\n            Page->>Page: setShowResponse(true)\n            Page->>Page: Render JSON examples\n        end\n    end\n    \n    Page->>Syntax: Render Quickstart code examples\n    Syntax->>Syntax: highlightBash/JS/Python()\n    Syntax-->>Page: Return highlighted JSX\n    \n    alt User clicks Copy Page\n        User->>Copy: Click PageCopyButton\n        Copy->>Copy: Query DOM for all sections\n        Copy->>Copy: Build markdown from sections\n        Copy->>Copy: Include all responses (even hidden)\n        Copy->>User: navigator.clipboard.writeText()\n    end\n    \n    alt User clicks endpoint Copy\n        User->>Page: Click CopyButton on endpoint\n        Page->>User: Copy full URL to clipboard\n    end\n```\n\n<!-- greptile_other_comments_section -->\n\n<!-- /greptile_comment -->\n\n<!-- This is an auto-generated comment: release notes by coderabbit.ai -->\n\n## Summary by CodeRabbit\n\n* **New Features**\n  * Added API index discovery endpoint with comprehensive metadata and examples\n  * Redesigned API explorer page with OpenAPI-driven interface and interactive endpoint documentation\n\n* **Chores**\n  * Updated build scripts; refined CI/CD pipeline workflows for artifact management\n\n<sub>✏️ Tip: You can customize this high-level summary in your review settings.</sub>\n\n<!-- end of auto-generated comment: release notes by coderabbit.ai -->",
+      "repository": "elizaos/elizaos.github.io",
+      "createdAt": "2026-01-15T05:59:09Z",
+      "mergedAt": "2026-01-15T08:07:13Z",
+      "additions": 1470,
+      "deletions": 1135
+    }
+  ],
+  "codeChanges": {
+    "additions": 12381,
+    "deletions": 1909,
+    "files": 50,
+    "commitCount": 175
+  },
+  "completedItems": [
+    {
+      "title": "chore(deps): bump actions/configure-pages from 4 to 5",
+      "prNumber": 191,
+      "type": "other",
+      "body": "Bumps [actions/configure-pages](https://github.com/actions/configure-pages) from 4 to 5.\n<details>\n<summary>Release notes</summary>\n<p><em>Sourced from <a href=\"https://github.com/actions/configure-pages/releases\">actions/configure-pages's ",
+      "files": [
+        ".github/workflows/deploy.yml"
+      ]
+    },
+    {
+      "title": "chore(deps): bump actions/checkout from 4 to 6",
+      "prNumber": 190,
+      "type": "other",
+      "body": "Bumps [actions/checkout](https://github.com/actions/checkout) from 4 to 6.\n<details>\n<summary>Release notes</summary>\n<p><em>Sourced from <a href=\"https://github.com/actions/checkout/releases\">actions/checkout's releases</a>.</em></p>\n<bloc",
+      "files": [
+        ".github/workflows/deploy.yml",
+        ".github/workflows/generate-summaries.yml",
+        ".github/workflows/pr-checks.yml",
+        ".github/workflows/run-pipelines.yml"
+      ]
+    },
+    {
+      "title": "chore(deps): bump actions/upload-pages-artifact from 3 to 4",
+      "prNumber": 189,
+      "type": "other",
+      "body": "Bumps [actions/upload-pages-artifact](https://github.com/actions/upload-pages-artifact) from 3 to 4.\n<details>\n<summary>Release notes</summary>\n<p><em>Sourced from <a href=\"https://github.com/actions/upload-pages-artifact/releases\">actions/",
+      "files": [
+        ".github/workflows/deploy.yml"
+      ]
+    },
+    {
+      "title": "feat: add XSL stylesheet for browser-rendered RSS feed + dependabot",
+      "prNumber": 188,
+      "type": "feature",
+      "body": "- Add rss-style.xsl for human-readable RSS feed display in browsers\r\n- Add xml-stylesheet processing instruction to RSS output\r\n- Change Content-Type to application/xml for XSLT rendering support\r\n- Add dependabot.yml for automated dependen",
+      "files": [
+        ".github/dependabot.yml",
+        "public/rss-style.xsl",
+        "src/app/rss.xml/route.ts"
+      ]
+    },
+    {
+      "title": "feat: add MMORPG-style character system to leaderboard API",
+      "prNumber": 193,
+      "type": "feature",
+      "body": "Enhance leaderboard API with comprehensive character progression system inspired by Ragnarok Online:\r\n\r\n## Phase 1: Enhanced Focus Areas with Rankings\r\n- Transform focus areas from simple tags to rich objects with scores, percentages, and g",
+      "files": [
+        ".gitignore",
+        "cli/analyze-pipeline.ts",
+        "drizzle/0014_add_lifetime_interval.sql",
+        "package.json",
+        "public/openapi.json",
+        "src/app/api/page.tsx",
+        "src/lib/data/schema.ts",
+        "src/lib/fsHelpers.ts",
+        "src/lib/pipelines/export/exportLeaderboardAPI.ts",
+        "src/lib/pipelines/summarize/aiContributorSummary.ts",
+        "src/lib/pipelines/summarize/context.ts",
+        "src/lib/pipelines/summarize/generateLifetimeSummary.ts",
+        "src/lib/pipelines/summarize/index.ts",
+        ".github/workflows/generate-summaries.yml",
+        "README.md",
+        "config/pipeline.config.ts",
+        "src/app/api/components/InteractiveEndpoints.tsx",
+        "src/lib/pipelines/summarize/queries.ts"
+      ]
+    },
+    {
+      "title": "chore(deps): bump the minor-and-patch group across 1 directory with 6 updates",
+      "prNumber": 201,
+      "type": "other",
+      "body": "Bumps the minor-and-patch group with 6 updates in the / directory:\n\n| Package | From | To |\n| --- | --- | --- |\n| [drizzle-orm](https://github.com/drizzle-team/drizzle-orm) | `0.41.0` | `0.45.1` |\n| [lucide-react](https://github.com/lucide-",
+      "files": [
+        ".github/workflows/deploy.yml",
+        "bun.lock",
+        "package.json"
+      ]
+    },
+    {
+      "title": "chore(deps): bump zod from 3.25.76 to 4.3.5",
+      "prNumber": 212,
+      "type": "other",
+      "body": "Bumps [zod](https://github.com/colinhacks/zod) from 3.25.76 to 4.3.5.\n<details>\n<summary>Release notes</summary>\n<p><em>Sourced from <a href=\"https://github.com/colinhacks/zod/releases\">zod's releases</a>.</em></p>\n<blockquote>\n<h2>v4.3.5</",
+      "files": [
+        "package.json"
+      ]
+    },
+    {
+      "title": "chore(deps): bump tailwind-merge from 2.6.0 to 3.4.0",
+      "prNumber": 211,
+      "type": "other",
+      "body": "Bumps [tailwind-merge](https://github.com/dcastil/tailwind-merge) from 2.6.0 to 3.4.0.\n<details>\n<summary>Release notes</summary>\n<p><em>Sourced from <a href=\"https://github.com/dcastil/tailwind-merge/releases\">tailwind-merge's releases</a>",
+      "files": [
+        "package.json"
+      ]
+    },
+    {
+      "title": "chore(deps-dev): bump @types/node from 22.19.5 to 25.0.6",
+      "prNumber": 210,
+      "type": "other",
+      "body": "Bumps [@types/node](https://github.com/DefinitelyTyped/DefinitelyTyped/tree/HEAD/types/node) from 22.19.5 to 25.0.6.\n<details>\n<summary>Commits</summary>\n<ul>\n<li>See full diff in <a href=\"https://github.com/DefinitelyTyped/DefinitelyTyped/",
+      "files": [
+        "package.json"
+      ]
+    },
+    {
+      "title": "chore(deps): bump react-markdown from 9.1.0 to 10.1.0",
+      "prNumber": 209,
+      "type": "other",
+      "body": "Bumps [react-markdown](https://github.com/remarkjs/react-markdown) from 9.1.0 to 10.1.0.\n<details>\n<summary>Release notes</summary>\n<p><em>Sourced from <a href=\"https://github.com/remarkjs/react-markdown/releases\">react-markdown's releases<",
+      "files": [
+        "package.json"
+      ]
+    },
+    {
+      "title": "chore(deps): bump p-retry from 6.2.1 to 7.1.1",
+      "prNumber": 207,
+      "type": "other",
+      "body": "Bumps [p-retry](https://github.com/sindresorhus/p-retry) from 6.2.1 to 7.1.1.\n<details>\n<summary>Release notes</summary>\n<p><em>Sourced from <a href=\"https://github.com/sindresorhus/p-retry/releases\">p-retry's releases</a>.</em></p>\n<blockq",
+      "files": [
+        "package.json"
+      ]
+    },
+    {
+      "title": "chore(deps-dev): bump lint-staged from 15.5.2 to 16.2.7",
+      "prNumber": 206,
+      "type": "other",
+      "body": "Bumps [lint-staged](https://github.com/lint-staged/lint-staged) from 15.5.2 to 16.2.7.\n<details>\n<summary>Release notes</summary>\n<p><em>Sourced from <a href=\"https://github.com/lint-staged/lint-staged/releases\">lint-staged's releases</a>.<",
+      "files": [
+        "package.json"
+      ]
+    },
+    {
+      "title": "chore(deps): bump @types/minimatch from 5.1.2 to 6.0.0",
+      "prNumber": 205,
+      "type": "other",
+      "body": "Bumps [@types/minimatch](https://github.com/DefinitelyTyped/DefinitelyTyped/tree/HEAD/types/minimatch) from 5.1.2 to 6.0.0.\n<details>\n<summary>Commits</summary>\n<ul>\n<li>See full diff in <a href=\"https://github.com/DefinitelyTyped/Definitel",
+      "files": [
+        "package.json"
+      ]
+    },
+    {
+      "title": "chore(deps): bump recharts from 2.15.4 to 3.6.0",
+      "prNumber": 204,
+      "type": "other",
+      "body": "Bumps [recharts](https://github.com/recharts/recharts) from 2.15.4 to 3.6.0.\n<details>\n<summary>Release notes</summary>\n<p><em>Sourced from <a href=\"https://github.com/recharts/recharts/releases\">recharts's releases</a>.</em></p>\n<blockquot",
+      "files": [
+        "package.json",
+        "bun.lock",
+        "src/app/repos/components/RepositoryCard.tsx",
+        "src/components/ui/chart.tsx"
+      ]
+    },
+    {
+      "title": "fix: render markdown in profile summary card",
+      "prNumber": 202,
+      "type": "bugfix",
+      "body": "<!-- greptile_comment -->\n\n<h2>Greptile Overview</h2>\n\n### Greptile Summary\n\nThis PR enhances the profile summary card by adding markdown rendering support using `react-markdown` and `remark-gfm`. The change replaces plain text rendering wi",
+      "files": [
+        "src/components/summary-card.tsx"
+      ]
+    },
+    {
+      "title": "feat: enhance API documentation with examples and improved UX",
+      "prNumber": 213,
+      "type": "feature",
+      "body": "## Summary\nComprehensive enhancement of the API documentation page to make it production-ready for AI agents and developers.\n\n### OpenAPI Spec Improvements\n- ✅ Added complete JSON response examples to all endpoints\n- ✅ Added realistic 200, ",
+      "files": [
+        ".github/workflows/generate-summaries.yml",
+        ".github/workflows/run-pipelines.yml",
+        "package.json",
+        "public/openapi.json",
+        "src/app/api/components/InteractiveEndpoints.tsx",
+        "src/app/api/page.tsx"
+      ]
+    },
+    {
+      "title": "chore(deps-dev): bump the minor-and-patch group across 1 directory with 2 updates",
+      "prNumber": 215,
+      "type": "other",
+      "body": "Bumps the minor-and-patch group with 2 updates in the / directory: [prettier](https://github.com/prettier/prettier) and [task-master-ai](https://github.com/eyaltoledano/claude-task-master).\n\nUpdates `prettier` from 3.7.4 to 3.8.0\n<details>\n",
+      "files": [
+        "package.json"
+      ]
+    },
+    {
+      "title": "chore(deps): bump dotenv from 16.6.1 to 17.2.3",
+      "prNumber": 224,
+      "type": "other",
+      "body": "Bumps [dotenv](https://github.com/motdotla/dotenv) from 16.6.1 to 17.2.3.\n<details>\n<summary>Changelog</summary>\n<p><em>Sourced from <a href=\"https://github.com/motdotla/dotenv/blob/master/CHANGELOG.md\">dotenv's changelog</a>.</em></p>\n<blo",
+      "files": [
+        "package.json",
+        "bun.lock"
+      ]
+    },
+    {
+      "title": "chore(deps): bump better-sqlite3 from 11.10.0 to 12.6.2",
+      "prNumber": 222,
+      "type": "other",
+      "body": "Bumps [better-sqlite3](https://github.com/WiseLibs/better-sqlite3) from 11.10.0 to 12.6.2.\n<details>\n<summary>Release notes</summary>\n<p><em>Sourced from <a href=\"https://github.com/WiseLibs/better-sqlite3/releases\">better-sqlite3's release",
+      "files": [
+        "package.json",
+        "bun.lock"
+      ]
+    },
+    {
+      "title": "chore(deps): bump @commander-js/extra-typings from 12.1.0 to 14.0.0",
+      "prNumber": 220,
+      "type": "other",
+      "body": "Bumps [@commander-js/extra-typings](https://github.com/commander-js/extra-typings) from 12.1.0 to 14.0.0.\n<details>\n<summary>Release notes</summary>\n<p><em>Sourced from <a href=\"https://github.com/commander-js/extra-typings/releases\"><code>",
+      "files": [
+        "package.json",
+        "bun.lock"
+      ]
+    },
+    {
+      "title": "chore(deps-dev): bump @faker-js/faker from 9.9.0 to 10.2.0",
+      "prNumber": 219,
+      "type": "other",
+      "body": "Bumps [@faker-js/faker](https://github.com/faker-js/faker) from 9.9.0 to 10.2.0.\n<details>\n<summary>Release notes</summary>\n<p><em>Sourced from <a href=\"https://github.com/faker-js/faker/releases\"><code>@​faker-js/faker</code>'s releases</a",
+      "files": [
+        "package.json",
+        "bun.lock"
+      ]
+    },
+    {
+      "title": "chore(deps): bump ora from 7.0.1 to 9.0.0",
+      "prNumber": 218,
+      "type": "other",
+      "body": "Bumps [ora](https://github.com/sindresorhus/ora) from 7.0.1 to 9.0.0.\n<details>\n<summary>Release notes</summary>\n<p><em>Sourced from <a href=\"https://github.com/sindresorhus/ora/releases\">ora's releases</a>.</em></p>\n<blockquote>\n<h2>v9.0.0",
+      "files": [
+        "package.json",
+        "bun.lock"
+      ]
+    },
+    {
+      "title": "chore(deps): bump date-fns from 3.6.0 to 4.1.0",
+      "prNumber": 217,
+      "type": "other",
+      "body": "Bumps [date-fns](https://github.com/date-fns/date-fns) from 3.6.0 to 4.1.0.\n<details>\n<summary>Release notes</summary>\n<p><em>Sourced from <a href=\"https://github.com/date-fns/date-fns/releases\">date-fns's releases</a>.</em></p>\n<blockquote",
+      "files": [
+        "package.json",
+        "bun.lock"
+      ]
+    },
+    {
+      "title": "Fix: re-export stats after contributor summaries are generated",
+      "prNumber": 229,
+      "type": "bugfix",
+      "body": "## Summary\nFixes #228 \n\nStats files (`data/elizaos_eliza/stats/day/stats_*.json`) always had `summary: null` for contributors, even when summaries existed in the database. This was due to a pipeline ordering issue.\n\n## Problem\n\nThe workflow",
+      "files": [
+        ".github/workflows/run-pipelines.yml"
+      ]
+    },
+    {
+      "title": "Consolidate untracked repos pipeline and fix DRY violations",
+      "prNumber": 231,
+      "type": "bugfix",
+      "body": "## Problem\n\nUsers have no visibility into repositories in their organizations that aren't being tracked for contributor analytics. With 35 tracked repos but 286 total repos across `elizaos` and `elizaos-plugins` orgs, there's a lot of \"dark",
+      "files": [
+        ".github/workflows/run-pipelines.yml",
+        "cli/analyze-pipeline.ts",
+        "config/example.json",
+        "config/pipeline.config.ts",
+        "drizzle/0015_add_untracked_repos.sql",
+        "drizzle/meta/0015_snapshot.json",
+        "drizzle/meta/_journal.json",
+        "src/app/repos/components/RepoStatsButton.tsx",
+        "src/app/repos/components/RepositoryCard.tsx",
+        "src/app/repos/components/UntrackedRepositoryCard.tsx",
+        "src/app/repos/components/UntrackedRepositoryList.tsx",
+        "src/app/repos/page.tsx",
+        "src/app/repos/queries.ts",
+        "src/lib/data/github.ts",
+        "src/lib/data/schema.ts",
+        "src/lib/pipelines/discoverUntrackedRepos.ts",
+        "src/lib/pipelines/pipelineConfig.ts",
+        ".gitignore",
+        "src/app/repos/components/RepositoryList.tsx",
+        "src/lib/data/types.ts",
+        "src/lib/pipelines/discoverUntrackedRepos.test.ts"
+      ]
+    },
+    {
+      "title": "chore(deps): bump commander from 12.1.0 to 14.0.2",
+      "prNumber": 237,
+      "type": "other",
+      "body": "Bumps [commander](https://github.com/tj/commander.js) from 12.1.0 to 14.0.2.\n<details>\n<summary>Release notes</summary>\n<p><em>Sourced from <a href=\"https://github.com/tj/commander.js/releases\">commander's releases</a>.</em></p>\n<blockquote",
+      "files": [
+        "package.json",
+        "bun.lock"
+      ]
+    },
+    {
+      "title": "chore(deps): bump next from 15.4.10 to 16.1.4",
+      "prNumber": 236,
+      "type": "other",
+      "body": "Bumps [next](https://github.com/vercel/next.js) from 15.4.10 to 16.1.4.\n<details>\n<summary>Release notes</summary>\n<p><em>Sourced from <a href=\"https://github.com/vercel/next.js/releases\">next's releases</a>.</em></p>\n<blockquote>\n<h2>v16.1",
+      "files": [
+        "package.json",
+        "bun.lock"
+      ]
+    },
+    {
+      "title": "chore(deps): bump glob from 11.1.0 to 13.0.0",
+      "prNumber": 234,
+      "type": "other",
+      "body": "Bumps [glob](https://github.com/isaacs/node-glob) from 11.1.0 to 13.0.0.\n<details>\n<summary>Changelog</summary>\n<p><em>Sourced from <a href=\"https://github.com/isaacs/node-glob/blob/main/changelog.md\">glob's changelog</a>.</em></p>\n<blockqu",
+      "files": [
+        "package.json",
+        "bun.lock"
+      ]
+    },
+    {
+      "title": "chore(deps): bump the minor-and-patch group with 2 updates",
+      "prNumber": 233,
+      "type": "other",
+      "body": "Bumps the minor-and-patch group with 2 updates: [lucide-react](https://github.com/lucide-icons/lucide/tree/HEAD/packages/lucide-react) and [prettier](https://github.com/prettier/prettier).\n\nUpdates `lucide-react` from 0.562.0 to 0.563.0\n<de",
+      "files": [
+        "package.json"
+      ]
+    },
+    {
+      "title": "feat: add MCP server for GitHub Analytics API",
+      "prNumber": 238,
+      "type": "feature",
+      "body": "## Summary\n\nMCP server for GitHub contributor analytics that queries the SQLite database directly. Includes **quality validation** and **coverage discovery** tools.\n\nBased on [PR #148](https://github.com/elizaOS/elizaos.github.io/pull/148) ",
+      "files": [
+        ".gitignore",
+        "mcp-github-analytics/.gitignore",
+        "mcp-github-analytics/README.md",
+        "mcp-github-analytics/package.json",
+        "mcp-github-analytics/src/db.ts",
+        "mcp-github-analytics/src/index.ts",
+        "mcp-github-analytics/src/tools.ts",
+        "mcp-github-analytics/tsconfig.json"
+      ]
+    }
+  ],
+  "topContributors": [
+    {
+      "username": "0xbbjoker",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/54844437?u=90fe1762420de6ad493a1c1582f1f70c0d87d8e2&v=4",
+      "totalScore": 520.3695475941632,
+      "prScore": 455.6695475941632,
+      "issueScore": 0,
+      "reviewScore": 64.5,
+      "commentScore": 0.2,
+      "summary": "0xbbjoker: Focused on enhancing database reliability and performance within the elizaos/eliza repository, notably resolving a critical SQL parameterization issue in the SQL plugin via PR #6316 (+278/-1 lines). They further contributed to system scalability by proposing a new LRU caching layer for the database adapter in PR #6329 and maintained high code quality through two peer reviews. Their work involved extensive modifications across 378 files, demonstrating a significant commitment to bug fixes and testing infrastructure. Overall, their primary focus this month was on stabilizing and optimizing core database plugins and backend configurations."
+    },
+    {
+      "username": "standujar",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/16385918?u=718bdcd1585be8447bdfffb8c11ce249baa7532d&v=4",
+      "totalScore": 466.62208373680664,
+      "prScore": 366.1300837368066,
+      "issueScore": 0,
+      "reviewScore": 98,
+      "commentScore": 2.492,
+      "summary": "standujar: Focused on strengthening the database infrastructure and security within the elizaos/eliza repository, most notably by implementing Neon serverless support and enhancing Row Level Security (RLS) schemas in PR #6343. They demonstrated a significant commitment to system reliability by contributing over 7,700 lines of test code to isolate RLS contexts (PR #6330) and addressing compatibility issues for PGLite (PR #6339). Beyond these merged improvements, they worked on optimizing runtime initialization through parallelization and provided technical feedback via 11 total reviews and comments. Their primary focus this month was on bug fixes and extensive test coverage, particularly within the SQL plugin architecture."
+    },
+    {
+      "username": "madjin",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/32600939?u=cdcf89f44c7a50906c7a80d889efa85023af2049&v=4",
+      "totalScore": 334.3382171167137,
+      "prScore": 281.28021711671363,
+      "issueScore": 46.2,
+      "reviewScore": 5,
+      "commentScore": 1.8579999999999999,
+      "summary": "madjin: Focused on expanding the functionality and user experience of the project's web presence, most notably by implementing a comprehensive MMORPG-style character system for the leaderboard API in elizaos/elizaos.github.io #193. This substantial contribution involved over 2,800 lines of code and established a foundation for complex features like class evolution and visual identity systems, which they further detailed through 11 new feature requests and bug reports. Beyond these gamification enhancements, they improved site accessibility by adding an XSL stylesheet for browser-rendered RSS feeds in #188 and identified critical performance bottlenecks regarding memory consumption in the build process. Their work this month primarily centered on feature development and configuration, significantly advancing the project's interactive and data-driven capabilities."
+    },
+    {
+      "username": "greptile-apps",
+      "avatarUrl": "https://avatars.githubusercontent.com/in/867647?v=4",
+      "totalScore": 276.538,
+      "prScore": 0,
+      "issueScore": 0,
+      "reviewScore": 274.5,
+      "commentScore": 2.0380000000000003,
+      "summary": "greptile-apps: Focused exclusively on providing feedback and guidance through 14 code reviews and 4 pull request comments this month. Despite having no direct code changes or merged pull requests, they maintained a consistent presence in the review process to support team contributions. Their primary impact was centered on collaborative oversight and technical discussion within the pull request workflow."
+    },
+    {
+      "username": "YuriNachos",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/19365375?u=35202bfa8350f028db180527a789e8dcb7576d42&v=4",
+      "totalScore": 249.18435236903713,
+      "prScore": 248.98435236903714,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0.2,
+      "summary": "YuriNachos: Focused on enhancing system stability and core functionality within the elizaos/eliza repository, contributing over 400 lines of code across 10 open pull requests. Their work addressed critical infrastructure needs, such as validating directory paths to prevent errors (#6379), ensuring proper authentication by loading environment variables in agent commands (#6374, #6376), and improving event emission logic in the server (#6378). Additionally, they introduced new capabilities to the core runtime with the unregisterAction method (#6372, #6375) and improved the reliability of entity connections within the bootstrap plugin (#6370, #6371). This month’s efforts were primarily dedicated to bug fixes and feature enhancements aimed at improving the robustness of the CLI and core agent runtime."
+    },
+    {
+      "username": "borisudovicic",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/31806472?u=8935f4d43fd7e4eb9bf5ff92d54d4d2f8ac8a786&v=4",
+      "totalScore": 230,
+      "prScore": 0,
+      "issueScore": 230,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "borisudovicic: Focused on refining the user experience and product logic for the Eliza platform, driving the resolution of 18 issues related to agent discovery, chat interface usability, and credit management. They played a key role in defining the \"SDK-first Hooks Mode\" (#5966) and \"Core Hooks\" (#5928) architecture while overseeing critical UI/UX polish, such as optimizing chat box dynamics (#6310) and improving the agent creation workflow (#6306, #6307). Their contributions centered on streamlining the onboarding process for non-signed-up users (#6312, #6353) and enhancing the public agent ecosystem through better state separation and knowledge transfer (#6313, #6303). Overall, their activity focused on product management and quality assurance to ensure a cohesive and scalable agent-building experience."
+    },
+    {
+      "username": "odilitime",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/16395496?u=c9bac48e632aae594a0d85aaf9e9c9c69b674d8b&v=4",
+      "totalScore": 205.42360532830114,
+      "prScore": 203.26760532830113,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 2.1559999999999997,
+      "summary": "odilitime: Focused on enhancing core plugin functionality and build system efficiency, notably merging a substantial update to the bootstrap plugin and SQL actions in elizaos/eliza (#6333) that involved over 6,900 lines of code changes. They also addressed infrastructure performance by optimizing build task inputs in turbo.json (#6349) and triaged a regression in Discord slash commands (elizaos-plugins/plugin-discord#15). Their work this month demonstrates a strong emphasis on system stability and configuration, with a primary focus on bug fixes and architectural improvements across code and test files."
+    },
+    {
+      "username": "wtfsayo",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/82053242?u=98209a1f10456f42d4d2fa71db4d5bf4a672cbc3&v=4",
+      "totalScore": 177.48902788001413,
+      "prScore": 167.65102788001414,
+      "issueScore": 0,
+      "reviewScore": 9,
+      "commentScore": 0.838,
+      "summary": "wtfsayo: Focused on enhancing infrastructure stability and database reliability, notably delivering a significant overhaul to the SQL plugin in elizaos/eliza (#6323) that introduced critical pool configurations and error handling. They also modernized the project's CI/CD pipeline by upgrading Claude workflows to Opus 4.5 and enabling automated bot triggers (#6324, #6328). Across 45 commits, they managed extensive modifications to nearly 400 files, demonstrating a high-impact focus on bug fixes and configuration management. Their primary contributions centered on improving system resilience through robust database integration and automated workflow optimizations."
+    },
+    {
+      "username": "hanzlamateen",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/10975502?u=53f23921078d9a27d96751373bb44f4bd2d58bf4&v=4",
+      "totalScore": 92.37709407952083,
+      "prScore": 92.37709407952083,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "hanzlamateen: Focused on critical compatibility and stability improvements for the V2.0.0 release, notably resolving a2a example and protobuf compatibility issues in elizaos/eliza via PR #6386. This significant contribution involved modifying 35 files and over 500 lines of code to ensure seamless integration across the platform's core components. They also initiated further fixes for the avatar example and elevenlabs plugin in PR #6387, demonstrating a commitment to functional reliability. Their primary focus this month was split between major refactoring and feature work, with a strong emphasis on code quality and documentation."
+    },
+    {
+      "username": "1bcMax",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/195689928?u=85f5178dd043e3d408b42cb5685e65806d723b1a&v=4",
+      "totalScore": 63.23034748685607,
+      "prScore": 62.89034748685607,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0.33999999999999997,
+      "summary": "1bcMax: Focused on expanding payment capabilities within the ecosystem by initiating the implementation of the plugin-blockrun for x402 micropayments in elizaos/eliza (#6355). This substantial feature addition involved over 1,000 lines of new code across 11 files, demonstrating a significant investment in building out financial infrastructure. The work shows a comprehensive approach to development, with a balanced focus on core feature logic, testing, and configuration."
+    },
+    {
+      "username": "vbkotecha",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/86377299?u=32a79d9adc10f2738dca41f4690de9ec944d8025&v=4",
+      "totalScore": 43.5437738965761,
+      "prScore": 43.5437738965761,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "vbkotecha: Focused on enhancing authentication capabilities within the twitter plugin, specifically developing a new broker authentication mode supported by a robust offline testing suite in PR #47. This work involved significant technical effort, contributing over 2,500 lines of code across 31 files to ensure the feature's reliability. Their activity demonstrates a balanced commitment to feature implementation and quality assurance, with a primary focus on backend logic and comprehensive test coverage."
+    },
+    {
+      "username": "revlentless",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/215957173?v=4",
+      "totalScore": 43.5437738965761,
+      "prScore": 43.5437738965761,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "revlentless: Focused on a major architectural expansion by initiating the implementation of a WebAssembly agent runtime for the v2.0.0 release of elizaos/eliza (#6363). This significant undertaking involved modifying 99 files with over 5,100 lines of code, demonstrating a high level of effort directed toward core feature development and system infrastructure. Their work this month was characterized by a heavy emphasis on feature engineering and comprehensive testing to support this new runtime environment."
+    },
+    {
+      "username": "lalalune",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/18633264?u=e2e906c3712c2506ebfa98df01c2cfdc50050b30&v=4",
+      "totalScore": 34.5787738965761,
+      "prScore": 34.1407738965761,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0.43799999999999994,
+      "summary": "lalalune: Focused on a massive structural overhaul of the codebase, primarily driven by the ongoing development of the \"V2.0.0\" release in elizaos/eliza (#6351). This high-impact effort involved 191 commits and extensive modifications across over 33,000 files, signaling a comprehensive restructuring of the project's architecture. Their work demonstrated a balanced commitment to stability and quality, with a primary focus on bugfixes, configuration updates, and core code enhancements."
+    },
+    {
+      "username": "matomoniwano",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/47988393?u=2e31304db3ca7b0a1f62bc26443c25ec34bb519d&v=4",
+      "totalScore": 29.89251334905818,
+      "prScore": 29.69251334905818,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0.2,
+      "summary": "matomoniwano: Focused on foundational development for the Eliza Python core by initiating a prototype for the RLM provider via PR #6383. This ongoing work involved substantial technical groundwork across 16 files, totaling over 800 lines of code changes to establish the necessary infrastructure. Their efforts were primarily concentrated on configuration, documentation, and testing to ensure a robust framework for the new provider. The month’s activity reflects a dedicated focus on architectural setup and system integration within the Python-based ecosystem."
+    },
+    {
+      "username": "linear",
+      "avatarUrl": "https://avatars.githubusercontent.com/in/20150?v=4",
+      "totalScore": 26,
+      "prScore": 0,
+      "issueScore": 26,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "linear: Focused on architectural improvements and system stability by identifying and documenting critical technical enhancements across the elizaos/eliza repository. They prioritized core infrastructure by proposing solutions for JWT authentication (#6327), message processing parallelization (#6337), and runtime initialization optimization (#6334). Their contributions also addressed immediate reliability issues, including a fix for double processing in the Messaging API (#6298) and resolving a race condition in credit deduction (#6338). Overall, their focus remained on high-level system design, database query patterns, and backend security."
+    },
+    {
+      "username": "rejected-l",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/99460023?u=977f49541583c40f4fc5f6a9f11ca6c6a78b362a&v=4",
+      "totalScore": 24.119306144334054,
+      "prScore": 24.119306144334054,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "rejected-l: Focused on administrative maintenance within the elizaos/eliza repository, specifically ensuring legal compliance by updating the project's licensing information. They successfully merged PR #6301 to update the license year, demonstrating attention to project documentation and upkeep. This work involved minor adjustments across two files, reflecting a primary focus on general repository maintenance and chore-related tasks."
+    },
+    {
+      "username": "augchan42",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/20424105?u=d1a74732b07564927928798346f07cd50935c529&v=4",
+      "totalScore": 22.553332238032112,
+      "prScore": 22.553332238032112,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "augchan42: Focused on enhancing API integration standards by introducing support for X-Title and HTTP-Referer headers in the OpenRouter plugin via PR #23. This work involved modifying four files to improve metadata transparency and compliance for outgoing requests. Their contributions this month were evenly split between feature implementation and documentation updates, ensuring that new configuration options are properly supported and recorded."
+    },
+    {
+      "username": "Xayaan",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/5237930?u=7840b286463bde982c8af8f389e61e26a01328cb&v=4",
+      "totalScore": 18.346573590279974,
+      "prScore": 14.346573590279972,
+      "issueScore": 4,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "Xayaan: Focused on identifying and documenting database-related edge cases within the elizaos/eliza repository. They contributed by reporting a specific technical issue regarding SQL error handling for zero-vector fallbacks (#6380). Their activity this month was centered on issue identification and system stability reporting."
+    },
+    {
+      "username": "BaseGold",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/240206422?u=6eb4bd10d4ab502d36d022d95331370c5b76e055&v=4",
+      "totalScore": 16.833213344056215,
+      "prScore": 16.833213344056215,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "BaseGold: Focused on enhancing the connectivity capabilities of the MCP plugin by implementing the StreamableHTTP transport and custom headers functionality in elizaos-plugins/plugin-mcp (#20). This contribution directly improves the flexibility of the plugin's communication layer by allowing for more complex HTTP configurations. Their work this month was centered entirely on feature development within the codebase to support advanced transport protocols."
+    },
+    {
+      "username": "j4lambert",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/36552964?v=4",
+      "totalScore": 15.545521226679158,
+      "prScore": 15.545521226679158,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "j4lambert: Focused on establishing project safety protocols by initiating the creation of a security policy for the elizaos/eliza repository. They opened PR #6428 to introduce a SECURITY.md file, providing essential guidelines for vulnerability reporting. This contribution represents their primary focus on documentation and project governance for the month."
+    },
+    {
+      "username": "ChristopherTrimboli",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/27584221?u=de148a498b5af814e037c2975112fadd09df743f&v=4",
+      "totalScore": 15,
+      "prScore": 0,
+      "issueScore": 0,
+      "reviewScore": 15,
+      "commentScore": 0,
+      "summary": "ChristopherTrimboli: Focused on quality assurance and peer collaboration this month, contributing through the review and approval of two pull requests. Their involvement centered on providing oversight and validation for team contributions rather than direct code implementation. This activity reflects a focus on maintaining project standards through the code review process."
+    },
+    {
+      "username": "timolein74",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/225394307?v=4",
+      "totalScore": 14.346573590279972,
+      "prScore": 14.346573590279972,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "timolein74: This month, the contributor focused on expanding the ecosystem's integration capabilities by initiating a pull request to the elizaos-plugins/registry. They submitted a configuration update to add the AsterPay plugin reference to the central index (#251). This work represents a targeted effort in feature expansion through registry management and configuration updates."
+    },
+    {
+      "username": "takasaki404",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/193405421?u=8b79613f736e04d6e10ebe37042851efa758768d&v=4",
+      "totalScore": 14.346573590279972,
+      "prScore": 14.346573590279972,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "takasaki404: Focused on ecosystem expansion by initiating the integration of new tools into the plugin registry. They submitted a configuration update in elizaos-plugins/registry (#247) to add the @zane-archer/plugin-aimo-router package. This contribution was centered entirely on registry management and configuration maintenance."
+    },
+    {
+      "username": "project-aeris-disaster-agent",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/242933833?v=4",
+      "totalScore": 14.346573590279972,
+      "prScore": 14.346573590279972,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "project-aeris-disaster-agent: Focused on expanding the ecosystem's integration capabilities by initiating the addition of the Sportradar plugin to the registry. This effort is represented by the open pull request in elizaos-plugins/registry (#250), which aims to incorporate @elizaos/plugin-sportradar into the official directory. Their primary focus this month has been on plugin registration and ecosystem discoverability."
+    },
+    {
+      "username": "kamiyo-ai",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/197570892?u=4c83683aeb4fdfcb6c7e747ec6fd77619964952b&v=4",
+      "totalScore": 14.346573590279972,
+      "prScore": 14.346573590279972,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "kamiyo-ai: Focused on expanding the ecosystem by initiating the integration of a new plugin into the registry. This effort is centered on the submission of PR #246 in elizaos-plugins/registry to add the @kamiyo/eliza plugin. Their primary focus this month has been on plugin registration and ecosystem contribution."
+    },
+    {
+      "username": "CIII-glitch",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/256561388?v=4",
+      "totalScore": 14.346573590279972,
+      "prScore": 14.346573590279972,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "CIII-glitch: Focused on expanding ecosystem connectivity by initiating the integration of the Agent Index plugin for x402 endpoint discovery. This contribution, currently tracked in elizaos-plugins/registry #252, aims to enhance service discovery capabilities within the registry. Their primary focus this month was on infrastructure registration and plugin discovery."
+    },
+    {
+      "username": "shuhaib112",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/211030292?v=4",
+      "totalScore": 9,
+      "prScore": 0,
+      "issueScore": 0,
+      "reviewScore": 9,
+      "commentScore": 0,
+      "summary": "shuhaib112: Focused on collaborative quality assurance by providing technical feedback through two pull request reviews. While no code was directly authored or merged this month, their contributions centered on the peer review process to support team development. Their primary impact was limited to these review-based discussions."
+    },
+    {
+      "username": "Abdulkader-Safi",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/53955839?u=840e43b472d25cb1a82c19b77124def52dfaa69c&v=4",
+      "totalScore": 4.54,
+      "prScore": 0,
+      "issueScore": 4.2,
+      "reviewScore": 0,
+      "commentScore": 0.33999999999999997,
+      "summary": "Abdulkader-Safi: Focused on troubleshooting and reporting environment-specific setup issues within the elizaos/eliza repository. They identified and documented a project generation failure in issue #6388, which was subsequently resolved. Their activity this month was centered on issue triage and community engagement through issue comments rather than direct code contributions."
+    },
+    {
+      "username": "thewoweffect",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/113222443?u=cb21d15b0ce815d0f68167f2eca236aad6c64598&v=4",
+      "totalScore": 4.4,
+      "prScore": 0,
+      "issueScore": 4.2,
+      "reviewScore": 0,
+      "commentScore": 0.2,
+      "summary": "thewoweffect: Focused on identifying and documenting system errors within the elizaos/eliza repository, specifically reporting a failure in the reflection evaluator. They successfully triaged and closed issue #6364 regarding the \"Entity not found\" error during update operations. Their activity this month was centered on issue reporting and troubleshooting within the core framework."
+    },
+    {
+      "username": "samarth30",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/48334430?u=1fc119a6c2deb8cf60448b4c8961cb21dc69baeb&v=4",
+      "totalScore": 4,
+      "prScore": 0,
+      "issueScore": 4,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "samarth30: Focused on project expansion by proposing a new \"Apps promotion\" feature for the elizaos/eliza repository. This contribution involved identifying a growth opportunity and documenting the requirement in issue #6341. Their primary focus this month was on feature ideation and initial project planning."
+    },
+    {
+      "username": "Zenobow",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/255418143?v=4",
+      "totalScore": 2.1,
+      "prScore": 0,
+      "issueScore": 2.1,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "Zenobow: Focused on identifying and documenting system inconsistencies within the elizaos/eliza repository. They reported a technical regression regarding eligibility mismatches and snapshot bugs related to Tangem Hardware (#6369). Their primary focus this month was on issue identification and troubleshooting hardware-related migration bugs."
+    },
+    {
+      "username": "tdnupe3",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/25161668?u=94680b6bcbcfce954c7a9dd09d667a3919953041&v=4",
+      "totalScore": 2,
+      "prScore": 0,
+      "issueScore": 2,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "tdnupe3: Focused on expanding the ecosystem's financial capabilities by proposing a comprehensive implementation guide for AI agent payments. They initiated a strategic discussion in elizaos/eliza (#6365) regarding the integration of Circle and Coinbase APIs to facilitate automated transactions. Their primary focus this month was on architectural planning and documentation for payment infrastructure."
+    },
+    {
+      "username": "metatev",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/26566294?u=a0604d1f9f7a7936e350643ffccaef1f2a808fad&v=4",
+      "totalScore": 2,
+      "prScore": 0,
+      "issueScore": 2,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "metatev: Focused on long-term project capabilities by proposing a strategic enhancement for smart contract deployment. They initiated a discussion on future infrastructure needs within the elizaos/eliza repository by opening issue #6367. Their primary focus this month was on architectural planning and expanding the platform's functional scope."
+    },
+    {
+      "username": "GarrickBrown",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/41980127?u=605528eb2347d8e0368ae5b08e6fdbdbfb5c293b&v=4",
+      "totalScore": 2,
+      "prScore": 0,
+      "issueScore": 2,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "GarrickBrown: Focused on identifying and reporting stability issues within the Telegram plugin ecosystem. They documented a critical TypeError occurring during image processing, opening issue #23 in elizaos-plugins/plugin-telegram to facilitate a fix for the crashing bug. Their primary focus this month was on bug reporting and improving the reliability of plugin-based image handling."
+    },
+    {
+      "username": "BinaryBluePeach",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/192237769?v=4",
+      "totalScore": 2,
+      "prScore": 0,
+      "issueScore": 2,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "BinaryBluePeach: Focused on identifying and reporting integration issues within the Discord plugin ecosystem. They documented a critical runtime error regarding undefined message functions in elizaos-plugins/plugin-discord (#43), providing essential feedback for troubleshooting the plugin's communication layer. Their activity this month was centered on bug reporting and system stability within the Discord integration."
+    }
+  ],
+  "newPRs": 38,
+  "mergedPRs": 30,
+  "newIssues": 14,
+  "closedIssues": 8,
+  "activeContributors": 9
+}

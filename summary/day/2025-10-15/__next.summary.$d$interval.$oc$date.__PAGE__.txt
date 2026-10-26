@@ -1,0 +1,429 @@
+1:"$Sreact.fragment"
+2:I[4817319,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"IntervalSelector"]
+3:I[6998365,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"LlmCopyButton"]
+f:I[3642796,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],""]
+10:I[3238488,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"StatCardsDisplay"]
+16:I[4261541,["/eliza-leaderboard/_next/static/chunks/b33bcbdcb3f88354.js","/eliza-leaderboard/_next/static/chunks/8ba59154b6704904.js"],"OutletBoundary"]
+17:"$Sreact.suspense"
+4:Tabb,This service offers a *deterministic* OpenAI-compliant LLM inference endpoint that can be used via multiple clients. A couple of key points:
+
+* By OpenAI compliancy we specifically mean the messages-based Chat Completions API: [https://platform.openai.com/docs/api-reference/chat/create](https://platform.openai.com/docs/api-reference/chat/create),
+* By “deterministic” we specifically mean that one request (prompt, parameters, etc) provided to the API multiple times will produce the **same** output.
+  * For eg. setting a different seed but otherwise keeping the request the same will produce a different output.
+
+## curl
+
+```
+curl -s -X POST http://192.222.58.254:8001/v1/chat/completions \
+-H "Content-Type: application/json" \
+-d '{
+  "model": "gemma-3-27b-it",
+  "max_completion_tokens": 120,
+  "seed": 42,
+  "messages": [{"role": "user", "content": "Write a story about programming"}]
+}' | jq
+```
+
+### Streaming response
+
+```
+curl -s -X POST http://192.222.58.254:8001/v1/chat/completions \
+-H "Content-Type: application/json" \
+-d '{
+  "model": "gemma-3-27b-it",
+  "max_completion_tokens": 120,
+  "seed": 42,
+  "stream": true,
+  "messages": [{"role": "user", "content": "Write a story about programming"}]
+}'
+```
+
+## Vercel AI SDK
+
+[https://ai-sdk.dev/docs/introduction](https://ai-sdk.dev/docs/introduction)
+
+```
+import { generateText } from 'ai';
+import { createOpenAI } from '@ai-sdk/openai';
+
+const config = {
+  baseURL: 'http://192.222.58.254:8001/v1',
+  apiKey: 'sk-dummy-custom-key',
+  model: 'gemma-3-27b-it'
+};
+
+// Create a custom OpenAI client instance
+const customOpenAI = createOpenAI({
+  baseURL: config.baseURL,
+  apiKey: config.apiKey,
+});
+
+// Create the model instance using the custom client
+const model = customOpenAI(config.model);
+
+async function chatCompletion() {
+  console.log('\n💬 Testing chat completion...');
+  
+  try {
+    const result = await generateText({
+      model: model,
+      messages: [
+        { role: 'system', content: 'You are a helpful assistant.' },
+        { role: 'user', content: 'What are the benefits of using local AI models?' }
+      ],
+      seed: 42
+    });
+
+    console.log('✅ Chat response:');
+    console.log(result.text);
+  } catch (error) {
+    console.error('❌ Error with chat completion:');
+    console.error(error.message);
+  }
+}
+
+// Main execution
+async function main() {
+  console.log('EigenAI usage via Vercel AI SDK\n');
+  console.log('=' + '='.repeat(49));
+  
+  console.log(`\n🔧 Configuration:`);
+  console.log(`   Service: EigenAI`);
+  console.log(`   Base URL: ${config.baseURL}`);
+  console.log(`   Model: ${config.model}`);
+  console.log(`   API Key: ${config.apiKey.substring(0, 10)}...`);
+  
+  await chatCompletion();
+}
+
+main().catch(console.error);
+```5:T970,<!-- CURSOR_SUMMARY -->
+> [!NOTE]
+> Adds BirdeyeService with config-driven init, wallet sync task, and new providers for wallet portfolio, market overview, and multi-chain trending with caching.
+> 
+> - **Core/Init**
+>   - Validate `BIRDEYE_API_KEY`; skip init if missing.
+>   - Conditionally register providers based on `BIRDEYE_WALLET_ADDR` and `BIRDEYE_NO_TRENDING`.
+>   - Register `BirdeyeService` and extensions to `INTEL_DATAPROVIDER`.
+> - **Tasks**
+>   - Add `BIRDEYE_SYNC_WALLET` task worker running every 5 minutes to sync portfolio and trades.
+> - **Providers**
+>   - `BIRDEYE_WALLET_PORTFOLIO`: fetches live wallet holdings via service and returns formatted context.
+>   - `BIRDEYE_CRYPTOCURRENCY_MARKET_DATA`: shows SOL/ETH/BTC market snapshot using multi-price endpoint.
+>   - `BIRDEYE_TRENDING_CRYPTOCURRENCY`: multi-chain trending output with supply-based mcap estimate and rug filtering.
+>   - (Optional) `BIRDEYE_TRADE_PORTFOLIO`: integrates portfolio + trade history via service.
+> - **Service** (`BirdeyeService`)
+>   - Centralizes Birdeye API calls (token market data, multi-price, trending, wallet token/tx list, search).
+>   - Introduces timed cache helpers (`getCacheTimed`/`setCacheTimed`) and per-key caching for results.
+> - **Types/Utils**
+>   - Add shared types (`IToken`, `TransactionHistory`, `Portfolio`, cache wrappers) and chain/address helpers.
+>   - Logging cleanup and safer metadata formatting.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit 941ac5032f7ac75e7624577f9af8a2ef942f3ccf. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+## Summary by CodeRabbit
+
+- New Features
+  - Live wallet sync mode (wallet-backed flow) with formatted portfolio output and periodic sync (every 5 minutes).
+  - Market overview summary for key tokens with price, 24h change, liquidity and multi-chain trending aggregation.
+
+- Improvements
+  - Config-driven startup with API key validation and optional trending toggle.
+  - Smarter cache timing and fresher data, plus rug-check filtering for trending results.
+
+- Refactor
+  - Centralized data access behind a service for more reliable fetching and clearer runtime logging.
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->6:Tae0,- Add KNOWLEDGE_ALLOW_PDF env var to control PDF upload support (default: enabled)
+- Block PDF uploads in file upload, URL upload, and docs loader when disabled
+- Improve error handling to return clean JSON responses (HTTP 403) instead of stack traces
+- Implement proper toast notification system in frontend UI
+- Fix toast positioning to top-right for better visibility with console open
+- Update README with security note about disabling PDF support
+
+Addresses security concerns around PDF file format while maintaining backward
+compatibility. When KNOWLEDGE_ALLOW_PDF=false is set, all PDF uploads are
+blocked with user-friendly error messages.
+
+<!-- CURSOR_SUMMARY -->
+---
+
+> [!NOTE]
+> Adds KNOWLEDGE_ALLOW_PDF to toggle PDF support (default enabled), blocks PDFs across loaders/uploads when disabled, improves frontend toasts and error handling, and updates docs.
+> 
+> - **Config/Backend**:
+>   - Add `KNOWLEDGE_ALLOW_PDF` env with helper `isPdfAllowed` (default: true); refine `parseBooleanEnv`.
+>   - Pass runtime to `loadDocsFromPath`; service updated to use it.
+> - **Uploads/Routes**:
+>   - Multer allowed types respect PDF setting; return clean JSON errors with `PDF_DISABLED` (403).
+>   - URL import rejects PDFs when disabled; improved error responses.
+> - **Docs Loader**:
+>   - Skip `.pdf` files when PDF support is disabled.
+> - **Frontend (Knowledge tab)**:
+>   - Implement toast system and top-right toast container; wire into uploads/imports.
+>   - Robust error parsing for uploads/URL imports with user-friendly PDF-disabled messages.
+>   - Minor UI enhancements: modal header controls and PDF viewer zoom/reset.
+> - **Docs**:
+>   - README: security note and config sample for `KNOWLEDGE_ALLOW_PDF`.
+> - **Version**:
+>   - Bump to `1.5.12`.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit ffc0fc1838228aeb05ac57588a75a08093e007b3. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+- New Features
+  - Option to disable PDF uploads for added control; app now skips PDFs when disabled and shows clear messages.
+  - Enhanced Knowledge tab: toast notifications, improved error handling, and success feedback.
+  - Expanded URL import dialog with list management and validation.
+  - Upgraded search panel with input, threshold slider, and loading/error states.
+  - Improved document viewer with PDF zoom controls and fallbacks.
+
+- Documentation
+  - Added guidance on disabling PDF support via environment configuration.
+
+- Chores
+  - Version bumped to 1.5.12.
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->7:T49e,## Summary
+- add Eigen CLI wrapper to tee command for TEE deployments
+- provide consented installation flow and PATH detection for Eigen binaries
+
+## Testing
+- manual: 
+  - bun run eliza/packages/cli/dist/index.js tee eigen (prompts, installs, re-run)
+
+<!-- CURSOR_SUMMARY -->
+---
+
+> [!NOTE]
+> Adds `tee eigen` wrapper that proxies to `eigenx`, with auto-detect/consented install and PATH handling.
+> 
+> - **CLI (TEE)**:
+>   - **New `eigen` wrapper** in `packages/cli/src/commands/tee/eigen-wrapper.ts`:
+>     - Proxies args to `eigenx`/`eigenx-dev`, resolves binary via env/known paths, and augments `PATH`.
+>     - Interactive or env-driven consented install via curl if binary missing; robust error handling and logging.
+>     - Pass-through execution with inherited stdio; custom help output and examples.
+>   - **Integration**: Adds `.addCommand(eigenCliCommand)` in `packages/cli/src/commands/tee/index.ts`.}
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit 75980ffcb55a17a77f8c12672448139a0db7ab0b. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->0:{"buildId":"US8XLB_zHXYj_PVAECGcd","rsc":["$","$1","c",{"children":[["$","div",null,{"className":"container mx-auto px-6 py-8 md:px-8","children":["$","div",null,{"className":"mx-auto max-w-4xl","children":[["$","div",null,{"className":"mb-4 flex flex-col justify-between sm:flex-row","children":[["$","$L2",null,{"currentInterval":"day","currentDate":"2025-10-15"}],["$","$L3",null,{"metrics":{"date":"2025-10-15","interval":{"intervalStart":"$D2025-10-15T00:00:00.000Z","intervalEnd":"$D2025-10-16T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":3,"merged":1,"total":3},"issues":{"new":0,"closed":1,"total":1},"activeContributors":4,"codeChanges":{"additions":246,"deletions":1,"files":2,"commitCount":19},"topContributors":[{"username":"odilitime","avatarUrl":"https://avatars.githubusercontent.com/u/16395496?u=c9bac48e632aae594a0d85aaf9e9c9c69b674d8b&v=4","totalScore":65.7917738965761,"prScore":56.7917738965761,"issueScore":0,"reviewScore":9,"commentScore":0,"summary":"odilitime: Focused on a significant refactor of plugin initialization and provider wiring, as evidenced by the open PR elizaos-plugins/plugin-birdeye#6 and substantial code changes across 19 files (+948/-494 lines) in 12 commits, indicating a primary focus on other work."},{"username":"0xbbjoker","avatarUrl":"https://avatars.githubusercontent.com/u/54844437?u=90fe1762420de6ad493a1c1582f1f70c0d87d8e2&v=4","totalScore":40.18701911726089,"prScore":34.987019117260886,"issueScore":0,"reviewScore":5,"commentScore":0.2,"summary":"0xbbjoker: Focused on feature development, opening PR elizaos-plugins/plugin-knowledge#42 to add a `KNOWLEDGE_ALLOW_PDF` environment variable, which involved modifying 27 files with a net change of +201 lines. They also contributed a review and a comment, demonstrating engagement with ongoing work."},{"username":"wtfsayo","avatarUrl":"https://avatars.githubusercontent.com/u/82053242?u=98209a1f10456f42d4d2fa71db4d5bf4a672cbc3&v=4","totalScore":34.05942874616498,"prScore":34.05942874616498,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"wtfsayo: Contributed a new feature by merging PR elizaos/eliza#6065, which added an Eigen TEE wrapper with a significant change of +246/-1 lines, demonstrating a focus on feature work and other development tasks."}],"focusAreas":[{"area":"cli","count":2}],"topIssues":[{"id":"I_kwDOMT5cIs7F0i3j","title":"Eigencloud POC","author":"borisudovicic","number":5768,"repository":"elizaos/eliza","body":"$4","createdAt":"2025-08-13T15:21:30Z","closedAt":"2025-10-15T14:50:04Z","state":"CLOSED","commentCount":0}],"topPullRequests":[{"id":"PR_kwDON0lTbc6tyGEf","title":"Refactor plugin initialization and provider wiring to use config-driven services","author":"odilitime","number":6,"body":"$5","repository":"elizaos-plugins/plugin-birdeye","createdAt":"2025-10-15T02:22:45Z","mergedAt":"2025-11-06T04:00:47Z","additions":1471,"deletions":775},{"id":"PR_kwDOOu4gVs6tzPzI","title":"feat: add KNOWLEDGE_ALLOW_PDF environment variable","author":"0xbbjoker","number":42,"body":"$6","repository":"elizaos-plugins/plugin-knowledge","createdAt":"2025-10-15T05:59:06Z","mergedAt":null,"additions":670,"deletions":469},{"id":"PR_kwDOMT5cIs6t47Ks","title":"feat(cli): add Eigen TEE wrapper","author":"wtfsayo","number":6065,"body":"$7","repository":"elizaos/eliza","createdAt":"2025-10-15T13:41:16Z","mergedAt":"2025-10-15T17:34:53Z","additions":246,"deletions":1}],"detailedContributorSummaries":{"0xbbjoker":"0xbbjoker: Focused on feature development, opening PR elizaos-plugins/plugin-knowledge#42 to add a `KNOWLEDGE_ALLOW_PDF` environment variable, which involved modifying 27 files with a net change of +201 lines. They also contributed a review and a comment, demonstrating engagement with ongoing work.","odilitime":"odilitime: Focused on a significant refactor of plugin initialization and provider wiring, as evidenced by the open PR elizaos-plugins/plugin-birdeye#6 and substantial code changes across 19 files (+948/-494 lines) in 12 commits, indicating a primary focus on other work.","wtfsayo":"wtfsayo: Contributed a new feature by merging PR elizaos/eliza#6065, which added an Eigen TEE wrapper with a significant change of +246/-1 lines, demonstrating a focus on feature work and other development tasks."}},"summaryContent":"Today, ElizaOS saw significant progress in enhancing agent capabilities with a new feature for PDF handling in the `plugin-knowledge` repository, alongside key CLI improvements in `eliza` for streamlined TEE deployments. A notable achievement was the closure of the Eigencloud POC issue, marking a milestone in the `eliza` project.\n\n## ✅ Completed Work\n### CLI Enhancements & TEE Deployments\n*   A new Eigen TEE wrapper was added to the CLI, providing a consented installation flow and PATH detection for Eigen binaries, streamlining TEE deployments. ([elizaos/eliza#6065](https://github.com/elizaos/eliza/pull/6065))\n\n## 🏗️ Work in Progress\n### New Pull Requests\n*   **elizaos-plugins/plugin-knowledge**\n    *   Feature for PDF Handling ([#42](https://github.com/elizaos-plugins/plugin-knowledge/pull/42))\n\n## 🐞 Issue Triage\n### Closed Issues\n*   **elizaos/eliza**\n    *   Eigencloud Proof of Concept ([#5768](https://github.com/elizaos/eliza/issues/5768))","className":"self-end sm:self-start"}]]}],"$L8","$L9","$La"]}]}],["$Lb","$Lc","$Ld"],"$Le"]}],"loading":null,"isPartial":false}
+8:["$","div",null,{"className":"mb-6","children":["$","div",null,{"className":"flex items-center justify-between","children":[[["$","$Lf",null,{"href":"/summary/day/2025-10-14","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left mr-2 h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"children":"Previous"}],false],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$Lf",null,{"href":"/summary/day/2025-10-14","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Previous"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]],["$","div",null,{"className":"flex flex-col items-center","children":[["$","div",null,{"className":"text-sm font-medium text-gray-500","children":["Daily"," Summary"]}],["$","time",null,{"dateTime":"2025-10-15","className":"text-md font-bold","children":"Oct 15, 2025"}]]}],[["$","$Lf",null,{"href":"/summary/day/2025-10-16","children":[false,["$","span",null,{"children":"Next"}],["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right ml-2 h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}]],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$Lf",null,{"href":"/summary/day/2025-10-16","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Next"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]]]}]}]
+11:Tabb,This service offers a *deterministic* OpenAI-compliant LLM inference endpoint that can be used via multiple clients. A couple of key points:
+
+* By OpenAI compliancy we specifically mean the messages-based Chat Completions API: [https://platform.openai.com/docs/api-reference/chat/create](https://platform.openai.com/docs/api-reference/chat/create),
+* By “deterministic” we specifically mean that one request (prompt, parameters, etc) provided to the API multiple times will produce the **same** output.
+  * For eg. setting a different seed but otherwise keeping the request the same will produce a different output.
+
+## curl
+
+```
+curl -s -X POST http://192.222.58.254:8001/v1/chat/completions \
+-H "Content-Type: application/json" \
+-d '{
+  "model": "gemma-3-27b-it",
+  "max_completion_tokens": 120,
+  "seed": 42,
+  "messages": [{"role": "user", "content": "Write a story about programming"}]
+}' | jq
+```
+
+### Streaming response
+
+```
+curl -s -X POST http://192.222.58.254:8001/v1/chat/completions \
+-H "Content-Type: application/json" \
+-d '{
+  "model": "gemma-3-27b-it",
+  "max_completion_tokens": 120,
+  "seed": 42,
+  "stream": true,
+  "messages": [{"role": "user", "content": "Write a story about programming"}]
+}'
+```
+
+## Vercel AI SDK
+
+[https://ai-sdk.dev/docs/introduction](https://ai-sdk.dev/docs/introduction)
+
+```
+import { generateText } from 'ai';
+import { createOpenAI } from '@ai-sdk/openai';
+
+const config = {
+  baseURL: 'http://192.222.58.254:8001/v1',
+  apiKey: 'sk-dummy-custom-key',
+  model: 'gemma-3-27b-it'
+};
+
+// Create a custom OpenAI client instance
+const customOpenAI = createOpenAI({
+  baseURL: config.baseURL,
+  apiKey: config.apiKey,
+});
+
+// Create the model instance using the custom client
+const model = customOpenAI(config.model);
+
+async function chatCompletion() {
+  console.log('\n💬 Testing chat completion...');
+  
+  try {
+    const result = await generateText({
+      model: model,
+      messages: [
+        { role: 'system', content: 'You are a helpful assistant.' },
+        { role: 'user', content: 'What are the benefits of using local AI models?' }
+      ],
+      seed: 42
+    });
+
+    console.log('✅ Chat response:');
+    console.log(result.text);
+  } catch (error) {
+    console.error('❌ Error with chat completion:');
+    console.error(error.message);
+  }
+}
+
+// Main execution
+async function main() {
+  console.log('EigenAI usage via Vercel AI SDK\n');
+  console.log('=' + '='.repeat(49));
+  
+  console.log(`\n🔧 Configuration:`);
+  console.log(`   Service: EigenAI`);
+  console.log(`   Base URL: ${config.baseURL}`);
+  console.log(`   Model: ${config.model}`);
+  console.log(`   API Key: ${config.apiKey.substring(0, 10)}...`);
+  
+  await chatCompletion();
+}
+
+main().catch(console.error);
+```12:T970,<!-- CURSOR_SUMMARY -->
+> [!NOTE]
+> Adds BirdeyeService with config-driven init, wallet sync task, and new providers for wallet portfolio, market overview, and multi-chain trending with caching.
+> 
+> - **Core/Init**
+>   - Validate `BIRDEYE_API_KEY`; skip init if missing.
+>   - Conditionally register providers based on `BIRDEYE_WALLET_ADDR` and `BIRDEYE_NO_TRENDING`.
+>   - Register `BirdeyeService` and extensions to `INTEL_DATAPROVIDER`.
+> - **Tasks**
+>   - Add `BIRDEYE_SYNC_WALLET` task worker running every 5 minutes to sync portfolio and trades.
+> - **Providers**
+>   - `BIRDEYE_WALLET_PORTFOLIO`: fetches live wallet holdings via service and returns formatted context.
+>   - `BIRDEYE_CRYPTOCURRENCY_MARKET_DATA`: shows SOL/ETH/BTC market snapshot using multi-price endpoint.
+>   - `BIRDEYE_TRENDING_CRYPTOCURRENCY`: multi-chain trending output with supply-based mcap estimate and rug filtering.
+>   - (Optional) `BIRDEYE_TRADE_PORTFOLIO`: integrates portfolio + trade history via service.
+> - **Service** (`BirdeyeService`)
+>   - Centralizes Birdeye API calls (token market data, multi-price, trending, wallet token/tx list, search).
+>   - Introduces timed cache helpers (`getCacheTimed`/`setCacheTimed`) and per-key caching for results.
+> - **Types/Utils**
+>   - Add shared types (`IToken`, `TransactionHistory`, `Portfolio`, cache wrappers) and chain/address helpers.
+>   - Logging cleanup and safer metadata formatting.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit 941ac5032f7ac75e7624577f9af8a2ef942f3ccf. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+## Summary by CodeRabbit
+
+- New Features
+  - Live wallet sync mode (wallet-backed flow) with formatted portfolio output and periodic sync (every 5 minutes).
+  - Market overview summary for key tokens with price, 24h change, liquidity and multi-chain trending aggregation.
+
+- Improvements
+  - Config-driven startup with API key validation and optional trending toggle.
+  - Smarter cache timing and fresher data, plus rug-check filtering for trending results.
+
+- Refactor
+  - Centralized data access behind a service for more reliable fetching and clearer runtime logging.
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->13:Tae0,- Add KNOWLEDGE_ALLOW_PDF env var to control PDF upload support (default: enabled)
+- Block PDF uploads in file upload, URL upload, and docs loader when disabled
+- Improve error handling to return clean JSON responses (HTTP 403) instead of stack traces
+- Implement proper toast notification system in frontend UI
+- Fix toast positioning to top-right for better visibility with console open
+- Update README with security note about disabling PDF support
+
+Addresses security concerns around PDF file format while maintaining backward
+compatibility. When KNOWLEDGE_ALLOW_PDF=false is set, all PDF uploads are
+blocked with user-friendly error messages.
+
+<!-- CURSOR_SUMMARY -->
+---
+
+> [!NOTE]
+> Adds KNOWLEDGE_ALLOW_PDF to toggle PDF support (default enabled), blocks PDFs across loaders/uploads when disabled, improves frontend toasts and error handling, and updates docs.
+> 
+> - **Config/Backend**:
+>   - Add `KNOWLEDGE_ALLOW_PDF` env with helper `isPdfAllowed` (default: true); refine `parseBooleanEnv`.
+>   - Pass runtime to `loadDocsFromPath`; service updated to use it.
+> - **Uploads/Routes**:
+>   - Multer allowed types respect PDF setting; return clean JSON errors with `PDF_DISABLED` (403).
+>   - URL import rejects PDFs when disabled; improved error responses.
+> - **Docs Loader**:
+>   - Skip `.pdf` files when PDF support is disabled.
+> - **Frontend (Knowledge tab)**:
+>   - Implement toast system and top-right toast container; wire into uploads/imports.
+>   - Robust error parsing for uploads/URL imports with user-friendly PDF-disabled messages.
+>   - Minor UI enhancements: modal header controls and PDF viewer zoom/reset.
+> - **Docs**:
+>   - README: security note and config sample for `KNOWLEDGE_ALLOW_PDF`.
+> - **Version**:
+>   - Bump to `1.5.12`.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit ffc0fc1838228aeb05ac57588a75a08093e007b3. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+- New Features
+  - Option to disable PDF uploads for added control; app now skips PDFs when disabled and shows clear messages.
+  - Enhanced Knowledge tab: toast notifications, improved error handling, and success feedback.
+  - Expanded URL import dialog with list management and validation.
+  - Upgraded search panel with input, threshold slider, and loading/error states.
+  - Improved document viewer with PDF zoom controls and fallbacks.
+
+- Documentation
+  - Added guidance on disabling PDF support via environment configuration.
+
+- Chores
+  - Version bumped to 1.5.12.
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->14:T49e,## Summary
+- add Eigen CLI wrapper to tee command for TEE deployments
+- provide consented installation flow and PATH detection for Eigen binaries
+
+## Testing
+- manual: 
+  - bun run eliza/packages/cli/dist/index.js tee eigen (prompts, installs, re-run)
+
+<!-- CURSOR_SUMMARY -->
+---
+
+> [!NOTE]
+> Adds `tee eigen` wrapper that proxies to `eigenx`, with auto-detect/consented install and PATH handling.
+> 
+> - **CLI (TEE)**:
+>   - **New `eigen` wrapper** in `packages/cli/src/commands/tee/eigen-wrapper.ts`:
+>     - Proxies args to `eigenx`/`eigenx-dev`, resolves binary via env/known paths, and augments `PATH`.
+>     - Interactive or env-driven consented install via curl if binary missing; robust error handling and logging.
+>     - Pass-through execution with inherited stdio; custom help output and examples.
+>   - **Integration**: Adds `.addCommand(eigenCliCommand)` in `packages/cli/src/commands/tee/index.ts`.}
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit 75980ffcb55a17a77f8c12672448139a0db7ab0b. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->9:["$","div",null,{"className":"mb-8 space-y-6","children":[["$","$L10",null,{"metrics":{"date":"2025-10-15","interval":{"intervalStart":"$D2025-10-15T00:00:00.000Z","intervalEnd":"$D2025-10-16T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":3,"merged":1,"total":3},"issues":{"new":0,"closed":1,"total":1},"activeContributors":4,"codeChanges":{"additions":246,"deletions":1,"files":2,"commitCount":19},"topContributors":[{"username":"odilitime","avatarUrl":"https://avatars.githubusercontent.com/u/16395496?u=c9bac48e632aae594a0d85aaf9e9c9c69b674d8b&v=4","totalScore":65.7917738965761,"prScore":56.7917738965761,"issueScore":0,"reviewScore":9,"commentScore":0,"summary":"odilitime: Focused on a significant refactor of plugin initialization and provider wiring, as evidenced by the open PR elizaos-plugins/plugin-birdeye#6 and substantial code changes across 19 files (+948/-494 lines) in 12 commits, indicating a primary focus on other work."},{"username":"0xbbjoker","avatarUrl":"https://avatars.githubusercontent.com/u/54844437?u=90fe1762420de6ad493a1c1582f1f70c0d87d8e2&v=4","totalScore":40.18701911726089,"prScore":34.987019117260886,"issueScore":0,"reviewScore":5,"commentScore":0.2,"summary":"0xbbjoker: Focused on feature development, opening PR elizaos-plugins/plugin-knowledge#42 to add a `KNOWLEDGE_ALLOW_PDF` environment variable, which involved modifying 27 files with a net change of +201 lines. They also contributed a review and a comment, demonstrating engagement with ongoing work."},{"username":"wtfsayo","avatarUrl":"https://avatars.githubusercontent.com/u/82053242?u=98209a1f10456f42d4d2fa71db4d5bf4a672cbc3&v=4","totalScore":34.05942874616498,"prScore":34.05942874616498,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"wtfsayo: Contributed a new feature by merging PR elizaos/eliza#6065, which added an Eigen TEE wrapper with a significant change of +246/-1 lines, demonstrating a focus on feature work and other development tasks."}],"focusAreas":[{"area":"cli","count":2}],"topIssues":[{"id":"I_kwDOMT5cIs7F0i3j","title":"Eigencloud POC","author":"borisudovicic","number":5768,"repository":"elizaos/eliza","body":"$11","createdAt":"2025-08-13T15:21:30Z","closedAt":"2025-10-15T14:50:04Z","state":"CLOSED","commentCount":0}],"topPullRequests":[{"id":"PR_kwDON0lTbc6tyGEf","title":"Refactor plugin initialization and provider wiring to use config-driven services","author":"odilitime","number":6,"body":"$12","repository":"elizaos-plugins/plugin-birdeye","createdAt":"2025-10-15T02:22:45Z","mergedAt":"2025-11-06T04:00:47Z","additions":1471,"deletions":775},{"id":"PR_kwDOOu4gVs6tzPzI","title":"feat: add KNOWLEDGE_ALLOW_PDF environment variable","author":"0xbbjoker","number":42,"body":"$13","repository":"elizaos-plugins/plugin-knowledge","createdAt":"2025-10-15T05:59:06Z","mergedAt":null,"additions":670,"deletions":469},{"id":"PR_kwDOMT5cIs6t47Ks","title":"feat(cli): add Eigen TEE wrapper","author":"wtfsayo","number":6065,"body":"$14","repository":"elizaos/eliza","createdAt":"2025-10-15T13:41:16Z","mergedAt":"2025-10-15T17:34:53Z","additions":246,"deletions":1}],"detailedContributorSummaries":{"0xbbjoker":"0xbbjoker: Focused on feature development, opening PR elizaos-plugins/plugin-knowledge#42 to add a `KNOWLEDGE_ALLOW_PDF` environment variable, which involved modifying 27 files with a net change of +201 lines. They also contributed a review and a comment, demonstrating engagement with ongoing work.","odilitime":"odilitime: Focused on a significant refactor of plugin initialization and provider wiring, as evidenced by the open PR elizaos-plugins/plugin-birdeye#6 and substantial code changes across 19 files (+948/-494 lines) in 12 commits, indicating a primary focus on other work.","wtfsayo":"wtfsayo: Contributed a new feature by merging PR elizaos/eliza#6065, which added an Eigen TEE wrapper with a significant change of +246/-1 lines, demonstrating a focus on feature work and other development tasks."}}}],"$L15"]}]
+a:["$","div",null,{"className":"prose prose-sm mx-auto mt-8 dark:prose-invert sm:prose lg:prose-lg xl:prose-xl","children":[["$","p","p-0",{"children":["Today, ElizaOS saw significant progress in enhancing agent capabilities with a new feature for PDF handling in the ",["$","code","code-0",{"children":"plugin-knowledge"}]," repository, alongside key CLI improvements in ",["$","code","code-1",{"children":"eliza"}]," for streamlined TEE deployments. A notable achievement was the closure of the Eigencloud POC issue, marking a milestone in the ",["$","code","code-2",{"children":"eliza"}]," project."]}],"\n",["$","h2","h2-0",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"✅ Completed Work","position":{"start":{"line":3,"column":4,"offset":336},"end":{"line":3,"column":20,"offset":352}}}],"position":{"start":{"line":3,"column":1,"offset":333},"end":{"line":3,"column":20,"offset":352}}},"children":"✅ Completed Work"}],"\n",["$","h3","h3-0",{"children":"CLI Enhancements & TEE Deployments"}],"\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["A new Eigen TEE wrapper was added to the CLI, providing a consented installation flow and PATH detection for Eigen binaries, streamlining TEE deployments. (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/6065","children":"elizaos/eliza#6065"}],")"]}],"\n"]}],"\n",["$","h2","h2-1",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"🏗️ Work in Progress","position":{"start":{"line":7,"column":4,"offset":622},"end":{"line":7,"column":24,"offset":642}}}],"position":{"start":{"line":7,"column":1,"offset":619},"end":{"line":7,"column":24,"offset":642}}},"children":"🏗️ Work in Progress"}],"\n",["$","h3","h3-1",{"children":"New Pull Requests"}],"\n",["$","ul","ul-1",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"elizaos-plugins/plugin-knowledge"}],"\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["Feature for PDF Handling (",["$","a","a-0",{"href":"https://github.com/elizaos-plugins/plugin-knowledge/pull/42","children":"#42"}],")"]}],"\n"]}],"\n"]}],"\n"]}],"\n",["$","h2","h2-2",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"🐞 Issue Triage","position":{"start":{"line":12,"column":4,"offset":812},"end":{"line":12,"column":19,"offset":827}}}],"position":{"start":{"line":12,"column":1,"offset":809},"end":{"line":12,"column":19,"offset":827}}},"children":"🐞 Issue Triage"}],"\n",["$","h3","h3-2",{"children":"Closed Issues"}],"\n",["$","ul","ul-2",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"elizaos/eliza"}],"\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["Eigencloud Proof of Concept (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/5768","children":"#5768"}],")"]}],"\n"]}],"\n"]}],"\n"]}]]}]
+b:["$","script","script-0",{"src":"/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","async":true}]
+c:["$","script","script-1",{"src":"/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","async":true}]
+d:["$","script","script-2",{"src":"/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js","async":true}]
+e:["$","$L16",null,{"children":["$","$17",null,{"name":"Next.MetadataOutlet","children":"$@18"}]}]
+15:["$","div",null,{"className":"rounded-lg border bg-card text-card-foreground shadow-sm","children":[["$","div",null,{"className":"flex flex-col space-y-1.5 p-6 py-4","children":["$","div",null,{"className":"tracking-tight text-sm font-medium","children":["$undefined","Code Changes"]}]}],["$","div",null,{"className":"p-6 pt-0","children":["$","div",null,{"className":"grid grid-cols-2 gap-4 md:grid-cols-4","children":[["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-git-commit-vertical h-5 w-5","aria-hidden":"true","children":[["$","path","1holv5",{"d":"M12 3v6"}],["$","circle","1v7zrd",{"cx":"12","cy":"12","r":"3"}],["$","path","a9ows0",{"d":"M12 15v6"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":19}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Commits"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-file-code h-5 w-5","aria-hidden":"true","children":[["$","path","1oefj6",{"d":"M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"}],["$","path","wfsgrz",{"d":"M14 2v5a1 1 0 0 0 1 1h5"}],["$","path","1tg20x",{"d":"M10 12.5 8 15l2 2.5"}],["$","path","yinavb",{"d":"m14 12.5 2 2.5-2 2.5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":2}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Files Changed"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-green-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-up h-5 w-5 text-green-500","aria-hidden":"true","children":[["$","path","hav0vg",{"d":"m5 12 7-7 7 7"}],["$","path","x0mq9r",{"d":"M12 19V5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-green-500","children":"+246"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Added"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-red-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-down h-5 w-5 text-red-500","aria-hidden":"true","children":[["$","path","s699le",{"d":"M12 5v14"}],["$","path","1idqje",{"d":"m19 12-7 7-7-7"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-red-500","children":"-1"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Deleted"}]]}]]}]]}]}]]}]
+18:null

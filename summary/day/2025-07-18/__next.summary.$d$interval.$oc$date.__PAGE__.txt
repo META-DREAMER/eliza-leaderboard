@@ -1,0 +1,1061 @@
+1:"$Sreact.fragment"
+2:I[4817319,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"IntervalSelector"]
+3:I[6998365,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"LlmCopyButton"]
+13:I[3642796,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],""]
+14:I[3238488,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"StatCardsDisplay"]
+23:I[4261541,["/eliza-leaderboard/_next/static/chunks/b33bcbdcb3f88354.js","/eliza-leaderboard/_next/static/chunks/8ba59154b6704904.js"],"OutletBoundary"]
+24:"$Sreact.suspense"
+4:Ta60,# Error when sending message without `ANTHROPIC_API_KEY`: "x-api-key header is required"
+
+## Description
+When installing Eliza from source and running `bun start`, attempts to send a message to the agent fail with an `AI_APICallError: x-api-key header is required` error if the `ANTHROPIC_API_KEY` environment variable is not set. This occurs regardless of whether an `OPENAI_API_KEY` is present.
+
+## Steps to Reproduce
+1. Clone the Eliza repository and install dependencies.
+2. Ensure only the `OPENAI_API_KEY` (or no API keys) is set in your environment; do not set `ANTHROPIC_API_KEY`.
+3. From the project root, run:
+   ```bash
+   bun start
+   ```
+4. Attempt to send a message to the “Eliza” agent (e.g., via an HTTP request or CLI).
+5. Observe the error in logs.
+
+## Expected Behavior
+- If `ANTHROPIC_API_KEY` is unset, Eliza should either:
+  - Fall back to OpenAI if `OPENAI_API_KEY` is provided, or
+  - Emit a warning about missing Anthropic functionality without throwing an error when handling messages.
+
+## Actual Behavior
+Eliza logs warnings about missing instrumentation and missing `ANTHROPIC_API_KEY`, then errors out on any message send with:
+```text
+(AI_APICallError) x-api-key header is required
+at new _AISDKError (/eliza/node_modules/@ai-sdk/provider/dist/index.mjs:19:5)
+...
+```
+
+## Relevant Logs
+```text
+[2025-04-23 22:20:42] WARN: ANTHROPIC_API_KEY is not set in environment - Anthropic functionality will be limited
+[2025-04-23 22:20:47] WARN: Service instrumentation not found
+    agentName: "Eliza"
+    agentId: "b850bc30-45f8-0041-a00a-83df46d8555d"
+[2025-04-23 22:20:47] WARN: [getTracer] Service instrumentation not found in runtime.
+[2025-04-23 22:20:48] ERROR: Error during emitEvent for MESSAGE_RECEIVED (handler execution):
+    agentName: "Eliza"
+    agentId: "b850bc30-45f8-0041-a00a-83df46d8555d"
+    message: "(AI_APICallError) x-api-key header is required"
+    stack: [
+      "AI_APICallError: x-api-key header is required",
+      "at new _AISDKError (/eliza/node_modules/@ai-sdk/provider/dist/index.mjs:19:5)",
+      "at new APICallError (/eliza/node_modules/@ai-sdk/provider/dist/index.mjs:61:5)",
+      "at <anonymous> (/eliza/node_modules/@ai-sdk/provider-utils/dist/index.mjs:667:18)",
+      "at processTicksAndRejections (native:7:39)"
+    ]
+```
+
+## Environment
+- OS: Ubuntu 22.04 LTS
+- Runtime: Bun v0.x
+- Eliza Version: Source checkout as of April 23, 2025
+- Env Vars:
+  - `OPENAI_API_KEY`: set or unset
+  - `ANTHROPIC_API_KEY`: **not** set
+
+## Additional Context
+This issue blocks users who wish to run Eliza exclusively with OpenAI credentials. A fallback or clearer error message would improve usability.
+
+5:T69a,\## Description
+
+The \`elizaos create --type agent <name>\` command currently copies a JSON character file, but ElizaOS has standardized on type-safe TypeScript character files (character.ts). This creates confusion and doesn't align with our current best practices.
+
+\## Current Behavior
+
+\- \`elizaos create --type agent bobby\` copies a JSON character file
+
+\- This doesn't match our TypeScript-first approach
+
+\- No type safety or IDE support with JSON characters
+
+\## Proposed Solutions
+
+\### Option 1: Update the command to generate TypeScript characters
+
+\- Modify \`elizaos create --type agent <name>\` to generate a new TypeScript file at \`src/characters/<name>.ts\`
+
+\- Include proper imports and types (e.g., \`import { Character } from '@elizaos/core'\`)
+
+\- Use a TypeScript template that incorporates the provided agent name
+
+\- Remove JSON character copying functionality
+
+\- Update CLI help text to reflect the change
+
+\### Option 2: Remove the agent creation command entirely
+
+\- Remove \`--type agent\` option from the create command
+
+\- Make \`--type project\` the only option (or default)
+
+\- Update documentation to explain character customization is done by editing \`src/character.ts\`
+
+\- Add docs explaining how to create additional characters by copying and modifying character.ts files
+
+\- Simplifies the CLI and makes the character creation process more explicit
+
+\## Decision Needed
+
+Choose between updating the command to generate TypeScript (Option 1) or removing it entirely (Option 2).
+
+\## Impact
+
+\- Documentation needs to be updated
+
+\- Existing tutorials/guides may need revision
+
+\- Users expecting JSON character creation will need migration guidance6:T12db,## 🔧 Enhanced Module Resolution for Consistent Local-First Loading
+
+This PR addresses critical module resolution issues by enhancing the existing ModuleLoader system to provide the same local-first guarantees as server-manager.ts, ensuring consistent module loading across all CLI operations.
+
+### 🎯 Problem Statement
+
+The CLI was experiencing inconsistent module resolution between different components:
+- **server-start.ts** was using ModuleLoader but without explicit local-first guarantees
+- **server-manager.ts** had proper local-first environment setup for spawned processes
+- **Inconsistent behavior** between development and production environments
+- **Potential singleton pattern issues** due to mixed global/local module loading
+
+### 🚀 Key Changes
+
+#### 1. **Enhanced ModuleLoader System** (`packages/cli/src/utils/module-loader.ts`)
+- **NEW: Environment Setup**: Added `setupEnvironment()` method that mirrors server-manager.ts logic
+- **NEW: Explicit Local Detection**: Checks if local module exists before resolution
+- **NEW: Enhanced Logging**: Clear feedback about which installation is being used
+- **IMPROVED: Validation**: Warns if expected local module resolves to global
+
+#### 2. **Consistent Architecture**
+- **ModuleLoader** → For in-process module loading with local-first guarantees
+- **server-manager.ts** → For spawned process environment setup with local-first guarantees
+- **Both systems** → Use same approach: check local existence, prioritize local, set environment variables
+
+#### 3. **Environment Variable Management**
+Enhanced ModuleLoader now sets up environment like server-manager.ts:
+- `NODE_PATH = "{project}/node_modules:{existing_NODE_PATH}"`
+- `PATH = "{project}/node_modules/.bin:{existing_PATH}"`
+
+### 🧪 Testing and Validation
+
+- ✅ **Build System**: All builds pass with enhanced ModuleLoader
+- ✅ **Local Module Detection**: Correctly identifies and uses local @elizaos packages
+- ✅ **Environment Setup**: Properly configures NODE_PATH and PATH variables
+- ✅ **Logging**: Clear feedback about local vs global module usage
+- ✅ **Backward Compatibility**: All existing APIs maintained
+
+### 📈 Impact and Benefits
+
+#### **Development Experience**
+- **Consistent Behavior**: Same module resolution logic across all CLI operations
+- **Local-First Approach**: Always prioritizes project's exact dependency versions
+- **Clear Feedback**: Explicit logging about which installation is being used
+- **Better Debugging**: Enhanced error messages with installation guidance
+
+#### **Architecture Improvements**
+- **Unified Strategy**: Both in-process and spawned processes use same local-first approach
+- **Singleton Safety**: Prevents multiple instances of core modules
+- **Environment Consistency**: Standardized module resolution across all operations
+- **Maintainability**: Centralized local-first logic in ModuleLoader
+
+### 🔍 Implementation Details
+
+#### **Enhanced Module Loading Strategy**
+ModuleLoader now includes explicit local-first checks:
+```typescript
+const localModulePath = path.join(this.projectPath, 'node_modules', moduleName);
+const isLocalModule = existsSync(localModulePath);
+
+if (isLocalModule) {
+  logger.info(`Using local ${moduleName} installation`);
+} else {
+  logger.info(`Using global ${moduleName} installation`);
+}
+```
+
+#### **Environment Enhancement (NEW)**
+Added setupEnvironment() method:
+```typescript
+private setupEnvironment(): void {
+  // Add local node_modules to NODE_PATH
+  const localModulesPath = path.join(this.projectPath, 'node_modules');
+  if (existsSync(localModulesPath)) {
+    process.env.NODE_PATH = `${localModulesPath}${path.delimiter}${process.env.NODE_PATH || ''}`;
+  }
+
+  // Add local .bin to PATH
+  const localBinPath = path.join(this.projectPath, 'node_modules', '.bin');
+  if (existsSync(localBinPath)) {
+    process.env.PATH = `${localBinPath}${path.delimiter}${process.env.PATH || ''}`;
+  }
+}
+```
+
+### 🛠 Technical Notes
+
+- **Enhanced, Not Replaced**: ModuleLoader was enhanced rather than replaced
+- **Consistent Approach**: Both ModuleLoader and server-manager.ts use same local-first logic
+- **Environment Variables**: Proper PATH and NODE_PATH setup for consistent resolution
+- **Explicit Validation**: Checks that local modules are actually being used when expected
+- **Comprehensive Logging**: Clear feedback about module resolution decisions
+
+### 📦 Files Changed
+
+- `packages/cli/src/utils/module-loader.ts` - Enhanced with local-first guarantees
+- `packages/cli/src/commands/start/actions/server-start.ts` - Uses enhanced ModuleLoader
+
+This enhancement ensures that **all** @elizaos modules are resolved locally first, whether they're being loaded in the current process (ModuleLoader) or in spawned processes (server-manager.ts), providing a consistent and reliable development experience.7:T77f,### PR Review – JSON B insert failure fix in `plugin-sql`
+
+Great catch!  
+The change that stringifies `content` and `metadata` before passing them to
+
+```ts
+sql`${...}::jsonb`
+```
+
+solves the root issue where raw objects were implicitly coerced to the string `"[object Object]"`.  
+That coercion broke the `::jsonb` cast, triggered `Failed query` errors, and blocked service startup (most visibly with `plugin-twitter`).
+
+#### What this patch does
+1. **`createMemory`**
+   * Detects string vs. object and always stores a *JSON string*:
+     ```ts
+     const contentToInsert  = typeof memory.content  === 'string'
+                              ? memory.content
+                              : JSON.stringify(memory.content ?? {});
+     const metadataToInsert = typeof memory.metadata === 'string'
+                              ? memory.metadata
+                              : JSON.stringify(memory.metadata ?? {});
+     ```
+   * Uses those variables in the `INSERT`.
+
+2. **`updateMemory`**
+   * Mirrors the same logic when updating existing rows.
+
+3. **Safety**
+   * No DB-schema changes; only the way values are bound.
+   * Back-compatible with records already stored as proper JSON.
+
+#### Why this matters
+* Prevents runtime-blocking SQL exceptions on any plugin that passes nested objects (Twitter, Discord, etc.).
+* Makes the adapter resilient to future changes where callers send rich objects.
+* Keeps the `::jsonb` cast (fast path for PG) without forcing every upstream plugin to remember to stringify.
+
+#### Suggested follow-ups
+* Add a small unit test for `createMemory`/`updateMemory` verifying that both object and string inputs land in Postgres as valid JSON.
+* Consider centralising this stringify helper to avoid duplication if more fields become JSONB later.
+
+Looks good – with this in, service registration succeeds and no more `[object Object]` inserts. 🎉8:Taac,<!-- Use this template by filling in information and copying and pasting relevant items out of the HTML comments. -->
+
+# Relates to
+
+<!-- LINK TO ISSUE OR TICKET -->
+https://github.com/elizaOS/eliza/issues/5604
+<!-- This risks section must be filled out before the final review and merge. -->
+
+# Risks
+
+<!--
+Low, medium, large. List what kind of risks and what could be affected.
+-->
+medium/large: adding flag to npx elizaos create
+# Background
+
+## What does this PR do?
+
+Added new --skip-api-keys flag to the create command
+Updated type definitions with skipApiKeys: boolean option
+Modified project creation logic to bypass API key setup when flag is present
+Updated both regular and TEE project creation flows to respect this setting
+Pass the flag through the entire setup chain to prevent API key prompts
+
+## What kind of change is this?
+
+<!--
+Bug fixes (non-breaking change which fixes an issue)
+Improvements (misc. changes to existing features)
+Features (non-breaking change which adds functionality)
+Updates (new versions of included code)
+-->
+
+<!-- This "Why" section is most relevant if there are no linked issues explaining why. If there is a related issue, it might make sense to skip this why section. -->
+<!--
+## Why are we doing this? Any context or related work?
+-->
+
+# Documentation changes needed?
+
+<!--
+My changes do not require a change to the project documentation.
+My changes require a change to the project documentation.
+If documentation change is needed: I have updated the documentation accordingly.
+-->
+
+<!-- Please show how you tested the PR. This will really help if the PR needs to be retested and probably help the PR get merged quicker. -->
+
+# Testing
+
+## Where should a reviewer start?
+
+## Detailed testing steps
+
+<!--
+None: Automated tests are acceptable.
+-->
+
+<!--
+- As [anon/admin], go to [link]
+  - [do action]
+  - verify [result]
+-->
+
+<!-- If there is a UI change, please include before and after screenshots or videos. This will speed up PRs being merged. It is extra nice to annotate screenshots with arrows or boxes pointing out the differences. -->
+<!--
+## Screenshots
+### Before
+### After
+-->
+
+<!-- If there is anything about the deployment, please make a note. -->
+<!--
+# Deploy Notes
+-->
+
+<!--  Copy and paste command line output. -->
+<!--
+## Database changes
+-->
+
+<!--  Please specify deploy instructions if there is something more than the automated steps. -->
+<!--
+## Deployment instructions
+-->
+
+<!-- If you are on Discord, please join https://discord.gg/ai16z and state your Discord username here for the contributor role and join us in #development-feed -->
+<!--
+## Discord username
+
+-->
+9:Tebf,## PR Description
+
+### Summary
+Fixes a bug where creating a new ElizaOS project from within an existing project directory causes the child project to incorrectly inherit the parent's `PGLITE_DATA_DIR` environment variable, resulting in both projects sharing the same database.
+
+### Context
+Issue reported by @cjft:
+> "@yung_algorithm can you take on .elizadb testing plz make sure goes in project folder, probs not terribly hard one, just double check cwd() placement, bug is when run create command cwd is not the place to put, needs to go to new folder. i think u can crush this, cli god"
+
+### Root Cause
+When creating a new project from inside an existing ElizaOS project directory, the `PGLITE_DATA_DIR` environment variable from the parent project's `.env` file is already loaded into `process.env`. This causes the child project to inherit the parent's database path instead of creating its own.
+
+**Example scenario:**
+```bash
+# 1. Create first project (works correctly)
+cd ~/Desktop
+elizaos create project-one
+# Result: project-one/.eliza/.elizadb/ ✅
+# project-one/.env contains: PGLITE_DATA_DIR=/Users/user/Desktop/project-one/.eliza/.elizadb
+
+# 2. Navigate into the first project
+cd project-one
+
+# 3. Create second project from inside the first
+elizaos create project-two
+# Bug: project-two/.eliza/ exists but NO .elizadb inside ❌
+# The new project inherits PGLITE_DATA_DIR from parent's process.env
+```
+
+### Technical Details
+The issue occurs because:
+1. When inside `project-one`, its `.env` file has already set `PGLITE_DATA_DIR=/path/to/project-one/.eliza/.elizadb`
+2. This environment variable persists in `process.env` throughout the CLI session
+3. When `resolvePgliteDir()` is called for the new project, it checks `process.env.PGLITE_DATA_DIR` first
+4. Even though the code has protection to skip loading env vars when `targetProjectDir` is provided, the variable is already in memory
+
+### Solution
+Added `delete process.env.PGLITE_DATA_DIR;` at the beginning of both `createProject()` and `createTEEProject()` functions in `packages/cli/src/commands/create/actions/creators.ts`:
+
+```typescript
+export async function createProject(
+  projectName: string,
+  targetDir: string,
+  database: string,
+  aiModel: string,
+  embeddingModel?: string,
+  isNonInteractive = false
+): Promise<void> {
+  // Clear any inherited PGLITE_DATA_DIR to prevent child projects from inheriting parent's database
+  delete process.env.PGLITE_DATA_DIR;
+  
+  // ... rest of function
+}
+```
+
+This ensures a clean environment for each new project creation, preventing the inheritance issue.
+
+### Testing Results
+- ✅ Creating project from desktop → `PGLITE_DATA_DIR` correctly set to new project's path
+- ✅ Creating project from monorepo root → `PGLITE_DATA_DIR` correctly set to new project's path
+- ✅ Creating project from monorepo subdirectory → `PGLITE_DATA_DIR` correctly set to new project's path
+- ✅ Creating project from inside existing project → `PGLITE_DATA_DIR` now correctly set to new project's path (previously inherited parent's path)
+
+### Impact
+- **Minimal**: Only affects the project creation flow
+- **Surgical**: Just 2 lines added (one in each create function)
+- **Safe**: No changes to runtime behavior, path resolution logic, or existing projects
+- **Backward Compatible**: Existing projects and workflows remain unaffected 
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+* **Bug Fixes**
+  * Prevented child projects from inheriting the parent’s database directory setting by ensuring the relevant environment variable is cleared at project creation.
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->a:Tab7,<!-- Use this template by filling in information and copying and pasting relevant items out of the HTML comments. -->
+
+# Relates to
+
+<!-- LINK TO ISSUE OR TICKET -->
+https://github.com/elizaOS/eliza/issues/5616
+<!-- This risks section must be filled out before the final review and merge. -->
+
+# Risks
+
+<!--
+Low, medium, large. List what kind of risks and what could be affected.
+-->
+Medium: adding dir logic 
+# Background
+
+## What does this PR do?
+
+Fixed bug: When running `elizaos create myproject`, the `.elizadb` directory was incorrectly created in the current directory instead of inside the new project. Fixed by updating to always use the target project directory as the base path when creating a new project. Now database files are properly contained within the project directory at `myproject/.eliza/.elizadb`.
+
+
+## What kind of change is this?
+
+<!--
+Bug fixes (non-breaking change which fixes an issue)
+Improvements (misc. changes to existing features)
+Features (non-breaking change which adds functionality)
+Updates (new versions of included code)
+-->
+
+<!-- This "Why" section is most relevant if there are no linked issues explaining why. If there is a related issue, it might make sense to skip this why section. -->
+<!--
+## Why are we doing this? Any context or related work?
+-->
+
+# Documentation changes needed?
+
+<!--
+My changes do not require a change to the project documentation.
+My changes require a change to the project documentation.
+If documentation change is needed: I have updated the documentation accordingly.
+-->
+
+<!-- Please show how you tested the PR. This will really help if the PR needs to be retested and probably help the PR get merged quicker. -->
+
+# Testing
+
+## Where should a reviewer start?
+
+## Detailed testing steps
+
+<!--
+None: Automated tests are acceptable.
+-->
+
+<!--
+- As [anon/admin], go to [link]
+  - [do action]
+  - verify [result]
+-->
+
+<!-- If there is a UI change, please include before and after screenshots or videos. This will speed up PRs being merged. It is extra nice to annotate screenshots with arrows or boxes pointing out the differences. -->
+<!--
+## Screenshots
+### Before
+### After
+-->
+
+<!-- If there is anything about the deployment, please make a note. -->
+<!--
+# Deploy Notes
+-->
+
+<!--  Copy and paste command line output. -->
+<!--
+## Database changes
+-->
+
+<!--  Please specify deploy instructions if there is something more than the automated steps. -->
+<!--
+## Deployment instructions
+-->
+
+<!-- If you are on Discord, please join https://discord.gg/ai16z and state your Discord username here for the contributor role and join us in #development-feed -->
+<!--
+## Discord username
+
+-->
+b:Tfb0,ElizaOS saw significant progress today with a major refactoring of the `elizaos.github.io` frontend to support a multi-repository architecture and extensive cleanup of legacy code. Concurrently, the `eliza` repository focused on enhancing module resolution, fixing critical CLI bugs related to project creation, and performing routine maintenance, including a version update to `v1.2.12`.
+
+## ✅ Completed Work
+
+### Frontend Architecture & Cleanup
+*   **Multi-repository Frontend Support**: The `elizaos.github.io` repository underwent a major update to support a multi-repository frontend, involving extensive changes across application components, queries, and utility functions, preparing for a more modular UI. ([elizaos/elizaos.github.io#143](https://github.com/elizaos/elizaos.github.io/pull/143))
+*   **Legacy Codebase Removal**: Outdated scripts and historical data, including analysis files and legacy Python scripts, were removed from `elizaos.github.io`, reducing technical debt. ([elizaos/elizaos.github.io#145](https://github.com/elizaos/elizaos.github.io/pull/145))
+
+### Core Framework Enhancements & Bug Fixes
+*   **Enhanced Module Resolution**: The `ModuleLoader` system in `eliza` was significantly enhanced to ensure consistent local-first module resolution, improving reliability. ([elizaos/eliza#5629](https://github.com/elizaos/eliza/pull/5629))
+*   **CLI Bug Fixes**: Critical bugs in the `eliza` CLI were addressed, preventing incorrect inheritance of `.elizadb` directories during nested project creation and fixing a typo. ([elizaos/eliza#5618](https://github.com/elizaos/eliza/pull/5618), [elizaos/eliza#5632](https://github.com/elizaos/eliza/pull/5632))
+*   **Routine Maintenance & Versioning**: `eliza` was updated to version `v1.2.12`, including updates across various packages and documentation files. ([elizaos/eliza#5630](https://github.com/elizaos/eliza/pull/5630))
+
+## 🏗️ Work in Progress
+
+### New Pull Requests
+*   **elizaos/eliza**:
+    *   Make API keys optional during `npx elizaos create`. ([elizaos/eliza#5634](https://github.com/elizaos/eliza/pull/5634))
+    *   Target project directory for `.elizadb` file. ([elizaos/eliza#5633](https://github.com/elizaos/eliza/pull/5633))
+    *   Fix for handling JSON strings within the SQL base. ([elizaos/eliza#5628](https://github.com/elizaos/eliza/pull/5628))
+    *   Address an export issue within the `@elizaos/config` package. ([elizaos/eliza#5635](https://github.com/elizaos/eliza/pull/5635))
+
+## 🐞 Issue Triage
+
+### Closed Issues
+*   **elizaos/elizaos.github.io**:
+    *   "Build Zapper plugin" was closed as a duplicate. ([elizaos/elizaos.github.io#5600](https://github.com/elizaos/elizaos.github.io/issues/5600))
+*   **elizaos/eliza**:
+    *   Resolved API key and configuration issues, including an error preventing messages without `ANTHROPIC_API_KEY`. ([elizaos/eliza#4346](https://github.com/elizaos/eliza/issues/4346))
+    *   Fixed a significant bug where the `.eliza` directory was incorrectly hoisted during project creation. ([elizaos/eliza#5606](https://github.com/elizaos/eliza/issues/5606))
+    *   Closed minor test and development issues, including "its working!" ([elizaos/eliza#5625](https://github.com/elizaos/eliza/issues/5625), [elizaos/eliza#5627](https://github.com/elizaos/eliza/issues/5627)) and "hello world" ([elizaos/eliza#5626](https://github.com/elizaos/eliza/issues/5626)).
+    *   Closed a duplicate issue regarding the Zapper plugin build. ([elizaos/eliza#5600](https://github.com/elizaos/eliza/issues/5600))
+    *   Resolved an issue where `elizaos create --type agent` was inconsistent with TypeScript character files. ([elizaos/eliza#5631](https://github.com/elizaos/eliza/issues/5631))
+
+### New Issues
+*   **elizaos/eliza**:
+    *   An issue was opened and closed today concerning the `elizaos create --type agent` command, which currently copies a JSON character file instead of using type-safe TypeScript files. ([elizaos/eliza#5631](https://github.com/elizaos/eliza/issues/5631))0:{"buildId":"US8XLB_zHXYj_PVAECGcd","rsc":["$","$1","c",{"children":[["$","div",null,{"className":"container mx-auto px-6 py-8 md:px-8","children":["$","div",null,{"className":"mx-auto max-w-4xl","children":[["$","div",null,{"className":"mb-4 flex flex-col justify-between sm:flex-row","children":[["$","$L2",null,{"currentInterval":"day","currentDate":"2025-07-18"}],["$","$L3",null,{"metrics":{"date":"2025-07-18","interval":{"intervalStart":"$D2025-07-18T00:00:00.000Z","intervalEnd":"$D2025-07-19T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":8,"merged":6,"total":10},"issues":{"new":1,"closed":7,"total":7},"activeContributors":11,"codeChanges":{"additions":14804,"deletions":260721,"files":156,"commitCount":73},"topContributors":[{"username":"wtfsayo","avatarUrl":"https://avatars.githubusercontent.com/u/82053242?u=98209a1f10456f42d4d2fa71db4d5bf4a672cbc3&v=4","totalScore":109.5255477931522,"prScore":109.0875477931522,"issueScore":0,"reviewScore":0,"commentScore":0.43799999999999994,"summary":"wtfsayo: Focused on enhancing core system capabilities, notably merging a significant feature in elizaos/eliza#5629 that improved ModuleLoader with local-first guarantees, alongside a maintenance release in elizaos/eliza#5630. Their work primarily involved other work, refactoring, and bug fixes, touching configuration, tests, and code files."},{"username":"META-DREAMER","avatarUrl":"https://avatars.githubusercontent.com/u/7143583?u=96f63f10e066a06d5ad592c8efc659e2b84a68fc&v=4","totalScore":49.5437738965761,"prScore":49.5437738965761,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"META-DREAMER: Drove a significant cleanup effort, primarily by merging PR elizaos/elizaos.github.io#145, which removed over 250k lines of legacy scripts and data. This work, involving modifications across 150 files with a focus on configuration and code, primarily contributed to other work and refactoring efforts."},{"username":"ai16z-demirix","avatarUrl":"https://avatars.githubusercontent.com/u/188117230?u=424cd5b834584b3799da288712b3c4158c8032a1&v=4","totalScore":33.70626497339596,"prScore":33.70626497339596,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"ai16z-demirix: Focused on significant development work, opening two substantial PRs: elizaos/eliza#5634, which makes API keys optional for `npx elizaos create`, and elizaos/eliza#5633, which targets the project directory for `.elizadb`. This work involved modifying 328 files with a net addition of over 16,000 lines of code, primarily focused on new features and bug fixes."},{"username":"ChristopherTrimboli","avatarUrl":"https://avatars.githubusercontent.com/u/27584221?u=de148a498b5af814e037c2975112fadd09df743f&v=4","totalScore":30.22763636973214,"prScore":30.22763636973214,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"ChristopherTrimboli: Focused on a bugfix, opening PR elizaos/eliza#5628 to address JSON string handling in the SQL base, with changes across 8 files including both code and tests."},{"username":"lalalune","avatarUrl":"https://avatars.githubusercontent.com/u/18633264?u=e2e906c3712c2506ebfa98df01c2cfdc50050b30&v=4","totalScore":21.485147180559945,"prScore":21.485147180559945,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":null},{"username":"reallesee","avatarUrl":"https://avatars.githubusercontent.com/u/155267459?u=048a8021b60ccdd599d1389ec6bd3a07578a8cbf&v=4","totalScore":20.834306144334054,"prScore":20.834306144334054,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"reallesee: Focused on minor code improvements, merging a small PR in elizaos/eliza (#5632) to fix a typo."},{"username":"linear","avatarUrl":"https://avatars.githubusercontent.com/in/20150?v=4","totalScore":4,"prScore":0,"issueScore":4,"reviewScore":0,"commentScore":0,"summary":"linear: Focused on identifying and documenting potential issues and testing new functionalities, creating 5 issues including elizaos/eliza#5606, elizaos/eliza#5627, elizaos/eliza#5626, elizaos/eliza#5625, and elizaos/eliza#5631, all of which were subsequently closed."}],"focusAreas":[{"area":"cli","count":42},{"area":"src/app","count":26},{"area":"src/lib","count":24},{"area":"scripts/legacy","count":14},{"area":"legacy-data/daily","count":13},{"area":".taskmaster/tasks","count":8},{"area":".cursor/rules","count":4},{"area":"server","count":3},{"area":"src/__testing__","count":3},{"area":"src/components","count":3}],"topIssues":[{"id":"I_kwDOMT5cIs7AsRye","title":"Build Zapper plugin","author":"borisudovicic","number":5600,"repository":"elizaos/eliza","body":"","createdAt":"2025-07-15T15:58:00Z","closedAt":"2025-07-18T14:01:39Z","state":"CLOSED","commentCount":1},{"id":"I_kwDOMT5cIs6zu3lP","title":"Error when sending message without `ANTHROPIC_API_KEY`: \"x-api-key header is required\"","author":"UD1sto","number":4346,"repository":"elizaos/eliza","body":"$4","createdAt":"2025-04-23T22:48:30Z","closedAt":"2025-07-18T13:58:13Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7A86cd","title":".eliza directory getting hoisted","author":"linear","number":5606,"repository":"elizaos/eliza","body":"","createdAt":"2025-07-16T20:01:27Z","closedAt":"2025-07-18T18:13:49Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7BLWjU","title":"its working!","author":"linear","number":5627,"repository":"elizaos/eliza","body":"","createdAt":"2025-07-17T21:32:41Z","closedAt":"2025-07-18T13:56:34Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7BLFzM","title":"hello world","author":"linear","number":5626,"repository":"elizaos/eliza","body":"","createdAt":"2025-07-17T21:04:41Z","closedAt":"2025-07-18T13:56:41Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7BLFDh","title":"its working!","author":"linear","number":5625,"repository":"elizaos/eliza","body":"","createdAt":"2025-07-17T21:03:40Z","closedAt":"2025-07-18T13:56:48Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7BVHHO","title":"Fix `elizaos create --type agent` to align with TypeScript character approach","author":"linear","number":5631,"repository":"elizaos/eliza","body":"$5","createdAt":"2025-07-18T15:07:01Z","closedAt":"2025-07-18T16:26:13Z","state":"CLOSED","commentCount":0}],"topPullRequests":[{"id":"PR_kwDONNAI986e42u9","title":"Multi repo frontend","author":"META-DREAMER","number":143,"body":"","repository":"elizaos/elizaos.github.io","createdAt":"2025-07-15T00:27:28Z","mergedAt":"2025-07-18T20:15:17Z","additions":8461,"deletions":564},{"id":"PR_kwDOMT5cIs6fjsbK","title":"chore: v1.2.12","author":"wtfsayo","number":5630,"body":"","repository":"elizaos/eliza","createdAt":"2025-07-18T11:13:53Z","mergedAt":"2025-07-18T11:23:21Z","additions":3830,"deletions":985},{"id":"PR_kwDOMT5cIs6fhJiz","title":"feat: enhance ModuleLoader with local-first guarantees for consistent module resolution","author":"wtfsayo","number":5629,"body":"$6","repository":"elizaos/eliza","createdAt":"2025-07-18T06:54:12Z","mergedAt":"2025-07-18T11:13:02Z","additions":2584,"deletions":233},{"id":"PR_kwDOMT5cIs6ffqSu","title":"fix: JSON strings in sql base","author":"ChristopherTrimboli","number":5628,"body":"$7","repository":"elizaos/eliza","createdAt":"2025-07-18T03:22:36Z","mergedAt":"2025-07-21T18:37:21Z","additions":81,"deletions":7},{"id":"PR_kwDOMT5cIs6fpH2S","title":"issue 5604 - making api keys optional for npx elizaos create","author":"ai16z-demirix","number":5634,"body":"$8","repository":"elizaos/eliza","createdAt":"2025-07-18T22:13:50Z","mergedAt":null,"additions":55,"deletions":11},{"id":"PR_kwDOMT5cIs6fbaVB","title":"feat: add tiny, dim CLI warning when running from monorepo","author":"yungalgo","number":5622,"body":"**PR Description:**\r\nAdds a light warning message when running elizaos CLI commands from within the monorepo directory. The CLI is intended for use in standalone project directories, and this helps guide users to the correct usage pattern. But if you are a dev using it for some intended reason its tiny and dim so it's not annoying.\r\n\r\n- Shows: `Note: CLI is intended for use outside the monorepo`\r\n- Only displays for actual commands (not --version, --help, etc.)\r\n- Non-blocking - users can still proceed\r\n- Uses dim text to keep it subtle\r\n\r\nDon't need this if other core devs dont want it, but trying to get ahead of issues. If we dont want to include it docs/videos should algo be fine.","repository":"elizaos/eliza","createdAt":"2025-07-17T18:16:36Z","mergedAt":null,"additions":17,"deletions":0},{"id":"PR_kwDOMT5cIs6fZ4Ba","title":"fix: (cli) prevent .elizadb inheritance in nested project creation","author":"yungalgo","number":5618,"body":"$9","repository":"elizaos/eliza","createdAt":"2025-07-17T15:33:17Z","mergedAt":"2025-07-18T11:14:54Z","additions":6,"deletions":0},{"id":"PR_kwDOMT5cIs6fpARU","title":"feat/issue 5616: target project dir for .elizadb","author":"ai16z-demirix","number":5633,"body":"$a","repository":"elizaos/eliza","createdAt":"2025-07-18T21:50:37Z","mergedAt":null,"additions":4,"deletions":1},{"id":"PR_kwDOMT5cIs6fpo0B","title":"Fix export in @elizaos/config","author":"lalalune","number":5635,"body":"Plugins that rely on this package will fail because the files are actually in src and need to be imported. Adding src to file output includes them in the npm package export. Doesn't happen locally since the files get included, but when they are published it fails.","repository":"elizaos/eliza","createdAt":"2025-07-18T23:45:32Z","mergedAt":"2025-07-20T05:43:46Z","additions":2,"deletions":1},{"id":"PR_kwDOMT5cIs6fngDf","title":"fix typo in plugin.ts","author":"reallesee","number":5632,"body":"Hi Devs, fixed typo in packages/plugin-quick-starter/src/plugin.ts\r\ndependecies - dependencies ","repository":"elizaos/eliza","createdAt":"2025-07-18T18:14:39Z","mergedAt":"2025-07-18T18:15:51Z","additions":1,"deletions":1},{"id":"PR_kwDONNAI986fogK-","title":"Remove legacy scripts and data","author":"META-DREAMER","number":145,"body":"","repository":"elizaos/elizaos.github.io","createdAt":"2025-07-18T20:19:30Z","mergedAt":"2025-07-18T20:59:06Z","additions":0,"deletions":258920}],"detailedContributorSummaries":{"ChristopherTrimboli":"ChristopherTrimboli: Focused on a bugfix, opening PR elizaos/eliza#5628 to address JSON string handling in the SQL base, with changes across 8 files including both code and tests.","META-DREAMER":"META-DREAMER: Drove a significant cleanup effort, primarily by merging PR elizaos/elizaos.github.io#145, which removed over 250k lines of legacy scripts and data. This work, involving modifications across 150 files with a focus on configuration and code, primarily contributed to other work and refactoring efforts.","ai16z-demirix":"ai16z-demirix: Focused on significant development work, opening two substantial PRs: elizaos/eliza#5634, which makes API keys optional for `npx elizaos create`, and elizaos/eliza#5633, which targets the project directory for `.elizadb`. This work involved modifying 328 files with a net addition of over 16,000 lines of code, primarily focused on new features and bug fixes.","linear":"linear: Focused on identifying and documenting potential issues and testing new functionalities, creating 5 issues including elizaos/eliza#5606, elizaos/eliza#5627, elizaos/eliza#5626, elizaos/eliza#5625, and elizaos/eliza#5631, all of which were subsequently closed.","reallesee":"reallesee: Focused on minor code improvements, merging a small PR in elizaos/eliza (#5632) to fix a typo.","wtfsayo":"wtfsayo: Focused on enhancing core system capabilities, notably merging a significant feature in elizaos/eliza#5629 that improved ModuleLoader with local-first guarantees, alongside a maintenance release in elizaos/eliza#5630. Their work primarily involved other work, refactoring, and bug fixes, touching configuration, tests, and code files."}},"summaryContent":"$b","className":"self-end sm:self-start"}]]}],"$Lc","$Ld","$Le"]}]}],["$Lf","$L10","$L11"],"$L12"]}],"loading":null,"isPartial":false}
+c:["$","div",null,{"className":"mb-6","children":["$","div",null,{"className":"flex items-center justify-between","children":[[["$","$L13",null,{"href":"/summary/day/2025-07-17","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left mr-2 h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"children":"Previous"}],false],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$L13",null,{"href":"/summary/day/2025-07-17","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Previous"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]],["$","div",null,{"className":"flex flex-col items-center","children":[["$","div",null,{"className":"text-sm font-medium text-gray-500","children":["Daily"," Summary"]}],["$","time",null,{"dateTime":"2025-07-18","className":"text-md font-bold","children":"Jul 18, 2025"}]]}],[["$","$L13",null,{"href":"/summary/day/2025-07-19","children":[false,["$","span",null,{"children":"Next"}],["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right ml-2 h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}]],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$L13",null,{"href":"/summary/day/2025-07-19","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Next"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]]]}]}]
+15:Ta60,# Error when sending message without `ANTHROPIC_API_KEY`: "x-api-key header is required"
+
+## Description
+When installing Eliza from source and running `bun start`, attempts to send a message to the agent fail with an `AI_APICallError: x-api-key header is required` error if the `ANTHROPIC_API_KEY` environment variable is not set. This occurs regardless of whether an `OPENAI_API_KEY` is present.
+
+## Steps to Reproduce
+1. Clone the Eliza repository and install dependencies.
+2. Ensure only the `OPENAI_API_KEY` (or no API keys) is set in your environment; do not set `ANTHROPIC_API_KEY`.
+3. From the project root, run:
+   ```bash
+   bun start
+   ```
+4. Attempt to send a message to the “Eliza” agent (e.g., via an HTTP request or CLI).
+5. Observe the error in logs.
+
+## Expected Behavior
+- If `ANTHROPIC_API_KEY` is unset, Eliza should either:
+  - Fall back to OpenAI if `OPENAI_API_KEY` is provided, or
+  - Emit a warning about missing Anthropic functionality without throwing an error when handling messages.
+
+## Actual Behavior
+Eliza logs warnings about missing instrumentation and missing `ANTHROPIC_API_KEY`, then errors out on any message send with:
+```text
+(AI_APICallError) x-api-key header is required
+at new _AISDKError (/eliza/node_modules/@ai-sdk/provider/dist/index.mjs:19:5)
+...
+```
+
+## Relevant Logs
+```text
+[2025-04-23 22:20:42] WARN: ANTHROPIC_API_KEY is not set in environment - Anthropic functionality will be limited
+[2025-04-23 22:20:47] WARN: Service instrumentation not found
+    agentName: "Eliza"
+    agentId: "b850bc30-45f8-0041-a00a-83df46d8555d"
+[2025-04-23 22:20:47] WARN: [getTracer] Service instrumentation not found in runtime.
+[2025-04-23 22:20:48] ERROR: Error during emitEvent for MESSAGE_RECEIVED (handler execution):
+    agentName: "Eliza"
+    agentId: "b850bc30-45f8-0041-a00a-83df46d8555d"
+    message: "(AI_APICallError) x-api-key header is required"
+    stack: [
+      "AI_APICallError: x-api-key header is required",
+      "at new _AISDKError (/eliza/node_modules/@ai-sdk/provider/dist/index.mjs:19:5)",
+      "at new APICallError (/eliza/node_modules/@ai-sdk/provider/dist/index.mjs:61:5)",
+      "at <anonymous> (/eliza/node_modules/@ai-sdk/provider-utils/dist/index.mjs:667:18)",
+      "at processTicksAndRejections (native:7:39)"
+    ]
+```
+
+## Environment
+- OS: Ubuntu 22.04 LTS
+- Runtime: Bun v0.x
+- Eliza Version: Source checkout as of April 23, 2025
+- Env Vars:
+  - `OPENAI_API_KEY`: set or unset
+  - `ANTHROPIC_API_KEY`: **not** set
+
+## Additional Context
+This issue blocks users who wish to run Eliza exclusively with OpenAI credentials. A fallback or clearer error message would improve usability.
+
+16:T69a,\## Description
+
+The \`elizaos create --type agent <name>\` command currently copies a JSON character file, but ElizaOS has standardized on type-safe TypeScript character files (character.ts). This creates confusion and doesn't align with our current best practices.
+
+\## Current Behavior
+
+\- \`elizaos create --type agent bobby\` copies a JSON character file
+
+\- This doesn't match our TypeScript-first approach
+
+\- No type safety or IDE support with JSON characters
+
+\## Proposed Solutions
+
+\### Option 1: Update the command to generate TypeScript characters
+
+\- Modify \`elizaos create --type agent <name>\` to generate a new TypeScript file at \`src/characters/<name>.ts\`
+
+\- Include proper imports and types (e.g., \`import { Character } from '@elizaos/core'\`)
+
+\- Use a TypeScript template that incorporates the provided agent name
+
+\- Remove JSON character copying functionality
+
+\- Update CLI help text to reflect the change
+
+\### Option 2: Remove the agent creation command entirely
+
+\- Remove \`--type agent\` option from the create command
+
+\- Make \`--type project\` the only option (or default)
+
+\- Update documentation to explain character customization is done by editing \`src/character.ts\`
+
+\- Add docs explaining how to create additional characters by copying and modifying character.ts files
+
+\- Simplifies the CLI and makes the character creation process more explicit
+
+\## Decision Needed
+
+Choose between updating the command to generate TypeScript (Option 1) or removing it entirely (Option 2).
+
+\## Impact
+
+\- Documentation needs to be updated
+
+\- Existing tutorials/guides may need revision
+
+\- Users expecting JSON character creation will need migration guidance17:T12db,## 🔧 Enhanced Module Resolution for Consistent Local-First Loading
+
+This PR addresses critical module resolution issues by enhancing the existing ModuleLoader system to provide the same local-first guarantees as server-manager.ts, ensuring consistent module loading across all CLI operations.
+
+### 🎯 Problem Statement
+
+The CLI was experiencing inconsistent module resolution between different components:
+- **server-start.ts** was using ModuleLoader but without explicit local-first guarantees
+- **server-manager.ts** had proper local-first environment setup for spawned processes
+- **Inconsistent behavior** between development and production environments
+- **Potential singleton pattern issues** due to mixed global/local module loading
+
+### 🚀 Key Changes
+
+#### 1. **Enhanced ModuleLoader System** (`packages/cli/src/utils/module-loader.ts`)
+- **NEW: Environment Setup**: Added `setupEnvironment()` method that mirrors server-manager.ts logic
+- **NEW: Explicit Local Detection**: Checks if local module exists before resolution
+- **NEW: Enhanced Logging**: Clear feedback about which installation is being used
+- **IMPROVED: Validation**: Warns if expected local module resolves to global
+
+#### 2. **Consistent Architecture**
+- **ModuleLoader** → For in-process module loading with local-first guarantees
+- **server-manager.ts** → For spawned process environment setup with local-first guarantees
+- **Both systems** → Use same approach: check local existence, prioritize local, set environment variables
+
+#### 3. **Environment Variable Management**
+Enhanced ModuleLoader now sets up environment like server-manager.ts:
+- `NODE_PATH = "{project}/node_modules:{existing_NODE_PATH}"`
+- `PATH = "{project}/node_modules/.bin:{existing_PATH}"`
+
+### 🧪 Testing and Validation
+
+- ✅ **Build System**: All builds pass with enhanced ModuleLoader
+- ✅ **Local Module Detection**: Correctly identifies and uses local @elizaos packages
+- ✅ **Environment Setup**: Properly configures NODE_PATH and PATH variables
+- ✅ **Logging**: Clear feedback about local vs global module usage
+- ✅ **Backward Compatibility**: All existing APIs maintained
+
+### 📈 Impact and Benefits
+
+#### **Development Experience**
+- **Consistent Behavior**: Same module resolution logic across all CLI operations
+- **Local-First Approach**: Always prioritizes project's exact dependency versions
+- **Clear Feedback**: Explicit logging about which installation is being used
+- **Better Debugging**: Enhanced error messages with installation guidance
+
+#### **Architecture Improvements**
+- **Unified Strategy**: Both in-process and spawned processes use same local-first approach
+- **Singleton Safety**: Prevents multiple instances of core modules
+- **Environment Consistency**: Standardized module resolution across all operations
+- **Maintainability**: Centralized local-first logic in ModuleLoader
+
+### 🔍 Implementation Details
+
+#### **Enhanced Module Loading Strategy**
+ModuleLoader now includes explicit local-first checks:
+```typescript
+const localModulePath = path.join(this.projectPath, 'node_modules', moduleName);
+const isLocalModule = existsSync(localModulePath);
+
+if (isLocalModule) {
+  logger.info(`Using local ${moduleName} installation`);
+} else {
+  logger.info(`Using global ${moduleName} installation`);
+}
+```
+
+#### **Environment Enhancement (NEW)**
+Added setupEnvironment() method:
+```typescript
+private setupEnvironment(): void {
+  // Add local node_modules to NODE_PATH
+  const localModulesPath = path.join(this.projectPath, 'node_modules');
+  if (existsSync(localModulesPath)) {
+    process.env.NODE_PATH = `${localModulesPath}${path.delimiter}${process.env.NODE_PATH || ''}`;
+  }
+
+  // Add local .bin to PATH
+  const localBinPath = path.join(this.projectPath, 'node_modules', '.bin');
+  if (existsSync(localBinPath)) {
+    process.env.PATH = `${localBinPath}${path.delimiter}${process.env.PATH || ''}`;
+  }
+}
+```
+
+### 🛠 Technical Notes
+
+- **Enhanced, Not Replaced**: ModuleLoader was enhanced rather than replaced
+- **Consistent Approach**: Both ModuleLoader and server-manager.ts use same local-first logic
+- **Environment Variables**: Proper PATH and NODE_PATH setup for consistent resolution
+- **Explicit Validation**: Checks that local modules are actually being used when expected
+- **Comprehensive Logging**: Clear feedback about module resolution decisions
+
+### 📦 Files Changed
+
+- `packages/cli/src/utils/module-loader.ts` - Enhanced with local-first guarantees
+- `packages/cli/src/commands/start/actions/server-start.ts` - Uses enhanced ModuleLoader
+
+This enhancement ensures that **all** @elizaos modules are resolved locally first, whether they're being loaded in the current process (ModuleLoader) or in spawned processes (server-manager.ts), providing a consistent and reliable development experience.18:T77f,### PR Review – JSON B insert failure fix in `plugin-sql`
+
+Great catch!  
+The change that stringifies `content` and `metadata` before passing them to
+
+```ts
+sql`${...}::jsonb`
+```
+
+solves the root issue where raw objects were implicitly coerced to the string `"[object Object]"`.  
+That coercion broke the `::jsonb` cast, triggered `Failed query` errors, and blocked service startup (most visibly with `plugin-twitter`).
+
+#### What this patch does
+1. **`createMemory`**
+   * Detects string vs. object and always stores a *JSON string*:
+     ```ts
+     const contentToInsert  = typeof memory.content  === 'string'
+                              ? memory.content
+                              : JSON.stringify(memory.content ?? {});
+     const metadataToInsert = typeof memory.metadata === 'string'
+                              ? memory.metadata
+                              : JSON.stringify(memory.metadata ?? {});
+     ```
+   * Uses those variables in the `INSERT`.
+
+2. **`updateMemory`**
+   * Mirrors the same logic when updating existing rows.
+
+3. **Safety**
+   * No DB-schema changes; only the way values are bound.
+   * Back-compatible with records already stored as proper JSON.
+
+#### Why this matters
+* Prevents runtime-blocking SQL exceptions on any plugin that passes nested objects (Twitter, Discord, etc.).
+* Makes the adapter resilient to future changes where callers send rich objects.
+* Keeps the `::jsonb` cast (fast path for PG) without forcing every upstream plugin to remember to stringify.
+
+#### Suggested follow-ups
+* Add a small unit test for `createMemory`/`updateMemory` verifying that both object and string inputs land in Postgres as valid JSON.
+* Consider centralising this stringify helper to avoid duplication if more fields become JSONB later.
+
+Looks good – with this in, service registration succeeds and no more `[object Object]` inserts. 🎉19:Taac,<!-- Use this template by filling in information and copying and pasting relevant items out of the HTML comments. -->
+
+# Relates to
+
+<!-- LINK TO ISSUE OR TICKET -->
+https://github.com/elizaOS/eliza/issues/5604
+<!-- This risks section must be filled out before the final review and merge. -->
+
+# Risks
+
+<!--
+Low, medium, large. List what kind of risks and what could be affected.
+-->
+medium/large: adding flag to npx elizaos create
+# Background
+
+## What does this PR do?
+
+Added new --skip-api-keys flag to the create command
+Updated type definitions with skipApiKeys: boolean option
+Modified project creation logic to bypass API key setup when flag is present
+Updated both regular and TEE project creation flows to respect this setting
+Pass the flag through the entire setup chain to prevent API key prompts
+
+## What kind of change is this?
+
+<!--
+Bug fixes (non-breaking change which fixes an issue)
+Improvements (misc. changes to existing features)
+Features (non-breaking change which adds functionality)
+Updates (new versions of included code)
+-->
+
+<!-- This "Why" section is most relevant if there are no linked issues explaining why. If there is a related issue, it might make sense to skip this why section. -->
+<!--
+## Why are we doing this? Any context or related work?
+-->
+
+# Documentation changes needed?
+
+<!--
+My changes do not require a change to the project documentation.
+My changes require a change to the project documentation.
+If documentation change is needed: I have updated the documentation accordingly.
+-->
+
+<!-- Please show how you tested the PR. This will really help if the PR needs to be retested and probably help the PR get merged quicker. -->
+
+# Testing
+
+## Where should a reviewer start?
+
+## Detailed testing steps
+
+<!--
+None: Automated tests are acceptable.
+-->
+
+<!--
+- As [anon/admin], go to [link]
+  - [do action]
+  - verify [result]
+-->
+
+<!-- If there is a UI change, please include before and after screenshots or videos. This will speed up PRs being merged. It is extra nice to annotate screenshots with arrows or boxes pointing out the differences. -->
+<!--
+## Screenshots
+### Before
+### After
+-->
+
+<!-- If there is anything about the deployment, please make a note. -->
+<!--
+# Deploy Notes
+-->
+
+<!--  Copy and paste command line output. -->
+<!--
+## Database changes
+-->
+
+<!--  Please specify deploy instructions if there is something more than the automated steps. -->
+<!--
+## Deployment instructions
+-->
+
+<!-- If you are on Discord, please join https://discord.gg/ai16z and state your Discord username here for the contributor role and join us in #development-feed -->
+<!--
+## Discord username
+
+-->
+1a:Tebf,## PR Description
+
+### Summary
+Fixes a bug where creating a new ElizaOS project from within an existing project directory causes the child project to incorrectly inherit the parent's `PGLITE_DATA_DIR` environment variable, resulting in both projects sharing the same database.
+
+### Context
+Issue reported by @cjft:
+> "@yung_algorithm can you take on .elizadb testing plz make sure goes in project folder, probs not terribly hard one, just double check cwd() placement, bug is when run create command cwd is not the place to put, needs to go to new folder. i think u can crush this, cli god"
+
+### Root Cause
+When creating a new project from inside an existing ElizaOS project directory, the `PGLITE_DATA_DIR` environment variable from the parent project's `.env` file is already loaded into `process.env`. This causes the child project to inherit the parent's database path instead of creating its own.
+
+**Example scenario:**
+```bash
+# 1. Create first project (works correctly)
+cd ~/Desktop
+elizaos create project-one
+# Result: project-one/.eliza/.elizadb/ ✅
+# project-one/.env contains: PGLITE_DATA_DIR=/Users/user/Desktop/project-one/.eliza/.elizadb
+
+# 2. Navigate into the first project
+cd project-one
+
+# 3. Create second project from inside the first
+elizaos create project-two
+# Bug: project-two/.eliza/ exists but NO .elizadb inside ❌
+# The new project inherits PGLITE_DATA_DIR from parent's process.env
+```
+
+### Technical Details
+The issue occurs because:
+1. When inside `project-one`, its `.env` file has already set `PGLITE_DATA_DIR=/path/to/project-one/.eliza/.elizadb`
+2. This environment variable persists in `process.env` throughout the CLI session
+3. When `resolvePgliteDir()` is called for the new project, it checks `process.env.PGLITE_DATA_DIR` first
+4. Even though the code has protection to skip loading env vars when `targetProjectDir` is provided, the variable is already in memory
+
+### Solution
+Added `delete process.env.PGLITE_DATA_DIR;` at the beginning of both `createProject()` and `createTEEProject()` functions in `packages/cli/src/commands/create/actions/creators.ts`:
+
+```typescript
+export async function createProject(
+  projectName: string,
+  targetDir: string,
+  database: string,
+  aiModel: string,
+  embeddingModel?: string,
+  isNonInteractive = false
+): Promise<void> {
+  // Clear any inherited PGLITE_DATA_DIR to prevent child projects from inheriting parent's database
+  delete process.env.PGLITE_DATA_DIR;
+  
+  // ... rest of function
+}
+```
+
+This ensures a clean environment for each new project creation, preventing the inheritance issue.
+
+### Testing Results
+- ✅ Creating project from desktop → `PGLITE_DATA_DIR` correctly set to new project's path
+- ✅ Creating project from monorepo root → `PGLITE_DATA_DIR` correctly set to new project's path
+- ✅ Creating project from monorepo subdirectory → `PGLITE_DATA_DIR` correctly set to new project's path
+- ✅ Creating project from inside existing project → `PGLITE_DATA_DIR` now correctly set to new project's path (previously inherited parent's path)
+
+### Impact
+- **Minimal**: Only affects the project creation flow
+- **Surgical**: Just 2 lines added (one in each create function)
+- **Safe**: No changes to runtime behavior, path resolution logic, or existing projects
+- **Backward Compatible**: Existing projects and workflows remain unaffected 
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+* **Bug Fixes**
+  * Prevented child projects from inheriting the parent’s database directory setting by ensuring the relevant environment variable is cleared at project creation.
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->1b:Tab7,<!-- Use this template by filling in information and copying and pasting relevant items out of the HTML comments. -->
+
+# Relates to
+
+<!-- LINK TO ISSUE OR TICKET -->
+https://github.com/elizaOS/eliza/issues/5616
+<!-- This risks section must be filled out before the final review and merge. -->
+
+# Risks
+
+<!--
+Low, medium, large. List what kind of risks and what could be affected.
+-->
+Medium: adding dir logic 
+# Background
+
+## What does this PR do?
+
+Fixed bug: When running `elizaos create myproject`, the `.elizadb` directory was incorrectly created in the current directory instead of inside the new project. Fixed by updating to always use the target project directory as the base path when creating a new project. Now database files are properly contained within the project directory at `myproject/.eliza/.elizadb`.
+
+
+## What kind of change is this?
+
+<!--
+Bug fixes (non-breaking change which fixes an issue)
+Improvements (misc. changes to existing features)
+Features (non-breaking change which adds functionality)
+Updates (new versions of included code)
+-->
+
+<!-- This "Why" section is most relevant if there are no linked issues explaining why. If there is a related issue, it might make sense to skip this why section. -->
+<!--
+## Why are we doing this? Any context or related work?
+-->
+
+# Documentation changes needed?
+
+<!--
+My changes do not require a change to the project documentation.
+My changes require a change to the project documentation.
+If documentation change is needed: I have updated the documentation accordingly.
+-->
+
+<!-- Please show how you tested the PR. This will really help if the PR needs to be retested and probably help the PR get merged quicker. -->
+
+# Testing
+
+## Where should a reviewer start?
+
+## Detailed testing steps
+
+<!--
+None: Automated tests are acceptable.
+-->
+
+<!--
+- As [anon/admin], go to [link]
+  - [do action]
+  - verify [result]
+-->
+
+<!-- If there is a UI change, please include before and after screenshots or videos. This will speed up PRs being merged. It is extra nice to annotate screenshots with arrows or boxes pointing out the differences. -->
+<!--
+## Screenshots
+### Before
+### After
+-->
+
+<!-- If there is anything about the deployment, please make a note. -->
+<!--
+# Deploy Notes
+-->
+
+<!--  Copy and paste command line output. -->
+<!--
+## Database changes
+-->
+
+<!--  Please specify deploy instructions if there is something more than the automated steps. -->
+<!--
+## Deployment instructions
+-->
+
+<!-- If you are on Discord, please join https://discord.gg/ai16z and state your Discord username here for the contributor role and join us in #development-feed -->
+<!--
+## Discord username
+
+-->
+d:["$","div",null,{"className":"mb-8 space-y-6","children":[["$","$L14",null,{"metrics":{"date":"2025-07-18","interval":{"intervalStart":"$D2025-07-18T00:00:00.000Z","intervalEnd":"$D2025-07-19T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":8,"merged":6,"total":10},"issues":{"new":1,"closed":7,"total":7},"activeContributors":11,"codeChanges":{"additions":14804,"deletions":260721,"files":156,"commitCount":73},"topContributors":[{"username":"wtfsayo","avatarUrl":"https://avatars.githubusercontent.com/u/82053242?u=98209a1f10456f42d4d2fa71db4d5bf4a672cbc3&v=4","totalScore":109.5255477931522,"prScore":109.0875477931522,"issueScore":0,"reviewScore":0,"commentScore":0.43799999999999994,"summary":"wtfsayo: Focused on enhancing core system capabilities, notably merging a significant feature in elizaos/eliza#5629 that improved ModuleLoader with local-first guarantees, alongside a maintenance release in elizaos/eliza#5630. Their work primarily involved other work, refactoring, and bug fixes, touching configuration, tests, and code files."},{"username":"META-DREAMER","avatarUrl":"https://avatars.githubusercontent.com/u/7143583?u=96f63f10e066a06d5ad592c8efc659e2b84a68fc&v=4","totalScore":49.5437738965761,"prScore":49.5437738965761,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"META-DREAMER: Drove a significant cleanup effort, primarily by merging PR elizaos/elizaos.github.io#145, which removed over 250k lines of legacy scripts and data. This work, involving modifications across 150 files with a focus on configuration and code, primarily contributed to other work and refactoring efforts."},{"username":"ai16z-demirix","avatarUrl":"https://avatars.githubusercontent.com/u/188117230?u=424cd5b834584b3799da288712b3c4158c8032a1&v=4","totalScore":33.70626497339596,"prScore":33.70626497339596,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"ai16z-demirix: Focused on significant development work, opening two substantial PRs: elizaos/eliza#5634, which makes API keys optional for `npx elizaos create`, and elizaos/eliza#5633, which targets the project directory for `.elizadb`. This work involved modifying 328 files with a net addition of over 16,000 lines of code, primarily focused on new features and bug fixes."},{"username":"ChristopherTrimboli","avatarUrl":"https://avatars.githubusercontent.com/u/27584221?u=de148a498b5af814e037c2975112fadd09df743f&v=4","totalScore":30.22763636973214,"prScore":30.22763636973214,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"ChristopherTrimboli: Focused on a bugfix, opening PR elizaos/eliza#5628 to address JSON string handling in the SQL base, with changes across 8 files including both code and tests."},{"username":"lalalune","avatarUrl":"https://avatars.githubusercontent.com/u/18633264?u=e2e906c3712c2506ebfa98df01c2cfdc50050b30&v=4","totalScore":21.485147180559945,"prScore":21.485147180559945,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":null},{"username":"reallesee","avatarUrl":"https://avatars.githubusercontent.com/u/155267459?u=048a8021b60ccdd599d1389ec6bd3a07578a8cbf&v=4","totalScore":20.834306144334054,"prScore":20.834306144334054,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"reallesee: Focused on minor code improvements, merging a small PR in elizaos/eliza (#5632) to fix a typo."},{"username":"linear","avatarUrl":"https://avatars.githubusercontent.com/in/20150?v=4","totalScore":4,"prScore":0,"issueScore":4,"reviewScore":0,"commentScore":0,"summary":"linear: Focused on identifying and documenting potential issues and testing new functionalities, creating 5 issues including elizaos/eliza#5606, elizaos/eliza#5627, elizaos/eliza#5626, elizaos/eliza#5625, and elizaos/eliza#5631, all of which were subsequently closed."}],"focusAreas":[{"area":"cli","count":42},{"area":"src/app","count":26},{"area":"src/lib","count":24},{"area":"scripts/legacy","count":14},{"area":"legacy-data/daily","count":13},{"area":".taskmaster/tasks","count":8},{"area":".cursor/rules","count":4},{"area":"server","count":3},{"area":"src/__testing__","count":3},{"area":"src/components","count":3}],"topIssues":[{"id":"I_kwDOMT5cIs7AsRye","title":"Build Zapper plugin","author":"borisudovicic","number":5600,"repository":"elizaos/eliza","body":"","createdAt":"2025-07-15T15:58:00Z","closedAt":"2025-07-18T14:01:39Z","state":"CLOSED","commentCount":1},{"id":"I_kwDOMT5cIs6zu3lP","title":"Error when sending message without `ANTHROPIC_API_KEY`: \"x-api-key header is required\"","author":"UD1sto","number":4346,"repository":"elizaos/eliza","body":"$15","createdAt":"2025-04-23T22:48:30Z","closedAt":"2025-07-18T13:58:13Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7A86cd","title":".eliza directory getting hoisted","author":"linear","number":5606,"repository":"elizaos/eliza","body":"","createdAt":"2025-07-16T20:01:27Z","closedAt":"2025-07-18T18:13:49Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7BLWjU","title":"its working!","author":"linear","number":5627,"repository":"elizaos/eliza","body":"","createdAt":"2025-07-17T21:32:41Z","closedAt":"2025-07-18T13:56:34Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7BLFzM","title":"hello world","author":"linear","number":5626,"repository":"elizaos/eliza","body":"","createdAt":"2025-07-17T21:04:41Z","closedAt":"2025-07-18T13:56:41Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7BLFDh","title":"its working!","author":"linear","number":5625,"repository":"elizaos/eliza","body":"","createdAt":"2025-07-17T21:03:40Z","closedAt":"2025-07-18T13:56:48Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7BVHHO","title":"Fix `elizaos create --type agent` to align with TypeScript character approach","author":"linear","number":5631,"repository":"elizaos/eliza","body":"$16","createdAt":"2025-07-18T15:07:01Z","closedAt":"2025-07-18T16:26:13Z","state":"CLOSED","commentCount":0}],"topPullRequests":[{"id":"PR_kwDONNAI986e42u9","title":"Multi repo frontend","author":"META-DREAMER","number":143,"body":"","repository":"elizaos/elizaos.github.io","createdAt":"2025-07-15T00:27:28Z","mergedAt":"2025-07-18T20:15:17Z","additions":8461,"deletions":564},{"id":"PR_kwDOMT5cIs6fjsbK","title":"chore: v1.2.12","author":"wtfsayo","number":5630,"body":"","repository":"elizaos/eliza","createdAt":"2025-07-18T11:13:53Z","mergedAt":"2025-07-18T11:23:21Z","additions":3830,"deletions":985},{"id":"PR_kwDOMT5cIs6fhJiz","title":"feat: enhance ModuleLoader with local-first guarantees for consistent module resolution","author":"wtfsayo","number":5629,"body":"$17","repository":"elizaos/eliza","createdAt":"2025-07-18T06:54:12Z","mergedAt":"2025-07-18T11:13:02Z","additions":2584,"deletions":233},{"id":"PR_kwDOMT5cIs6ffqSu","title":"fix: JSON strings in sql base","author":"ChristopherTrimboli","number":5628,"body":"$18","repository":"elizaos/eliza","createdAt":"2025-07-18T03:22:36Z","mergedAt":"2025-07-21T18:37:21Z","additions":81,"deletions":7},{"id":"PR_kwDOMT5cIs6fpH2S","title":"issue 5604 - making api keys optional for npx elizaos create","author":"ai16z-demirix","number":5634,"body":"$19","repository":"elizaos/eliza","createdAt":"2025-07-18T22:13:50Z","mergedAt":null,"additions":55,"deletions":11},{"id":"PR_kwDOMT5cIs6fbaVB","title":"feat: add tiny, dim CLI warning when running from monorepo","author":"yungalgo","number":5622,"body":"**PR Description:**\r\nAdds a light warning message when running elizaos CLI commands from within the monorepo directory. The CLI is intended for use in standalone project directories, and this helps guide users to the correct usage pattern. But if you are a dev using it for some intended reason its tiny and dim so it's not annoying.\r\n\r\n- Shows: `Note: CLI is intended for use outside the monorepo`\r\n- Only displays for actual commands (not --version, --help, etc.)\r\n- Non-blocking - users can still proceed\r\n- Uses dim text to keep it subtle\r\n\r\nDon't need this if other core devs dont want it, but trying to get ahead of issues. If we dont want to include it docs/videos should algo be fine.","repository":"elizaos/eliza","createdAt":"2025-07-17T18:16:36Z","mergedAt":null,"additions":17,"deletions":0},{"id":"PR_kwDOMT5cIs6fZ4Ba","title":"fix: (cli) prevent .elizadb inheritance in nested project creation","author":"yungalgo","number":5618,"body":"$1a","repository":"elizaos/eliza","createdAt":"2025-07-17T15:33:17Z","mergedAt":"2025-07-18T11:14:54Z","additions":6,"deletions":0},{"id":"PR_kwDOMT5cIs6fpARU","title":"feat/issue 5616: target project dir for .elizadb","author":"ai16z-demirix","number":5633,"body":"$1b","repository":"elizaos/eliza","createdAt":"2025-07-18T21:50:37Z","mergedAt":null,"additions":4,"deletions":1},{"id":"PR_kwDOMT5cIs6fpo0B","title":"Fix export in @elizaos/config","author":"lalalune","number":5635,"body":"Plugins that rely on this package will fail because the files are actually in src and need to be imported. Adding src to file output includes them in the npm package export. Doesn't happen locally since the files get included, but when they are published it fails.","repository":"elizaos/eliza","createdAt":"2025-07-18T23:45:32Z","mergedAt":"2025-07-20T05:43:46Z","additions":2,"deletions":1},{"id":"PR_kwDOMT5cIs6fngDf","title":"fix typo in plugin.ts","author":"reallesee","number":5632,"body":"Hi Devs, fixed typo in packages/plugin-quick-starter/src/plugin.ts\r\ndependecies - dependencies ","repository":"elizaos/eliza","createdAt":"2025-07-18T18:14:39Z","mergedAt":"2025-07-18T18:15:51Z","additions":1,"deletions":1},{"id":"PR_kwDONNAI986fogK-","title":"Remove legacy scripts and data","author":"META-DREAMER","number":145,"body":"","repository":"elizaos/elizaos.github.io","createdAt":"2025-07-18T20:19:30Z","mergedAt":"2025-07-18T20:59:06Z","additions":0,"deletions":258920}],"detailedContributorSummaries":{"ChristopherTrimboli":"ChristopherTrimboli: Focused on a bugfix, opening PR elizaos/eliza#5628 to address JSON string handling in the SQL base, with changes across 8 files including both code and tests.","META-DREAMER":"META-DREAMER: Drove a significant cleanup effort, primarily by merging PR elizaos/elizaos.github.io#145, which removed over 250k lines of legacy scripts and data. This work, involving modifications across 150 files with a focus on configuration and code, primarily contributed to other work and refactoring efforts.","ai16z-demirix":"ai16z-demirix: Focused on significant development work, opening two substantial PRs: elizaos/eliza#5634, which makes API keys optional for `npx elizaos create`, and elizaos/eliza#5633, which targets the project directory for `.elizadb`. This work involved modifying 328 files with a net addition of over 16,000 lines of code, primarily focused on new features and bug fixes.","linear":"linear: Focused on identifying and documenting potential issues and testing new functionalities, creating 5 issues including elizaos/eliza#5606, elizaos/eliza#5627, elizaos/eliza#5626, elizaos/eliza#5625, and elizaos/eliza#5631, all of which were subsequently closed.","reallesee":"reallesee: Focused on minor code improvements, merging a small PR in elizaos/eliza (#5632) to fix a typo.","wtfsayo":"wtfsayo: Focused on enhancing core system capabilities, notably merging a significant feature in elizaos/eliza#5629 that improved ModuleLoader with local-first guarantees, alongside a maintenance release in elizaos/eliza#5630. Their work primarily involved other work, refactoring, and bug fixes, touching configuration, tests, and code files."}}}],"$L1c"]}]
+e:["$","div",null,{"className":"prose prose-sm mx-auto mt-8 dark:prose-invert sm:prose lg:prose-lg xl:prose-xl","children":[["$","p","p-0",{"children":["ElizaOS saw significant progress today with a major refactoring of the ",["$","code","code-0",{"children":"elizaos.github.io"}]," frontend to support a multi-repository architecture and extensive cleanup of legacy code. Concurrently, the ",["$","code","code-1",{"children":"eliza"}]," repository focused on enhancing module resolution, fixing critical CLI bugs related to project creation, and performing routine maintenance, including a version update to ",["$","code","code-2",{"children":"v1.2.12"}],"."]}],"\n",["$","h2","h2-0",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"✅ Completed Work","position":{"start":{"line":3,"column":4,"offset":393},"end":{"line":3,"column":20,"offset":409}}}],"position":{"start":{"line":3,"column":1,"offset":390},"end":{"line":3,"column":20,"offset":409}}},"children":"✅ Completed Work"}],"\n",["$","h3","h3-0",{"children":"Frontend Architecture & Cleanup"}],"\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"Multi-repository Frontend Support"}],": The ",["$","code","code-0",{"children":"elizaos.github.io"}]," repository underwent a major update to support a multi-repository frontend, involving extensive changes across application components, queries, and utility functions, preparing for a more modular UI. (",["$","a","a-0",{"href":"https://github.com/elizaos/elizaos.github.io/pull/143","children":"elizaos/elizaos.github.io#143"}],")"]}],"\n",["$","li","li-1",{"children":[["$","strong","strong-0",{"children":"Legacy Codebase Removal"}],": Outdated scripts and historical data, including analysis files and legacy Python scripts, were removed from ",["$","code","code-0",{"children":"elizaos.github.io"}],", reducing technical debt. (",["$","a","a-0",{"href":"https://github.com/elizaos/elizaos.github.io/pull/145","children":"elizaos/elizaos.github.io#145"}],")"]}],"\n"]}],"\n",["$","h3","h3-1",{"children":"Core Framework Enhancements & Bug Fixes"}],"\n",["$","ul","ul-1",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"Enhanced Module Resolution"}],": The ",["$","code","code-0",{"children":"ModuleLoader"}]," system in ",["$","code","code-1",{"children":"eliza"}]," was significantly enhanced to ensure consistent local-first module resolution, improving reliability. (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5629","children":"elizaos/eliza#5629"}],")"]}],"\n",["$","li","li-1",{"children":[["$","strong","strong-0",{"children":"CLI Bug Fixes"}],": Critical bugs in the ",["$","code","code-0",{"children":"eliza"}]," CLI were addressed, preventing incorrect inheritance of ",["$","code","code-1",{"children":".elizadb"}]," directories during nested project creation and fixing a typo. (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5618","children":"elizaos/eliza#5618"}],", ",["$","a","a-1",{"href":"https://github.com/elizaos/eliza/pull/5632","children":"elizaos/eliza#5632"}],")"]}],"\n",["$","li","li-2",{"children":[["$","strong","strong-0",{"children":"Routine Maintenance & Versioning"}],": ",["$","code","code-0",{"children":"eliza"}]," was updated to version ",["$","code","code-1",{"children":"v1.2.12"}],", including updates across various packages and documentation files. (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5630","children":"elizaos/eliza#5630"}],")"]}],"\n"]}],"\n",["$","h2","h2-1",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"🏗️ Work in Progress","position":{"start":{"line":14,"column":4,"offset":1902},"end":{"line":14,"column":24,"offset":1922}}}],"position":{"start":{"line":14,"column":1,"offset":1899},"end":{"line":14,"column":24,"offset":1922}}},"children":"🏗️ Work in Progress"}],"\n",["$","h3","h3-2",{"children":"New Pull Requests"}],"\n",["$","ul","ul-2",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"elizaos/eliza"}],":","\n","$L1d","\n"]}],"\n"]}],"\n","$L1e","\n","$L1f","\n","$L20","\n","$L21","\n","$L22"]}]
+f:["$","script","script-0",{"src":"/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","async":true}]
+10:["$","script","script-1",{"src":"/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","async":true}]
+11:["$","script","script-2",{"src":"/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js","async":true}]
+12:["$","$L23",null,{"children":["$","$24",null,{"name":"Next.MetadataOutlet","children":"$@25"}]}]
+1c:["$","div",null,{"className":"rounded-lg border bg-card text-card-foreground shadow-sm","children":[["$","div",null,{"className":"flex flex-col space-y-1.5 p-6 py-4","children":["$","div",null,{"className":"tracking-tight text-sm font-medium","children":["$undefined","Code Changes"]}]}],["$","div",null,{"className":"p-6 pt-0","children":["$","div",null,{"className":"grid grid-cols-2 gap-4 md:grid-cols-4","children":[["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-git-commit-vertical h-5 w-5","aria-hidden":"true","children":[["$","path","1holv5",{"d":"M12 3v6"}],["$","circle","1v7zrd",{"cx":"12","cy":"12","r":"3"}],["$","path","a9ows0",{"d":"M12 15v6"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":73}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Commits"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-file-code h-5 w-5","aria-hidden":"true","children":[["$","path","1oefj6",{"d":"M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"}],["$","path","wfsgrz",{"d":"M14 2v5a1 1 0 0 0 1 1h5"}],["$","path","1tg20x",{"d":"M10 12.5 8 15l2 2.5"}],["$","path","yinavb",{"d":"m14 12.5 2 2.5-2 2.5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":156}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Files Changed"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-green-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-up h-5 w-5 text-green-500","aria-hidden":"true","children":[["$","path","hav0vg",{"d":"m5 12 7-7 7 7"}],["$","path","x0mq9r",{"d":"M12 19V5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-green-500","children":"+14,804"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Added"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-red-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-down h-5 w-5 text-red-500","aria-hidden":"true","children":[["$","path","s699le",{"d":"M12 5v14"}],["$","path","1idqje",{"d":"m19 12-7 7-7-7"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-red-500","children":"-260,721"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Deleted"}]]}]]}]]}]}]]}]
+1d:["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["Make API keys optional during ",["$","code","code-0",{"children":"npx elizaos create"}],". (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5634","children":"elizaos/eliza#5634"}],")"]}],"\n",["$","li","li-1",{"children":["Target project directory for ",["$","code","code-0",{"children":".elizadb"}]," file. (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5633","children":"elizaos/eliza#5633"}],")"]}],"\n",["$","li","li-2",{"children":["Fix for handling JSON strings within the SQL base. (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5628","children":"elizaos/eliza#5628"}],")"]}],"\n",["$","li","li-3",{"children":["Address an export issue within the ",["$","code","code-0",{"children":"@elizaos/config"}]," package. (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5635","children":"elizaos/eliza#5635"}],")"]}],"\n"]}]
+1e:["$","h2","h2-2",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"🐞 Issue Triage","position":{"start":{"line":23,"column":4,"offset":2484},"end":{"line":23,"column":19,"offset":2499}}}],"position":{"start":{"line":23,"column":1,"offset":2481},"end":{"line":23,"column":19,"offset":2499}}},"children":"🐞 Issue Triage"}]
+1f:["$","h3","h3-3",{"children":"Closed Issues"}]
+20:["$","ul","ul-3",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"elizaos/elizaos.github.io"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["\"Build Zapper plugin\" was closed as a duplicate. (",["$","a","a-0",{"href":"https://github.com/elizaos/elizaos.github.io/issues/5600","children":"elizaos/elizaos.github.io#5600"}],")"]}],"\n"]}],"\n"]}],"\n",["$","li","li-1",{"children":[["$","strong","strong-0",{"children":"elizaos/eliza"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["Resolved API key and configuration issues, including an error preventing messages without ",["$","code","code-0",{"children":"ANTHROPIC_API_KEY"}],". (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/4346","children":"elizaos/eliza#4346"}],")"]}],"\n",["$","li","li-1",{"children":["Fixed a significant bug where the ",["$","code","code-0",{"children":".eliza"}]," directory was incorrectly hoisted during project creation. (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/5606","children":"elizaos/eliza#5606"}],")"]}],"\n",["$","li","li-2",{"children":["Closed minor test and development issues, including \"its working!\" (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/5625","children":"elizaos/eliza#5625"}],", ",["$","a","a-1",{"href":"https://github.com/elizaos/eliza/issues/5627","children":"elizaos/eliza#5627"}],") and \"hello world\" (",["$","a","a-2",{"href":"https://github.com/elizaos/eliza/issues/5626","children":"elizaos/eliza#5626"}],")."]}],"\n",["$","li","li-3",{"children":["Closed a duplicate issue regarding the Zapper plugin build. (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/5600","children":"elizaos/eliza#5600"}],")"]}],"\n",["$","li","li-4",{"children":["Resolved an issue where ",["$","code","code-0",{"children":"elizaos create --type agent"}]," was inconsistent with TypeScript character files. (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/5631","children":"elizaos/eliza#5631"}],")"]}],"\n"]}],"\n"]}],"\n"]}]
+21:["$","h3","h3-4",{"children":"New Issues"}]
+22:["$","ul","ul-4",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"elizaos/eliza"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["An issue was opened and closed today concerning the ",["$","code","code-0",{"children":"elizaos create --type agent"}]," command, which currently copies a JSON character file instead of using type-safe TypeScript files. (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/5631","children":"elizaos/eliza#5631"}],")"]}],"\n"]}],"\n"]}],"\n"]}]
+25:null

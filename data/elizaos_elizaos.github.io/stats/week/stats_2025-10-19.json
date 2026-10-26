@@ -1,0 +1,356 @@
+{
+  "interval": {
+    "intervalStart": "2025-10-19T00:00:00.000Z",
+    "intervalEnd": "2025-10-26T00:00:00.000Z",
+    "intervalType": "week"
+  },
+  "repository": "elizaos/elizaos.github.io",
+  "overview": "From 2025-10-19 to 2025-10-26, elizaos/elizaos.github.io had 8 new PRs (3 merged), 1 new issues, and 5 active contributors.",
+  "topIssues": [
+    {
+      "id": "I_kwDONNAI987SX1I5",
+      "title": "Enhancement: Adaptive Rate Limiting for 60% Faster Multi-Repo Ingestion",
+      "author": "madjin",
+      "number": 159,
+      "repository": "elizaos/elizaos.github.io",
+      "body": "## Problem: Sequential Processing is Too Slow for Multi-Repo Pipelines\n\n### Current Bottleneck\n\nThe current pipeline uses **static concurrency** which creates a performance vs reliability tradeoff:\n\n- **Low concurrency (current: 5)**: Safe but SLOW\n  - 23 repos × 52 weeks of data = **~10-15 hours** for full ingestion\n  - Single slow repo blocks entire pipeline\n  - Underutilizes available API quota (5,000 requests/hour)\n\n- **High concurrency**: Fast but RISKY\n  - Hits secondary rate limits frequently\n  - Forces pipeline to wait 15+ minutes\n  - Wastes time with retry backoff cycles\n\n### Real-World Impact\n\n**Example from M3-org fork** (14 Optimism repositories):\n- **Static concurrency=5**: 6-8 hours for full historical ingestion\n- **With adaptive concurrency**: 2-3 hours (60% faster)\n- **Rate limit hits**: Reduced from 10-15 to 2-3 per run\n\n**Projected for 23 elizaOS repositories:**\n- **Current static approach**: 10-15 hours\n- **With adaptive concurrency**: ~4-6 hours (60-70% faster)\n\n### Why Static Concurrency Fails\n\n1. **API health varies** - Morning vs evening, weekday vs weekend\n2. **Repository sizes differ** - Small repos finish fast, large repos take hours\n3. **Rate limit recovery** - After hitting limit, pipeline should slow down temporarily\n4. **Unnecessary conservatism** - Static concurrency=5 is safe but wastes quota\n\n---\n\n## Solution: Adaptive Concurrency Management\n\n### Core Concept\n\n**Dynamically adjust concurrent operations (3-8) based on rate limit health:**\n\n- **Start conservative**: 3 concurrent operations\n- **Increase on success**: +1 concurrency every 2 minutes without rate limits\n- **Decrease on rate limit**: Halve concurrency immediately\n- **Track health**: Remember last rate limit for 5 minutes\n\n### Performance Benchmarks\n\n**Test Setup**: M3-org/op-hiscores fork with 14 ethereum-optimism repos\n\n| Metric | Static (5) | Adaptive (3-8) | Improvement |\n|--------|-----------|----------------|-------------|\n| **Total duration** | 6h 45min | 2h 50min | **58% faster** |\n| **Rate limit hits** | 12 | 2 | **83% fewer** |\n| **Avg concurrency** | 5 | 5.8 | +16% |\n| **Recovery time** | 3h 20min | 45min | **77% faster** |\n\n---\n\n## Implementation Components\n\n### 1. Adaptive Concurrency Manager (~110 lines)\n```typescript\nclass AdaptiveConcurrencyManager {\n  currentLevel: 3-8 (starts at 3)\n  reduceOnSecondaryLimit() → currentLevel / 2\n  increaseOnSuccess() → currentLevel + 1 (if no rate limit in 2min)\n  shouldReduceLoad() → true if rate limited in last 5min\n}\n```\n\n### 2. Rate Limit Type Detection (~50 lines)\n- Distinguishes **primary** vs **secondary** rate limits\n- Different strategies for each type\n- Primary: Wait until reset (1hr)\n- Secondary: Reduce load + backoff (15min)\n\n### 3. Adaptive Pipeline Integration (~60 lines)\n```typescript\nmapStep(operation, {\n  adaptiveConcurrency: true,  // Enable dynamic adjustment\n  defaultConcurrency: 5       // Fallback\n})\n```\n\n### 4. API Cost Estimation (~75 lines)\n- Shows estimated duration BEFORE execution\n- `--estimate-only` flag for dry-run\n- Risk assessment (LOW/MEDIUM/HIGH)\n\n### 5. Graceful Shutdown (~30 lines)\n- First Ctrl+C: Complete current operation, preserve adaptive state\n- Second Ctrl+C: Force exit\n- Better for long-running multi-hour ingestions\n\n**Total**: ~348 lines across 4 files\n\n---\n\n## Production Testing\n\n- **Fork**: https://github.com/M3-org/op-hiscores\n- **Deployment**: https://m3-org.github.io/op-hiscores/\n- **Dataset**: 14 repos, 18,000+ PRs, 4,800+ issues\n- **Duration**: 6+ months in production\n- **Commit**: `309c37c` - feat: Enhance pipeline with adaptive rate limiting\n\n---\n\n## Trade-offs\n\n### Pros\n✅ **60-70% faster** for multi-repo ingestion\n✅ **75% fewer rate limit hits**\n✅ **Self-tuning** - No manual configuration needed\n✅ **Production-tested** - 14 repos, 18K+ PRs successfully processed\n✅ **Backward compatible** - Opt-in via `adaptiveConcurrency: true`\n\n### Cons\n⚠️ **Complexity** - 348 lines vs current static approach\n⚠️ **Tuning** - Thresholds (3-8, 2min, 5min) may not be optimal for all workloads\n⚠️ **Debugging** - Dynamic behavior is harder to reason about\n\n---\n\n## Value Proposition\n\nFor projects tracking **10+ repositories** (like this project with 23 repos), the difference between **15 hours and 4-6 hours** for full ingestion is substantial.\n\nThe self-tuning nature means:\n- No manual configuration needed\n- Automatically finds optimal concurrency\n- Scales better as more repos are added\n- Reduces developer waiting time by 6-10 hours per full ingestion\n\n---\n\n## Next Steps\n\nIf this enhancement aligns with the project's goals, I'm happy to:\n1. Submit a PR with the full implementation\n2. Provide additional benchmarks or testing\n3. Adjust parameters based on your specific workload\n4. Start with a subset (e.g., just rate limit type detection) if preferred\n\nThe implementation is production-ready and has been thoroughly tested with larger datasets than currently tracked by this project.\n\n---\n\n**Question for maintainers**: Is the ~60% performance improvement worth the additional complexity? Would you prefer the full enhancement or a smaller subset (e.g., just rate limit parsing)?\n",
+      "createdAt": "2025-10-19T03:21:00Z",
+      "closedAt": null,
+      "state": "OPEN",
+      "commentCount": 0
+    }
+  ],
+  "topPRs": [
+    {
+      "id": "PR_kwDONNAI986vgnd1",
+      "title": "Feat: improve deploy workflow",
+      "author": "standujar",
+      "number": 167,
+      "body": "",
+      "repository": "elizaos/elizaos.github.io",
+      "createdAt": "2025-10-24T12:47:50Z",
+      "mergedAt": null,
+      "additions": 4896,
+      "deletions": 134
+    },
+    {
+      "id": "PR_kwDONNAI986u8BEF",
+      "title": "feat: Implement MVP Badge System for Contributor Achievements",
+      "author": "madjin",
+      "number": 161,
+      "body": "## Overview\n\nImplements a minimal, efficient badge/achievement system with **5 badge types** across **3 tier levels** (beginner/elite/legend). Designed with DRY and YAGNI principles to minimize code overhead (~370 lines vs 2000+ for alternative approaches).\n\n## Badge Types\n\n- **Level Milestones**: Beginner (10), Elite (30), Legend (50)\n- **Activity Streaks**: 7, 30, 60 consecutive days\n- **PR Master**: 5, 25, 100 merged PRs\n- **Bug Hunter**: 3, 15, 50 bug fixes\n- **Review Champion**: 10, 50, 200 code reviews\n\n## Implementation Approach\n\n### ✅ Chosen: Ultra-Minimal Strategy (~370 LOC)\n\n**Key Decisions:**\n- **On-demand calculation** - No progress storage, reuses existing queries\n- **TypeScript constants** - Badge definitions in code (no DB table needed)\n- **Component reuse** - Extended `SkillCard` with badge mode prop\n- **Highest tier only** - UNIQUE DB constraint prevents duplicates\n- **Parallel to tags** - Separate concept but follows similar patterns\n\n**Benefits:**\n- ✅ Minimal maintenance surface area\n- ✅ Zero storage overhead for progress tracking\n- ✅ Maximum reuse of existing infrastructure\n- ✅ Fast to implement and validate\n\n### 🔄 Alternative Strategies Considered\n\n**1. Moderate Approach (~600 LOC)**\n- Badge definitions stored in database\n- Separate evaluator functions per badge type\n- Progress calculation helper functions\n- Badge detail modal component\n\n*Trade-off:* More extensible but violates YAGNI since badge requirements unlikely to change frequently.\n\n**2. Config-Driven Approach (~800 LOC)**\n- Badge requirements in `pipeline.config.ts` like scoring rules\n- Generic rule engine evaluates any badge from config\n- Admin API to modify requirements without code changes\n\n*Trade-off:* Maximum flexibility but significant complexity increase. Only needed if requirements change often (they won't).\n\n## Technical Details\n\n### Database\n- New `user_badges` table with 7 columns\n- UNIQUE constraint on `(username, badgeType)` enforces highest tier only\n- Foreign key to users with CASCADE delete\n- Migration: `drizzle/0013_add_user_badges.sql`\n\n### Core Logic (3 files, 550 lines)\n- `src/lib/badges/types.ts` - Badge definitions with emoji icons & colors\n- `src/lib/badges/checker.ts` - Eligibility checking (reuses 5 existing query functions)\n- `src/lib/badges/award.ts` - Award/upgrade logic with automatic deduplication\n\n### Pipeline Integration\n- New `processContributorBadges` step in contributor pipeline\n- Runs after tag and score calculation\n- Parallel processing for all contributors\n- ~20 lines added to existing pipeline\n\n### Frontend\n- Extended `SkillCard` component with `mode=\"badge\"` prop\n- New \"Achievements\" section in user profile pages\n- Trophy icon and badge count display\n- Tooltip shows earned date and description\n\n## Trust & Anti-Gaming\n\n- ✅ Only tracks **whitelisted repositories** (24 repos)\n- ✅ Merged PRs require **maintainer approval**\n- ✅ Bug labels set by **maintainers**\n- ✅ Streak requires **sustained effort** (no backdating possible)\n- ✅ All thresholds based on **actual contributor distribution**\n\n## Testing\n\n✅ TypeScript compilation passes  \n✅ ESLint passes (no new warnings)  \n✅ Database schema validated  \n✅ Pipeline integration tested  \n✅ UI components render correctly\n\n## Usage\n\nAfter merging:\n1. Run migration: `bun run db:migrate`\n2. Process contributors: `bun run pipeline process`\n3. Build site: `bun run build`\n4. Badges appear on user profile pages\n\n## Files Changed\n\n**Created (4 files):**\n- `drizzle/0013_add_user_badges.sql`\n- `src/lib/badges/types.ts`\n- `src/lib/badges/checker.ts`\n- `src/lib/badges/award.ts`\n\n**Modified (6 files):**\n- `src/lib/data/schema.ts` - Added userBadges table\n- `src/lib/pipelines/contributors/index.ts` - Badge processing step\n- `src/app/profile/[username]/queries.ts` - Badge fetching query\n- `src/app/profile/[username]/page.tsx` - Pass badges to component\n- `src/app/profile/[username]/components/UserProfile.tsx` - Achievements section\n- `src/components/skill-card.tsx` - Badge display mode\n\n---\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)",
+      "repository": "elizaos/elizaos.github.io",
+      "createdAt": "2025-10-21T22:06:16Z",
+      "mergedAt": "2025-10-27T19:04:12Z",
+      "additions": 3911,
+      "deletions": 10
+    },
+    {
+      "id": "PR_kwDONNAI986vPtTs",
+      "title": "fix: env validation",
+      "author": "standujar",
+      "number": 165,
+      "body": "",
+      "repository": "elizaos/elizaos.github.io",
+      "createdAt": "2025-10-23T11:33:45Z",
+      "mergedAt": "2025-10-23T11:33:59Z",
+      "additions": 795,
+      "deletions": 120
+    },
+    {
+      "id": "PR_kwDONNAI986vPihn",
+      "title": "feat: leaderboard json api",
+      "author": "standujar",
+      "number": 163,
+      "body": "# Add JSON Leaderboard API Endpoints\r\n\r\n## Summary\r\n\r\nThis PR adds static JSON API endpoints for leaderboard data, enabling external applications, mobile apps, and third-party integrations to consume leaderboard information programmatically.\r\n\r\n## Features\r\n\r\n- **Three time periods**: Monthly, weekly, and lifetime leaderboards\r\n- **Comprehensive scoring**: Includes total score plus breakdown by contribution type (PR, issue, review, comment)\r\n- **Wallet addresses**: Includes Solana and Ethereum wallet addresses from GitHub profiles\r\n- **Calendar-based periods**: \r\n  - Weekly: Sunday to today\r\n  - Monthly: 1st of month to today\r\n  - Lifetime: Project start date to today\r\n- **CLI command**: `bun run pipeline export-leaderboard`\r\n- **CI/CD integration**: Automatically generates fresh leaderboard data on every deployment\r\n- **Full test coverage**: 9 comprehensive tests covering all scenarios\r\n\r\n## API Endpoints\r\n\r\nThe following static JSON files will be available via GitHub Pages:\r\n\r\n- `/data/api/leaderboard-monthly.json`\r\n- `/data/api/leaderboard-weekly.json`\r\n- `/data/api/leaderboard-lifetime.json`\r\n\r\n## Response Format\r\n\r\n```json\r\n{\r\n  \"period\": \"monthly\",\r\n  \"startDate\": \"2025-10-01\",\r\n  \"endDate\": \"2025-10-23\",\r\n  \"generatedAt\": \"2025-10-23T11:12:25.933Z\",\r\n  \"totalUsers\": 150,\r\n  \"leaderboard\": [\r\n    {\r\n      \"rank\": 1,\r\n      \"username\": \"contributor1\",\r\n      \"avatarUrl\": \"https://avatars.githubusercontent.com/...\",\r\n      \"score\": 1234.5,\r\n      \"prScore\": 800.0,\r\n      \"issueScore\": 200.0,\r\n      \"reviewScore\": 150.5,\r\n      \"commentScore\": 84.0,\r\n      \"wallets\": {\r\n        \"solana\": \"9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin\",\r\n        \"ethereum\": \"0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb\"\r\n      }\r\n    }\r\n  ]\r\n}\r\n```\r\n\r\n## Use Cases\r\n- Mobile apps: Display leaderboard data in native applications\r\n- Discord bots: Show contributor rankings and stats\r\n- Analytics dashboards: Track contributor engagement over time\r\n- Reward systems: Automate token distributions based on rankings\r\n- Third-party integrations: Enable community-built tools and services\r\n\r\n## Testing\r\nAll tests pass successfully:\r\n- bun test src/lib/pipelines/export/exportLeaderboardAPI.test.ts",
+      "repository": "elizaos/elizaos.github.io",
+      "createdAt": "2025-10-23T11:18:25Z",
+      "mergedAt": null,
+      "additions": 738,
+      "deletions": 14
+    },
+    {
+      "id": "PR_kwDONNAI986vPlUQ",
+      "title": "feat: add JSON leaderboard API endpoints",
+      "author": "standujar",
+      "number": 164,
+      "body": "# Add JSON Leaderboard API Endpoints\r\n\r\n## Summary\r\n\r\nThis PR adds static JSON API endpoints for leaderboard data, enabling external applications, mobile apps, and third-party integrations to consume leaderboard information programmatically.\r\n\r\n## Features\r\n\r\n- **Three time periods**: Monthly, weekly, and lifetime leaderboards\r\n- **Comprehensive scoring**: Includes total score plus breakdown by contribution type (PR, issue, review, comment)\r\n- **Wallet addresses**: Includes Solana and Ethereum wallet addresses from GitHub profiles\r\n- **Calendar-based periods**: \r\n  - Weekly: Sunday to today\r\n  - Monthly: 1st of month to today\r\n  - Lifetime: Project start date to today\r\n- **CLI command**: `bun run pipeline export-leaderboard`\r\n- **CI/CD integration**: Automatically generates fresh leaderboard data on every deployment\r\n- **Full test coverage**: 9 comprehensive tests covering all scenarios\r\n\r\n## API Endpoints\r\n\r\nThe following static JSON files will be available via GitHub Pages:\r\n\r\n- `/data/api/leaderboard-monthly.json`\r\n- `/data/api/leaderboard-weekly.json`\r\n- `/data/api/leaderboard-lifetime.json`\r\n\r\n## Response Format\r\n\r\n```json\r\n{\r\n  \"period\": \"monthly\",\r\n  \"startDate\": \"2025-10-01\",\r\n  \"endDate\": \"2025-10-23\",\r\n  \"generatedAt\": \"2025-10-23T11:12:25.933Z\",\r\n  \"totalUsers\": 150,\r\n  \"leaderboard\": [\r\n    {\r\n      \"rank\": 1,\r\n      \"username\": \"contributor1\",\r\n      \"avatarUrl\": \"https://avatars.githubusercontent.com/...\",\r\n      \"score\": 1234.5,\r\n      \"prScore\": 800.0,\r\n      \"issueScore\": 200.0,\r\n      \"reviewScore\": 150.5,\r\n      \"commentScore\": 84.0,\r\n      \"wallets\": {\r\n        \"solana\": \"9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin\",\r\n        \"ethereum\": \"0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb\"\r\n      }\r\n    }\r\n  ]\r\n}\r\n```\r\n\r\n## Use Cases\r\n- Mobile apps: Display leaderboard data in native applications\r\n- Discord bots: Show contributor rankings and stats\r\n- Analytics dashboards: Track contributor engagement over time\r\n- Reward systems: Automate token distributions based on rankings\r\n- Third-party integrations: Enable community-built tools and services\r\n\r\n## Testing\r\nAll tests pass successfully:\r\n- bun test src/lib/pipelines/export/exportLeaderboardAPI.test.ts",
+      "repository": "elizaos/elizaos.github.io",
+      "createdAt": "2025-10-23T11:22:38Z",
+      "mergedAt": null,
+      "additions": 715,
+      "deletions": 11
+    }
+  ],
+  "codeChanges": {
+    "additions": 1144,
+    "deletions": 966,
+    "files": 25,
+    "commitCount": 35
+  },
+  "completedItems": [
+    {
+      "title": "feat: add badge progress indicators and leaderboard badge counts",
+      "prNumber": 162,
+      "type": "feature",
+      "body": "## Summary\n\nAdds two additional quick wins to enhance the badge system UX:\n\n1. **Badge count in leaderboard** - Display badge count next to XP/Level in leaderboard cards with trophy icon\n2. **Progress indicators** - Show \"Next Achievements\"",
+      "files": [
+        "src/app/leaderboard/queries.ts",
+        "src/app/profile/[username]/components/UserProfile.tsx",
+        "src/app/profile/[username]/page.tsx",
+        "src/app/profile/[username]/queries.ts",
+        "src/components/leaderboard-card.tsx",
+        "src/components/leaderboard.tsx",
+        "src/components/skill-card.tsx",
+        "src/lib/badges/types.ts"
+      ]
+    },
+    {
+      "title": "Revert \"fix: env validation\"",
+      "prNumber": 166,
+      "type": "bugfix",
+      "body": "Reverts elizaOS/elizaos.github.io#165",
+      "files": [
+        ".github/actions/pipeline-data/action.yml",
+        ".github/workflows/deploy.yml",
+        ".github/workflows/run-pipelines.yml",
+        "auth-worker/wrangler.toml",
+        "cli/analyze-pipeline.ts",
+        "config/pipeline.config.ts",
+        "next.config.js",
+        "src/__testing__/helpers/mock-data.ts",
+        "src/app/about/page.tsx",
+        "src/app/auth/callback/page.tsx",
+        "src/app/layout.tsx",
+        "src/app/summary/[interval]/[[...date]]/queries.ts",
+        "src/components/navigation.tsx",
+        "src/contexts/AuthContext.tsx",
+        "src/lib/pipelines/export/exportLeaderboardAPI.test.ts",
+        "src/lib/pipelines/export/exportLeaderboardAPI.ts",
+        "src/lib/pipelines/summarize/callAIService.ts"
+      ]
+    },
+    {
+      "title": "fix: env validation",
+      "prNumber": 165,
+      "type": "bugfix",
+      "body": "",
+      "files": [
+        ".github/actions/pipeline-data/action.yml",
+        ".github/workflows/deploy.yml",
+        ".github/workflows/run-pipelines.yml",
+        "auth-worker/wrangler.toml",
+        "cli/analyze-pipeline.ts",
+        "config/pipeline.config.ts",
+        "next.config.js",
+        "src/__testing__/helpers/mock-data.ts",
+        "src/app/about/page.tsx",
+        "src/app/auth/callback/page.tsx",
+        "src/app/layout.tsx",
+        "src/app/summary/[interval]/[[...date]]/queries.ts",
+        "src/components/navigation.tsx",
+        "src/contexts/AuthContext.tsx",
+        "src/lib/pipelines/export/exportLeaderboardAPI.test.ts",
+        "src/lib/pipelines/export/exportLeaderboardAPI.ts",
+        "src/lib/pipelines/summarize/callAIService.ts"
+      ]
+    }
+  ],
+  "topContributors": [
+    {
+      "username": "wtfsayo",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/82053242?u=98209a1f10456f42d4d2fa71db4d5bf4a672cbc3&v=4",
+      "totalScore": 323.19981503527026,
+      "prScore": 322.7618150352703,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0.43799999999999994,
+      "summary": "wtfsayo: Drove significant feature development and maintenance across the Eliza ecosystem, merging 6 PRs. They landed a major feature integrating Streamdown and cross-platform crypto in `elizaos/eliza#6082` (+1962/-774 lines), fixed a key packaging issue in the CLI via `elizaos/eliza#6080`, and opened a PR for a new headless React hooks package (`elizaos/eliza#6093`). Their 51 commits demonstrate a balanced focus on new feature work, bug fixes, and code refactoring."
+    },
+    {
+      "username": "standujar",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/16385918?u=718bdcd1585be8447bdfffb8c11ce249baa7532d&v=4",
+      "totalScore": 304.9517953974373,
+      "prScore": 290.9517953974373,
+      "issueScore": 0,
+      "reviewScore": 14,
+      "commentScore": 0,
+      "summary": "standujar: Delivered several new features and fixes across multiple repositories, merging five pull requests this week. Their most impactful contribution was implementing the 'get action results' feature in `elizaos/eliza#6081` (+1950/-670 lines), while also attempting a significant environment validation fix in `elizaos/elizaos.github.io#165` that was later reverted via `#166`. Their effort was distributed across feature work, bug fixes, and other tasks, with changes primarily touching code and configuration files."
+    },
+    {
+      "username": "madjin",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/32600939?u=cdcf89f44c7a50906c7a80d889efa85023af2049&v=4",
+      "totalScore": 159.6388399668295,
+      "prScore": 157.20083996682948,
+      "issueScore": 2,
+      "reviewScore": 0,
+      "commentScore": 0.43799999999999994,
+      "summary": "madjin: Focused on shipping significant new features for `elizaos/elizaos.github.io`, merging three pull requests this week. The most impactful contribution was the implementation of an MVP Badge System for contributor achievements in a substantial PR (#161, +3978/-77 lines), complemented by the addition of adaptive rate limiting (#160) and badge progress indicators (#162). This activity shows a clear concentration on feature work, with changes primarily affecting code files."
+    },
+    {
+      "username": "0xbbjoker",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/54844437?u=90fe1762420de6ad493a1c1582f1f70c0d87d8e2&v=4",
+      "totalScore": 132.12919778226703,
+      "prScore": 122.12919778226703,
+      "issueScore": 0,
+      "reviewScore": 10,
+      "commentScore": 0,
+      "summary": "0xbbjoker: This week, 0xbbjoker enhanced functionality and stability across the Eliza ecosystem by merging three pull requests. They resolved a significant crash in the Telegram plugin (elizaos-plugins/plugin-telegram#19) and introduced new features for flexible deployment modes (elizaos-plugins/plugin-knowledge#44) and an optional embedding service (elizaos/eliza#6075). Their work showed a strong emphasis on quality, with half of all file modifications dedicated to tests, supporting a mix of bug fixes and new feature development."
+    },
+    {
+      "username": "yungalgo",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/113615973?u=92e0f29f7e2fbb8ce46ed13c51f692ca803de02d&v=4",
+      "totalScore": 87.19214968785415,
+      "prScore": 86.85214968785415,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0.33999999999999997,
+      "summary": "yungalgo: Focused on improving project documentation this week, merging two pull requests in elizaos/docs. They added a new launch resources page (#76), which involved a significant content refactor, and improved clarity by renaming the API reference (#75). This work reflects a primary focus on documentation, which constituted 94% of the files modified."
+    },
+    {
+      "username": "ChristopherTrimboli",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/27584221?u=0d816ce1dcdea8f925aba18bb710153d4a87a719&v=4",
+      "totalScore": 59.7437738965761,
+      "prScore": 59.5437738965761,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0.2,
+      "summary": "ChristopherTrimboli: Focused on a significant refactor within the `elizaos/eliza` repository, merging a pull request (#6087) to remove the Claude integration and upgrade dependencies. This single PR represented a major cleanup, removing over 5,400 lines of code from the project. Their work was primarily categorized as refactoring and bug fixes."
+    },
+    {
+      "username": "lalalune",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/18633264?u=e2e906c3712c2506ebfa98df01c2cfdc50050b30&v=4",
+      "totalScore": 55.5437738965761,
+      "prScore": 49.5437738965761,
+      "issueScore": 6,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "lalalune: Made a foundational contribution to the `jeju` repository, merging a massive pull request that introduced new applications (elizaos/jeju#1, +71k/-25k lines). In addition to this core delivery, they planned future development by opening issues for new agents and load testing (jeju#2, jeju#3, jeju#4) and identified a build issue in the `eliza` repository (elizaos/eliza#5673). Their code changes indicate this effort involved a significant mix of refactoring and testing work."
+    },
+    {
+      "username": "tcm390",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/60634884?u=c6c41679b8322eaa0c81f72e0b4ed95e80f0ac16&v=4",
+      "totalScore": 50.3591022550876,
+      "prScore": 45.3591022550876,
+      "issueScore": 0,
+      "reviewScore": 5,
+      "commentScore": 0,
+      "summary": "tcm390: Focused on bug fixes within the `elizaos/eliza` repository, merging two PRs to address issues with action thoughts (#6083, #6084). They also provided one review approval, with their contributions primarily consisting of bugfix and other work on code files."
+    },
+    {
+      "username": "MonteCrypto999",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/58423789?u=7db7196121472df50395eadf84f9d5963d886d69&v=4",
+      "totalScore": 43.5437738965761,
+      "prScore": 43.5437738965761,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "MonteCrypto999: Focused on adding new functionality to the Jupiter plugin, opening a pull request to add referral fee support (elizaos-plugins/plugin-jupiter#3). This in-progress feature work involved substantial changes across 31 files (+5965/-431 lines). Their effort touched a mix of configuration, code, and test files, indicating a focus on feature development."
+    },
+    {
+      "username": "alex-nax",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/82507604?u=b3af75d82f80ed83007a77c351a64bdd9e5d67de&v=4",
+      "totalScore": 42.35087518789015,
+      "prScore": 42.15087518789015,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0.2,
+      "summary": "alex-nax: Focused on a significant feature enhancement, opening a large-scale pull request in elizaos/eliza (#6094) to enable a custom storage service, which involved over 35,000 new lines of code. The underlying commits show a balanced effort across bugfixes and adding tests to support this new functionality."
+    },
+    {
+      "username": "0xRabbidfly",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/93952856?v=4",
+      "totalScore": 33.90101911726088,
+      "prScore": 33.90101911726088,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "0xRabbidfly: Focused on bug fixing within the Telegram plugin, opening a pull request to address an issue where GIF animations would not play (elizaos-plugins/plugin-telegram#20). The proposed fix represents a substantial effort, with +720/-402 lines of changes across 8 files, including tests. This work was entirely concentrated on improving functionality for the Telegram plugin."
+    },
+    {
+      "username": "amlord",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/7287225?u=c9efedf5ceccac420c39b5bcd5b44e0f0692c4d5&v=4",
+      "totalScore": 28.422573590279974,
+      "prScore": 28.422573590279974,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "amlord: Focused on expanding the plugin ecosystem by adding the new 'nuggets' plugin to the registry via PR elizaos-plugins/registry#236. This feature work consisted of minor configuration changes to enable the new plugin."
+    },
+    {
+      "username": "linear",
+      "avatarUrl": "https://avatars.githubusercontent.com/in/20150?v=4",
+      "totalScore": 10,
+      "prScore": 0,
+      "issueScore": 10,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "linear: Focused on identifying and defining work within the elizaos/eliza repository, creating 8 new issues. These included tracking a frontend bug fix for markdown rendering (#5688) and planning for new documentation like an API/SDK section (#6090). This activity shows a focus on product quality and planning."
+    },
+    {
+      "username": "icecoins",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/92659856?u=015d38990c9348e60ff7c4dfc86a68cc2d4cece1&v=4",
+      "totalScore": 8.087768721952859,
+      "prScore": 8.087768721952859,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "icecoins: This week, icecoins focused on enhancing the Twitter plugin by opening a pull request (elizaos-plugins/plugin-twitter#45). This work introduces the ability to upload media data using the Twitter API v2."
+    },
+    {
+      "username": "github-advanced-security",
+      "avatarUrl": "https://avatars.githubusercontent.com/in/57789?v=4",
+      "totalScore": 4.5,
+      "prScore": 0,
+      "issueScore": 0,
+      "reviewScore": 4.5,
+      "commentScore": 0,
+      "summary": "github-advanced-security: No activity this week."
+    },
+    {
+      "username": "schmidsi",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/103280?u=77faaad95c5f0f1af815e2e46438c0ceb3945031&v=4",
+      "totalScore": 4.4,
+      "prScore": 0,
+      "issueScore": 4.2,
+      "reviewScore": 0,
+      "commentScore": 0.2,
+      "summary": "schmidsi: This week, schmidsi contributed to project health by identifying, reporting, and helping resolve an installation issue in the `elizaos/eliza` repository (#6088). Their activity was focused on troubleshooting within the main application."
+    },
+    {
+      "username": "borisudovicic",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/31806472?u=8935f4d43fd7e4eb9bf5ff92d54d4d2f8ac8a786&v=4",
+      "totalScore": 2,
+      "prScore": 0,
+      "issueScore": 2,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "borisudovicic: Focused on project planning and organization within the elizaos/eliza repository this week. They created six issues to outline improvements, including \"Documentation & Release Process\" (#5936), \"Release Automation\" (#5937), and \"Core Documentation Expansion\" (#5938). This activity indicates a focus on structuring future work around documentation and release procedures."
+    },
+    {
+      "username": "odilitime",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/16395496?u=c9bac48e632aae594a0d85aaf9e9c9c69b674d8b&v=4",
+      "totalScore": 0.8799999999999999,
+      "prScore": 0,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0.8799999999999999,
+      "summary": "odilitime: Made significant code changes this week across 16 commits, totaling +1745/-953 lines. While no pull requests were merged, they contributed to ongoing development by leaving 5 comments on pull requests. This work was primarily a mix of bug fixes and other general tasks."
+    },
+    {
+      "username": "letmehateu",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/133153661?u=2217cec1ebd7bf22a8e4e3ace28b3183720dd444&v=4",
+      "totalScore": 0.2,
+      "prScore": 0,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0.2,
+      "summary": null
+    }
+  ],
+  "newPRs": 8,
+  "mergedPRs": 3,
+  "newIssues": 1,
+  "closedIssues": 0,
+  "activeContributors": 5
+}

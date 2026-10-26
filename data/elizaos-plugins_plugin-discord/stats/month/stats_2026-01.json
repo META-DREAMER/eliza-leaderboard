@@ -1,0 +1,482 @@
+{
+  "interval": {
+    "intervalStart": "2026-01-01T00:00:00.000Z",
+    "intervalEnd": "2026-02-01T00:00:00.000Z",
+    "intervalType": "month"
+  },
+  "repository": "elizaos-plugins/plugin-discord",
+  "overview": "From 2026-01-01 to 2026-02-01, elizaos-plugins/plugin-discord had 4 new PRs (2 merged), 2 new issues, and 9 active contributors.",
+  "topIssues": [
+    {
+      "id": "I_kwDOOtXZkc7hiptm",
+      "title": "bug: Version v1.3.4 failed to publish (jumped from v1.3.3 to v1.3.5)",
+      "author": "madjin",
+      "number": 40,
+      "repository": "elizaos-plugins/plugin-discord",
+      "body": "## Context\nDiscord plugin v1.3.4 failed to publish, resulting in a version jump from v1.3.3 directly to v1.3.5.\n\n- **Source**: Discord discussion (2026-01-03)\n- **Priority**: P1 (from issue-triage assessment)\n- **Impact**: Medium-High (breaks predictable upgrades; may strand users on bad versions)\n\n## Evidence\n- Discord: \"v1.3.4 failed to publish; version jumped from v1.3.3 to v1.3.5\"\n- Reporter: YogaFlame\n- Related: Previous issue #9 (v1.0.x getWavHeader) is different and closed\n- Pattern: Indicates release pipeline fragility\n\n## Technical Details\n- **Component**: Plugin System / Publishing pipeline (npm, registry, CI workflows)\n- **Complexity**: 3/5 (requires pipeline audit and safeguards)\n- **Required Expertise**: npm publishing, CI release workflows, semver/tagging\n\n## Proposed Investigation\n1. Audit npm error logs + CI run for v1.3.4 publish attempt\n2. Check for tag creation issues, provenance problems, npm token scope\n3. Determine if v1.3.4 contained important fixes that users need\n4. Add automated guard: fail if version already exists / missing changelog\n\n## Proposed Prevention\n1. Add \"release checklist\" to CI workflow\n2. Implement dry-run publish in CI before actual release\n3. Add Slack/Discord notification on publish failure\n\n## Acceptance Criteria\n- [ ] Root cause of v1.3.4 failure documented\n- [ ] Release workflow improved to prevent recurrence\n- [ ] Process documented for handling skipped versions\n\n---\nGenerated from [elizaOS intelligence pipeline](https://github.com/elizaOS/knowledge)\nEvidence date: 2026-01-06",
+      "createdAt": "2026-01-06T06:40:56Z",
+      "closedAt": null,
+      "state": "OPEN",
+      "commentCount": 1
+    },
+    {
+      "id": "I_kwDOOtXZkc7DpfkW",
+      "title": "join and leave slash commands went away",
+      "author": "odilitime",
+      "number": 15,
+      "repository": "elizaos-plugins/plugin-discord",
+      "body": "We used to have them and now they're gone",
+      "createdAt": "2025-08-01T03:38:44Z",
+      "closedAt": "2026-01-07T00:13:09Z",
+      "state": "CLOSED",
+      "commentCount": 1
+    },
+    {
+      "id": "I_kwDOOtXZkc7jqxLy",
+      "title": "this.runtime.elizaOS.sendMessage' is undefined - Discord not working with latest elizaos version",
+      "author": "BinaryBluePeach",
+      "number": 43,
+      "repository": "elizaos-plugins/plugin-discord",
+      "body": "Error handling message: 4888 |           return [];\n4889 |         }\n4890 |       };\n4891 |       if (this.runtime.hasElizaOS()) {\n4892 |         logger11.debug(\"[Discord] Using unified messaging API\");\n4893 |         await this.runtime.elizaOS.sendMessage(\n                                          ^\nTypeError: this.runtime.elizaOS.sendMessage is not a function. (In 'this.runtime.elizaOS.sendMessage(this.runtime.agentId, newMessage, {\n          onResponse: callback\n        })', 'this.runtime.elizaOS.sendMessage' is undefined)\n      at handleMessage ",
+      "createdAt": "2026-01-15T23:37:35Z",
+      "closedAt": null,
+      "state": "OPEN",
+      "commentCount": 1
+    }
+  ],
+  "topPRs": [
+    {
+      "id": "PR_kwDOOtXZkc6741h7",
+      "title": "fix: use handleMessage instead of sendMessage for elizaOS unified API",
+      "author": "standujar",
+      "number": 41,
+      "body": "<h2>Greptile Overview</h2>\n\n### Greptile Summary\n\nThis PR updates the Discord plugin to use the new `handleMessage` method instead of the deprecated `sendMessage` method in the elizaOS unified messaging API. The changes are clean and complete:\n\n- Updated the `UnifiedMessagingAPI` interface definition to use `handleMessage`\n- Updated the runtime check function `hasUnifiedMessagingAPI` to detect the new method\n- Updated the actual API call in `messages.ts` to invoke `handleMessage`\n- Updated documentation comments to reflect the new method name\n\nThe PR also includes formatting changes (single to double quotes) that appear to be from an auto-formatter. All changes are backward compatible since they only affect the new unified API path, with fallbacks to `messageService` and event-based handling still intact.\n\n### Confidence Score: 5/5\n\n- This PR is safe to merge with no risk - it's a straightforward method rename that aligns with the updated elizaOS API\n- The changes are minimal, focused, and complete. All three required updates (interface definition, runtime check, and API call) are present and correct. The PR maintains backward compatibility through existing fallback mechanisms for older core versions. No logic changes were introduced, only a method name update.\n- No files require special attention\n\n<h3>Important Files Changed</h3>\n\n\n\nFile Analysis\n\n\n\n| Filename | Score | Overview |\n|----------|-------|----------|\n| src/messages.ts | 5/5 | Updated unified API call from `sendMessage` to `handleMessage` at line 455, aligning with the new interface definition |\n| src/utils.ts | 5/5 | Updated `UnifiedMessagingAPI` interface and `hasUnifiedMessagingAPI` function to use `handleMessage` instead of deprecated `sendMessage`, includes formatting changes (quote style) |\n\n</details>\n\n\n\n<h3>Sequence Diagram</h3>\n\n```mermaid\nsequenceDiagram\n    participant Discord as Discord Message\n    participant MM as MessageManager\n    participant Utils as getUnifiedMessagingAPI()\n    participant Runtime as IAgentRuntime\n    participant UnifiedAPI as elizaOS.handleMessage\n    participant MsgService as messageService.handleMessage\n    participant Callback as HandlerCallback\n    \n    Discord->>MM: handleMessage(message)\n    MM->>MM: processMessage()\n    MM->>MM: buildMemoryFromMessage()\n    MM->>Utils: getUnifiedMessagingAPI(runtime)\n    Utils->>Runtime: Check elizaOS.handleMessage exists\n    \n    alt Unified API Available (NEW)\n        Runtime-->>Utils: elizaOS.handleMessage found\n        Utils-->>MM: Return UnifiedMessagingAPI\n        MM->>UnifiedAPI: handleMessage(agentId, message, {onResponse: callback})\n        UnifiedAPI->>Callback: Execute callback with content\n        Callback->>Discord: Send response to channel\n    else MessageService Available\n        Runtime-->>Utils: messageService found\n        Utils-->>MM: Return null, check messageService\n        MM->>MsgService: handleMessage(runtime, message, callback)\n        MsgService->>Callback: Execute callback with content\n        Callback->>Discord: Send response to channel\n    else Legacy Event-based\n        Runtime-->>Utils: Neither available\n        Utils-->>MM: Return null\n        MM->>Runtime: emitEvent(MESSAGE_RECEIVED)\n        Runtime->>Callback: Execute callback with content\n        Callback->>Discord: Send response to channel\n    end\n```\n\n<!-- This is an auto-generated comment: release notes by coderabbit.ai -->\n\n## Summary by CodeRabbit\n\n* **Refactor**\n  * Refined the unified messaging interface to a new public API surface, improving consistency of message handling.\n* **Chores**\n  * Bumped package version to 1.3.7.\n\n<sub>✏️ Tip: You can customize this high-level summary in your review settings.</sub>\n\n<!-- end of auto-generated comment: release notes by coderabbit.ai -->",
+      "repository": "elizaos-plugins/plugin-discord",
+      "createdAt": "2026-01-07T11:29:44Z",
+      "mergedAt": null,
+      "additions": 147,
+      "deletions": 88
+    },
+    {
+      "id": "PR_kwDOOtXZkc6-hDMS",
+      "title": "bump version for release",
+      "author": "0xbbjoker",
+      "number": 44,
+      "body": "<!-- CURSOR_SUMMARY -->\n> [!NOTE]\n> Prepares a new release with dependency updates and a refreshed lockfile.\n> \n> - **Version bump**: `package.json` updated from `1.3.6` to `1.3.7`\n> - **Dependency update**: `@elizaos/core` upgraded from `^1.7.0` to `^1.7.2`\n> - **Lockfile refresh**: `bun.lock` re-resolved, updating numerous transitive deps (e.g., `esbuild`, `rollup`, `@discordjs/*`, `libsodium`, `ws`, `langchain`, `zod`); adds `configVersion: 1`\n> - No source code changes\n> \n> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit 0b72a46264544317e62abb5fe74b227bf2a5a696. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>\n<!-- /CURSOR_SUMMARY -->\n\n<!-- greptile_comment -->\n\n<h3>Greptile Summary</h3>\n\n\nThis PR bumps the plugin version from 1.3.6 to 1.3.7 and updates the `@elizaos/core` dependency from ^1.7.0 to ^1.7.2.\n\n- Plugin version incremented by patch level (1.3.6 → 1.3.7)\n- Core dependency updated to ^1.7.2 to pick up recent fixes\n- Lock file automatically updated with transitive dependency changes\n\n<h3>Confidence Score: 5/5</h3>\n\n\n- This PR is safe to merge with minimal risk\n- Simple version bump following semantic versioning. The core dependency update is a patch-level change that aligns with recent bug fixes in the repository. Lock file changes are automatically generated and consistent with the dependency update.\n- No files require special attention\n\n<h3>Important Files Changed</h3>\n\n\n\n\n| Filename | Overview |\n|----------|----------|\n| package.json | Version bumped from 1.3.6 to 1.3.7, `@elizaos/core` dependency updated from ^1.7.0 to ^1.7.2 |\n| bun.lock | Lock file updated to reflect dependency changes, including transitive dependencies |\n\n</details>\n\n\n\n<h3>Sequence Diagram</h3>\n\n```mermaid\nsequenceDiagram\n    participant Dev as Developer\n    participant PKG as package.json\n    participant LOCK as bun.lock\n    participant REG as npm Registry\n    \n    Dev->>PKG: Bump version 1.3.6 → 1.3.7\n    Dev->>PKG: Update @elizaos/core ^1.7.0 → ^1.7.2\n    Dev->>LOCK: Run bun install\n    LOCK->>REG: Resolve @elizaos/core@^1.7.2\n    REG-->>LOCK: Return dependency tree\n    LOCK->>LOCK: Update transitive dependencies\n    Note over LOCK: @discordjs/builders 1.12.2 → 1.13.1<br/>@discordjs/formatters 0.6.1 → 0.6.2<br/>@discordjs/util 1.1.1 → 1.2.0<br/>and others\n    LOCK-->>Dev: Lock file updated\n```\n\n<!-- greptile_other_comments_section -->\n\n<!-- /greptile_comment -->\n\n<!-- This is an auto-generated comment: release notes by coderabbit.ai -->\n\n## Summary by CodeRabbit\n\n* **Chores**\n  * Bumped package version to 1.3.7.\n  * Updated core dependency to ^1.7.2 for enhanced stability and compatibility.\n\n<sub>✏️ Tip: You can customize this high-level summary in your review settings.</sub>\n\n<!-- end of auto-generated comment: release notes by coderabbit.ai -->",
+      "repository": "elizaos-plugins/plugin-discord",
+      "createdAt": "2026-01-21T18:23:29Z",
+      "mergedAt": "2026-01-21T18:23:43Z",
+      "additions": 114,
+      "deletions": 151
+    },
+    {
+      "id": "PR_kwDOOtXZkc6-0dex",
+      "title": "fix(plugin-discord): bind proxy methods to target for private field a…",
+      "author": "0xbbjoker",
+      "number": 45,
+      "body": "When createCompatRuntime wraps the runtime in a Proxy, methods returned\r\nwithout binding have `this` set to the proxy instead of the original\r\nAgentRuntime. This breaks access to private fields like #conversationLength,\r\ncausing \"Cannot access invalid private field\" errors in providers.\n\n<!-- CURSOR_SUMMARY -->\n---\n\n> [!NOTE]\n> **Fixes method binding in compatibility proxy**\n> \n> - In `src/compat.ts`, updates `createCompatRuntime` to bind all non-overridden methods to the original runtime target, ensuring `this` is correct for accessing private fields (e.g., `#conversationLength`).\n> - Keeps special handling for `ensureWorldExists`, `ensureRoomExists`, `ensureConnection`, and `ensureConnections` while maintaining `serverId`/`messageServerId` compatibility.\n> - Bumps package version to `1.3.8`.\n> \n> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit be0ef8c22b7f51b404c74f5bc29bafe58b2de899. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>\n<!-- /CURSOR_SUMMARY -->\n\n<!-- greptile_comment -->\n\n<h3>Greptile Summary</h3>\n\n\nFixed a critical bug in the runtime compatibility layer where proxy-intercepted methods lost their `this` context, causing \"Cannot access invalid private field\" errors when accessing private fields like `#conversationLength`.\n\n**Key Changes:**\n- Added `.bind(target)` to all non-intercepted runtime methods in the proxy's `get` trap\n- Ensures methods maintain correct `this` binding to the original `AgentRuntime` instance instead of the proxy\n- Preserves access to private class fields that are not accessible from proxy context\n- Also includes code formatting improvements (indentation consistency)\n\n**Impact:**\n- Resolves runtime errors in actions like `transcribeMedia` and `chatWithAttachments` that call `runtime.getConversationLength()`\n- Maintains backward compatibility while fixing the proxy delegation issue\n- No breaking changes to the API surface\n\n<h3>Confidence Score: 5/5</h3>\n\n\n- This PR is safe to merge with no identified risks\n- The fix correctly addresses a well-understood JavaScript/TypeScript proxy behavior issue with a standard solution (binding methods to their original context). The change is minimal, focused, and preserves all existing functionality while fixing the private field access bug. The formatting changes are cosmetic improvements that increase code consistency.\n- No files require special attention\n\n<h3>Important Files Changed</h3>\n\n\n\n\n| Filename | Overview |\n|----------|----------|\n| src/compat.ts | Fixed proxy method binding to preserve `this` context for private field access, preventing \"Cannot access invalid private field\" errors when runtime methods access private fields like `#conversationLength` |\n| package.json | Version bump from 1.3.7 to 1.3.8 for patch release |\n\n</details>\n\n\n\n<h3>Sequence Diagram</h3>\n\n```mermaid\nsequenceDiagram\n    participant Client as Plugin Code\n    participant Proxy as createCompatRuntime Proxy\n    participant Target as AgentRuntime\n    participant PrivateField as #conversationLength\n\n    Note over Client,PrivateField: Before Fix: Method calls lose context\n    Client->>Proxy: runtime.getConversationLength()\n    Proxy->>Proxy: get trap intercepts access\n    Proxy->>Target: Reflect.get(target, 'getConversationLength', receiver)\n    Note over Proxy: Returns unbound function<br/>with this = proxy\n    Proxy-->>Client: Returns unbound function\n    Client->>Proxy: Call function\n    Proxy->>PrivateField: Try to access #conversationLength\n    PrivateField-->>Proxy: ❌ Error: Cannot access invalid private field\n    \n    Note over Client,PrivateField: After Fix: Methods bound to target\n    Client->>Proxy: runtime.getConversationLength()\n    Proxy->>Proxy: get trap intercepts access\n    Proxy->>Target: Reflect.get(target, 'getConversationLength', receiver)\n    Proxy->>Proxy: value.bind(target)\n    Note over Proxy: Binds this = target (AgentRuntime)\n    Proxy-->>Client: Returns bound function\n    Client->>Target: Call bound function\n    Target->>PrivateField: Access #conversationLength\n    PrivateField-->>Target: ✅ Returns conversation length\n    Target-->>Client: Returns value\n```\n\n<!-- greptile_other_comments_section -->\n\n<!-- /greptile_comment -->",
+      "repository": "elizaos-plugins/plugin-discord",
+      "createdAt": "2026-01-23T00:12:33Z",
+      "mergedAt": "2026-01-23T00:12:39Z",
+      "additions": 40,
+      "deletions": 29
+    },
+    {
+      "id": "PR_kwDOOtXZkc69C2PY",
+      "title": "voice-pr: utilities & other fixes",
+      "author": "odilitime",
+      "number": 42,
+      "body": "- Add missing DiscordService methods: buildMemoryFromMessage, setVoiceChannelStatus, clearActivity, setListeningActivity\r\n- Add voiceConnectionManager property for multi-bot support\r\n- Make buildStandardizedRooms/Users public for clientRegistry access\r\n- Add base64/local file attachment handling in messages.ts\r\n- Add updateLastMessage() and update-message.ts utility\r\n- Fix guild fetch type narrowing in joinChannel, sendDM, setVoiceChannelStatus\r\n- Fix unused variable in plugin-info.ts provider\r\n- Add *.d.ts to .gitignore (build artifacts)\r\n\n<!-- CURSOR_SUMMARY -->\n---\n\n> [!NOTE]\n> Minor housekeeping.\n> \n> - Bumps package version to `1.3.7` in `package.json`\n> - Adds `*.d.ts` and `*.tsbuildinfo` to `.gitignore` to exclude TypeScript build artifacts\n> \n> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit d618bd833ef952d6d159362dbc3c6a4feafaf79f. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>\n<!-- /CURSOR_SUMMARY -->\n\n<!-- greptile_comment -->\n\n<h3>Greptile Summary</h3>\n\n\nThis PR extends the Discord plugin with voice/activity features and attachment handling improvements. Key changes include:\n\n- **New DiscordService methods**: `buildMemoryFromMessage`, `setVoiceChannelStatus`, `clearActivity`, `setListeningActivity` enable voice channel status updates and bot activity management\n- **Public API exposure**: `buildStandardizedRooms` and `buildStandardizedUsers` methods made public for multi-bot clientRegistry access\n- **Enhanced attachment support**: Added base64 data URL and local file path handling in messages.ts for sending images/files from memory\n- **Message update utility**: New `update-message.ts` utility and `updateLastMessage()` method enable editing previously sent messages\n- **Type safety fixes**: Added null checks before `isDiscordSnowflake()` calls in joinChannel, sendDM, and setVoiceChannelStatus actions\n- **Build configuration**: Added `*.d.ts` to .gitignore and improved tsconfig.build.json settings\n\n**Critical security concern**: The new local file path handling (lines 297-301, 340-344 in messages.ts) reads files without path validation, creating a path traversal vulnerability if `media.url` comes from untrusted sources.\n\n<h3>Confidence Score: 3/5</h3>\n\n\n- PR has path traversal vulnerabilities in attachment handling that need fixing before merge\n- Score reflects two critical path traversal issues in messages.ts where local file paths are read without validation (lines 297-301, 340-344). While the rest of the changes are solid improvements with proper null checks and clean implementations, these security vulnerabilities prevent a higher score. The type fixes, new utility functions, and API additions are well-implemented.\n- messages.ts requires immediate attention for path traversal vulnerabilities in local file attachment handling\n\n<h3>Important Files Changed</h3>\n\n\n\n\n| Filename | Overview |\n|----------|----------|\n| src/service.ts | Major refactor: adds public buildStandardizedRooms/Users methods, voiceConnectionManager property, and new service methods (buildMemoryFromMessage, setVoiceChannelStatus, clearActivity, setListeningActivity). Removes multi-bot infrastructure for simpler single-client approach. |\n| src/messages.ts | Adds base64 data URL and local file path handling for attachments, adds updateLastMessage() method with lastSentMessages tracking. Removes progressive message tracking system. |\n| src/update-message.ts | New utility file for updating Discord messages with proper event emission. Clean implementation with good error handling. |\n| src/actions/joinChannel.ts | Adds null check for messageServerId before isDiscordSnowflake check, fixing potential undefined access bug. Minor formatting cleanup. |\n| src/actions/sendDM.ts | Adds null check for messageServerId before isDiscordSnowflake check, preventing potential undefined access. |\n| src/actions/setVoiceChannelStatus.ts | Adds null check for messageServerId before isDiscordSnowflake check. Minor formatting cleanup. |\n\n</details>\n\n\n\n<h3>Sequence Diagram</h3>\n\n```mermaid\nsequenceDiagram\n    participant User\n    participant DiscordAPI as Discord API\n    participant Service as DiscordService\n    participant MessageMgr as MessageManager\n    participant UpdateUtil as update-message.ts\n    participant Runtime as AgentRuntime\n    \n    Note over Service: Initialization\n    Service->>Service: Constructor creates client\n    Service->>MessageMgr: new MessageManager(this)\n    Service->>Service: voiceConnectionManager (optional)\n    Service->>DiscordAPI: client.login()\n    DiscordAPI-->>Service: ClientReady event\n    Service->>Service: onReady() - buildStandardizedRooms/Users\n    \n    Note over User,Runtime: Message Flow\n    User->>DiscordAPI: Send message\n    DiscordAPI->>Service: messageCreate event\n    Service->>MessageMgr: handleMessage()\n    MessageMgr->>MessageMgr: Process attachments (base64/local files)\n    MessageMgr->>Runtime: messageService.handleMessage()\n    Runtime-->>MessageMgr: callback with content\n    MessageMgr->>MessageMgr: Handle base64/local file attachments\n    MessageMgr->>DiscordAPI: send message chunks\n    DiscordAPI-->>MessageMgr: Discord messages\n    MessageMgr->>MessageMgr: Store in lastSentMessages Map\n    MessageMgr->>Runtime: createMemory()\n    \n    Note over MessageMgr,UpdateUtil: Message Update Flow\n    Runtime->>MessageMgr: updateLastMessage(roomId, content)\n    MessageMgr->>MessageMgr: Get from lastSentMessages Map\n    MessageMgr->>UpdateUtil: updateDiscordMessages()\n    UpdateUtil->>DiscordAPI: message.edit() for each chunk\n    UpdateUtil->>Runtime: emitEvent(MESSAGE_UPDATED)\n    \n    Note over Service,DiscordAPI: Voice/Activity Methods\n    Runtime->>Service: setVoiceChannelStatus(channelId, status)\n    Service->>DiscordAPI: channel.setStatus()\n    Runtime->>Service: setListeningActivity(text)\n    Service->>DiscordAPI: client.user.setActivity()\n    Runtime->>Service: clearActivity()\n    Service->>DiscordAPI: client.user.setActivity(null)\n```\n\n<!-- greptile_other_comments_section -->\n\n<!-- /greptile_comment -->",
+      "repository": "elizaos-plugins/plugin-discord",
+      "createdAt": "2026-01-14T00:15:24Z",
+      "mergedAt": null,
+      "additions": 3,
+      "deletions": 1
+    }
+  ],
+  "codeChanges": {
+    "additions": 154,
+    "deletions": 180,
+    "files": 3,
+    "commitCount": 7
+  },
+  "completedItems": [
+    {
+      "title": "bump version for release",
+      "prNumber": 44,
+      "type": "other",
+      "body": "<!-- CURSOR_SUMMARY -->\n> [!NOTE]\n> Prepares a new release with dependency updates and a refreshed lockfile.\n> \n> - **Version bump**: `package.json` updated from `1.3.6` to `1.3.7`\n> - **Dependency update**: `@elizaos/core` upgraded from `^",
+      "files": [
+        "bun.lock",
+        "package.json"
+      ]
+    },
+    {
+      "title": "fix(plugin-discord): bind proxy methods to target for private field a…",
+      "prNumber": 45,
+      "type": "bugfix",
+      "body": "When createCompatRuntime wraps the runtime in a Proxy, methods returned\r\nwithout binding have `this` set to the proxy instead of the original\r\nAgentRuntime. This breaks access to private fields like #conversationLength,\r\ncausing \"Cannot acc",
+      "files": [
+        "package.json",
+        "src/compat.ts"
+      ]
+    }
+  ],
+  "topContributors": [
+    {
+      "username": "0xbbjoker",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/54844437?u=90fe1762420de6ad493a1c1582f1f70c0d87d8e2&v=4",
+      "totalScore": 520.3695475941632,
+      "prScore": 455.6695475941632,
+      "issueScore": 0,
+      "reviewScore": 64.5,
+      "commentScore": 0.2,
+      "summary": "0xbbjoker: Focused on enhancing database reliability and performance within the elizaos/eliza repository, notably resolving a critical SQL parameterization issue in the SQL plugin via PR #6316 (+278/-1 lines). They further contributed to system scalability by proposing a new LRU caching layer for the database adapter in PR #6329 and maintained high code quality through two peer reviews. Their work involved extensive modifications across 378 files, demonstrating a significant commitment to bug fixes and testing infrastructure. Overall, their primary focus this month was on stabilizing and optimizing core database plugins and backend configurations."
+    },
+    {
+      "username": "standujar",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/16385918?u=718bdcd1585be8447bdfffb8c11ce249baa7532d&v=4",
+      "totalScore": 466.62208373680664,
+      "prScore": 366.1300837368066,
+      "issueScore": 0,
+      "reviewScore": 98,
+      "commentScore": 2.492,
+      "summary": "standujar: Focused on strengthening the database infrastructure and security within the elizaos/eliza repository, most notably by implementing Neon serverless support and enhancing Row Level Security (RLS) schemas in PR #6343. They demonstrated a significant commitment to system reliability by contributing over 7,700 lines of test code to isolate RLS contexts (PR #6330) and addressing compatibility issues for PGLite (PR #6339). Beyond these merged improvements, they worked on optimizing runtime initialization through parallelization and provided technical feedback via 11 total reviews and comments. Their primary focus this month was on bug fixes and extensive test coverage, particularly within the SQL plugin architecture."
+    },
+    {
+      "username": "madjin",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/32600939?u=cdcf89f44c7a50906c7a80d889efa85023af2049&v=4",
+      "totalScore": 334.3382171167137,
+      "prScore": 281.28021711671363,
+      "issueScore": 46.2,
+      "reviewScore": 5,
+      "commentScore": 1.8579999999999999,
+      "summary": "madjin: Focused on expanding the functionality and user experience of the project's web presence, most notably by implementing a comprehensive MMORPG-style character system for the leaderboard API in elizaos/elizaos.github.io #193. This substantial contribution involved over 2,800 lines of code and established a foundation for complex features like class evolution and visual identity systems, which they further detailed through 11 new feature requests and bug reports. Beyond these gamification enhancements, they improved site accessibility by adding an XSL stylesheet for browser-rendered RSS feeds in #188 and identified critical performance bottlenecks regarding memory consumption in the build process. Their work this month primarily centered on feature development and configuration, significantly advancing the project's interactive and data-driven capabilities."
+    },
+    {
+      "username": "greptile-apps",
+      "avatarUrl": "https://avatars.githubusercontent.com/in/867647?v=4",
+      "totalScore": 276.538,
+      "prScore": 0,
+      "issueScore": 0,
+      "reviewScore": 274.5,
+      "commentScore": 2.0380000000000003,
+      "summary": "greptile-apps: Focused exclusively on providing feedback and guidance through 14 code reviews and 4 pull request comments this month. Despite having no direct code changes or merged pull requests, they maintained a consistent presence in the review process to support team contributions. Their primary impact was centered on collaborative oversight and technical discussion within the pull request workflow."
+    },
+    {
+      "username": "YuriNachos",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/19365375?u=35202bfa8350f028db180527a789e8dcb7576d42&v=4",
+      "totalScore": 249.18435236903713,
+      "prScore": 248.98435236903714,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0.2,
+      "summary": "YuriNachos: Focused on enhancing system stability and core functionality within the elizaos/eliza repository, contributing over 400 lines of code across 10 open pull requests. Their work addressed critical infrastructure needs, such as validating directory paths to prevent errors (#6379), ensuring proper authentication by loading environment variables in agent commands (#6374, #6376), and improving event emission logic in the server (#6378). Additionally, they introduced new capabilities to the core runtime with the unregisterAction method (#6372, #6375) and improved the reliability of entity connections within the bootstrap plugin (#6370, #6371). This month’s efforts were primarily dedicated to bug fixes and feature enhancements aimed at improving the robustness of the CLI and core agent runtime."
+    },
+    {
+      "username": "borisudovicic",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/31806472?u=8935f4d43fd7e4eb9bf5ff92d54d4d2f8ac8a786&v=4",
+      "totalScore": 230,
+      "prScore": 0,
+      "issueScore": 230,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "borisudovicic: Focused on refining the user experience and product logic for the Eliza platform, driving the resolution of 18 issues related to agent discovery, chat interface usability, and credit management. They played a key role in defining the \"SDK-first Hooks Mode\" (#5966) and \"Core Hooks\" (#5928) architecture while overseeing critical UI/UX polish, such as optimizing chat box dynamics (#6310) and improving the agent creation workflow (#6306, #6307). Their contributions centered on streamlining the onboarding process for non-signed-up users (#6312, #6353) and enhancing the public agent ecosystem through better state separation and knowledge transfer (#6313, #6303). Overall, their activity focused on product management and quality assurance to ensure a cohesive and scalable agent-building experience."
+    },
+    {
+      "username": "odilitime",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/16395496?u=c9bac48e632aae594a0d85aaf9e9c9c69b674d8b&v=4",
+      "totalScore": 205.42360532830114,
+      "prScore": 203.26760532830113,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 2.1559999999999997,
+      "summary": "odilitime: Focused on enhancing core plugin functionality and build system efficiency, notably merging a substantial update to the bootstrap plugin and SQL actions in elizaos/eliza (#6333) that involved over 6,900 lines of code changes. They also addressed infrastructure performance by optimizing build task inputs in turbo.json (#6349) and triaged a regression in Discord slash commands (elizaos-plugins/plugin-discord#15). Their work this month demonstrates a strong emphasis on system stability and configuration, with a primary focus on bug fixes and architectural improvements across code and test files."
+    },
+    {
+      "username": "wtfsayo",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/82053242?u=98209a1f10456f42d4d2fa71db4d5bf4a672cbc3&v=4",
+      "totalScore": 177.48902788001413,
+      "prScore": 167.65102788001414,
+      "issueScore": 0,
+      "reviewScore": 9,
+      "commentScore": 0.838,
+      "summary": "wtfsayo: Focused on enhancing infrastructure stability and database reliability, notably delivering a significant overhaul to the SQL plugin in elizaos/eliza (#6323) that introduced critical pool configurations and error handling. They also modernized the project's CI/CD pipeline by upgrading Claude workflows to Opus 4.5 and enabling automated bot triggers (#6324, #6328). Across 45 commits, they managed extensive modifications to nearly 400 files, demonstrating a high-impact focus on bug fixes and configuration management. Their primary contributions centered on improving system resilience through robust database integration and automated workflow optimizations."
+    },
+    {
+      "username": "hanzlamateen",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/10975502?u=53f23921078d9a27d96751373bb44f4bd2d58bf4&v=4",
+      "totalScore": 92.37709407952083,
+      "prScore": 92.37709407952083,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "hanzlamateen: Focused on critical compatibility and stability improvements for the V2.0.0 release, notably resolving a2a example and protobuf compatibility issues in elizaos/eliza via PR #6386. This significant contribution involved modifying 35 files and over 500 lines of code to ensure seamless integration across the platform's core components. They also initiated further fixes for the avatar example and elevenlabs plugin in PR #6387, demonstrating a commitment to functional reliability. Their primary focus this month was split between major refactoring and feature work, with a strong emphasis on code quality and documentation."
+    },
+    {
+      "username": "1bcMax",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/195689928?u=85f5178dd043e3d408b42cb5685e65806d723b1a&v=4",
+      "totalScore": 63.23034748685607,
+      "prScore": 62.89034748685607,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0.33999999999999997,
+      "summary": "1bcMax: Focused on expanding payment capabilities within the ecosystem by initiating the implementation of the plugin-blockrun for x402 micropayments in elizaos/eliza (#6355). This substantial feature addition involved over 1,000 lines of new code across 11 files, demonstrating a significant investment in building out financial infrastructure. The work shows a comprehensive approach to development, with a balanced focus on core feature logic, testing, and configuration."
+    },
+    {
+      "username": "vbkotecha",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/86377299?u=32a79d9adc10f2738dca41f4690de9ec944d8025&v=4",
+      "totalScore": 43.5437738965761,
+      "prScore": 43.5437738965761,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "vbkotecha: Focused on enhancing authentication capabilities within the twitter plugin, specifically developing a new broker authentication mode supported by a robust offline testing suite in PR #47. This work involved significant technical effort, contributing over 2,500 lines of code across 31 files to ensure the feature's reliability. Their activity demonstrates a balanced commitment to feature implementation and quality assurance, with a primary focus on backend logic and comprehensive test coverage."
+    },
+    {
+      "username": "revlentless",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/215957173?v=4",
+      "totalScore": 43.5437738965761,
+      "prScore": 43.5437738965761,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "revlentless: Focused on a major architectural expansion by initiating the implementation of a WebAssembly agent runtime for the v2.0.0 release of elizaos/eliza (#6363). This significant undertaking involved modifying 99 files with over 5,100 lines of code, demonstrating a high level of effort directed toward core feature development and system infrastructure. Their work this month was characterized by a heavy emphasis on feature engineering and comprehensive testing to support this new runtime environment."
+    },
+    {
+      "username": "lalalune",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/18633264?u=e2e906c3712c2506ebfa98df01c2cfdc50050b30&v=4",
+      "totalScore": 34.5787738965761,
+      "prScore": 34.1407738965761,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0.43799999999999994,
+      "summary": "lalalune: Focused on a massive structural overhaul of the codebase, primarily driven by the ongoing development of the \"V2.0.0\" release in elizaos/eliza (#6351). This high-impact effort involved 191 commits and extensive modifications across over 33,000 files, signaling a comprehensive restructuring of the project's architecture. Their work demonstrated a balanced commitment to stability and quality, with a primary focus on bugfixes, configuration updates, and core code enhancements."
+    },
+    {
+      "username": "matomoniwano",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/47988393?u=2e31304db3ca7b0a1f62bc26443c25ec34bb519d&v=4",
+      "totalScore": 29.89251334905818,
+      "prScore": 29.69251334905818,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0.2,
+      "summary": "matomoniwano: Focused on foundational development for the Eliza Python core by initiating a prototype for the RLM provider via PR #6383. This ongoing work involved substantial technical groundwork across 16 files, totaling over 800 lines of code changes to establish the necessary infrastructure. Their efforts were primarily concentrated on configuration, documentation, and testing to ensure a robust framework for the new provider. The month’s activity reflects a dedicated focus on architectural setup and system integration within the Python-based ecosystem."
+    },
+    {
+      "username": "linear",
+      "avatarUrl": "https://avatars.githubusercontent.com/in/20150?v=4",
+      "totalScore": 26,
+      "prScore": 0,
+      "issueScore": 26,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "linear: Focused on architectural improvements and system stability by identifying and documenting critical technical enhancements across the elizaos/eliza repository. They prioritized core infrastructure by proposing solutions for JWT authentication (#6327), message processing parallelization (#6337), and runtime initialization optimization (#6334). Their contributions also addressed immediate reliability issues, including a fix for double processing in the Messaging API (#6298) and resolving a race condition in credit deduction (#6338). Overall, their focus remained on high-level system design, database query patterns, and backend security."
+    },
+    {
+      "username": "rejected-l",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/99460023?u=977f49541583c40f4fc5f6a9f11ca6c6a78b362a&v=4",
+      "totalScore": 24.119306144334054,
+      "prScore": 24.119306144334054,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "rejected-l: Focused on administrative maintenance within the elizaos/eliza repository, specifically ensuring legal compliance by updating the project's licensing information. They successfully merged PR #6301 to update the license year, demonstrating attention to project documentation and upkeep. This work involved minor adjustments across two files, reflecting a primary focus on general repository maintenance and chore-related tasks."
+    },
+    {
+      "username": "augchan42",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/20424105?u=d1a74732b07564927928798346f07cd50935c529&v=4",
+      "totalScore": 22.553332238032112,
+      "prScore": 22.553332238032112,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "augchan42: Focused on enhancing API integration standards by introducing support for X-Title and HTTP-Referer headers in the OpenRouter plugin via PR #23. This work involved modifying four files to improve metadata transparency and compliance for outgoing requests. Their contributions this month were evenly split between feature implementation and documentation updates, ensuring that new configuration options are properly supported and recorded."
+    },
+    {
+      "username": "Xayaan",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/5237930?u=7840b286463bde982c8af8f389e61e26a01328cb&v=4",
+      "totalScore": 18.346573590279974,
+      "prScore": 14.346573590279972,
+      "issueScore": 4,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "Xayaan: Focused on identifying and documenting database-related edge cases within the elizaos/eliza repository. They contributed by reporting a specific technical issue regarding SQL error handling for zero-vector fallbacks (#6380). Their activity this month was centered on issue identification and system stability reporting."
+    },
+    {
+      "username": "BaseGold",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/240206422?u=6eb4bd10d4ab502d36d022d95331370c5b76e055&v=4",
+      "totalScore": 16.833213344056215,
+      "prScore": 16.833213344056215,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "BaseGold: Focused on enhancing the connectivity capabilities of the MCP plugin by implementing the StreamableHTTP transport and custom headers functionality in elizaos-plugins/plugin-mcp (#20). This contribution directly improves the flexibility of the plugin's communication layer by allowing for more complex HTTP configurations. Their work this month was centered entirely on feature development within the codebase to support advanced transport protocols."
+    },
+    {
+      "username": "j4lambert",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/36552964?v=4",
+      "totalScore": 15.545521226679158,
+      "prScore": 15.545521226679158,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "j4lambert: Focused on establishing project safety protocols by initiating the creation of a security policy for the elizaos/eliza repository. They opened PR #6428 to introduce a SECURITY.md file, providing essential guidelines for vulnerability reporting. This contribution represents their primary focus on documentation and project governance for the month."
+    },
+    {
+      "username": "ChristopherTrimboli",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/27584221?u=de148a498b5af814e037c2975112fadd09df743f&v=4",
+      "totalScore": 15,
+      "prScore": 0,
+      "issueScore": 0,
+      "reviewScore": 15,
+      "commentScore": 0,
+      "summary": "ChristopherTrimboli: Focused on quality assurance and peer collaboration this month, contributing through the review and approval of two pull requests. Their involvement centered on providing oversight and validation for team contributions rather than direct code implementation. This activity reflects a focus on maintaining project standards through the code review process."
+    },
+    {
+      "username": "timolein74",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/225394307?v=4",
+      "totalScore": 14.346573590279972,
+      "prScore": 14.346573590279972,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "timolein74: This month, the contributor focused on expanding the ecosystem's integration capabilities by initiating a pull request to the elizaos-plugins/registry. They submitted a configuration update to add the AsterPay plugin reference to the central index (#251). This work represents a targeted effort in feature expansion through registry management and configuration updates."
+    },
+    {
+      "username": "takasaki404",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/193405421?u=8b79613f736e04d6e10ebe37042851efa758768d&v=4",
+      "totalScore": 14.346573590279972,
+      "prScore": 14.346573590279972,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "takasaki404: Focused on ecosystem expansion by initiating the integration of new tools into the plugin registry. They submitted a configuration update in elizaos-plugins/registry (#247) to add the @zane-archer/plugin-aimo-router package. This contribution was centered entirely on registry management and configuration maintenance."
+    },
+    {
+      "username": "project-aeris-disaster-agent",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/242933833?v=4",
+      "totalScore": 14.346573590279972,
+      "prScore": 14.346573590279972,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "project-aeris-disaster-agent: Focused on expanding the ecosystem's integration capabilities by initiating the addition of the Sportradar plugin to the registry. This effort is represented by the open pull request in elizaos-plugins/registry (#250), which aims to incorporate @elizaos/plugin-sportradar into the official directory. Their primary focus this month has been on plugin registration and ecosystem discoverability."
+    },
+    {
+      "username": "kamiyo-ai",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/197570892?u=4c83683aeb4fdfcb6c7e747ec6fd77619964952b&v=4",
+      "totalScore": 14.346573590279972,
+      "prScore": 14.346573590279972,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "kamiyo-ai: Focused on expanding the ecosystem by initiating the integration of a new plugin into the registry. This effort is centered on the submission of PR #246 in elizaos-plugins/registry to add the @kamiyo/eliza plugin. Their primary focus this month has been on plugin registration and ecosystem contribution."
+    },
+    {
+      "username": "CIII-glitch",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/256561388?v=4",
+      "totalScore": 14.346573590279972,
+      "prScore": 14.346573590279972,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "CIII-glitch: Focused on expanding ecosystem connectivity by initiating the integration of the Agent Index plugin for x402 endpoint discovery. This contribution, currently tracked in elizaos-plugins/registry #252, aims to enhance service discovery capabilities within the registry. Their primary focus this month was on infrastructure registration and plugin discovery."
+    },
+    {
+      "username": "shuhaib112",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/211030292?v=4",
+      "totalScore": 9,
+      "prScore": 0,
+      "issueScore": 0,
+      "reviewScore": 9,
+      "commentScore": 0,
+      "summary": "shuhaib112: Focused on collaborative quality assurance by providing technical feedback through two pull request reviews. While no code was directly authored or merged this month, their contributions centered on the peer review process to support team development. Their primary impact was limited to these review-based discussions."
+    },
+    {
+      "username": "Abdulkader-Safi",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/53955839?u=840e43b472d25cb1a82c19b77124def52dfaa69c&v=4",
+      "totalScore": 4.54,
+      "prScore": 0,
+      "issueScore": 4.2,
+      "reviewScore": 0,
+      "commentScore": 0.33999999999999997,
+      "summary": "Abdulkader-Safi: Focused on troubleshooting and reporting environment-specific setup issues within the elizaos/eliza repository. They identified and documented a project generation failure in issue #6388, which was subsequently resolved. Their activity this month was centered on issue triage and community engagement through issue comments rather than direct code contributions."
+    },
+    {
+      "username": "thewoweffect",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/113222443?u=cb21d15b0ce815d0f68167f2eca236aad6c64598&v=4",
+      "totalScore": 4.4,
+      "prScore": 0,
+      "issueScore": 4.2,
+      "reviewScore": 0,
+      "commentScore": 0.2,
+      "summary": "thewoweffect: Focused on identifying and documenting system errors within the elizaos/eliza repository, specifically reporting a failure in the reflection evaluator. They successfully triaged and closed issue #6364 regarding the \"Entity not found\" error during update operations. Their activity this month was centered on issue reporting and troubleshooting within the core framework."
+    },
+    {
+      "username": "samarth30",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/48334430?u=1fc119a6c2deb8cf60448b4c8961cb21dc69baeb&v=4",
+      "totalScore": 4,
+      "prScore": 0,
+      "issueScore": 4,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "samarth30: Focused on project expansion by proposing a new \"Apps promotion\" feature for the elizaos/eliza repository. This contribution involved identifying a growth opportunity and documenting the requirement in issue #6341. Their primary focus this month was on feature ideation and initial project planning."
+    },
+    {
+      "username": "Zenobow",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/255418143?v=4",
+      "totalScore": 2.1,
+      "prScore": 0,
+      "issueScore": 2.1,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "Zenobow: Focused on identifying and documenting system inconsistencies within the elizaos/eliza repository. They reported a technical regression regarding eligibility mismatches and snapshot bugs related to Tangem Hardware (#6369). Their primary focus this month was on issue identification and troubleshooting hardware-related migration bugs."
+    },
+    {
+      "username": "tdnupe3",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/25161668?u=94680b6bcbcfce954c7a9dd09d667a3919953041&v=4",
+      "totalScore": 2,
+      "prScore": 0,
+      "issueScore": 2,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "tdnupe3: Focused on expanding the ecosystem's financial capabilities by proposing a comprehensive implementation guide for AI agent payments. They initiated a strategic discussion in elizaos/eliza (#6365) regarding the integration of Circle and Coinbase APIs to facilitate automated transactions. Their primary focus this month was on architectural planning and documentation for payment infrastructure."
+    },
+    {
+      "username": "metatev",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/26566294?u=a0604d1f9f7a7936e350643ffccaef1f2a808fad&v=4",
+      "totalScore": 2,
+      "prScore": 0,
+      "issueScore": 2,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "metatev: Focused on long-term project capabilities by proposing a strategic enhancement for smart contract deployment. They initiated a discussion on future infrastructure needs within the elizaos/eliza repository by opening issue #6367. Their primary focus this month was on architectural planning and expanding the platform's functional scope."
+    },
+    {
+      "username": "GarrickBrown",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/41980127?u=605528eb2347d8e0368ae5b08e6fdbdbfb5c293b&v=4",
+      "totalScore": 2,
+      "prScore": 0,
+      "issueScore": 2,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "GarrickBrown: Focused on identifying and reporting stability issues within the Telegram plugin ecosystem. They documented a critical TypeError occurring during image processing, opening issue #23 in elizaos-plugins/plugin-telegram to facilitate a fix for the crashing bug. Their primary focus this month was on bug reporting and improving the reliability of plugin-based image handling."
+    },
+    {
+      "username": "BinaryBluePeach",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/192237769?v=4",
+      "totalScore": 2,
+      "prScore": 0,
+      "issueScore": 2,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "BinaryBluePeach: Focused on identifying and reporting integration issues within the Discord plugin ecosystem. They documented a critical runtime error regarding undefined message functions in elizaos-plugins/plugin-discord (#43), providing essential feedback for troubleshooting the plugin's communication layer. Their activity this month was centered on bug reporting and system stability within the Discord integration."
+    }
+  ],
+  "newPRs": 4,
+  "mergedPRs": 2,
+  "newIssues": 2,
+  "closedIssues": 1,
+  "activeContributors": 9
+}

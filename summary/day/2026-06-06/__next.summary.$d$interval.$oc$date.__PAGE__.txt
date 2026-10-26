@@ -1,0 +1,1289 @@
+1:"$Sreact.fragment"
+2:I[4817319,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"IntervalSelector"]
+3:I[6998365,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"LlmCopyButton"]
+23:I[3642796,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],""]
+24:I[3238488,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"StatCardsDisplay"]
+42:I[4261541,["/eliza-leaderboard/_next/static/chunks/b33bcbdcb3f88354.js","/eliza-leaderboard/_next/static/chunks/8ba59154b6704904.js"],"OutletBoundary"]
+43:"$Sreact.suspense"
+4:Ta4a,## Summary
+App-credits purchases and inference spend use **two different ledgers**, so credits a user buys for a monetized app can't be spent — and a user with cloud/org credits is blocked from a monetized app unless they separately top up the app pool. This blocks third-party browser apps monetizing via `X-App-Id` end-to-end.
+
+This looks like a half-finished migration (see the `// Switched from app_credit_balances ... to the org balance` comment), so flagging rather than unilaterally changing billing.
+
+## Details (origin/develop)
+- **Purchase funds the per-app pool.** `processPurchase` credits `app_credit_balances` via `appCreditBalancesRepository.addCredits(...)` — `packages/cloud-shared/src/lib/services/app-credits.ts:~307`.
+- **Balance check reads the per-app pool.** `checkBalance` → `appCreditBalancesRepository.findByAppAndUser(...)` — `app-credits.ts:~193`.
+- **Spend debits the ORG balance.** The spend path was switched to `creditsService.reserveAndDeductCredits({ organizationId })` — `app-credits.ts:~408` (the "Switched from app_credit_balances ... to the org balance" comment). The `X-App-Id` completions path also reserves against the org: `reserveCredits({ organizationId })` — `packages/cloud-api/v1/chat/completions/route.ts:~934`.
+
+## Impact
+1. A user buys app-credits → funds land in `app_credit_balances` → inference debits the **org** balance → "Insufficient credits" against an empty org balance. **Money paid, credits never spendable.**
+2. `checkBalance` gates on the app pool, so a user who *does* have org/cloud credits is rejected from a monetized app unless they top up the app pool too.
+3. The `/api/v1/apps/[id]/chat` 402 says "Insufficient app credits" but deducts from the org balance (`route.ts:~295-333`), so the error misdirects users.
+
+## Suggested fix (pick one ledger)
+- **A — org-only (matches the "Switched" comment's intent):** make `processPurchase` credit the **org** balance (and have `/api/v1/app-credits/balance` + `checkBalance` report/read org). App-credits checkout becomes "top up cloud credits for this app"; creator still earns markup via `recordCreatorEarnings()`. Simplest if the per-app pool is being retired.
+- **B — app-pool-only:** make the `X-App-Id` spend path read+debit `app_credit_balances` instead of the org balance.
+
+Happy to open the PR once you confirm the direction (A or B) — A looks consistent with the existing comment + `recordCreatorEarnings`. Also a one-line follow-up: word the `/apps/[id]/chat` 402 to match whichever ledger is checked.
+
+Found while building a third-party app (SupaKan) on the `X-App-Id` app-credits flow.
+5:T6d0,## Context
+The continuous-chat overlay shows an always-5 prompt-suggestion strip (#8201), now lightly tailored client-side (time-of-day + history; #8224). The next step toward genuinely **context/history/memory-aware** suggestions is a small server endpoint — filing as an issue first (non-trivial, touches `@elizaos/agent`) to coordinate before any PR.
+
+## Proposed design (mirrors the existing `quickContext` pattern)
+- **`GET /api/suggestions?scope=<PageScope>&roomId=<uuid>`** in `@elizaos/agent` (handler alongside `handleMemoryRoutes`; `quickContext`/`/api/context/quick` is the blueprint — `packages/agent/src/api/memory-routes.ts`). Returns a typed `{ suggestions: PromptSuggestion[5], tier, generatedAt }`.
+- **Client**: `client.getPromptSuggestions(scope, opts)` on `@elizaos/ui` (mirror `client.quickContext`).
+- **Wiring**: `usePromptSuggestions` calls it on view-change / convo-switch / message-settled (debounced), with the current **static set as the offline fallback** (no signature change — already structured for this).
+- **Tailoring inputs** (all eliza-native, no odysseus backend): active view/route (`app.tab`→`PageScope`), recent thread (`getMemories`), optional memory (`searchMemories`), time of day.
+- **Phasing**: Phase-1 = scope + recent-thread heuristic, **zero model calls** (cheap, cacheable); Phase-2 = optional single `TEXT_SMALL` rank. Always returns 5; degrade-not-empty.
+
+## Why an issue, not a PR
+This adds a public backend endpoint + client surface — wanted @shawmakesmagic's steer on (a) endpoint shape vs. a provider, and (b) whether this overlaps anything you're already doing, before I build it. Happy to implement once there's a direction.
+
+Refs: #8201 (strip), #8224 (client-side tailoring).6:T1679,## Summary
+
+Decomposes the ~7.5K-LOC `plugin-lifeops` monolith into a slim orchestrator (`plugin-personal-assistant`) plus 6 new focused plugins, with the `/lifeops` dashboard view removed in favor of per-domain plugin views. Existing domain plugins (todos, health, calendar, documents, phone) gain the owner-facing actions and views they should have owned all along. Stub future homes for runtime primitives (owner-state, scheduled-task, registries, dispatch) are scaffolded in `@elizaos/core` and `@elizaos/app-core` to mark where the still-in-PA implementations will eventually migrate.
+
+No backwards-compat shims — `@elizaos/plugin-lifeops` is gone, not aliased.
+
+## What changed
+
+### New plugins (Phase 1)
+- **plugin-relationships** — entity/relationship graph (`ENTITY` action + Drizzle `app_relationships` schema). Absorbs lifeops `entities/`, `relationships/`, voice-observer bridge.
+- **plugin-inbox** — cross-channel inbox (`INBOX` action + triage + Drizzle `app_inbox` + `/inbox` view). Distinct from plugin-messages (which stays Android-SMS-only).
+- **plugin-goals** — life goals + self-care (`OWNER_GOALS`/`ROUTINES`/`REMINDERS`/`ALARMS` + `CheckinService` + Drizzle `app_goals` + `/goals` view).
+- **plugin-blocker** — focus/distraction control (`BLOCK` action + website + app blocker services + `/focus` view).
+- **plugin-finances** — owner finances (`OWNER_FINANCES` + Drizzle `app_finances` + `/finances` view).
+- **plugin-remote-desktop** — `REMOTE_DESKTOP` action.
+
+### Extended plugins (Phase 2)
+- **plugin-todos** — `+ /todos` view (Today/Upcoming/Someday lanes); doc-block folds `OWNER_TODOS`.
+- **plugin-health** — `+ OWNER_HEALTH`, `OWNER_SCREENTIME` actions; `+ /health` view (Sleep/Circadian/Screen-time/Activity/Connectors).
+- **plugin-calendar** — `+ CALENDAR` (8 ops), `CONFLICT_DETECT` actions; `+ /calendar` view.
+- **plugin-documents** — `+ OWNER_DOCUMENTS` action; `+ /documents` view.
+- **plugin-phone** — `+ VOICE_CALL` (Twilio) action.
+
+### Rename + view kill (Phase 3)
+- `plugin-lifeops` → `plugin-personal-assistant` (727+50 file renames, 299 cross-workspace updates, zero remaining `@elizaos/plugin-lifeops` references).
+- Internal exports renamed (`appLifeOpsPlugin` → `personalAssistantPlugin` etc.).
+- `packages/shared/src/contracts/lifeops.ts` → `personal-assistant.ts`.
+- App registry entry `apps/lifeops.json` → `apps/personal-assistant.json`.
+- `/lifeops` view deleted (LifeOpsPageView, LifeOpsTuiView, XR variant, `lifeops.overview` widget). PA no longer ships a view — domain plugins do.
+- `.github/workflows/lifeops-bench*.yml` filenames kept (benchmark-suite identifier, not the plugin name) — required-check refs would break.
+
+### Core foundations (Phase 3, structural only)
+Scaffold-only future homes; code still lives in `plugin-personal-assistant` until the next migration pass:
+- `packages/core/src/owner-state/` — OwnerFactsStore, HandoffStore, GlobalPauseStore, FirstRunService, PendingPromptsStore interfaces.
+- `packages/core/src/registries/` — Anchor, Gate, EventKind, EscalationLadder, Family, Blocker registry interfaces.
+- `packages/core/src/scheduled-task/` — ScheduledTask types extending core's existing task-scheduler with gates/escalation/completionCheck/anchors.
+- `packages/app-core/src/dispatch/` — ConnectorRegistry, ChannelRegistry, ApprovalQueue, send-policy interfaces.
+Each module has a README with `TODO(migrate:)` pointing back to the still-canonical source.
+
+### What stayed in `plugin-personal-assistant`
+The cross-domain orchestration role:
+- `BRIEF`, `PRIORITIZE`, `PERSONAL_ASSISTANT`, `SCHEDULED_TASKS`, `RESOLVE_REQUEST` actions.
+- Default-pack composition (daily-rhythm, morning-brief, followup-starter, habit-starters, executive-assistant).
+- The entity/relationship store, scheduled-task runner, owner-state, registries, connector/channel registries — all still here, will migrate into core/app-core in follow-up passes once the new homes exist.
+
+## Test plan
+
+- [x] `bun run lint` — exit 0
+- [x] `bun run typecheck` — exit 0 workspace-wide
+- [x] `bun run build` — exit 0 workspace-wide
+- [ ] Manual smoke: load PA + the new domain plugins in dev-ui, confirm each registered view renders
+- [ ] Manual smoke: `BRIEF` action still composes calendar + inbox + todos + finances correctly
+- [ ] DB migration plan: new plugins introduce `app_relationships`, `app_inbox`, `app_goals`, `app_blocker`, `app_finances` schemas — verify their tables co-exist with PA's existing `app_lifeops` schema during the cut-over window
+
+## Follow-up
+
+This PR establishes the structural decomposition. The remaining migration moves the implementations out of `plugin-personal-assistant` into the new homes:
+1. Move EntityStore + RelationshipStore + merge engine → plugin-relationships.
+2. Move INBOX action body + TriageRepository → plugin-inbox.
+3. Move OWNER_GOALS/ROUTINES/REMINDERS/ALARMS bodies + CheckinService + default-pack fragments → plugin-goals.
+4. Move BLOCK + website-blocker/ + app-blocker/ → plugin-blocker.
+5. Move OWNER_FINANCES body → plugin-finances.
+6. Move CALENDAR/CONFLICT_DETECT bodies + calendar-gate + travel-time → plugin-calendar.
+7. Move OWNER_DOCUMENTS body → plugin-documents.
+8. Move OWNER_HEALTH/SCREENTIME bodies + ActivityTracker + PresenceSignalBridge → plugin-health.
+9. Move ScheduledTaskRunner + Anchor/Gate/EventKind/EscalationLadder registries + OwnerState services → @elizaos/core.
+10. Move ConnectorRegistry + ChannelRegistry + ApprovalQueue + send-policy → @elizaos/app-core.
+11. After (1)-(10), PA becomes ~10% of its current size — pure BRIEF/PRIORITIZE/PA orchestration + default-pack composition.
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)7:Tb27,## What
+
+Closes the production gap that left the capped self-spend autonomy mechanism (merged in #8250) unreachable by a live agent. A `/economics` sub-agent can now autonomously drive the monetized-app loop through the parent-agent Cloud command broker.
+
+## Why
+
+`runParentAgentBroker` / `runCloudCommand` (the only emitter of `spend_auto_authorized`) had **no production caller**: nothing parsed a child's `USE_SKILL parent-agent {…}` request, `buildSkillsManifest({ virtualSkills })` was never called, and the autonomy was only proven via Vitest. See `plugins/plugin-agent-orchestrator/docs/economics-goal-runbook.md` (bundled/updated here).
+
+## How (the three gaps, closed)
+
+1. **Dispatch** — new `parent-agent-dispatch.ts`: a string/escape-aware extractor for `USE_SKILL parent-agent {json}` (handles streaming/partial JSON, braces inside strings, nested params, markdown backticks, malformed markers) + a dispatch helper that runs the directive through `runParentAgentBroker` and streams `result.text` back via `acp.sendToSession`. Wired into `SubAgentRouter.handleEvent`: accumulates the child's `message` chunks, dispatches the first complete directive, caps round-trips via `ACPX_SUB_AGENT_ROUND_TRIP_CAP`. **Marker-guarded** — only acts on text containing `USE_SKILL parent-agent`, which ordinary coding tasks never emit, so the session-event hot path is inert for every other flow.
+2. **Advertise** — `spawnAgentForTask` writes a `SKILLS.md` for `capabilityProfile === "economics"` tasks via `buildSkillsManifest(..., { recommendedSlugs: ["build-monetized-app","eliza-cloud"], virtualSkills: [PARENT_AGENT_BROKER_MANIFEST_ENTRY] })` so the child learns the slug + arg contract. Best-effort (never fatal).
+3. **Estimate** — the broker's unknown-cost stall now returns an *actionable* instruction (fetch a quote with `domains.check`, retry with `params.spendEstimateUsd`) instead of a human-only yes/no, and the manifest guidance advertises the same pattern — so `domains.buy` self-authorizes within the cap without a human turn.
+
+## Verification
+
+- New `parent-agent-dispatch.test.ts` (11 cases): extractor edge cases + the broker→`sendToSession` bridge end to end via the network-free `list-cloud-commands` mode.
+- Existing `parent-agent-broker.test.ts` + `skill-manifest.test.ts` still green (no regression from the preview/guidance change).
+- Plugin typecheck clean; biome clean.
+- End-to-end (a real `spend_auto_authorized` on `domains.buy`/`containers.create`) still needs a live ACP backend — the runbook documents the exact steps.
+
+## Safety
+
+The hot-path hook is a no-op unless the child emits the literal `USE_SKILL parent-agent` marker. Paid/mutating commands remain gated by the existing capped spend allowance (`ELIZA_AGENT_SPEND_CAP_USD`, default 0 = confirm everything); destructive commands always require a human.8:Tc50,## Summary
+
+- fixes Cloud OAuth login from mobile/CLI auth by keeping Steward's `redirect_uri` on the bare allowlisted `/login` callback and storing the post-login return target in session storage
+- simplifies the iOS first-run surface for Cloud v1: orange background, orb + transparent `Connect`, no local runtime choice on the compact mobile screen
+- waits for native Cloud login completion before provisioning the Cloud agent, then persists the provisioned agent runtime URL/id separately
+- adds cloud simulator/device build and sideload helper commands plus focused mobile/cloud onboarding coverage
+
+## Root Cause
+
+The iOS app opens `https://www.elizacloud.ai/auth/cli-login?...` for native Cloud auth. The deployed login page preserved `returnTo` by putting the query string on the Steward OAuth `redirect_uri`, producing `/login?returnTo=...`. Steward's production tenant allowlist accepts `https://www.elizacloud.ai/login` but rejects the query-bearing callback, so the in-app browser landed on a white JSON `redirect_uri is not allowed` error before Google auth.
+
+## Validation
+
+- `bun run --cwd packages/cloud-frontend test src/pages/login/steward-oauth-url.test.ts src/pages/login/login-return-to.test.ts src/pages/login/steward-login-section.test.tsx`
+- `bun run --cwd packages/ui test src/first-run/use-first-run-controller.test.tsx src/first-run/CompactOnboarding.test.tsx src/api/client-cloud-direct-auth.test.ts src/first-run/first-run.test.ts src/state/persistence-cloud-active-server.test.ts`
+- `bun run --cwd packages/shared typecheck`
+- `bun run --cwd packages/cloud-frontend typecheck`
+- `bun run --cwd packages/ui typecheck`
+- `bun run --cwd packages/cloud-frontend build:client`
+- `bunx @biomejs/biome check ...` on the touched Cloud/shared/UI/app files
+- `bun run --cwd packages/cloud-frontend audit:cloud` produced `116 passed`
+- `ELIZA_IOS_DERIVED_DATA_PATH=/Users/home/Documents/eliza/.eliza-local/DerivedData/ios-cloud-sim LANG=en_US.UTF-8 bun run --cwd packages/app build:ios:cloud:sim` succeeded
+
+## Live Verification Notes
+
+Before this PR is deployed to production, live `www.elizacloud.ai` still serves the old bundle and reproduces the mobile login failure. A direct live probe confirms the backend contract:
+
+- query-bearing callback: `400 redirect_uri is not allowed for this tenant`
+- bare `/login` callback: `302` to Google OAuth
+
+After this lands and Cloudflare Pages production deploy completes, retest the iOS simulator Cloud login/provisioning path.
+
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+* **New Features**
+  * iOS cloud runtime support—cloud API requests bypass local agent transport
+  * Cloud agent provisioning and persistent storage
+  * OAuth return-to preservation across login redirects
+  * PKCE authentication support
+
+* **Bug Fixes**
+  * Prevent concurrent cloud login race conditions
+  * Standardized OAuth redirect handling
+
+* **Tests**
+  * Added CompactOnboarding component test coverage
+  * Added first-run controller hook tests
+  * Updated onboarding UI tests
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->9:Tb32,## What
+
+Hardens the daily container-billing cron so a re-run (manual trigger, overlapping CF cron, retry) can never double-debit. Defense in depth across three layers, plus a billing reconciliation fix.
+
+**Stacks on #8269** (the free-hosting fix). Until that merges, the diff here includes its single commit; afterward this shrinks to just the four new commits.
+
+## Why
+
+The cron had no idempotency: `convertToCredits` re-debited earnings on every call, `listBillableContainers` ignored the (written-but-never-read) `next_billing_at`, there was no app-level lock (CF cron provides none), and `credit_transactions` recorded `-dailyCost` while `credit_balance` only moved by `-fromCredits` — so the ledger overstated the credit debit by the earnings portion (which is already on the earnings ledger), breaking `credit_balance == sum(credit_transactions)`.
+
+## How
+
+- **Deterministic period.** `computeContainerBillingPeriod(now)` normalizes the run to its UTC day, so the period (and the key derived from it) is stable across same-day re-runs.
+- **Earnings idempotency.** `convertToCredits` takes an optional `idempotencyKey` (`container:<id>:<utc-day>`); under the per-user advisory lock it returns the prior `credit_conversion` ledger entry instead of debiting again. Backed by a partial unique index on `redeemable_earnings_ledger((metadata->>'idempotency_key'))`.
+- **Query gate.** `listBillableContainers(now)` skips containers whose `next_billing_at` is still in the future (already paid this period).
+- **Row-lock guard.** `recordSuccessfulDailyBilling` locks the container row and no-ops if the period is already billed — closing the read→write race between listing and charging. Backed by a partial unique index on `container_billing_records(container_id, billing_period_start) WHERE status='success'`.
+- **Reconciliation.** The `credit_transaction` now records `-fromCredits` (the actual credit-balance movement); `dailyCost` and the earnings/credits split stay in metadata.
+
+## Migration (0139)
+
+Adds both partial unique indexes and **dedupes any pre-existing duplicate `success` rows first** (keep earliest by `created_at,id`) so the index can be created on existing prod data — confirmed duplicates can exist today since nothing guarded against them. The ledger index is partial on a non-null key, so existing conversions (which carry no key) are unaffected.
+
+## Verification
+
+- `db:migrate` applies all 140 migrations from scratch incl. 0139 against the real cumulative schema — clean.
+- New PGlite-backed suite (`container-billing-idempotency.test.ts`) exercises the real SQL (`FOR UPDATE`, the JSONB-keyed lookup, both partial unique indexes): earnings debit once per key, gate by `next_billing_at`, `-fromCredits` recorded, row-lock no-op on re-run.
+- `cloud-shared` + `cloud-api` typecheck clean; biome clean; `db:check-migrations` passes.a:T5b1,## Problem
+
+`POST /api/v1/apps/:id/domains/buy` has no atomic idempotency guard. On a fresh domain it reads a non-locking `getDomainByName`, then **debits credits** and **registers via Cloudflare**, writing the unique `managed_domains` row last. Two concurrent or retried requests both pass the existence check, so both debit AND both register — a real double-charge / double real-money spend. `deductCredits` is atomic per call but carries no idempotency key.
+
+## Fix
+
+Mirror the proven `app_image_generation_idempotency` pattern:
+
+- New append-only **`domain_purchase_idempotency`** table (migration `0138`), unique `key`.
+- The buy route claims `domain-buy:{org}:{domain}` via `INSERT … ON CONFLICT DO NOTHING` **before** any money moves. Only the claim winner runs the purchase; a concurrent/retried buy short-circuits — replays the completed row's cached `response_body` (200), or 409 while in progress.
+- The purchase flow is extracted so a success **caches** its response and any failure **releases** the claim (so a genuine retry can proceed). The register-failure refund path is unchanged.
+
+## Verification
+
+End to end on the mock stack: first buy debits $14.95 (1000 → 985.05); a **second buy of the same domain replays the response with no second debit** (stays 985.05) and returns the same `appDomainId`. `db:check-migrations` passes.
+
+Follow-up: the container-billing earnings path has an analogous missing idempotency (noted in #8269).b:T683,## What
+
+Adds an end-to-end smoke test that drives the monetized-app money path against
+a live `cloud:mock` stack, plus the Cloudflare-registrar stub needed to run it
+offline.
+
+Flow proven: seed org (1000 credits) → `apps.create` →
+`apps.monetization.update` → `domains.check` → `domains.buy` (Cloudflare stub,
+**real credit debit**) → record inference-markup earnings → survival-economics
+decision (`computeContainerBillingPlan`: an earning agent's daily container
+bill is paid from earnings; a broke agent → `insufficient` / shutdown path).
+
+## Changes
+
+- `packages/test/cloud-e2e/scripts/monetized-app-loop-smoke.ts` — the smoke
+  script. Seeds via the existing `seedTestUser` fixture; asserts each step;
+  exits non-zero on failure.
+- `packages/scripts/cloud/admin/dev/cloud-api-dev.mjs` — in e2e/test mode, pass
+  `--var ELIZA_CF_REGISTRAR_DEV_STUB:1` (overridable) so domain check/buy use
+  deterministic stubs instead of hitting real Cloudflare.
+
+## Verification
+
+Ran **ALL PASS** against a local stack: domain bought + attached, credits
+debited 1000 → 985.05; earnings recorded; survival plan `billed` from earnings;
+broke plan `insufficient`.
+
+How to run:
+
+    CLOUD_E2E=1 NODE_ENV=test bun run cloud:mock --no-frontend --reset
+    # then, with the printed api/pglite ports:
+    API_BASE=http://127.0.0.1:<apiPort> \
+    DATABASE_URL=postgresql://postgres@127.0.0.1:<pglitePort>/postgres \
+    NODE_ENV=test ELIZA_KMS_BACKEND=memory \
+    bun run packages/test/cloud-e2e/scripts/monetized-app-loop-smoke.ts
+
+Note: also touches `cloud-api-dev.mjs` (a different function than #8248); a
+trivial rebase may be needed if that PR merges first.
+c:T476,Follow-up to #8258 (the `/api/v1/containers` deploy + read route). Adds the per-container mutation surface the survival loop needs — the only lifecycle exit today is the billing cron's auto-shutdown.
+
+`v1/containers/[id]/route.ts`:
+- **PATCH** `/api/v1/containers/:id` — action-discriminated: `restart` | `setEnv` | `scale`.
+- **DELETE** `/api/v1/containers/:id` — `?mode=stop` (preserve the row, billing off) or delete (remove the row); `?purgeVolume=true` to also drop the volume (defaults false).
+
+Each verb maps 1:1 to an existing org-scoped `HetznerContainersClient` method (no new business logic in the route), with `HetznerClientError` → HTTP mapping (`container_not_found`→404, `invalid_input`→400, `ssh_unreachable`/`no_capacity`→503). `DELETE`/stop sets `status=stopped` which halts billing immediately. Router regenerated via codegen.
+
+Verified on the API-only mock: unknown container → 404 `container_not_found`, bad PATCH action → 400, `scale` with desiredCount≠1 → 400 `invalid_input`. Real container mutation runs over SSH to the Docker-on-Hetzner pool (not exercisable on the mock, same as #8258's POST).d:T7e9,## What
+
+`shouldForwardEnv` (the allowlist `buildEnv` uses to decide which host env vars a
+spawned ACP coding sub-agent inherits) matched the OS search path as
+`key === "PATH"` — case-sensitively.
+
+The repo runtime is Bun, and **Bun on Windows reports the key as `Path`, not
+`PATH`**. So `buildEnv` forwarded *none* of it, and every spawned ACP sub-agent
+inherited an empty `PATH`. The vendored opencode shim then died at spawn with:
+
+```
+'bun' is not recognized as an internal or external command, operable program or batch file.
+```
+
+i.e. ACP-driven coding agents were unusable on Windows.
+
+## Fix
+
+- Match the OS system vars **case-insensitively** (a `Set` keyed by uppercase
+  name) and broaden the set to the Windows essentials a spawned shell + Bun +
+  the agent's config/cache resolution need (`PATHEXT`, `SYSTEMROOT`, `COMSPEC`,
+  `SYSTEMDRIVE`, `TEMP`/`TMP`, `USERPROFILE`, `APPDATA`/`LOCALAPPDATA`,
+  `PROGRAMFILES`, …) alongside the existing POSIX names.
+- **Canonicalize** each forwarded system var to its uppercase form in `buildEnv`
+  (all three sources: `process.env`, `customCredentials`, `extra`) so a child
+  never inherits two casings of the same var (the winner is undefined on
+  Windows) and JS consumers that read `env.PATH` case-sensitively resolve it.
+- Extract the projection into the pure, exported `forwardableSubAgentEnv` /
+  `canonicalForwardedEnvKey` so the behavior is unit-testable.
+
+The deny-list (`isDeniedSubAgentEnvKey`) still runs **first** (deny wins over
+allow), so no secret is newly forwarded — covered by the existing + new tests.
+
+## Testing
+
+- `__tests__/unit/should-forward-env.test.ts` — added Windows-casing,
+  no-over-match, system-var, canonicalization, and dual-casing-collapse cases
+  (17 pass).
+- `bun run --cwd plugins/plugin-agent-orchestrator typecheck` clean.
+
+## How it was surfaced
+
+Running the monetized-app economics `/goal` loop end-to-end on Windows: a real
+`opencode` ACP sub-agent (Cerebras `gpt-oss-120b`) would not spawn until the
+PATH was forwarded.
+e:T8ce,Two related fixes to the Steward login **return leg** (callback handling), found while debugging live prod login failures on elizacloud.ai. Both are confirmed against the real Steward source (`Steward-Fi/steward`).
+
+## Commit 1 — consume the OAuth/email code from the URL **fragment** (`#code=`)
+
+Steward's callback returns the one-time auth code in the URL **fragment**, not the query — for **both** OAuth (`#code=<nonce>`) and magic-link email (`#code=<nonce>&auth=email&tenantId=...`, see Steward `auth.ts` `GET /callback/email` → `setRedirectFragment`). The fragment never reaches the server (no access logs, no `Referer`) — same rationale as `#token=`. But the SPA only read `?code=` (query) and `#token=` (hash), so a `#code=` fragment was silently dropped and sign-in never completed (lands on `…/login#code=…` and sits there).
+
+Fix: `consumeStewardCodeFromQuery()` now reads the code from `?code=` **or** `#code=`, stripping whichever it used (preserving non-OAuth params), leaving `#token=` for `consumeStewardTokensFromHash()`. Verified against real jsdom (12/12, incl. the exact prod URL) + new `steward-session.test.ts`.
+
+## Commit 2 — surface Steward's real callback `reason` instead of a generic error
+
+Steward's `GET /auth/callback/email` redirects failures with `?error=email_auth_failed&reason=<code>`, but the SPA's reason→message map only handled 4 codes; the rest (`invalid_link`, `tenant_mismatch`, `rate_limited`, `method_disabled`, `sso_required`, `tenant_not_found`, `tenant_forbidden`, `missing_params`, `mfa_required`) fell through to the generic "Couldn't complete sign-in. Try again." — which is exactly why a failing magic link only ever said "Try again." Added a case for each. `invalid_link` copy is intentionally neutral (the link isn't necessarily expired/used). Copy-only, no behavioral change.
+
+## Scope / context
+`packages/cloud-frontend` only. Follows #8259 (PKCE on `/authorize`) — that fixed the outbound leg; this fixes the return leg. Note: the separate live magic-link `invalid_link` itself is a **Steward-side** issue (token store not shared across Workers isolates + a redirect-origin env mismatch) tracked separately — these two commits make the eliza side correct and honest regardless.f:T4a3,## What
+Adds `ElizaCloudClient.transcribeAudio(request, options)` — a high-level helper for `POST /api/v1/voice/stt`, mirroring `createEmbeddings` / `generateImage`. Apps currently hand-roll the multipart POST (FormData + manual `Authorization` / `X-App-Id`) because there was no typed helper.
+
+- `src/types.ts`: `VoiceSttRequest` (`audio: Blob`, `filename?`, `languageCode?`) + `VoiceSttResponse` (`transcript`, `duration_ms`)
+- `src/client.ts`: `transcribeAudio()` builds FormData and routes through `this.v1.request("POST", "/voice/stt", { ...appIdRequestOptions(options.appId), body: form })`, so auth + `X-App-Id` billing are applied automatically and the runtime sets the multipart boundary (no forced `application/json`)
+- `src/client.test.ts`: unit test asserting URL, method, `X-App-Id`, bearer auth, and a `FormData` body
+
+## Why
+So apps (e.g. wiki-speech-trainer) can drop their hand-rolled STT fetch and use the SDK everywhere, like the edad reference. Additive — no existing signatures change; types auto-export via `export type * from "./types.js"`.
+
+## Verification
+`bun run --cwd packages/cloud-sdk test` → 37 pass / 0 fail · `typecheck` → clean · biome clean.
+10:T4b8,## What
+
+Adds a third-party registry entry for [`@madeonsol/plugin-madeonsol`](https://www.npmjs.com/package/@madeonsol/plugin-madeonsol) per the process in `packages/registry/README.md`:
+
+- `entries/third-party/madeonsol__plugin-madeonsol.json` (new entry)
+- `generated-registry.json` regenerated via `src/generate.ts`
+
+No other files touched. `validate-cli` passes (3 entries validated).
+
+## About the plugin
+
+Real-time Solana memecoin intelligence for elizaOS agents, backed by the [MadeOnSol](https://madeonsol.com) API:
+
+- KOL trade feed from 1,000+ tracked Solana wallets (sub-3s from on-chain confirmation)
+- Multi-KOL coordination/convergence signals
+- Pump.fun deployer reputation tiers + new-launch alerts
+- Wallet win rate / FIFO cost-basis PnL
+
+Auth is either a MadeOnSol API key (free tier available) or **x402 USDC micropayments** — agents with a Solana wallet can pay per call with no signup.
+
+- npm: `@madeonsol/plugin-madeonsol` @ 1.9.0 (keywords include `elizaos` for runtime auto-discovery)
+- Repo: https://github.com/LamboPoewert/plugin-madeonsol (MIT, logo + banner assets included)
+- `package.json` carries `agentConfig` with typed plugin parameters
+
+I own the package and repository.11:T50b,## Problem
+`NativeAcpClient.connect()` issues the `initialize` JSON-RPC request without a timeout argument, so it always falls back to the hardcoded `DEFAULT_TIMEOUT_MS` (300s) — even though every session already carries a `timeoutMs` (from `ACPX_DEFAULT_TIMEOUT_MS` / `ELIZA_ACP_PROMPT_TIMEOUT_MS`) that governs `session/prompt`.
+
+A cold first spawn of an agent that runs from source (e.g. the vendored opencode shim) compiles its TS tree and installs its provider npm package (e.g. `@ai-sdk/cerebras`) during startup. That can take longer than 300s, so the handshake aborts with `ACP request timed out: initialize` before the agent is ever usable — even when the operator configured a longer timeout.
+
+## Fix
+Pass the configured session timeout to the `initialize` request, falling back to the 300s default when unset. This makes the handshake consistent with how `session/prompt` already honors `this.opts.timeoutMs`.
+
+## Test
+Adds a regression test to `acp-native-transport.test.ts`: with `timeoutMs: 600_000`, fake timers advance past the old 300s default (asserting the handshake has NOT timed out yet), then past the configured 600s budget (asserting it times out with `ACP request timed out: initialize`).
+
+`vitest run __tests__/unit/acp-native-transport.test.ts` → 17/17 pass.12:T617,## Problem
+
+The cloud-e2e stack fixture cannot boot cloud-api. Since #8112 it launches `cloud-api-e2e-server.mjs`, which `import()`s the cloud-api worker straight from TypeScript source (`packages/cloud-api/src/index.ts`). Neither runtime can load it from source:
+
+- **node** throws `ERR_MODULE_NOT_FOUND` on the first extensionless `.ts` relative import (`./worker-polyfills`);
+- **bun** can't resolve cloud-api's `@/…` path aliases without a tsconfig `baseUrl`, which **tsgo** (the repo typechecker) rejects.
+
+Only wrangler/esbuild bundling resolves the aliases. So `startCloudStack` times out at the cloud-api health wait, and every cloud-e2e spec — including the merged `monetized-app-loop.spec.ts` — can't run.
+
+## Fix
+
+Boot cloud-api through the same wrangler dev launcher `cloud:mock` already uses: `bun run --cwd packages/cloud-api dev`. The `stripBunAncestryEnv` in `env.ts` exists precisely so wrangler starts from a bun-spawned context. wrangler pre-bundles, so requests are fast (no per-request cold start).
+
+Also add an opt-in `frontend?: false` option to `startCloudStack` for API-only stacks, and gitignore the fixture's runtime `.logs/`.
+
+## Verification
+
+Booted the API-only stack via this launcher and ran the full monetized-app loop (create → monetization → domains.buy with a real $14.95 credit debit → earnings → survival-economics) end to end against the mock: **ALL PASS**. This is the harness change that makes the already-merged `monetized-app-loop.spec.ts` (and the rest of the cloud-e2e suite) actually boot cloud-api.13:T94b,> **DRAFT — pending a product decision.** Removing anonymous guest chat is contested: shad0w/nubs want it gone (sign-in friction is low-value now that signup grants $5); Odilitime thinks the "try a response before signing up" funnel may be worth keeping. **This is teed up and ready if @standujar says go** — otherwise it's here for review, not merge.
+
+## What
+Replace anonymous guest access with **"sign in (get $5) to use it"**. The
+`X-Affiliate-Code` revenue model is **completely untouched**.
+
+- Delete the 9 anon-session routes (`auth/{create-anonymous-session,anonymous-session,migrate-anonymous}`, `anonymous-session`, `set-anonymous-session`, `cron/cleanup-anonymous-sessions`, `affiliate/{create-session,create-character}`, `my-agents/claim-affiliate-characters`) + regenerate the router (`codegen`).
+- Delete the anon services (`anonymous-session-creator`, `anonymous-sessions`, `auth-anonymous`) + drop the cleanup cron entry.
+- `/v1/chat` + the eliza welcome route now **401 unauthenticated** instead of falling back to an anon user (the affiliate `X-Affiliate-Code` read is preserved).
+- **Gate the public chat** behind a sign-in CTA ("Sign in to chat with {agent} — get $5 in credits"); strip the dead anon plumbing in `eliza-page-client` + `my-agents`; remove the anon message-count increments.
+
+## Verified
+Built + typechecked locally against a real install: **`cloud-api` typecheck green, `cloud-frontend` typecheck green** (my files), **biome clean**. CI will re-verify.
+
+## Deliberately NOT in this PR
+- **The destructive DB drop** (`anonymous_sessions` table + `users`/`user_identities.is_anonymous` columns) is a **separate, soaked follow-up migration** — the columns are kept and simply no longer read (snapshot-only rollback for the drop, so it's decoupled).
+- The required **`audit:cloud` visual-review gate** (cloud-frontend UI change) — I couldn't run it in my env; needs an eyeball before "done".
+- Minor dead-but-harmless leftovers to prune in follow-up (non-breaking, never populated now): `chat-store.anonymousSessionToken`, the `is_anonymous` field in `lib/data/user.ts`, and the dead message-limit signup UI in `eliza-chat-interface`.
+
+## Keep (do not touch)
+The affiliate revenue model: `affiliate_codes`/`user_affiliates`, `ai-billing` `affiliateCode` branch, `X-Affiliate-Code` header reads, `v1/affiliates`, redeemable/app earnings.
+14:Ta6e,## Why
+
+The Magic Link return-leg silently sends users back to /login on staging.elizacloud.ai. Reproducible with Playwright: open /login#code=… and the SPA POSTs to `https://api.elizacloud.ai/api/auth/steward-nonce-exchange` (the prod Worker) instead of `https://api-staging.elizacloud.ai/...`.
+
+`packages/cloud-frontend/src/lib/steward-session.ts` mapped all of `{elizacloud.ai, www.elizacloud.ai, dev.elizacloud.ai, staging.elizacloud.ai}` onto the same `ELIZA_CLOUD_DIRECT_AUTH_BASE = "https://api.elizacloud.ai"`. Each Worker pins its Steward tenant via `STEWARD_TENANT_ID` (`elizacloud-staging` vs `elizacloud`), and both the embedded `/steward` proxy and the steward-nonce-exchange bypass route forward that header to Steward. So a code minted by the staging tenant 401s when the exchange happens against the prod tenant. The bypass route responds `{error:"Invalid or already-used code", code:"code_invalid"}` and the SPA's callback flow returns to /login with no surfaced error.
+
+This bug was masked while Steward did NOT yet require PKCE + signatures: the prod-vs-staging exchange was either failing in a way the SPA already absorbed, or both env Workers were silently letting unsigned/lenient exchanges through. After PR #8259 (PKCE + nonce-exchange signing) tightened the path, the tenant mismatch became user-visible.
+
+## What
+
+Replace the single shared base string with a per-host map:
+
+```ts
+const ELIZA_CLOUD_AUTH_BASES: Record<string, string> = {
+  "elizacloud.ai": "https://api.elizacloud.ai",
+  "www.elizacloud.ai": "https://api.elizacloud.ai",
+  "dev.elizacloud.ai": "https://api.elizacloud.ai",
+  "staging.elizacloud.ai": "https://api-staging.elizacloud.ai",
+};
+```
+
+This matches what the Pages Function `_proxy.ts` already does for the same-origin `/api/*` calls (staging.pages.dev → api-staging, prod → api).
+
+## Tests
+
+The existing `resolveStewardAuthEndpoint` test was **actively asserting the bug** — it expected `staging.elizacloud.ai` to map to `api.elizacloud.ai`. Updated to keep the prod cases and add a dedicated tenant-isolation case that covers all three endpoints (nonce-exchange, session, refresh) on staging.
+
+3 new tests + 3 unchanged prod tests, all green via `bun x vitest run --environment=jsdom`.
+
+## Test plan
+
+- [ ] CI green
+- [ ] Cloud-cf-deploy rolls out the new SPA bundle
+- [ ] On staging.elizacloud.ai, click Magic Link → check inbox → click the link → land authenticated on /dashboard (not /login)
+- [ ] DevTools Network shows POST to `api-staging.elizacloud.ai/api/auth/steward-nonce-exchange` returning 200 with `data.token`
+- [ ] No regression on prod (`www.elizacloud.ai` still hits `api.elizacloud.ai`)15:T830,
+
+[![Dependabot compatibility score](https://dependabot-badges.githubapp.com/badges/compatibility_score?dependency-name=aiohttp&package-manager=uv&previous-version=3.13.5&new-version=3.14.0)](https://docs.github.com/en/github/managing-security-vulnerabilities/about-dependabot-security-updates#about-compatibility-scores)
+
+Dependabot will resolve any conflicts with this PR as long as you don't alter it yourself. You can also trigger a rebase manually by commenting `@dependabot rebase`.
+
+[//]: # (dependabot-automerge-start)
+[//]: # (dependabot-automerge-end)
+
+---
+
+<details>
+<summary>Dependabot commands and options</summary>
+<br />
+
+You can trigger Dependabot actions by commenting on this PR:
+- `@dependabot rebase` will rebase this PR
+- `@dependabot recreate` will recreate this PR, overwriting any edits that have been made to it
+- `@dependabot show <dependency name> ignore conditions` will show all of the ignore conditions of the specified dependency
+- `@dependabot ignore <dependency name> major version` will close this group update PR and stop Dependabot creating any more for the specific dependency's major version (unless you unignore this specific dependency's major version or upgrade to it yourself)
+- `@dependabot ignore <dependency name> minor version` will close this group update PR and stop Dependabot creating any more for the specific dependency's minor version (unless you unignore this specific dependency's minor version or upgrade to it yourself)
+- `@dependabot ignore <dependency name>` will close this group update PR and stop Dependabot creating any more for the specific dependency (unless you unignore this specific dependency or upgrade to it yourself)
+- `@dependabot unignore <dependency name>` will remove all of the ignore conditions of the specified dependency
+- `@dependabot unignore <dependency name> <ignore condition>` will remove the ignore condition of the specified dependency and ignore conditions
+You can disable automated security fix PRs for this repo from the [Security Alerts page](https://github.com/elizaOS/eliza/network/alerts).
+
+</details>16:T4fb,## Problem
+
+In the container-billing cron, `redeemableEarningsService.convertToCredits` **throws** on insufficient/contended earnings for a positive amount — it never returns `{ success: false }` (see `redeemable-earnings.ts` lines 769/774/796). So the guard
+
+```ts
+if (!conversion.success) { /* Fall through: try to charge full cost to credits below. */ }
+```
+
+is **dead code**, and the throw propagates out of `processContainerBilling` — the container is recorded as `error` and **never billed for the day (free hosting)**. The unconditional `newBalance = currentBalance + fromEarnings - dailyCost` would also have inflated the balance by earnings that were never debited.
+
+## Fix
+
+Wrap `convertToCredits` in try/catch. On failure, charge the full day to credits (`fromEarnings = 0`, `fromCredits = dailyCost`) — matching the documented intent — instead of aborting billing. This also closes the latent balance-inflation path.
+
+The deeper hardening (per-(container, billing_period) idempotency on `convertToCredits`, gating `listBillableContainers` on `next_billing_at`, and recording the `credit_transactions` amount as `-fromCredits` for ledger reconciliation) is intentionally left as a follow-up since it needs a migration + a reconciliation-semantics decision.17:Ta3f,## Why
+
+After yesterday's #8282 (staging SPA → api-staging) deployed, the magic-link return-leg gets further than before — `POST /steward/auth/email/verify` now returns 200 with the freshly-issued tokens — but it still kicks the user back to `/login?returnTo=/dashboard` with **"Request expiry header required"** rendered in the login card.
+
+Worker tail captures the actual failure:
+
+\`\`\`
+POST /steward/auth/email/verify              200  (Steward issued tokens)
+POST /api/auth/steward-session               200  (Worker cookies sync)
+POST /api/auth/steward-refresh               502  {"error":"Request expiry header required","code":"internal_error"}
+                                                   ↑ this kicks back to /login
+\`\`\`
+
+The SPA's session-bootstrap calls `/api/auth/steward-refresh` immediately after the verify to rotate the freshly-issued refresh token. That bypass route forwards directly to Steward `POST /auth/refresh` without going through the `/steward/*` embedded proxy in `bootstrap-app.ts` — same shape as the nonce-exchange bypass route that #8259 already taught to sign. **steward-refresh was missed in that PR**, so its outbound fetch arrives at Steward unsigned and Steward's `authorization-signature` middleware 502s it.
+
+## What
+
+Plumb `c.env.STEWARD_REQUEST_SIGNING_SECRET` into \`callStewardRefresh\` and sign the outbound fetch the same way \`steward-nonce-exchange\` does:
+
+- Convert the local \`headers\` object to a \`Headers\` instance (so \`signStewardMutatingRequest\` can mutate it).
+- Build the canonical URL + body bytes once, sign when the secret is configured, then \`fetch(refreshUrl, …)\`.
+
+No new helper, no new env binding — the secret is already set on the Worker (both prod and staging) and \`signStewardMutatingRequest\` already lives in \`packages/cloud-api/src/steward/sign.ts\` (added by #8259).
+
+## Test plan
+
+- [ ] CI green
+- [ ] cloud-cf-deploy rolls out the staging Worker
+- [ ] Live test: clean SPA profile, request fresh magic link, click immediately. Worker tail should show:
+  - \`POST /api/auth/steward-refresh\` → **200** (not 502)
+  - Final URL = \`/dashboard\` (not \`/login?returnTo=/dashboard\`)
+- [ ] Prod regression: same flow on \`www.elizacloud.ai\` still works (Worker secret is identical, signing function identical to nonce-exchange).
+
+## Follow-up
+
+Audit every other \`/api/auth/steward-*\` bypass route for the same gap (\`steward-session\` is read-only verification but still POSTs upstream; \`steward-nonce-exchange\` signs already). If we find more, batch them together rather than chasing one bypass-route bug at a time.18:T8e7,## Why
+
+The cloud-cf-deploy `build:core` step builds plugin-google transitively (app-core → plugin-health → plugin-calendar → plugin-google) and has been failing on develop with:
+
+```
+client-factory.ts(48,25): error TS2769: No overload matches this call.
+  Type 'OAuth2Client' (10.7.0) is not assignable to
+  Type 'OAuth2Client' (10.5.0)
+    Types have separate declarations of a private property 'redirectUri'.
+```
+
+bun's isolated linker installs **two copies** of `google-auth-library`:
+- `googleapis@169.0.0` declares `google-auth-library: ^10.2.0` → resolves to **10.7.0**
+- `googleapis-common@8.0.2` declares `google-auth-library: 10.5.0` exact → installs **10.5.0** nested
+
+Shaw's earlier `#7d1ee6e34c` routed the type via `googleapis.Auth`, but that's the 10.7.0 side, while `gmail_v1.Options.auth` (and the calendar/drive/docs/sheets/meet equivalents) is typed against the 10.5.0 side baked into googleapis itself. Same physical class, different TypeScript nominal identity.
+
+Tried `overrides` and `resolutions` in root package.json — bun still nests the second copy under `googleapis-common`. The next available lever is at the call site.
+
+## What
+
+Per-method `as unknown as <ns>.Options` cast on each of the six service constructors (`gmail`, `calendar`, `drive`, `docs`, `sheets`, `meet`). Runtime auth object is structurally identical — only the TS nominal check is wrong. Short comment near `apiOptions` documents the trap so the next person looking at this code doesn't spend an afternoon retracing it.
+
+## Impact
+
+Unblocks `cloud-cf-deploy` which has been failing all afternoon. Three already-merged cloud-api fixes are sitting undeployed behind this:
+- #8282 staging tenant routing
+- #8283 wildcard verify-step removal
+- #8287 steward-refresh signing (the Magic Link callback fix)
+
+## Test plan
+
+- [ ] CI green
+- [ ] `cloud-cf-deploy` on develop completes both Worker + Pages
+- [ ] Worker staging picks up the steward-refresh signing (Magic Link callback lands on /dashboard, not /login?returnTo=)
+- [ ] No regression on prod Worker
+
+## Follow-up
+
+A proper fix would pin both googleapis dependencies to the same auth-library minor (or wait for googleapis-common to bump). That's an upstream concern; this cast keeps us shipping while it gets sorted.19:T42c,## What
+Several monetized-inference error surfaces say **"Insufficient app credits"** — implying a per-app credit pool — even though billing already runs against the user's **org (cloud) credit balance**.
+
+`appCreditsService.deductCredits()` / `reconcileCredits()` were switched off the (now-stranded) `app_credit_balances` pool to the org balance, and `checkBalance()` reads the org balance too. The wording just never caught up.
+
+Changes (message/comment only):
+- `/v1/chat/completions`, `/v1/messages`, `/v1/apps/[id]/chat`, `/v1/apps/[id]/generate-image`: `Insufficient app credits` → `Insufficient credits`
+- `/v1/apps/[id]/chat` log line → `Insufficient cloud credits`
+- short comment at each pre-check noting `checkBalance()` reads the org balance
+
+## Why
+The "app credits" wording makes integrators think they must pre-fund a per-app pool (the stranded one) when users actually spend their org credits.
+
+## Notes
+Error `code`s left **unchanged** to avoid a contract break — text only. biome clean on the changed files; full suite via CI. Refs #8253.
+1a:Tb4b,## Why
+
+\`cloud-cf-deploy.yml\` line 184 had:
+\`\`\`yaml
+- name: Verify generated agent wildcard route
+  if: ... && deploy_environment == 'production'
+  run: |
+    node ... fetch('https://00000000-0000-0000-0000-000000000000.elizacloud.ai/')
+    if (!body.includes('agent not found or not running')) throw new Error(...)
+\`\`\`
+
+The string \`agent not found or not running\` only lives in \`packages/scripts/cloud/admin/daemons/agent-router.ts\` — a **Hetzner-side daemon**, never the cloud-api Worker. So a \`*.elizacloud.ai/*\` Worker route doesn't actually return that message; it returns the Worker's root JSON (\`{name:"eliza-cloud-api", …}\`).
+
+Each time someone added the wildcard to satisfy the verifier (most recently overnight), it caught \`staging.elizacloud.ai/*\` before Pages could serve the SPA. Result:
+
+- Dashboard at \`staging.elizacloud.ai/dashboard/agents\` returned cloud-api JSON instead of HTML.
+- The Magic Link callback (which lives at \`/login\`) was served as JSON, broke, and silently redirected to \`/login\` again.
+- "+ New Agent" / "Open Web UI" were unreachable.
+
+I deleted the wildcard yesterday and again this morning; both times it got re-added because the verifier kept telling whoever was deploying that something was missing. The fix is to drop the verifier (the contract it checks was never implemented) and leave a \`NOTE:\` explaining the trap.
+
+## What
+
+Replace the step with a \`# NOTE: …\` comment that documents:
+- What the verifier used to check
+- Why that contract was never wired
+- What broke each time the wildcard was added back
+- When (and how) to reintroduce a verifier alongside an actual Worker handler
+
+No other changes — \`bunx wrangler deploy\` still runs, all the secret-publish steps still run, the staging deploy that just landed (#8282) is unaffected.
+
+## Test plan
+
+- [ ] CI green
+- [ ] Next staging deploy produces a healthy \`staging.elizacloud.ai/dashboard/agents\` page (no JSON regression)
+- [ ] Manually re-check \`https://api.cloudflare.com/.../workers/routes\` after the deploy — no \`*.elizacloud.ai/*\` route should appear, even after the verifier is gone
+
+## Follow-up
+
+If we want \`<uuid>.elizacloud.ai/\` to return a real "agent not found" response, the right move is:
+1. Add a host-aware handler in \`packages/cloud-api/src/bootstrap-app.ts\` that detects UUID-shaped subdomains, looks the sandbox up by \`agent_sandboxes.id\` matching the leftmost label, and either proxies to \`bridge_url\` or returns the 404 message.
+2. Re-introduce the Worker route \`*.elizacloud.ai/*\` AND the verifier together.
+3. Make sure the route ordering still lets Pages handle \`staging.elizacloud.ai/\` for the dashboard (probably by adding a more-specific \`staging.elizacloud.ai/*\` Worker route that explicitly falls through to Pages, or by binding Pages first).
+
+That's a separate PR; this one just stops the bleeding.1b:Tbea,# Overall Project Summary: Jun 6, 2026
+
+Development on June 6 focused on stabilizing cloud infrastructure and refining the Steward authentication flow to resolve mobile and CLI onboarding issues. The team also successfully modularized the `plugin-lifeops` monolith into specialized domain plugins and unified credit ledgers to ensure consistent inference capabilities across monetized applications.
+
+## ✅ Completed Work
+
+**Cloud Authentication & Infrastructure Stability**
+*   Resolved mobile and CLI onboarding issues by pinning Steward OAuth redirect URIs and implementing session storage for return targets ([elizaos/eliza#8278](https://github.com/elizaos/eliza/pull/8278), [elizaos/eliza#8279](https://github.com/elizaos/eliza/pull/8279)).
+*   Fixed session bouncing by addressing Steward cookie refresh and SPA hydration ([elizaos/eliza#8280](https://github.com/elizaos/eliza/pull/8280), [elizaos/eliza#8282](https://github.com/elizaos/eliza/pull/8282)).
+*   Updated Steward SDK to v0.10.1 to improve passkey challenge handling and MFA support ([elizaos/eliza#8267](https://github.com/elizaos/eliza/pull/8267), [elizaos/eliza#8271](https://github.com/elizaos/eliza/pull/8271)).
+
+**Architecture & Plugin Refactoring**
+*   Decomposed the `plugin-lifeops` monolith into a slim `plugin-personal-assistant` orchestrator and six domain-focused plugins to improve maintainability ([elizaos/eliza#8277](https://github.com/elizaos/eliza/pull/8277)).
+*   Enabled third-party registry support for `@madeonsol/plugin-madeonsol` ([elizaos/eliza#8260](https://github.com/elizaos/eliza/pull/8260)).
+
+**System Enhancements & QA**
+*   Implemented scope-aware prompt suggestions via a hybrid heuristic/model-based tiering system ([elizaos/eliza#8225](https://github.com/elizaos/eliza/issues/8225)).
+*   Unified app-credit purchases into the primary organization ledger to resolve "stranded credits" ([elizaos/eliza#8253](https://github.com/elizaos/eliza/issues/8253)).
+*   Deployed end-to-end smoke tests for the monetized-app loop using a `cloud:mock` stack ([elizaos/eliza#8249](https://github.com/elizaos/eliza/pull/8249)).
+
+## 🏗️ Work in Progress
+
+**New Pull Requests (elizaos/eliza)**
+*   **Cloud & Auth:** [#8281](https://github.com/elizaos/eliza/pull/8281), [#8274](https://github.com/elizaos/eliza/pull/8274), [#8273](https://github.com/elizaos/eliza/pull/8273), [#8272](https://github.com/elizaos/eliza/pull/8272), [#8265](https://github.com/elizaos/eliza/pull/8265)
+*   **Orchestrator & UI:** [#8286](https://github.com/elizaos/eliza/pull/8286), [#8285](https://github.com/elizaos/eliza/pull/8285), [#8276](https://github.com/elizaos/eliza/pull/8276), [#8275](https://github.com/elizaos/eliza/pull/8275)
+*   **Dependencies:** [#8284](https://github.com/elizaos/eliza/pull/8284)
+
+## 🐞 Issue Triage
+
+**Closed Issues (elizaos/eliza)**
+*   [#8225](https://github.com/elizaos/eliza/issues/8225): Implemented scope-aware prompt suggestions.
+*   [#8253](https://github.com/elizaos/eliza/issues/8253): Resolved stranded credits via ledger unification.0:{"buildId":"US8XLB_zHXYj_PVAECGcd","rsc":["$","$1","c",{"children":[["$","div",null,{"className":"container mx-auto px-6 py-8 md:px-8","children":["$","div",null,{"className":"mx-auto max-w-4xl","children":[["$","div",null,{"className":"mb-4 flex flex-col justify-between sm:flex-row","children":[["$","$L2",null,{"currentInterval":"day","currentDate":"2026-06-06"}],["$","$L3",null,{"metrics":{"date":"2026-06-06","interval":{"intervalStart":"$D2026-06-06T00:00:00.000Z","intervalEnd":"$D2026-06-07T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":24,"merged":12,"total":26},"issues":{"new":0,"closed":2,"total":2},"activeContributors":12,"codeChanges":{"additions":4291,"deletions":1808,"files":101,"commitCount":126},"topContributors":[{"username":"greptile-apps","avatarUrl":"https://avatars.githubusercontent.com/in/867647?v=4","totalScore":220.5,"prScore":0,"issueScore":0,"reviewScore":220.5,"commentScore":0,"summary":"greptile-apps: No activity today."},{"username":"2-A-M","avatarUrl":"https://avatars.githubusercontent.com/u/96268540?u=39ce724443b5cd500fc28905812cdba16e3181a7&v=4","totalScore":178.85251768143291,"prScore":178.85251768143291,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"2-A-M: Focused on enhancing cloud infrastructure and API reliability, successfully merging three PRs in elizaos/eliza that introduced container lifecycle verbs (#8270) and resolved critical billing and E2E boot issues (#8269, #8268). Their work reflects a balanced commitment to feature development and bug fixing, with ongoing efforts to stabilize orchestrator and cloud-api functionality through five additional open pull requests."},{"username":"0xSolace","avatarUrl":"https://avatars.githubusercontent.com/u/257989456?u=2138984e3bfc9b5f8cd3f60f134e550b4cc22520&v=4","totalScore":162.38108276075053,"prScore":162.38108276075053,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"0xSolace: Focused on stabilizing cloud authentication and SDK integration within the elizaos/eliza repository, successfully merging four PRs (#8280, #8279, #8271, #8267) that addressed critical session management, OAuth redirects, and type handling. This work involved 8 commits across 60 files, reflecting a dedicated effort toward bug fixing and improving system reliability through code and test updates."},{"username":"standujar","avatarUrl":"https://avatars.githubusercontent.com/u/16385918?u=718bdcd1585be8447bdfffb8c11ce249baa7532d&v=4","totalScore":104.07004985753056,"prScore":104.07004985753056,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"standujar: Focused on stabilizing cloud infrastructure and API authentication within elizaos/eliza, successfully merging four PRs (#8288, #8287, #8283, #8282) that resolved critical deployment and staging environment issues. Their work primarily centered on bugfixes and refactoring, involving 10 commits across 12 files to improve system reliability."},{"username":"NubsCarson","avatarUrl":"https://avatars.githubusercontent.com/u/192162056?u=d2be9082dbee60fcbad21d32bf6e662ab1af3674&v=4","totalScore":91.37380181968504,"prScore":91.03380181968504,"issueScore":0,"reviewScore":0,"commentScore":0.33999999999999997,"summary":"NubsCarson: Focused on enhancing the cloud SDK and hardening authentication security, notably merging PR #8266 to add audio transcription capabilities and addressing critical login and session management issues in the elizaos/eliza repository. Their work was primarily driven by bug fixes (43%), alongside feature development, refactoring, and testing efforts."},{"username":"Dexploarer","avatarUrl":"https://avatars.githubusercontent.com/u/211557447?u=21a243d61cc1f87574328ae07fc64d7d7577b53d&v=4","totalScore":63.08116701179374,"prScore":63.08116701179374,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"Dexploarer: Focused on enhancing mobile accessibility and platform stability, successfully merging PR #8278 in elizaos/eliza to resolve critical cloud onboarding issues. Their work today involved 19 commits across 429 files, with a primary emphasis on bugfixes and testing infrastructure."},{"username":"lalalune","avatarUrl":"https://avatars.githubusercontent.com/u/18633264?u=e2e906c3712c2506ebfa98df01c2cfdc50050b30&v=4","totalScore":59.9817738965761,"prScore":59.5437738965761,"issueScore":0,"reviewScore":0,"commentScore":0.43799999999999994,"summary":"lalalune: Drove a significant architectural improvement by merging PR #8277 in elizaos/eliza, which refactored the lifeops plugin into focused modules through a massive codebase update. Their work today spanned 1,791 files with a primary focus on documentation, bug fixes, and structural refactoring."},{"username":"binkyfishai","avatarUrl":"https://avatars.githubusercontent.com/u/172897890?u=13dcfbbffef5a3f90ae60741795eaf47cc93a244&v=4","totalScore":13.828386167963231,"prScore":13.828386167963231,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"binkyfishai: Focused on enhancing the user interface, currently maintaining an open pull request in elizaos/eliza (#8276) to improve the views and apps screen."}],"focusAreas":[{"area":"app-core","count":20},{"area":"cloud-frontend","count":15},{"area":"agent","count":15},{"area":"app","count":10},{"area":"ui","count":10},{"area":".github/workflows","count":7},{"area":"cloud-api","count":4},{"area":"test","count":2},{"area":"registry","count":2},{"area":"feed","count":2}],"topIssues":[{"id":"I_kwDOMT5cIs8AAAABEhH8Pg","title":"App-credits: purchases fund the per-app pool but inference debits the org balance (stranded credits)","author":"NubsCarson","number":8253,"repository":"elizaos/eliza","body":"$4","createdAt":"2026-06-05T15:38:34Z","closedAt":"2026-06-06T01:16:34Z","state":"CLOSED","commentCount":1},{"id":"I_kwDOMT5cIs8AAAABEWmdhw","title":"proposal: GET /api/suggestions — server-tailored prompt suggestions for the continuous-chat overlay","author":"NubsCarson","number":8225,"repository":"elizaos/eliza","body":"$5","createdAt":"2026-06-04T08:24:12Z","closedAt":"2026-06-06T01:16:46Z","state":"CLOSED","commentCount":1}],"topPullRequests":[{"id":"PR_kwDOMT5cIs7jWZtf","title":"refactor(lifeops): split plugin-lifeops into focused plugins + plugin-personal-assistant","author":"lalalune","number":8277,"body":"$6","repository":"elizaos/eliza","createdAt":"2026-06-06T03:56:44Z","mergedAt":"2026-06-06T14:57:40Z","additions":42135,"deletions":24987},{"id":"PR_kwDOMT5cIs7jV90-","title":"feat(orchestrator): wire the child→parent USE_SKILL parent-agent broker dispatcher","author":"2-A-M","number":8275,"body":"$7","repository":"elizaos/eliza","createdAt":"2026-06-06T03:11:44Z","mergedAt":"2026-06-11T22:16:38Z","additions":798,"deletions":4},{"id":"PR_kwDOMT5cIs7jW9GE","title":"fix: mobile cloud onboarding","author":"Dexploarer","number":8278,"body":"$8","repository":"elizaos/eliza","createdAt":"2026-06-06T04:46:36Z","mergedAt":"2026-06-06T06:55:33Z","additions":720,"deletions":113},{"id":"PR_kwDOMT5cIs7jVqvX","title":"fix(cloud-api): make container billing idempotent per period (no double-debit on cron re-run)","author":"2-A-M","number":8273,"body":"$9","repository":"elizaos/eliza","createdAt":"2026-06-06T02:45:26Z","mergedAt":"2026-06-15T14:14:43Z","additions":513,"deletions":25},{"id":"PR_kwDOMT5cIs7jWSqq","title":"Improve views/apps screen","author":"binkyfishai","number":8276,"body":"views page improvements because felt it needed a brush up, feel free to toss","repository":"elizaos/eliza","createdAt":"2026-06-06T03:46:06Z","mergedAt":"2026-06-11T22:16:51Z","additions":470,"deletions":131},{"id":"PR_kwDOMT5cIs7jVIr-","title":"fix(cloud-api): make domain purchase idempotent","author":"2-A-M","number":8272,"body":"$a","repository":"elizaos/eliza","createdAt":"2026-06-06T01:59:23Z","mergedAt":"2026-06-16T02:42:06Z","additions":362,"deletions":131},{"id":"PR_kwDOMT5cIs7jJfvU","title":"test(cloud-e2e): smoke test for the monetized-app loop on cloud:mock","author":"2-A-M","number":8249,"body":"$b","repository":"elizaos/eliza","createdAt":"2026-06-05T15:00:55Z","mergedAt":"2026-06-06T01:11:14Z","additions":209,"deletions":0},{"id":"PR_kwDOMT5cIs7jVHd7","title":"fix(cloud): handle @stwd/sdk 0.10 auth result types","author":"0xSolace","number":8271,"body":"## Summary\n- handle @stwd/sdk 0.10 MFA-required auth results before reading tokens\n- add the new required twitter provider flag to cloud login provider defaults\n- force the Steward SDK dependency graph to resolve to 0.10.1 so @stwd/react and cloud frontend use compatible StewardClient types\n\n## Verification\n- bun run --cwd packages/cloud-frontend typecheck\n- codex review --base origin/develop\n","repository":"elizaos/eliza","createdAt":"2026-06-06T01:57:36Z","mergedAt":"2026-06-06T04:48:33Z","additions":202,"deletions":44},{"id":"PR_kwDOMT5cIs7jVGj0","title":"feat(cloud-api): add container lifecycle verbs (PATCH/DELETE/scale)","author":"2-A-M","number":8270,"body":"$c","repository":"elizaos/eliza","createdAt":"2026-06-06T01:56:16Z","mergedAt":"2026-06-07T19:37:08Z","additions":181,"deletions":1},{"id":"PR_kwDOMT5cIs7jfXat","title":"fix(orchestrator): forward Windows env (Path casing) to ACP sub-agents","author":"2-A-M","number":8285,"body":"$d","repository":"elizaos/eliza","createdAt":"2026-06-06T18:05:20Z","mergedAt":"2026-06-11T22:16:42Z","additions":180,"deletions":16},{"id":"PR_kwDOMT5cIs7jZP60","title":"fix(cloud): harden Steward login callback — consume #code= fragment + surface real errors","author":"NubsCarson","number":8281,"body":"$e","repository":"elizaos/eliza","createdAt":"2026-06-06T08:52:50Z","mergedAt":null,"additions":140,"deletions":15},{"id":"PR_kwDOMT5cIs7jYlXH","title":"fix(cloud): hydrate Steward cookie refresh sessions","author":"0xSolace","number":8280,"body":"## Summary\n- return the refreshed Steward access token from `/api/auth/steward-refresh` for trusted Cloud origins\n- hydrate the SPA localStorage token mirror from cookie refresh so valid HttpOnly-cookie sessions do not bounce back to `/login`\n- make the OAuth callback fail visibly instead of redirect-looping if exchange succeeds without a JS-readable token\n- add login coverage for cookie-only Steward session recovery\n\n## Verification\n- bun run --cwd packages/cloud-frontend test -- src/pages/login/steward-login-section.test.tsx\n- bun run --cwd packages/cloud-frontend typecheck\n- bun run --cwd packages/cloud-api typecheck\n- bun run --cwd packages/cloud-frontend build:client\n- codex review --uncommitted","repository":"elizaos/eliza","createdAt":"2026-06-06T07:32:41Z","mergedAt":"2026-06-06T07:32:59Z","additions":115,"deletions":22},{"id":"PR_kwDOMT5cIs7jYFk5","title":"fix(cloud): stabilize Steward OAuth redirect URI","author":"0xSolace","number":8279,"body":"## Summary\n- keep Steward OAuth redirect_uri pinned to the allowlisted /login URL\n- preserve deep-link returnTo targets in sanitized sessionStorage instead of embedding them in redirect_uri\n- reuse the same stable redirect_uri during nonce exchange\n\n## Verification\n- bun run --cwd packages/cloud-frontend test -- src/pages/login/steward-oauth-url.test.ts src/pages/login/login-return-to.test.ts\n- bun run --cwd packages/cloud-frontend typecheck\n- bun run --cwd packages/cloud-frontend build:client\n- codex review --uncommitted","repository":"elizaos/eliza","createdAt":"2026-06-06T06:40:18Z","mergedAt":"2026-06-06T06:40:41Z","additions":104,"deletions":30},{"id":"PR_kwDOMT5cIs7jT1_j","title":"feat(cloud-sdk): add ElizaCloudClient.transcribeAudio() for voice/stt","author":"NubsCarson","number":8266,"body":"$f","repository":"elizaos/eliza","createdAt":"2026-06-06T00:19:12Z","mergedAt":"2026-06-07T19:37:17Z","additions":96,"deletions":0},{"id":"PR_kwDOMT5cIs7jOg7v","title":"feat(registry): add @madeonsol/plugin-madeonsol third-party entry","author":"LamboPoewert","number":8260,"body":"$10","repository":"elizaos/eliza","createdAt":"2026-06-05T19:04:53Z","mergedAt":"2026-06-06T01:11:14Z","additions":66,"deletions":0},{"id":"PR_kwDOMT5cIs7jhd8f","title":"fix(orchestrator): honor the configured session timeout for the ACP initialize handshake","author":"2-A-M","number":8286,"body":"$11","repository":"elizaos/eliza","createdAt":"2026-06-06T22:02:51Z","mergedAt":"2026-06-11T22:16:46Z","additions":59,"deletions":10},{"id":"PR_kwDOMT5cIs7jVFir","title":"fix(cloud-e2e): boot cloud-api via the wrangler dev launcher","author":"2-A-M","number":8268,"body":"$12","repository":"elizaos/eliza","createdAt":"2026-06-06T01:55:01Z","mergedAt":"2026-06-07T19:37:14Z","additions":50,"deletions":27},{"id":"PR_kwDOMT5cIs7jV6KV","title":"refactor(cloud): remove anonymous guest sessions (sign-in required to chat)","author":"NubsCarson","number":8274,"body":"$13","repository":"elizaos/eliza","createdAt":"2026-06-06T03:06:19Z","mergedAt":null,"additions":49,"deletions":2559},{"id":"PR_kwDOMT5cIs7jbaqg","title":"fix(cloud-frontend): staging SPA hits staging Worker for Steward auth (tenant isolation)","author":"standujar","number":8282,"body":"$14","repository":"elizaos/eliza","createdAt":"2026-06-06T12:33:44Z","mergedAt":"2026-06-06T12:40:47Z","additions":44,"deletions":13},{"id":"PR_kwDOMT5cIs7jddgh","title":"chore(deps): bump aiohttp from 3.13.5 to 3.14.0 in /packages/benchmarks/lifeops-bench in the uv group across 1 directory","author":"dependabot","number":8284,"body":"$15","repository":"elizaos/eliza","createdAt":"2026-06-06T15:11:10Z","mergedAt":"2026-06-11T22:11:10Z","additions":39,"deletions":36},{"id":"PR_kwDOMT5cIs7jVGE2","title":"fix(cloud-api): bill containers when earnings conversion fails","author":"2-A-M","number":8269,"body":"$16","repository":"elizaos/eliza","createdAt":"2026-06-06T01:55:38Z","mergedAt":"2026-06-07T19:37:10Z","additions":36,"deletions":17},{"id":"PR_kwDOMT5cIs7jhqAz","title":"fix(cloud-api): sign /api/auth/steward-refresh upstream call to Steward","author":"standujar","number":8287,"body":"$17","repository":"elizaos/eliza","createdAt":"2026-06-06T22:24:03Z","mergedAt":"2026-06-06T22:31:37Z","additions":25,"deletions":5},{"id":"PR_kwDOMT5cIs7jT3fb","title":"fix(cloud): bump @stwd/sdk to 0.10.1 (passkey challengeId login fix)","author":"0xSolace","number":8267,"body":"Prod passkey login fails with 'challengeId is required'. cloud-frontend bundled @stwd/sdk@0.8.1 whose published dist doesn't forward the passkey challengeId to /auth/passkey/login/verify. 0.10.1 (just published) adds it. Bumped cloud-frontend/cloud-shared/os-homepage to ^0.10.1; verified resolved 0.10.1 dist forwards challengeId and cloud-frontend resolves it. Companion to the OAuth fix (tenant allowedRedirectUrls, already applied + verified 302->Google).","repository":"elizaos/eliza","createdAt":"2026-06-06T00:21:39Z","mergedAt":"2026-06-06T00:21:53Z","additions":17,"deletions":8},{"id":"PR_kwDOMT5cIs7jiFtN","title":"fix(plugin-google): unblock cloud-cf-deploy via Options-shape casts","author":"standujar","number":8288,"body":"$18","repository":"elizaos/eliza","createdAt":"2026-06-06T23:17:42Z","mergedAt":"2026-06-06T23:34:58Z","additions":13,"deletions":6},{"id":"PR_kwDOMT5cIs7jT1-y","title":"fix(cloud-api): clarify insufficient-credits wording on inference","author":"NubsCarson","number":8265,"body":"$19","repository":"elizaos/eliza","createdAt":"2026-06-06T00:19:11Z","mergedAt":null,"additions":10,"deletions":5},{"id":"PR_kwDOMT5cIs7jbrrF","title":"ci(cloud-cf-deploy): remove broken 'verify generated agent wildcard route' step","author":"standujar","number":8283,"body":"$1a","repository":"elizaos/eliza","createdAt":"2026-06-06T12:54:38Z","mergedAt":"2026-06-06T13:55:43Z","additions":0,"deletions":22}],"detailedContributorSummaries":{"0xSolace":"0xSolace: Focused on stabilizing cloud authentication and SDK integration within the elizaos/eliza repository, successfully merging four PRs (#8280, #8279, #8271, #8267) that addressed critical session management, OAuth redirects, and type handling. This work involved 8 commits across 60 files, reflecting a dedicated effort toward bug fixing and improving system reliability through code and test updates.","2-A-M":"2-A-M: Focused on enhancing cloud infrastructure and API reliability, successfully merging three PRs in elizaos/eliza that introduced container lifecycle verbs (#8270) and resolved critical billing and E2E boot issues (#8269, #8268). Their work reflects a balanced commitment to feature development and bug fixing, with ongoing efforts to stabilize orchestrator and cloud-api functionality through five additional open pull requests.","Dexploarer":"Dexploarer: Focused on enhancing mobile accessibility and platform stability, successfully merging PR #8278 in elizaos/eliza to resolve critical cloud onboarding issues. Their work today involved 19 commits across 429 files, with a primary emphasis on bugfixes and testing infrastructure.","NubsCarson":"NubsCarson: Focused on enhancing the cloud SDK and hardening authentication security, notably merging PR #8266 to add audio transcription capabilities and addressing critical login and session management issues in the elizaos/eliza repository. Their work was primarily driven by bug fixes (43%), alongside feature development, refactoring, and testing efforts.","binkyfishai":"binkyfishai: Focused on enhancing the user interface, currently maintaining an open pull request in elizaos/eliza (#8276) to improve the views and apps screen.","greptile-apps":"greptile-apps: No activity today.","lalalune":"lalalune: Drove a significant architectural improvement by merging PR #8277 in elizaos/eliza, which refactored the lifeops plugin into focused modules through a massive codebase update. Their work today spanned 1,791 files with a primary focus on documentation, bug fixes, and structural refactoring.","standujar":"standujar: Focused on stabilizing cloud infrastructure and API authentication within elizaos/eliza, successfully merging four PRs (#8288, #8287, #8283, #8282) that resolved critical deployment and staging environment issues. Their work primarily centered on bugfixes and refactoring, involving 10 commits across 12 files to improve system reliability."}},"summaryContent":"$1b","className":"self-end sm:self-start"}]]}],"$L1c","$L1d","$L1e"]}]}],["$L1f","$L20","$L21"],"$L22"]}],"loading":null,"isPartial":false}
+1c:["$","div",null,{"className":"mb-6","children":["$","div",null,{"className":"flex items-center justify-between","children":[[["$","$L23",null,{"href":"/summary/day/2026-06-05","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left mr-2 h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"children":"Previous"}],false],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$L23",null,{"href":"/summary/day/2026-06-05","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Previous"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]],["$","div",null,{"className":"flex flex-col items-center","children":[["$","div",null,{"className":"text-sm font-medium text-gray-500","children":["Daily"," Summary"]}],["$","time",null,{"dateTime":"2026-06-06","className":"text-md font-bold","children":"Jun 6, 2026"}]]}],[["$","$L23",null,{"href":"/summary/day/2026-06-07","children":[false,["$","span",null,{"children":"Next"}],["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right ml-2 h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}]],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$L23",null,{"href":"/summary/day/2026-06-07","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Next"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]]]}]}]
+25:Ta4a,## Summary
+App-credits purchases and inference spend use **two different ledgers**, so credits a user buys for a monetized app can't be spent — and a user with cloud/org credits is blocked from a monetized app unless they separately top up the app pool. This blocks third-party browser apps monetizing via `X-App-Id` end-to-end.
+
+This looks like a half-finished migration (see the `// Switched from app_credit_balances ... to the org balance` comment), so flagging rather than unilaterally changing billing.
+
+## Details (origin/develop)
+- **Purchase funds the per-app pool.** `processPurchase` credits `app_credit_balances` via `appCreditBalancesRepository.addCredits(...)` — `packages/cloud-shared/src/lib/services/app-credits.ts:~307`.
+- **Balance check reads the per-app pool.** `checkBalance` → `appCreditBalancesRepository.findByAppAndUser(...)` — `app-credits.ts:~193`.
+- **Spend debits the ORG balance.** The spend path was switched to `creditsService.reserveAndDeductCredits({ organizationId })` — `app-credits.ts:~408` (the "Switched from app_credit_balances ... to the org balance" comment). The `X-App-Id` completions path also reserves against the org: `reserveCredits({ organizationId })` — `packages/cloud-api/v1/chat/completions/route.ts:~934`.
+
+## Impact
+1. A user buys app-credits → funds land in `app_credit_balances` → inference debits the **org** balance → "Insufficient credits" against an empty org balance. **Money paid, credits never spendable.**
+2. `checkBalance` gates on the app pool, so a user who *does* have org/cloud credits is rejected from a monetized app unless they top up the app pool too.
+3. The `/api/v1/apps/[id]/chat` 402 says "Insufficient app credits" but deducts from the org balance (`route.ts:~295-333`), so the error misdirects users.
+
+## Suggested fix (pick one ledger)
+- **A — org-only (matches the "Switched" comment's intent):** make `processPurchase` credit the **org** balance (and have `/api/v1/app-credits/balance` + `checkBalance` report/read org). App-credits checkout becomes "top up cloud credits for this app"; creator still earns markup via `recordCreatorEarnings()`. Simplest if the per-app pool is being retired.
+- **B — app-pool-only:** make the `X-App-Id` spend path read+debit `app_credit_balances` instead of the org balance.
+
+Happy to open the PR once you confirm the direction (A or B) — A looks consistent with the existing comment + `recordCreatorEarnings`. Also a one-line follow-up: word the `/apps/[id]/chat` 402 to match whichever ledger is checked.
+
+Found while building a third-party app (SupaKan) on the `X-App-Id` app-credits flow.
+26:T6d0,## Context
+The continuous-chat overlay shows an always-5 prompt-suggestion strip (#8201), now lightly tailored client-side (time-of-day + history; #8224). The next step toward genuinely **context/history/memory-aware** suggestions is a small server endpoint — filing as an issue first (non-trivial, touches `@elizaos/agent`) to coordinate before any PR.
+
+## Proposed design (mirrors the existing `quickContext` pattern)
+- **`GET /api/suggestions?scope=<PageScope>&roomId=<uuid>`** in `@elizaos/agent` (handler alongside `handleMemoryRoutes`; `quickContext`/`/api/context/quick` is the blueprint — `packages/agent/src/api/memory-routes.ts`). Returns a typed `{ suggestions: PromptSuggestion[5], tier, generatedAt }`.
+- **Client**: `client.getPromptSuggestions(scope, opts)` on `@elizaos/ui` (mirror `client.quickContext`).
+- **Wiring**: `usePromptSuggestions` calls it on view-change / convo-switch / message-settled (debounced), with the current **static set as the offline fallback** (no signature change — already structured for this).
+- **Tailoring inputs** (all eliza-native, no odysseus backend): active view/route (`app.tab`→`PageScope`), recent thread (`getMemories`), optional memory (`searchMemories`), time of day.
+- **Phasing**: Phase-1 = scope + recent-thread heuristic, **zero model calls** (cheap, cacheable); Phase-2 = optional single `TEXT_SMALL` rank. Always returns 5; degrade-not-empty.
+
+## Why an issue, not a PR
+This adds a public backend endpoint + client surface — wanted @shawmakesmagic's steer on (a) endpoint shape vs. a provider, and (b) whether this overlaps anything you're already doing, before I build it. Happy to implement once there's a direction.
+
+Refs: #8201 (strip), #8224 (client-side tailoring).27:T1679,## Summary
+
+Decomposes the ~7.5K-LOC `plugin-lifeops` monolith into a slim orchestrator (`plugin-personal-assistant`) plus 6 new focused plugins, with the `/lifeops` dashboard view removed in favor of per-domain plugin views. Existing domain plugins (todos, health, calendar, documents, phone) gain the owner-facing actions and views they should have owned all along. Stub future homes for runtime primitives (owner-state, scheduled-task, registries, dispatch) are scaffolded in `@elizaos/core` and `@elizaos/app-core` to mark where the still-in-PA implementations will eventually migrate.
+
+No backwards-compat shims — `@elizaos/plugin-lifeops` is gone, not aliased.
+
+## What changed
+
+### New plugins (Phase 1)
+- **plugin-relationships** — entity/relationship graph (`ENTITY` action + Drizzle `app_relationships` schema). Absorbs lifeops `entities/`, `relationships/`, voice-observer bridge.
+- **plugin-inbox** — cross-channel inbox (`INBOX` action + triage + Drizzle `app_inbox` + `/inbox` view). Distinct from plugin-messages (which stays Android-SMS-only).
+- **plugin-goals** — life goals + self-care (`OWNER_GOALS`/`ROUTINES`/`REMINDERS`/`ALARMS` + `CheckinService` + Drizzle `app_goals` + `/goals` view).
+- **plugin-blocker** — focus/distraction control (`BLOCK` action + website + app blocker services + `/focus` view).
+- **plugin-finances** — owner finances (`OWNER_FINANCES` + Drizzle `app_finances` + `/finances` view).
+- **plugin-remote-desktop** — `REMOTE_DESKTOP` action.
+
+### Extended plugins (Phase 2)
+- **plugin-todos** — `+ /todos` view (Today/Upcoming/Someday lanes); doc-block folds `OWNER_TODOS`.
+- **plugin-health** — `+ OWNER_HEALTH`, `OWNER_SCREENTIME` actions; `+ /health` view (Sleep/Circadian/Screen-time/Activity/Connectors).
+- **plugin-calendar** — `+ CALENDAR` (8 ops), `CONFLICT_DETECT` actions; `+ /calendar` view.
+- **plugin-documents** — `+ OWNER_DOCUMENTS` action; `+ /documents` view.
+- **plugin-phone** — `+ VOICE_CALL` (Twilio) action.
+
+### Rename + view kill (Phase 3)
+- `plugin-lifeops` → `plugin-personal-assistant` (727+50 file renames, 299 cross-workspace updates, zero remaining `@elizaos/plugin-lifeops` references).
+- Internal exports renamed (`appLifeOpsPlugin` → `personalAssistantPlugin` etc.).
+- `packages/shared/src/contracts/lifeops.ts` → `personal-assistant.ts`.
+- App registry entry `apps/lifeops.json` → `apps/personal-assistant.json`.
+- `/lifeops` view deleted (LifeOpsPageView, LifeOpsTuiView, XR variant, `lifeops.overview` widget). PA no longer ships a view — domain plugins do.
+- `.github/workflows/lifeops-bench*.yml` filenames kept (benchmark-suite identifier, not the plugin name) — required-check refs would break.
+
+### Core foundations (Phase 3, structural only)
+Scaffold-only future homes; code still lives in `plugin-personal-assistant` until the next migration pass:
+- `packages/core/src/owner-state/` — OwnerFactsStore, HandoffStore, GlobalPauseStore, FirstRunService, PendingPromptsStore interfaces.
+- `packages/core/src/registries/` — Anchor, Gate, EventKind, EscalationLadder, Family, Blocker registry interfaces.
+- `packages/core/src/scheduled-task/` — ScheduledTask types extending core's existing task-scheduler with gates/escalation/completionCheck/anchors.
+- `packages/app-core/src/dispatch/` — ConnectorRegistry, ChannelRegistry, ApprovalQueue, send-policy interfaces.
+Each module has a README with `TODO(migrate:)` pointing back to the still-canonical source.
+
+### What stayed in `plugin-personal-assistant`
+The cross-domain orchestration role:
+- `BRIEF`, `PRIORITIZE`, `PERSONAL_ASSISTANT`, `SCHEDULED_TASKS`, `RESOLVE_REQUEST` actions.
+- Default-pack composition (daily-rhythm, morning-brief, followup-starter, habit-starters, executive-assistant).
+- The entity/relationship store, scheduled-task runner, owner-state, registries, connector/channel registries — all still here, will migrate into core/app-core in follow-up passes once the new homes exist.
+
+## Test plan
+
+- [x] `bun run lint` — exit 0
+- [x] `bun run typecheck` — exit 0 workspace-wide
+- [x] `bun run build` — exit 0 workspace-wide
+- [ ] Manual smoke: load PA + the new domain plugins in dev-ui, confirm each registered view renders
+- [ ] Manual smoke: `BRIEF` action still composes calendar + inbox + todos + finances correctly
+- [ ] DB migration plan: new plugins introduce `app_relationships`, `app_inbox`, `app_goals`, `app_blocker`, `app_finances` schemas — verify their tables co-exist with PA's existing `app_lifeops` schema during the cut-over window
+
+## Follow-up
+
+This PR establishes the structural decomposition. The remaining migration moves the implementations out of `plugin-personal-assistant` into the new homes:
+1. Move EntityStore + RelationshipStore + merge engine → plugin-relationships.
+2. Move INBOX action body + TriageRepository → plugin-inbox.
+3. Move OWNER_GOALS/ROUTINES/REMINDERS/ALARMS bodies + CheckinService + default-pack fragments → plugin-goals.
+4. Move BLOCK + website-blocker/ + app-blocker/ → plugin-blocker.
+5. Move OWNER_FINANCES body → plugin-finances.
+6. Move CALENDAR/CONFLICT_DETECT bodies + calendar-gate + travel-time → plugin-calendar.
+7. Move OWNER_DOCUMENTS body → plugin-documents.
+8. Move OWNER_HEALTH/SCREENTIME bodies + ActivityTracker + PresenceSignalBridge → plugin-health.
+9. Move ScheduledTaskRunner + Anchor/Gate/EventKind/EscalationLadder registries + OwnerState services → @elizaos/core.
+10. Move ConnectorRegistry + ChannelRegistry + ApprovalQueue + send-policy → @elizaos/app-core.
+11. After (1)-(10), PA becomes ~10% of its current size — pure BRIEF/PRIORITIZE/PA orchestration + default-pack composition.
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)28:Tb27,## What
+
+Closes the production gap that left the capped self-spend autonomy mechanism (merged in #8250) unreachable by a live agent. A `/economics` sub-agent can now autonomously drive the monetized-app loop through the parent-agent Cloud command broker.
+
+## Why
+
+`runParentAgentBroker` / `runCloudCommand` (the only emitter of `spend_auto_authorized`) had **no production caller**: nothing parsed a child's `USE_SKILL parent-agent {…}` request, `buildSkillsManifest({ virtualSkills })` was never called, and the autonomy was only proven via Vitest. See `plugins/plugin-agent-orchestrator/docs/economics-goal-runbook.md` (bundled/updated here).
+
+## How (the three gaps, closed)
+
+1. **Dispatch** — new `parent-agent-dispatch.ts`: a string/escape-aware extractor for `USE_SKILL parent-agent {json}` (handles streaming/partial JSON, braces inside strings, nested params, markdown backticks, malformed markers) + a dispatch helper that runs the directive through `runParentAgentBroker` and streams `result.text` back via `acp.sendToSession`. Wired into `SubAgentRouter.handleEvent`: accumulates the child's `message` chunks, dispatches the first complete directive, caps round-trips via `ACPX_SUB_AGENT_ROUND_TRIP_CAP`. **Marker-guarded** — only acts on text containing `USE_SKILL parent-agent`, which ordinary coding tasks never emit, so the session-event hot path is inert for every other flow.
+2. **Advertise** — `spawnAgentForTask` writes a `SKILLS.md` for `capabilityProfile === "economics"` tasks via `buildSkillsManifest(..., { recommendedSlugs: ["build-monetized-app","eliza-cloud"], virtualSkills: [PARENT_AGENT_BROKER_MANIFEST_ENTRY] })` so the child learns the slug + arg contract. Best-effort (never fatal).
+3. **Estimate** — the broker's unknown-cost stall now returns an *actionable* instruction (fetch a quote with `domains.check`, retry with `params.spendEstimateUsd`) instead of a human-only yes/no, and the manifest guidance advertises the same pattern — so `domains.buy` self-authorizes within the cap without a human turn.
+
+## Verification
+
+- New `parent-agent-dispatch.test.ts` (11 cases): extractor edge cases + the broker→`sendToSession` bridge end to end via the network-free `list-cloud-commands` mode.
+- Existing `parent-agent-broker.test.ts` + `skill-manifest.test.ts` still green (no regression from the preview/guidance change).
+- Plugin typecheck clean; biome clean.
+- End-to-end (a real `spend_auto_authorized` on `domains.buy`/`containers.create`) still needs a live ACP backend — the runbook documents the exact steps.
+
+## Safety
+
+The hot-path hook is a no-op unless the child emits the literal `USE_SKILL parent-agent` marker. Paid/mutating commands remain gated by the existing capped spend allowance (`ELIZA_AGENT_SPEND_CAP_USD`, default 0 = confirm everything); destructive commands always require a human.29:Tc50,## Summary
+
+- fixes Cloud OAuth login from mobile/CLI auth by keeping Steward's `redirect_uri` on the bare allowlisted `/login` callback and storing the post-login return target in session storage
+- simplifies the iOS first-run surface for Cloud v1: orange background, orb + transparent `Connect`, no local runtime choice on the compact mobile screen
+- waits for native Cloud login completion before provisioning the Cloud agent, then persists the provisioned agent runtime URL/id separately
+- adds cloud simulator/device build and sideload helper commands plus focused mobile/cloud onboarding coverage
+
+## Root Cause
+
+The iOS app opens `https://www.elizacloud.ai/auth/cli-login?...` for native Cloud auth. The deployed login page preserved `returnTo` by putting the query string on the Steward OAuth `redirect_uri`, producing `/login?returnTo=...`. Steward's production tenant allowlist accepts `https://www.elizacloud.ai/login` but rejects the query-bearing callback, so the in-app browser landed on a white JSON `redirect_uri is not allowed` error before Google auth.
+
+## Validation
+
+- `bun run --cwd packages/cloud-frontend test src/pages/login/steward-oauth-url.test.ts src/pages/login/login-return-to.test.ts src/pages/login/steward-login-section.test.tsx`
+- `bun run --cwd packages/ui test src/first-run/use-first-run-controller.test.tsx src/first-run/CompactOnboarding.test.tsx src/api/client-cloud-direct-auth.test.ts src/first-run/first-run.test.ts src/state/persistence-cloud-active-server.test.ts`
+- `bun run --cwd packages/shared typecheck`
+- `bun run --cwd packages/cloud-frontend typecheck`
+- `bun run --cwd packages/ui typecheck`
+- `bun run --cwd packages/cloud-frontend build:client`
+- `bunx @biomejs/biome check ...` on the touched Cloud/shared/UI/app files
+- `bun run --cwd packages/cloud-frontend audit:cloud` produced `116 passed`
+- `ELIZA_IOS_DERIVED_DATA_PATH=/Users/home/Documents/eliza/.eliza-local/DerivedData/ios-cloud-sim LANG=en_US.UTF-8 bun run --cwd packages/app build:ios:cloud:sim` succeeded
+
+## Live Verification Notes
+
+Before this PR is deployed to production, live `www.elizacloud.ai` still serves the old bundle and reproduces the mobile login failure. A direct live probe confirms the backend contract:
+
+- query-bearing callback: `400 redirect_uri is not allowed for this tenant`
+- bare `/login` callback: `302` to Google OAuth
+
+After this lands and Cloudflare Pages production deploy completes, retest the iOS simulator Cloud login/provisioning path.
+
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+* **New Features**
+  * iOS cloud runtime support—cloud API requests bypass local agent transport
+  * Cloud agent provisioning and persistent storage
+  * OAuth return-to preservation across login redirects
+  * PKCE authentication support
+
+* **Bug Fixes**
+  * Prevent concurrent cloud login race conditions
+  * Standardized OAuth redirect handling
+
+* **Tests**
+  * Added CompactOnboarding component test coverage
+  * Added first-run controller hook tests
+  * Updated onboarding UI tests
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->2a:Tb32,## What
+
+Hardens the daily container-billing cron so a re-run (manual trigger, overlapping CF cron, retry) can never double-debit. Defense in depth across three layers, plus a billing reconciliation fix.
+
+**Stacks on #8269** (the free-hosting fix). Until that merges, the diff here includes its single commit; afterward this shrinks to just the four new commits.
+
+## Why
+
+The cron had no idempotency: `convertToCredits` re-debited earnings on every call, `listBillableContainers` ignored the (written-but-never-read) `next_billing_at`, there was no app-level lock (CF cron provides none), and `credit_transactions` recorded `-dailyCost` while `credit_balance` only moved by `-fromCredits` — so the ledger overstated the credit debit by the earnings portion (which is already on the earnings ledger), breaking `credit_balance == sum(credit_transactions)`.
+
+## How
+
+- **Deterministic period.** `computeContainerBillingPeriod(now)` normalizes the run to its UTC day, so the period (and the key derived from it) is stable across same-day re-runs.
+- **Earnings idempotency.** `convertToCredits` takes an optional `idempotencyKey` (`container:<id>:<utc-day>`); under the per-user advisory lock it returns the prior `credit_conversion` ledger entry instead of debiting again. Backed by a partial unique index on `redeemable_earnings_ledger((metadata->>'idempotency_key'))`.
+- **Query gate.** `listBillableContainers(now)` skips containers whose `next_billing_at` is still in the future (already paid this period).
+- **Row-lock guard.** `recordSuccessfulDailyBilling` locks the container row and no-ops if the period is already billed — closing the read→write race between listing and charging. Backed by a partial unique index on `container_billing_records(container_id, billing_period_start) WHERE status='success'`.
+- **Reconciliation.** The `credit_transaction` now records `-fromCredits` (the actual credit-balance movement); `dailyCost` and the earnings/credits split stay in metadata.
+
+## Migration (0139)
+
+Adds both partial unique indexes and **dedupes any pre-existing duplicate `success` rows first** (keep earliest by `created_at,id`) so the index can be created on existing prod data — confirmed duplicates can exist today since nothing guarded against them. The ledger index is partial on a non-null key, so existing conversions (which carry no key) are unaffected.
+
+## Verification
+
+- `db:migrate` applies all 140 migrations from scratch incl. 0139 against the real cumulative schema — clean.
+- New PGlite-backed suite (`container-billing-idempotency.test.ts`) exercises the real SQL (`FOR UPDATE`, the JSONB-keyed lookup, both partial unique indexes): earnings debit once per key, gate by `next_billing_at`, `-fromCredits` recorded, row-lock no-op on re-run.
+- `cloud-shared` + `cloud-api` typecheck clean; biome clean; `db:check-migrations` passes.2b:T5b1,## Problem
+
+`POST /api/v1/apps/:id/domains/buy` has no atomic idempotency guard. On a fresh domain it reads a non-locking `getDomainByName`, then **debits credits** and **registers via Cloudflare**, writing the unique `managed_domains` row last. Two concurrent or retried requests both pass the existence check, so both debit AND both register — a real double-charge / double real-money spend. `deductCredits` is atomic per call but carries no idempotency key.
+
+## Fix
+
+Mirror the proven `app_image_generation_idempotency` pattern:
+
+- New append-only **`domain_purchase_idempotency`** table (migration `0138`), unique `key`.
+- The buy route claims `domain-buy:{org}:{domain}` via `INSERT … ON CONFLICT DO NOTHING` **before** any money moves. Only the claim winner runs the purchase; a concurrent/retried buy short-circuits — replays the completed row's cached `response_body` (200), or 409 while in progress.
+- The purchase flow is extracted so a success **caches** its response and any failure **releases** the claim (so a genuine retry can proceed). The register-failure refund path is unchanged.
+
+## Verification
+
+End to end on the mock stack: first buy debits $14.95 (1000 → 985.05); a **second buy of the same domain replays the response with no second debit** (stays 985.05) and returns the same `appDomainId`. `db:check-migrations` passes.
+
+Follow-up: the container-billing earnings path has an analogous missing idempotency (noted in #8269).2c:T683,## What
+
+Adds an end-to-end smoke test that drives the monetized-app money path against
+a live `cloud:mock` stack, plus the Cloudflare-registrar stub needed to run it
+offline.
+
+Flow proven: seed org (1000 credits) → `apps.create` →
+`apps.monetization.update` → `domains.check` → `domains.buy` (Cloudflare stub,
+**real credit debit**) → record inference-markup earnings → survival-economics
+decision (`computeContainerBillingPlan`: an earning agent's daily container
+bill is paid from earnings; a broke agent → `insufficient` / shutdown path).
+
+## Changes
+
+- `packages/test/cloud-e2e/scripts/monetized-app-loop-smoke.ts` — the smoke
+  script. Seeds via the existing `seedTestUser` fixture; asserts each step;
+  exits non-zero on failure.
+- `packages/scripts/cloud/admin/dev/cloud-api-dev.mjs` — in e2e/test mode, pass
+  `--var ELIZA_CF_REGISTRAR_DEV_STUB:1` (overridable) so domain check/buy use
+  deterministic stubs instead of hitting real Cloudflare.
+
+## Verification
+
+Ran **ALL PASS** against a local stack: domain bought + attached, credits
+debited 1000 → 985.05; earnings recorded; survival plan `billed` from earnings;
+broke plan `insufficient`.
+
+How to run:
+
+    CLOUD_E2E=1 NODE_ENV=test bun run cloud:mock --no-frontend --reset
+    # then, with the printed api/pglite ports:
+    API_BASE=http://127.0.0.1:<apiPort> \
+    DATABASE_URL=postgresql://postgres@127.0.0.1:<pglitePort>/postgres \
+    NODE_ENV=test ELIZA_KMS_BACKEND=memory \
+    bun run packages/test/cloud-e2e/scripts/monetized-app-loop-smoke.ts
+
+Note: also touches `cloud-api-dev.mjs` (a different function than #8248); a
+trivial rebase may be needed if that PR merges first.
+2d:T476,Follow-up to #8258 (the `/api/v1/containers` deploy + read route). Adds the per-container mutation surface the survival loop needs — the only lifecycle exit today is the billing cron's auto-shutdown.
+
+`v1/containers/[id]/route.ts`:
+- **PATCH** `/api/v1/containers/:id` — action-discriminated: `restart` | `setEnv` | `scale`.
+- **DELETE** `/api/v1/containers/:id` — `?mode=stop` (preserve the row, billing off) or delete (remove the row); `?purgeVolume=true` to also drop the volume (defaults false).
+
+Each verb maps 1:1 to an existing org-scoped `HetznerContainersClient` method (no new business logic in the route), with `HetznerClientError` → HTTP mapping (`container_not_found`→404, `invalid_input`→400, `ssh_unreachable`/`no_capacity`→503). `DELETE`/stop sets `status=stopped` which halts billing immediately. Router regenerated via codegen.
+
+Verified on the API-only mock: unknown container → 404 `container_not_found`, bad PATCH action → 400, `scale` with desiredCount≠1 → 400 `invalid_input`. Real container mutation runs over SSH to the Docker-on-Hetzner pool (not exercisable on the mock, same as #8258's POST).2e:T7e9,## What
+
+`shouldForwardEnv` (the allowlist `buildEnv` uses to decide which host env vars a
+spawned ACP coding sub-agent inherits) matched the OS search path as
+`key === "PATH"` — case-sensitively.
+
+The repo runtime is Bun, and **Bun on Windows reports the key as `Path`, not
+`PATH`**. So `buildEnv` forwarded *none* of it, and every spawned ACP sub-agent
+inherited an empty `PATH`. The vendored opencode shim then died at spawn with:
+
+```
+'bun' is not recognized as an internal or external command, operable program or batch file.
+```
+
+i.e. ACP-driven coding agents were unusable on Windows.
+
+## Fix
+
+- Match the OS system vars **case-insensitively** (a `Set` keyed by uppercase
+  name) and broaden the set to the Windows essentials a spawned shell + Bun +
+  the agent's config/cache resolution need (`PATHEXT`, `SYSTEMROOT`, `COMSPEC`,
+  `SYSTEMDRIVE`, `TEMP`/`TMP`, `USERPROFILE`, `APPDATA`/`LOCALAPPDATA`,
+  `PROGRAMFILES`, …) alongside the existing POSIX names.
+- **Canonicalize** each forwarded system var to its uppercase form in `buildEnv`
+  (all three sources: `process.env`, `customCredentials`, `extra`) so a child
+  never inherits two casings of the same var (the winner is undefined on
+  Windows) and JS consumers that read `env.PATH` case-sensitively resolve it.
+- Extract the projection into the pure, exported `forwardableSubAgentEnv` /
+  `canonicalForwardedEnvKey` so the behavior is unit-testable.
+
+The deny-list (`isDeniedSubAgentEnvKey`) still runs **first** (deny wins over
+allow), so no secret is newly forwarded — covered by the existing + new tests.
+
+## Testing
+
+- `__tests__/unit/should-forward-env.test.ts` — added Windows-casing,
+  no-over-match, system-var, canonicalization, and dual-casing-collapse cases
+  (17 pass).
+- `bun run --cwd plugins/plugin-agent-orchestrator typecheck` clean.
+
+## How it was surfaced
+
+Running the monetized-app economics `/goal` loop end-to-end on Windows: a real
+`opencode` ACP sub-agent (Cerebras `gpt-oss-120b`) would not spawn until the
+PATH was forwarded.
+2f:T8ce,Two related fixes to the Steward login **return leg** (callback handling), found while debugging live prod login failures on elizacloud.ai. Both are confirmed against the real Steward source (`Steward-Fi/steward`).
+
+## Commit 1 — consume the OAuth/email code from the URL **fragment** (`#code=`)
+
+Steward's callback returns the one-time auth code in the URL **fragment**, not the query — for **both** OAuth (`#code=<nonce>`) and magic-link email (`#code=<nonce>&auth=email&tenantId=...`, see Steward `auth.ts` `GET /callback/email` → `setRedirectFragment`). The fragment never reaches the server (no access logs, no `Referer`) — same rationale as `#token=`. But the SPA only read `?code=` (query) and `#token=` (hash), so a `#code=` fragment was silently dropped and sign-in never completed (lands on `…/login#code=…` and sits there).
+
+Fix: `consumeStewardCodeFromQuery()` now reads the code from `?code=` **or** `#code=`, stripping whichever it used (preserving non-OAuth params), leaving `#token=` for `consumeStewardTokensFromHash()`. Verified against real jsdom (12/12, incl. the exact prod URL) + new `steward-session.test.ts`.
+
+## Commit 2 — surface Steward's real callback `reason` instead of a generic error
+
+Steward's `GET /auth/callback/email` redirects failures with `?error=email_auth_failed&reason=<code>`, but the SPA's reason→message map only handled 4 codes; the rest (`invalid_link`, `tenant_mismatch`, `rate_limited`, `method_disabled`, `sso_required`, `tenant_not_found`, `tenant_forbidden`, `missing_params`, `mfa_required`) fell through to the generic "Couldn't complete sign-in. Try again." — which is exactly why a failing magic link only ever said "Try again." Added a case for each. `invalid_link` copy is intentionally neutral (the link isn't necessarily expired/used). Copy-only, no behavioral change.
+
+## Scope / context
+`packages/cloud-frontend` only. Follows #8259 (PKCE on `/authorize`) — that fixed the outbound leg; this fixes the return leg. Note: the separate live magic-link `invalid_link` itself is a **Steward-side** issue (token store not shared across Workers isolates + a redirect-origin env mismatch) tracked separately — these two commits make the eliza side correct and honest regardless.30:T4a3,## What
+Adds `ElizaCloudClient.transcribeAudio(request, options)` — a high-level helper for `POST /api/v1/voice/stt`, mirroring `createEmbeddings` / `generateImage`. Apps currently hand-roll the multipart POST (FormData + manual `Authorization` / `X-App-Id`) because there was no typed helper.
+
+- `src/types.ts`: `VoiceSttRequest` (`audio: Blob`, `filename?`, `languageCode?`) + `VoiceSttResponse` (`transcript`, `duration_ms`)
+- `src/client.ts`: `transcribeAudio()` builds FormData and routes through `this.v1.request("POST", "/voice/stt", { ...appIdRequestOptions(options.appId), body: form })`, so auth + `X-App-Id` billing are applied automatically and the runtime sets the multipart boundary (no forced `application/json`)
+- `src/client.test.ts`: unit test asserting URL, method, `X-App-Id`, bearer auth, and a `FormData` body
+
+## Why
+So apps (e.g. wiki-speech-trainer) can drop their hand-rolled STT fetch and use the SDK everywhere, like the edad reference. Additive — no existing signatures change; types auto-export via `export type * from "./types.js"`.
+
+## Verification
+`bun run --cwd packages/cloud-sdk test` → 37 pass / 0 fail · `typecheck` → clean · biome clean.
+31:T4b8,## What
+
+Adds a third-party registry entry for [`@madeonsol/plugin-madeonsol`](https://www.npmjs.com/package/@madeonsol/plugin-madeonsol) per the process in `packages/registry/README.md`:
+
+- `entries/third-party/madeonsol__plugin-madeonsol.json` (new entry)
+- `generated-registry.json` regenerated via `src/generate.ts`
+
+No other files touched. `validate-cli` passes (3 entries validated).
+
+## About the plugin
+
+Real-time Solana memecoin intelligence for elizaOS agents, backed by the [MadeOnSol](https://madeonsol.com) API:
+
+- KOL trade feed from 1,000+ tracked Solana wallets (sub-3s from on-chain confirmation)
+- Multi-KOL coordination/convergence signals
+- Pump.fun deployer reputation tiers + new-launch alerts
+- Wallet win rate / FIFO cost-basis PnL
+
+Auth is either a MadeOnSol API key (free tier available) or **x402 USDC micropayments** — agents with a Solana wallet can pay per call with no signup.
+
+- npm: `@madeonsol/plugin-madeonsol` @ 1.9.0 (keywords include `elizaos` for runtime auto-discovery)
+- Repo: https://github.com/LamboPoewert/plugin-madeonsol (MIT, logo + banner assets included)
+- `package.json` carries `agentConfig` with typed plugin parameters
+
+I own the package and repository.32:T50b,## Problem
+`NativeAcpClient.connect()` issues the `initialize` JSON-RPC request without a timeout argument, so it always falls back to the hardcoded `DEFAULT_TIMEOUT_MS` (300s) — even though every session already carries a `timeoutMs` (from `ACPX_DEFAULT_TIMEOUT_MS` / `ELIZA_ACP_PROMPT_TIMEOUT_MS`) that governs `session/prompt`.
+
+A cold first spawn of an agent that runs from source (e.g. the vendored opencode shim) compiles its TS tree and installs its provider npm package (e.g. `@ai-sdk/cerebras`) during startup. That can take longer than 300s, so the handshake aborts with `ACP request timed out: initialize` before the agent is ever usable — even when the operator configured a longer timeout.
+
+## Fix
+Pass the configured session timeout to the `initialize` request, falling back to the 300s default when unset. This makes the handshake consistent with how `session/prompt` already honors `this.opts.timeoutMs`.
+
+## Test
+Adds a regression test to `acp-native-transport.test.ts`: with `timeoutMs: 600_000`, fake timers advance past the old 300s default (asserting the handshake has NOT timed out yet), then past the configured 600s budget (asserting it times out with `ACP request timed out: initialize`).
+
+`vitest run __tests__/unit/acp-native-transport.test.ts` → 17/17 pass.33:T617,## Problem
+
+The cloud-e2e stack fixture cannot boot cloud-api. Since #8112 it launches `cloud-api-e2e-server.mjs`, which `import()`s the cloud-api worker straight from TypeScript source (`packages/cloud-api/src/index.ts`). Neither runtime can load it from source:
+
+- **node** throws `ERR_MODULE_NOT_FOUND` on the first extensionless `.ts` relative import (`./worker-polyfills`);
+- **bun** can't resolve cloud-api's `@/…` path aliases without a tsconfig `baseUrl`, which **tsgo** (the repo typechecker) rejects.
+
+Only wrangler/esbuild bundling resolves the aliases. So `startCloudStack` times out at the cloud-api health wait, and every cloud-e2e spec — including the merged `monetized-app-loop.spec.ts` — can't run.
+
+## Fix
+
+Boot cloud-api through the same wrangler dev launcher `cloud:mock` already uses: `bun run --cwd packages/cloud-api dev`. The `stripBunAncestryEnv` in `env.ts` exists precisely so wrangler starts from a bun-spawned context. wrangler pre-bundles, so requests are fast (no per-request cold start).
+
+Also add an opt-in `frontend?: false` option to `startCloudStack` for API-only stacks, and gitignore the fixture's runtime `.logs/`.
+
+## Verification
+
+Booted the API-only stack via this launcher and ran the full monetized-app loop (create → monetization → domains.buy with a real $14.95 credit debit → earnings → survival-economics) end to end against the mock: **ALL PASS**. This is the harness change that makes the already-merged `monetized-app-loop.spec.ts` (and the rest of the cloud-e2e suite) actually boot cloud-api.34:T94b,> **DRAFT — pending a product decision.** Removing anonymous guest chat is contested: shad0w/nubs want it gone (sign-in friction is low-value now that signup grants $5); Odilitime thinks the "try a response before signing up" funnel may be worth keeping. **This is teed up and ready if @standujar says go** — otherwise it's here for review, not merge.
+
+## What
+Replace anonymous guest access with **"sign in (get $5) to use it"**. The
+`X-Affiliate-Code` revenue model is **completely untouched**.
+
+- Delete the 9 anon-session routes (`auth/{create-anonymous-session,anonymous-session,migrate-anonymous}`, `anonymous-session`, `set-anonymous-session`, `cron/cleanup-anonymous-sessions`, `affiliate/{create-session,create-character}`, `my-agents/claim-affiliate-characters`) + regenerate the router (`codegen`).
+- Delete the anon services (`anonymous-session-creator`, `anonymous-sessions`, `auth-anonymous`) + drop the cleanup cron entry.
+- `/v1/chat` + the eliza welcome route now **401 unauthenticated** instead of falling back to an anon user (the affiliate `X-Affiliate-Code` read is preserved).
+- **Gate the public chat** behind a sign-in CTA ("Sign in to chat with {agent} — get $5 in credits"); strip the dead anon plumbing in `eliza-page-client` + `my-agents`; remove the anon message-count increments.
+
+## Verified
+Built + typechecked locally against a real install: **`cloud-api` typecheck green, `cloud-frontend` typecheck green** (my files), **biome clean**. CI will re-verify.
+
+## Deliberately NOT in this PR
+- **The destructive DB drop** (`anonymous_sessions` table + `users`/`user_identities.is_anonymous` columns) is a **separate, soaked follow-up migration** — the columns are kept and simply no longer read (snapshot-only rollback for the drop, so it's decoupled).
+- The required **`audit:cloud` visual-review gate** (cloud-frontend UI change) — I couldn't run it in my env; needs an eyeball before "done".
+- Minor dead-but-harmless leftovers to prune in follow-up (non-breaking, never populated now): `chat-store.anonymousSessionToken`, the `is_anonymous` field in `lib/data/user.ts`, and the dead message-limit signup UI in `eliza-chat-interface`.
+
+## Keep (do not touch)
+The affiliate revenue model: `affiliate_codes`/`user_affiliates`, `ai-billing` `affiliateCode` branch, `X-Affiliate-Code` header reads, `v1/affiliates`, redeemable/app earnings.
+35:Ta6e,## Why
+
+The Magic Link return-leg silently sends users back to /login on staging.elizacloud.ai. Reproducible with Playwright: open /login#code=… and the SPA POSTs to `https://api.elizacloud.ai/api/auth/steward-nonce-exchange` (the prod Worker) instead of `https://api-staging.elizacloud.ai/...`.
+
+`packages/cloud-frontend/src/lib/steward-session.ts` mapped all of `{elizacloud.ai, www.elizacloud.ai, dev.elizacloud.ai, staging.elizacloud.ai}` onto the same `ELIZA_CLOUD_DIRECT_AUTH_BASE = "https://api.elizacloud.ai"`. Each Worker pins its Steward tenant via `STEWARD_TENANT_ID` (`elizacloud-staging` vs `elizacloud`), and both the embedded `/steward` proxy and the steward-nonce-exchange bypass route forward that header to Steward. So a code minted by the staging tenant 401s when the exchange happens against the prod tenant. The bypass route responds `{error:"Invalid or already-used code", code:"code_invalid"}` and the SPA's callback flow returns to /login with no surfaced error.
+
+This bug was masked while Steward did NOT yet require PKCE + signatures: the prod-vs-staging exchange was either failing in a way the SPA already absorbed, or both env Workers were silently letting unsigned/lenient exchanges through. After PR #8259 (PKCE + nonce-exchange signing) tightened the path, the tenant mismatch became user-visible.
+
+## What
+
+Replace the single shared base string with a per-host map:
+
+```ts
+const ELIZA_CLOUD_AUTH_BASES: Record<string, string> = {
+  "elizacloud.ai": "https://api.elizacloud.ai",
+  "www.elizacloud.ai": "https://api.elizacloud.ai",
+  "dev.elizacloud.ai": "https://api.elizacloud.ai",
+  "staging.elizacloud.ai": "https://api-staging.elizacloud.ai",
+};
+```
+
+This matches what the Pages Function `_proxy.ts` already does for the same-origin `/api/*` calls (staging.pages.dev → api-staging, prod → api).
+
+## Tests
+
+The existing `resolveStewardAuthEndpoint` test was **actively asserting the bug** — it expected `staging.elizacloud.ai` to map to `api.elizacloud.ai`. Updated to keep the prod cases and add a dedicated tenant-isolation case that covers all three endpoints (nonce-exchange, session, refresh) on staging.
+
+3 new tests + 3 unchanged prod tests, all green via `bun x vitest run --environment=jsdom`.
+
+## Test plan
+
+- [ ] CI green
+- [ ] Cloud-cf-deploy rolls out the new SPA bundle
+- [ ] On staging.elizacloud.ai, click Magic Link → check inbox → click the link → land authenticated on /dashboard (not /login)
+- [ ] DevTools Network shows POST to `api-staging.elizacloud.ai/api/auth/steward-nonce-exchange` returning 200 with `data.token`
+- [ ] No regression on prod (`www.elizacloud.ai` still hits `api.elizacloud.ai`)36:T830,
+
+[![Dependabot compatibility score](https://dependabot-badges.githubapp.com/badges/compatibility_score?dependency-name=aiohttp&package-manager=uv&previous-version=3.13.5&new-version=3.14.0)](https://docs.github.com/en/github/managing-security-vulnerabilities/about-dependabot-security-updates#about-compatibility-scores)
+
+Dependabot will resolve any conflicts with this PR as long as you don't alter it yourself. You can also trigger a rebase manually by commenting `@dependabot rebase`.
+
+[//]: # (dependabot-automerge-start)
+[//]: # (dependabot-automerge-end)
+
+---
+
+<details>
+<summary>Dependabot commands and options</summary>
+<br />
+
+You can trigger Dependabot actions by commenting on this PR:
+- `@dependabot rebase` will rebase this PR
+- `@dependabot recreate` will recreate this PR, overwriting any edits that have been made to it
+- `@dependabot show <dependency name> ignore conditions` will show all of the ignore conditions of the specified dependency
+- `@dependabot ignore <dependency name> major version` will close this group update PR and stop Dependabot creating any more for the specific dependency's major version (unless you unignore this specific dependency's major version or upgrade to it yourself)
+- `@dependabot ignore <dependency name> minor version` will close this group update PR and stop Dependabot creating any more for the specific dependency's minor version (unless you unignore this specific dependency's minor version or upgrade to it yourself)
+- `@dependabot ignore <dependency name>` will close this group update PR and stop Dependabot creating any more for the specific dependency (unless you unignore this specific dependency or upgrade to it yourself)
+- `@dependabot unignore <dependency name>` will remove all of the ignore conditions of the specified dependency
+- `@dependabot unignore <dependency name> <ignore condition>` will remove the ignore condition of the specified dependency and ignore conditions
+You can disable automated security fix PRs for this repo from the [Security Alerts page](https://github.com/elizaOS/eliza/network/alerts).
+
+</details>37:T4fb,## Problem
+
+In the container-billing cron, `redeemableEarningsService.convertToCredits` **throws** on insufficient/contended earnings for a positive amount — it never returns `{ success: false }` (see `redeemable-earnings.ts` lines 769/774/796). So the guard
+
+```ts
+if (!conversion.success) { /* Fall through: try to charge full cost to credits below. */ }
+```
+
+is **dead code**, and the throw propagates out of `processContainerBilling` — the container is recorded as `error` and **never billed for the day (free hosting)**. The unconditional `newBalance = currentBalance + fromEarnings - dailyCost` would also have inflated the balance by earnings that were never debited.
+
+## Fix
+
+Wrap `convertToCredits` in try/catch. On failure, charge the full day to credits (`fromEarnings = 0`, `fromCredits = dailyCost`) — matching the documented intent — instead of aborting billing. This also closes the latent balance-inflation path.
+
+The deeper hardening (per-(container, billing_period) idempotency on `convertToCredits`, gating `listBillableContainers` on `next_billing_at`, and recording the `credit_transactions` amount as `-fromCredits` for ledger reconciliation) is intentionally left as a follow-up since it needs a migration + a reconciliation-semantics decision.38:Ta3f,## Why
+
+After yesterday's #8282 (staging SPA → api-staging) deployed, the magic-link return-leg gets further than before — `POST /steward/auth/email/verify` now returns 200 with the freshly-issued tokens — but it still kicks the user back to `/login?returnTo=/dashboard` with **"Request expiry header required"** rendered in the login card.
+
+Worker tail captures the actual failure:
+
+\`\`\`
+POST /steward/auth/email/verify              200  (Steward issued tokens)
+POST /api/auth/steward-session               200  (Worker cookies sync)
+POST /api/auth/steward-refresh               502  {"error":"Request expiry header required","code":"internal_error"}
+                                                   ↑ this kicks back to /login
+\`\`\`
+
+The SPA's session-bootstrap calls `/api/auth/steward-refresh` immediately after the verify to rotate the freshly-issued refresh token. That bypass route forwards directly to Steward `POST /auth/refresh` without going through the `/steward/*` embedded proxy in `bootstrap-app.ts` — same shape as the nonce-exchange bypass route that #8259 already taught to sign. **steward-refresh was missed in that PR**, so its outbound fetch arrives at Steward unsigned and Steward's `authorization-signature` middleware 502s it.
+
+## What
+
+Plumb `c.env.STEWARD_REQUEST_SIGNING_SECRET` into \`callStewardRefresh\` and sign the outbound fetch the same way \`steward-nonce-exchange\` does:
+
+- Convert the local \`headers\` object to a \`Headers\` instance (so \`signStewardMutatingRequest\` can mutate it).
+- Build the canonical URL + body bytes once, sign when the secret is configured, then \`fetch(refreshUrl, …)\`.
+
+No new helper, no new env binding — the secret is already set on the Worker (both prod and staging) and \`signStewardMutatingRequest\` already lives in \`packages/cloud-api/src/steward/sign.ts\` (added by #8259).
+
+## Test plan
+
+- [ ] CI green
+- [ ] cloud-cf-deploy rolls out the staging Worker
+- [ ] Live test: clean SPA profile, request fresh magic link, click immediately. Worker tail should show:
+  - \`POST /api/auth/steward-refresh\` → **200** (not 502)
+  - Final URL = \`/dashboard\` (not \`/login?returnTo=/dashboard\`)
+- [ ] Prod regression: same flow on \`www.elizacloud.ai\` still works (Worker secret is identical, signing function identical to nonce-exchange).
+
+## Follow-up
+
+Audit every other \`/api/auth/steward-*\` bypass route for the same gap (\`steward-session\` is read-only verification but still POSTs upstream; \`steward-nonce-exchange\` signs already). If we find more, batch them together rather than chasing one bypass-route bug at a time.39:T8e7,## Why
+
+The cloud-cf-deploy `build:core` step builds plugin-google transitively (app-core → plugin-health → plugin-calendar → plugin-google) and has been failing on develop with:
+
+```
+client-factory.ts(48,25): error TS2769: No overload matches this call.
+  Type 'OAuth2Client' (10.7.0) is not assignable to
+  Type 'OAuth2Client' (10.5.0)
+    Types have separate declarations of a private property 'redirectUri'.
+```
+
+bun's isolated linker installs **two copies** of `google-auth-library`:
+- `googleapis@169.0.0` declares `google-auth-library: ^10.2.0` → resolves to **10.7.0**
+- `googleapis-common@8.0.2` declares `google-auth-library: 10.5.0` exact → installs **10.5.0** nested
+
+Shaw's earlier `#7d1ee6e34c` routed the type via `googleapis.Auth`, but that's the 10.7.0 side, while `gmail_v1.Options.auth` (and the calendar/drive/docs/sheets/meet equivalents) is typed against the 10.5.0 side baked into googleapis itself. Same physical class, different TypeScript nominal identity.
+
+Tried `overrides` and `resolutions` in root package.json — bun still nests the second copy under `googleapis-common`. The next available lever is at the call site.
+
+## What
+
+Per-method `as unknown as <ns>.Options` cast on each of the six service constructors (`gmail`, `calendar`, `drive`, `docs`, `sheets`, `meet`). Runtime auth object is structurally identical — only the TS nominal check is wrong. Short comment near `apiOptions` documents the trap so the next person looking at this code doesn't spend an afternoon retracing it.
+
+## Impact
+
+Unblocks `cloud-cf-deploy` which has been failing all afternoon. Three already-merged cloud-api fixes are sitting undeployed behind this:
+- #8282 staging tenant routing
+- #8283 wildcard verify-step removal
+- #8287 steward-refresh signing (the Magic Link callback fix)
+
+## Test plan
+
+- [ ] CI green
+- [ ] `cloud-cf-deploy` on develop completes both Worker + Pages
+- [ ] Worker staging picks up the steward-refresh signing (Magic Link callback lands on /dashboard, not /login?returnTo=)
+- [ ] No regression on prod Worker
+
+## Follow-up
+
+A proper fix would pin both googleapis dependencies to the same auth-library minor (or wait for googleapis-common to bump). That's an upstream concern; this cast keeps us shipping while it gets sorted.3a:T42c,## What
+Several monetized-inference error surfaces say **"Insufficient app credits"** — implying a per-app credit pool — even though billing already runs against the user's **org (cloud) credit balance**.
+
+`appCreditsService.deductCredits()` / `reconcileCredits()` were switched off the (now-stranded) `app_credit_balances` pool to the org balance, and `checkBalance()` reads the org balance too. The wording just never caught up.
+
+Changes (message/comment only):
+- `/v1/chat/completions`, `/v1/messages`, `/v1/apps/[id]/chat`, `/v1/apps/[id]/generate-image`: `Insufficient app credits` → `Insufficient credits`
+- `/v1/apps/[id]/chat` log line → `Insufficient cloud credits`
+- short comment at each pre-check noting `checkBalance()` reads the org balance
+
+## Why
+The "app credits" wording makes integrators think they must pre-fund a per-app pool (the stranded one) when users actually spend their org credits.
+
+## Notes
+Error `code`s left **unchanged** to avoid a contract break — text only. biome clean on the changed files; full suite via CI. Refs #8253.
+3b:Tb4b,## Why
+
+\`cloud-cf-deploy.yml\` line 184 had:
+\`\`\`yaml
+- name: Verify generated agent wildcard route
+  if: ... && deploy_environment == 'production'
+  run: |
+    node ... fetch('https://00000000-0000-0000-0000-000000000000.elizacloud.ai/')
+    if (!body.includes('agent not found or not running')) throw new Error(...)
+\`\`\`
+
+The string \`agent not found or not running\` only lives in \`packages/scripts/cloud/admin/daemons/agent-router.ts\` — a **Hetzner-side daemon**, never the cloud-api Worker. So a \`*.elizacloud.ai/*\` Worker route doesn't actually return that message; it returns the Worker's root JSON (\`{name:"eliza-cloud-api", …}\`).
+
+Each time someone added the wildcard to satisfy the verifier (most recently overnight), it caught \`staging.elizacloud.ai/*\` before Pages could serve the SPA. Result:
+
+- Dashboard at \`staging.elizacloud.ai/dashboard/agents\` returned cloud-api JSON instead of HTML.
+- The Magic Link callback (which lives at \`/login\`) was served as JSON, broke, and silently redirected to \`/login\` again.
+- "+ New Agent" / "Open Web UI" were unreachable.
+
+I deleted the wildcard yesterday and again this morning; both times it got re-added because the verifier kept telling whoever was deploying that something was missing. The fix is to drop the verifier (the contract it checks was never implemented) and leave a \`NOTE:\` explaining the trap.
+
+## What
+
+Replace the step with a \`# NOTE: …\` comment that documents:
+- What the verifier used to check
+- Why that contract was never wired
+- What broke each time the wildcard was added back
+- When (and how) to reintroduce a verifier alongside an actual Worker handler
+
+No other changes — \`bunx wrangler deploy\` still runs, all the secret-publish steps still run, the staging deploy that just landed (#8282) is unaffected.
+
+## Test plan
+
+- [ ] CI green
+- [ ] Next staging deploy produces a healthy \`staging.elizacloud.ai/dashboard/agents\` page (no JSON regression)
+- [ ] Manually re-check \`https://api.cloudflare.com/.../workers/routes\` after the deploy — no \`*.elizacloud.ai/*\` route should appear, even after the verifier is gone
+
+## Follow-up
+
+If we want \`<uuid>.elizacloud.ai/\` to return a real "agent not found" response, the right move is:
+1. Add a host-aware handler in \`packages/cloud-api/src/bootstrap-app.ts\` that detects UUID-shaped subdomains, looks the sandbox up by \`agent_sandboxes.id\` matching the leftmost label, and either proxies to \`bridge_url\` or returns the 404 message.
+2. Re-introduce the Worker route \`*.elizacloud.ai/*\` AND the verifier together.
+3. Make sure the route ordering still lets Pages handle \`staging.elizacloud.ai/\` for the dashboard (probably by adding a more-specific \`staging.elizacloud.ai/*\` Worker route that explicitly falls through to Pages, or by binding Pages first).
+
+That's a separate PR; this one just stops the bleeding.1d:["$","div",null,{"className":"mb-8 space-y-6","children":[["$","$L24",null,{"metrics":{"date":"2026-06-06","interval":{"intervalStart":"$D2026-06-06T00:00:00.000Z","intervalEnd":"$D2026-06-07T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":24,"merged":12,"total":26},"issues":{"new":0,"closed":2,"total":2},"activeContributors":12,"codeChanges":{"additions":4291,"deletions":1808,"files":101,"commitCount":126},"topContributors":[{"username":"greptile-apps","avatarUrl":"https://avatars.githubusercontent.com/in/867647?v=4","totalScore":220.5,"prScore":0,"issueScore":0,"reviewScore":220.5,"commentScore":0,"summary":"greptile-apps: No activity today."},{"username":"2-A-M","avatarUrl":"https://avatars.githubusercontent.com/u/96268540?u=39ce724443b5cd500fc28905812cdba16e3181a7&v=4","totalScore":178.85251768143291,"prScore":178.85251768143291,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"2-A-M: Focused on enhancing cloud infrastructure and API reliability, successfully merging three PRs in elizaos/eliza that introduced container lifecycle verbs (#8270) and resolved critical billing and E2E boot issues (#8269, #8268). Their work reflects a balanced commitment to feature development and bug fixing, with ongoing efforts to stabilize orchestrator and cloud-api functionality through five additional open pull requests."},{"username":"0xSolace","avatarUrl":"https://avatars.githubusercontent.com/u/257989456?u=2138984e3bfc9b5f8cd3f60f134e550b4cc22520&v=4","totalScore":162.38108276075053,"prScore":162.38108276075053,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"0xSolace: Focused on stabilizing cloud authentication and SDK integration within the elizaos/eliza repository, successfully merging four PRs (#8280, #8279, #8271, #8267) that addressed critical session management, OAuth redirects, and type handling. This work involved 8 commits across 60 files, reflecting a dedicated effort toward bug fixing and improving system reliability through code and test updates."},{"username":"standujar","avatarUrl":"https://avatars.githubusercontent.com/u/16385918?u=718bdcd1585be8447bdfffb8c11ce249baa7532d&v=4","totalScore":104.07004985753056,"prScore":104.07004985753056,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"standujar: Focused on stabilizing cloud infrastructure and API authentication within elizaos/eliza, successfully merging four PRs (#8288, #8287, #8283, #8282) that resolved critical deployment and staging environment issues. Their work primarily centered on bugfixes and refactoring, involving 10 commits across 12 files to improve system reliability."},{"username":"NubsCarson","avatarUrl":"https://avatars.githubusercontent.com/u/192162056?u=d2be9082dbee60fcbad21d32bf6e662ab1af3674&v=4","totalScore":91.37380181968504,"prScore":91.03380181968504,"issueScore":0,"reviewScore":0,"commentScore":0.33999999999999997,"summary":"NubsCarson: Focused on enhancing the cloud SDK and hardening authentication security, notably merging PR #8266 to add audio transcription capabilities and addressing critical login and session management issues in the elizaos/eliza repository. Their work was primarily driven by bug fixes (43%), alongside feature development, refactoring, and testing efforts."},{"username":"Dexploarer","avatarUrl":"https://avatars.githubusercontent.com/u/211557447?u=21a243d61cc1f87574328ae07fc64d7d7577b53d&v=4","totalScore":63.08116701179374,"prScore":63.08116701179374,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"Dexploarer: Focused on enhancing mobile accessibility and platform stability, successfully merging PR #8278 in elizaos/eliza to resolve critical cloud onboarding issues. Their work today involved 19 commits across 429 files, with a primary emphasis on bugfixes and testing infrastructure."},{"username":"lalalune","avatarUrl":"https://avatars.githubusercontent.com/u/18633264?u=e2e906c3712c2506ebfa98df01c2cfdc50050b30&v=4","totalScore":59.9817738965761,"prScore":59.5437738965761,"issueScore":0,"reviewScore":0,"commentScore":0.43799999999999994,"summary":"lalalune: Drove a significant architectural improvement by merging PR #8277 in elizaos/eliza, which refactored the lifeops plugin into focused modules through a massive codebase update. Their work today spanned 1,791 files with a primary focus on documentation, bug fixes, and structural refactoring."},{"username":"binkyfishai","avatarUrl":"https://avatars.githubusercontent.com/u/172897890?u=13dcfbbffef5a3f90ae60741795eaf47cc93a244&v=4","totalScore":13.828386167963231,"prScore":13.828386167963231,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"binkyfishai: Focused on enhancing the user interface, currently maintaining an open pull request in elizaos/eliza (#8276) to improve the views and apps screen."}],"focusAreas":[{"area":"app-core","count":20},{"area":"cloud-frontend","count":15},{"area":"agent","count":15},{"area":"app","count":10},{"area":"ui","count":10},{"area":".github/workflows","count":7},{"area":"cloud-api","count":4},{"area":"test","count":2},{"area":"registry","count":2},{"area":"feed","count":2}],"topIssues":[{"id":"I_kwDOMT5cIs8AAAABEhH8Pg","title":"App-credits: purchases fund the per-app pool but inference debits the org balance (stranded credits)","author":"NubsCarson","number":8253,"repository":"elizaos/eliza","body":"$25","createdAt":"2026-06-05T15:38:34Z","closedAt":"2026-06-06T01:16:34Z","state":"CLOSED","commentCount":1},{"id":"I_kwDOMT5cIs8AAAABEWmdhw","title":"proposal: GET /api/suggestions — server-tailored prompt suggestions for the continuous-chat overlay","author":"NubsCarson","number":8225,"repository":"elizaos/eliza","body":"$26","createdAt":"2026-06-04T08:24:12Z","closedAt":"2026-06-06T01:16:46Z","state":"CLOSED","commentCount":1}],"topPullRequests":[{"id":"PR_kwDOMT5cIs7jWZtf","title":"refactor(lifeops): split plugin-lifeops into focused plugins + plugin-personal-assistant","author":"lalalune","number":8277,"body":"$27","repository":"elizaos/eliza","createdAt":"2026-06-06T03:56:44Z","mergedAt":"2026-06-06T14:57:40Z","additions":42135,"deletions":24987},{"id":"PR_kwDOMT5cIs7jV90-","title":"feat(orchestrator): wire the child→parent USE_SKILL parent-agent broker dispatcher","author":"2-A-M","number":8275,"body":"$28","repository":"elizaos/eliza","createdAt":"2026-06-06T03:11:44Z","mergedAt":"2026-06-11T22:16:38Z","additions":798,"deletions":4},{"id":"PR_kwDOMT5cIs7jW9GE","title":"fix: mobile cloud onboarding","author":"Dexploarer","number":8278,"body":"$29","repository":"elizaos/eliza","createdAt":"2026-06-06T04:46:36Z","mergedAt":"2026-06-06T06:55:33Z","additions":720,"deletions":113},{"id":"PR_kwDOMT5cIs7jVqvX","title":"fix(cloud-api): make container billing idempotent per period (no double-debit on cron re-run)","author":"2-A-M","number":8273,"body":"$2a","repository":"elizaos/eliza","createdAt":"2026-06-06T02:45:26Z","mergedAt":"2026-06-15T14:14:43Z","additions":513,"deletions":25},{"id":"PR_kwDOMT5cIs7jWSqq","title":"Improve views/apps screen","author":"binkyfishai","number":8276,"body":"views page improvements because felt it needed a brush up, feel free to toss","repository":"elizaos/eliza","createdAt":"2026-06-06T03:46:06Z","mergedAt":"2026-06-11T22:16:51Z","additions":470,"deletions":131},{"id":"PR_kwDOMT5cIs7jVIr-","title":"fix(cloud-api): make domain purchase idempotent","author":"2-A-M","number":8272,"body":"$2b","repository":"elizaos/eliza","createdAt":"2026-06-06T01:59:23Z","mergedAt":"2026-06-16T02:42:06Z","additions":362,"deletions":131},{"id":"PR_kwDOMT5cIs7jJfvU","title":"test(cloud-e2e): smoke test for the monetized-app loop on cloud:mock","author":"2-A-M","number":8249,"body":"$2c","repository":"elizaos/eliza","createdAt":"2026-06-05T15:00:55Z","mergedAt":"2026-06-06T01:11:14Z","additions":209,"deletions":0},{"id":"PR_kwDOMT5cIs7jVHd7","title":"fix(cloud): handle @stwd/sdk 0.10 auth result types","author":"0xSolace","number":8271,"body":"## Summary\n- handle @stwd/sdk 0.10 MFA-required auth results before reading tokens\n- add the new required twitter provider flag to cloud login provider defaults\n- force the Steward SDK dependency graph to resolve to 0.10.1 so @stwd/react and cloud frontend use compatible StewardClient types\n\n## Verification\n- bun run --cwd packages/cloud-frontend typecheck\n- codex review --base origin/develop\n","repository":"elizaos/eliza","createdAt":"2026-06-06T01:57:36Z","mergedAt":"2026-06-06T04:48:33Z","additions":202,"deletions":44},{"id":"PR_kwDOMT5cIs7jVGj0","title":"feat(cloud-api): add container lifecycle verbs (PATCH/DELETE/scale)","author":"2-A-M","number":8270,"body":"$2d","repository":"elizaos/eliza","createdAt":"2026-06-06T01:56:16Z","mergedAt":"2026-06-07T19:37:08Z","additions":181,"deletions":1},{"id":"PR_kwDOMT5cIs7jfXat","title":"fix(orchestrator): forward Windows env (Path casing) to ACP sub-agents","author":"2-A-M","number":8285,"body":"$2e","repository":"elizaos/eliza","createdAt":"2026-06-06T18:05:20Z","mergedAt":"2026-06-11T22:16:42Z","additions":180,"deletions":16},{"id":"PR_kwDOMT5cIs7jZP60","title":"fix(cloud): harden Steward login callback — consume #code= fragment + surface real errors","author":"NubsCarson","number":8281,"body":"$2f","repository":"elizaos/eliza","createdAt":"2026-06-06T08:52:50Z","mergedAt":null,"additions":140,"deletions":15},{"id":"PR_kwDOMT5cIs7jYlXH","title":"fix(cloud): hydrate Steward cookie refresh sessions","author":"0xSolace","number":8280,"body":"## Summary\n- return the refreshed Steward access token from `/api/auth/steward-refresh` for trusted Cloud origins\n- hydrate the SPA localStorage token mirror from cookie refresh so valid HttpOnly-cookie sessions do not bounce back to `/login`\n- make the OAuth callback fail visibly instead of redirect-looping if exchange succeeds without a JS-readable token\n- add login coverage for cookie-only Steward session recovery\n\n## Verification\n- bun run --cwd packages/cloud-frontend test -- src/pages/login/steward-login-section.test.tsx\n- bun run --cwd packages/cloud-frontend typecheck\n- bun run --cwd packages/cloud-api typecheck\n- bun run --cwd packages/cloud-frontend build:client\n- codex review --uncommitted","repository":"elizaos/eliza","createdAt":"2026-06-06T07:32:41Z","mergedAt":"2026-06-06T07:32:59Z","additions":115,"deletions":22},{"id":"PR_kwDOMT5cIs7jYFk5","title":"fix(cloud): stabilize Steward OAuth redirect URI","author":"0xSolace","number":8279,"body":"## Summary\n- keep Steward OAuth redirect_uri pinned to the allowlisted /login URL\n- preserve deep-link returnTo targets in sanitized sessionStorage instead of embedding them in redirect_uri\n- reuse the same stable redirect_uri during nonce exchange\n\n## Verification\n- bun run --cwd packages/cloud-frontend test -- src/pages/login/steward-oauth-url.test.ts src/pages/login/login-return-to.test.ts\n- bun run --cwd packages/cloud-frontend typecheck\n- bun run --cwd packages/cloud-frontend build:client\n- codex review --uncommitted","repository":"elizaos/eliza","createdAt":"2026-06-06T06:40:18Z","mergedAt":"2026-06-06T06:40:41Z","additions":104,"deletions":30},{"id":"PR_kwDOMT5cIs7jT1_j","title":"feat(cloud-sdk): add ElizaCloudClient.transcribeAudio() for voice/stt","author":"NubsCarson","number":8266,"body":"$30","repository":"elizaos/eliza","createdAt":"2026-06-06T00:19:12Z","mergedAt":"2026-06-07T19:37:17Z","additions":96,"deletions":0},{"id":"PR_kwDOMT5cIs7jOg7v","title":"feat(registry): add @madeonsol/plugin-madeonsol third-party entry","author":"LamboPoewert","number":8260,"body":"$31","repository":"elizaos/eliza","createdAt":"2026-06-05T19:04:53Z","mergedAt":"2026-06-06T01:11:14Z","additions":66,"deletions":0},{"id":"PR_kwDOMT5cIs7jhd8f","title":"fix(orchestrator): honor the configured session timeout for the ACP initialize handshake","author":"2-A-M","number":8286,"body":"$32","repository":"elizaos/eliza","createdAt":"2026-06-06T22:02:51Z","mergedAt":"2026-06-11T22:16:46Z","additions":59,"deletions":10},{"id":"PR_kwDOMT5cIs7jVFir","title":"fix(cloud-e2e): boot cloud-api via the wrangler dev launcher","author":"2-A-M","number":8268,"body":"$33","repository":"elizaos/eliza","createdAt":"2026-06-06T01:55:01Z","mergedAt":"2026-06-07T19:37:14Z","additions":50,"deletions":27},{"id":"PR_kwDOMT5cIs7jV6KV","title":"refactor(cloud): remove anonymous guest sessions (sign-in required to chat)","author":"NubsCarson","number":8274,"body":"$34","repository":"elizaos/eliza","createdAt":"2026-06-06T03:06:19Z","mergedAt":null,"additions":49,"deletions":2559},{"id":"PR_kwDOMT5cIs7jbaqg","title":"fix(cloud-frontend): staging SPA hits staging Worker for Steward auth (tenant isolation)","author":"standujar","number":8282,"body":"$35","repository":"elizaos/eliza","createdAt":"2026-06-06T12:33:44Z","mergedAt":"2026-06-06T12:40:47Z","additions":44,"deletions":13},{"id":"PR_kwDOMT5cIs7jddgh","title":"chore(deps): bump aiohttp from 3.13.5 to 3.14.0 in /packages/benchmarks/lifeops-bench in the uv group across 1 directory","author":"dependabot","number":8284,"body":"$36","repository":"elizaos/eliza","createdAt":"2026-06-06T15:11:10Z","mergedAt":"2026-06-11T22:11:10Z","additions":39,"deletions":36},{"id":"PR_kwDOMT5cIs7jVGE2","title":"fix(cloud-api): bill containers when earnings conversion fails","author":"2-A-M","number":8269,"body":"$37","repository":"elizaos/eliza","createdAt":"2026-06-06T01:55:38Z","mergedAt":"2026-06-07T19:37:10Z","additions":36,"deletions":17},{"id":"PR_kwDOMT5cIs7jhqAz","title":"fix(cloud-api): sign /api/auth/steward-refresh upstream call to Steward","author":"standujar","number":8287,"body":"$38","repository":"elizaos/eliza","createdAt":"2026-06-06T22:24:03Z","mergedAt":"2026-06-06T22:31:37Z","additions":25,"deletions":5},{"id":"PR_kwDOMT5cIs7jT3fb","title":"fix(cloud): bump @stwd/sdk to 0.10.1 (passkey challengeId login fix)","author":"0xSolace","number":8267,"body":"Prod passkey login fails with 'challengeId is required'. cloud-frontend bundled @stwd/sdk@0.8.1 whose published dist doesn't forward the passkey challengeId to /auth/passkey/login/verify. 0.10.1 (just published) adds it. Bumped cloud-frontend/cloud-shared/os-homepage to ^0.10.1; verified resolved 0.10.1 dist forwards challengeId and cloud-frontend resolves it. Companion to the OAuth fix (tenant allowedRedirectUrls, already applied + verified 302->Google).","repository":"elizaos/eliza","createdAt":"2026-06-06T00:21:39Z","mergedAt":"2026-06-06T00:21:53Z","additions":17,"deletions":8},{"id":"PR_kwDOMT5cIs7jiFtN","title":"fix(plugin-google): unblock cloud-cf-deploy via Options-shape casts","author":"standujar","number":8288,"body":"$39","repository":"elizaos/eliza","createdAt":"2026-06-06T23:17:42Z","mergedAt":"2026-06-06T23:34:58Z","additions":13,"deletions":6},{"id":"PR_kwDOMT5cIs7jT1-y","title":"fix(cloud-api): clarify insufficient-credits wording on inference","author":"NubsCarson","number":8265,"body":"$3a","repository":"elizaos/eliza","createdAt":"2026-06-06T00:19:11Z","mergedAt":null,"additions":10,"deletions":5},{"id":"PR_kwDOMT5cIs7jbrrF","title":"ci(cloud-cf-deploy): remove broken 'verify generated agent wildcard route' step","author":"standujar","number":8283,"body":"$3b","repository":"elizaos/eliza","createdAt":"2026-06-06T12:54:38Z","mergedAt":"2026-06-06T13:55:43Z","additions":0,"deletions":22}],"detailedContributorSummaries":{"0xSolace":"0xSolace: Focused on stabilizing cloud authentication and SDK integration within the elizaos/eliza repository, successfully merging four PRs (#8280, #8279, #8271, #8267) that addressed critical session management, OAuth redirects, and type handling. This work involved 8 commits across 60 files, reflecting a dedicated effort toward bug fixing and improving system reliability through code and test updates.","2-A-M":"2-A-M: Focused on enhancing cloud infrastructure and API reliability, successfully merging three PRs in elizaos/eliza that introduced container lifecycle verbs (#8270) and resolved critical billing and E2E boot issues (#8269, #8268). Their work reflects a balanced commitment to feature development and bug fixing, with ongoing efforts to stabilize orchestrator and cloud-api functionality through five additional open pull requests.","Dexploarer":"Dexploarer: Focused on enhancing mobile accessibility and platform stability, successfully merging PR #8278 in elizaos/eliza to resolve critical cloud onboarding issues. Their work today involved 19 commits across 429 files, with a primary emphasis on bugfixes and testing infrastructure.","NubsCarson":"NubsCarson: Focused on enhancing the cloud SDK and hardening authentication security, notably merging PR #8266 to add audio transcription capabilities and addressing critical login and session management issues in the elizaos/eliza repository. Their work was primarily driven by bug fixes (43%), alongside feature development, refactoring, and testing efforts.","binkyfishai":"binkyfishai: Focused on enhancing the user interface, currently maintaining an open pull request in elizaos/eliza (#8276) to improve the views and apps screen.","greptile-apps":"greptile-apps: No activity today.","lalalune":"lalalune: Drove a significant architectural improvement by merging PR #8277 in elizaos/eliza, which refactored the lifeops plugin into focused modules through a massive codebase update. Their work today spanned 1,791 files with a primary focus on documentation, bug fixes, and structural refactoring.","standujar":"standujar: Focused on stabilizing cloud infrastructure and API authentication within elizaos/eliza, successfully merging four PRs (#8288, #8287, #8283, #8282) that resolved critical deployment and staging environment issues. Their work primarily centered on bugfixes and refactoring, involving 10 commits across 12 files to improve system reliability."}}}],"$L3c"]}]
+1e:["$","div",null,{"className":"prose prose-sm mx-auto mt-8 dark:prose-invert sm:prose lg:prose-lg xl:prose-xl","children":[["$","p","p-0",{"children":["Development on June 6 focused on stabilizing cloud infrastructure and refining the Steward authentication flow to resolve mobile and CLI onboarding issues. The team also successfully modularized the ",["$","code","code-0",{"children":"plugin-lifeops"}]," monolith into specialized domain plugins and unified credit ledgers to ensure consistent inference capabilities across monetized applications."]}],"\n",["$","h2","h2-0",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"✅ Completed Work","position":{"start":{"line":5,"column":4,"offset":403},"end":{"line":5,"column":20,"offset":419}}}],"position":{"start":{"line":5,"column":1,"offset":400},"end":{"line":5,"column":20,"offset":419}}},"children":"✅ Completed Work"}],"\n",["$","p","p-1",{"children":["$","strong","strong-0",{"children":"Cloud Authentication & Infrastructure Stability"}]}],"\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["Resolved mobile and CLI onboarding issues by pinning Steward OAuth redirect URIs and implementing session storage for return targets (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/8278","children":"elizaos/eliza#8278"}],", ",["$","a","a-1",{"href":"https://github.com/elizaos/eliza/pull/8279","children":"elizaos/eliza#8279"}],")."]}],"\n",["$","li","li-1",{"children":["Fixed session bouncing by addressing Steward cookie refresh and SPA hydration (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/8280","children":"elizaos/eliza#8280"}],", ",["$","a","a-1",{"href":"https://github.com/elizaos/eliza/pull/8282","children":"elizaos/eliza#8282"}],")."]}],"\n",["$","li","li-2",{"children":["Updated Steward SDK to v0.10.1 to improve passkey challenge handling and MFA support (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/8267","children":"elizaos/eliza#8267"}],", ",["$","a","a-1",{"href":"https://github.com/elizaos/eliza/pull/8271","children":"elizaos/eliza#8271"}],")."]}],"\n"]}],"\n",["$","p","p-2",{"children":["$","strong","strong-0",{"children":"Architecture & Plugin Refactoring"}]}],"\n",["$","ul","ul-1",{"children":["\n",["$","li","li-0",{"children":["Decomposed the ",["$","code","code-0",{"children":"plugin-lifeops"}]," monolith into a slim ",["$","code","code-1",{"children":"plugin-personal-assistant"}]," orchestrator and six domain-focused plugins to improve maintainability (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/8277","children":"elizaos/eliza#8277"}],")."]}],"\n",["$","li","li-1",{"children":["Enabled third-party registry support for ",["$","code","code-0",{"children":"@madeonsol/plugin-madeonsol"}]," (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/8260","children":"elizaos/eliza#8260"}],")."]}],"\n"]}],"\n",["$","p","p-3",{"children":["$","strong","strong-0",{"children":"System Enhancements & QA"}]}],"\n",["$","ul","ul-2",{"children":["\n",["$","li","li-0",{"children":["Implemented scope-aware prompt suggestions via a hybrid heuristic/model-based tiering system (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/8225","children":"elizaos/eliza#8225"}],")."]}],"\n",["$","li","li-1",{"children":["Unified app-credit purchases into the primary organization ledger to resolve \"stranded credits\" (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/8253","children":"elizaos/eliza#8253"}],")."]}],"\n",["$","li","li-2",{"children":["Deployed end-to-end smoke tests for the monetized-app loop using a ",["$","code","code-0",{"children":"cloud:mock"}]," stack (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/8249","children":"elizaos/eliza#8249"}],")."]}],"\n"]}],"\n",["$","h2","h2-1",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"🏗️ Work in Progress","position":{"start":{"line":21,"column":4,"offset":2118},"end":{"line":21,"column":24,"offset":2138}}}],"position":{"start":{"line":21,"column":1,"offset":2115},"end":{"line":21,"column":24,"offset":2138}}},"children":"🏗️ Work in Progress"}],"\n","$L3d","\n","$L3e","\n","$L3f","\n","$L40","\n","$L41"]}]
+1f:["$","script","script-0",{"src":"/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","async":true}]
+20:["$","script","script-1",{"src":"/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","async":true}]
+21:["$","script","script-2",{"src":"/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js","async":true}]
+22:["$","$L42",null,{"children":["$","$43",null,{"name":"Next.MetadataOutlet","children":"$@44"}]}]
+3c:["$","div",null,{"className":"rounded-lg border bg-card text-card-foreground shadow-sm","children":[["$","div",null,{"className":"flex flex-col space-y-1.5 p-6 py-4","children":["$","div",null,{"className":"tracking-tight text-sm font-medium","children":["$undefined","Code Changes"]}]}],["$","div",null,{"className":"p-6 pt-0","children":["$","div",null,{"className":"grid grid-cols-2 gap-4 md:grid-cols-4","children":[["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-git-commit-vertical h-5 w-5","aria-hidden":"true","children":[["$","path","1holv5",{"d":"M12 3v6"}],["$","circle","1v7zrd",{"cx":"12","cy":"12","r":"3"}],["$","path","a9ows0",{"d":"M12 15v6"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":126}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Commits"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-file-code h-5 w-5","aria-hidden":"true","children":[["$","path","1oefj6",{"d":"M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"}],["$","path","wfsgrz",{"d":"M14 2v5a1 1 0 0 0 1 1h5"}],["$","path","1tg20x",{"d":"M10 12.5 8 15l2 2.5"}],["$","path","yinavb",{"d":"m14 12.5 2 2.5-2 2.5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":101}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Files Changed"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-green-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-up h-5 w-5 text-green-500","aria-hidden":"true","children":[["$","path","hav0vg",{"d":"m5 12 7-7 7 7"}],["$","path","x0mq9r",{"d":"M12 19V5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-green-500","children":"+4,291"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Added"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-red-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-down h-5 w-5 text-red-500","aria-hidden":"true","children":[["$","path","s699le",{"d":"M12 5v14"}],["$","path","1idqje",{"d":"m19 12-7 7-7-7"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-red-500","children":"-1,808"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Deleted"}]]}]]}]]}]}]]}]
+3d:["$","p","p-4",{"children":["$","strong","strong-0",{"children":"New Pull Requests (elizaos/eliza)"}]}]
+3e:["$","ul","ul-3",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"Cloud & Auth:"}]," ",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/8281","children":"#8281"}],", ",["$","a","a-1",{"href":"https://github.com/elizaos/eliza/pull/8274","children":"#8274"}],", ",["$","a","a-2",{"href":"https://github.com/elizaos/eliza/pull/8273","children":"#8273"}],", ",["$","a","a-3",{"href":"https://github.com/elizaos/eliza/pull/8272","children":"#8272"}],", ",["$","a","a-4",{"href":"https://github.com/elizaos/eliza/pull/8265","children":"#8265"}]]}],"\n",["$","li","li-1",{"children":[["$","strong","strong-0",{"children":"Orchestrator & UI:"}]," ",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/8286","children":"#8286"}],", ",["$","a","a-1",{"href":"https://github.com/elizaos/eliza/pull/8285","children":"#8285"}],", ",["$","a","a-2",{"href":"https://github.com/elizaos/eliza/pull/8276","children":"#8276"}],", ",["$","a","a-3",{"href":"https://github.com/elizaos/eliza/pull/8275","children":"#8275"}]]}],"\n",["$","li","li-2",{"children":[["$","strong","strong-0",{"children":"Dependencies:"}]," ",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/8284","children":"#8284"}]]}],"\n"]}]
+3f:["$","h2","h2-2",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"🐞 Issue Triage","position":{"start":{"line":28,"column":4,"offset":2780},"end":{"line":28,"column":19,"offset":2795}}}],"position":{"start":{"line":28,"column":1,"offset":2777},"end":{"line":28,"column":19,"offset":2795}}},"children":"🐞 Issue Triage"}]
+40:["$","p","p-5",{"children":["$","strong","strong-0",{"children":"Closed Issues (elizaos/eliza)"}]}]
+41:["$","ul","ul-4",{"children":["\n",["$","li","li-0",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/8225","children":"#8225"}],": Implemented scope-aware prompt suggestions."]}],"\n",["$","li","li-1",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/8253","children":"#8253"}],": Resolved stranded credits via ledger unification."]}],"\n"]}]
+44:null

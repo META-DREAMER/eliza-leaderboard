@@ -1,0 +1,466 @@
+{
+  "interval": {
+    "intervalStart": "2026-04-19T00:00:00.000Z",
+    "intervalEnd": "2026-04-26T00:00:00.000Z",
+    "intervalType": "week"
+  },
+  "repository": "elizaos/cloud",
+  "overview": "From 2026-04-19 to 2026-04-26, elizaos/cloud had 12 new PRs (6 merged), 0 new issues, and 8 active contributors.",
+  "topIssues": [],
+  "topPRs": [
+    {
+      "id": "PR_kwDOP6BTDM7ULvLJ",
+      "title": "feat(auth): wallet + GH login + server-side refresh (combined)",
+      "author": "0xSolace",
+      "number": 463,
+      "body": "Combines PR #461 (server-side refresh) + PR #462 (wallet + GH login) into one PR for single-merge-and-manual-promote workflow.\n\n## What's in here\n\n### 1. Server-side Steward token refresh (#461 content)\nFixes the 15-30 min silent-logout bug. Edge proxy refreshes expired access tokens server-side using the refresh-token cookie, rotates both cookies, forwards fresh bearer on the same request.\n\nFiles: `proxy.ts`, `app/api/auth/steward-session/route.ts`, `packages/lib/providers/StewardProvider.tsx`, `app/login/steward-login-section.tsx` (body-shape update), `packages/tests/unit/steward-proxy-refresh.test.ts`\n\n### 2. Wallet + GitHub login UI (#462 content)\nWires `@stwd/react@0.7.1` `<WalletLogin />` (EVM + Solana) + GitHub OAuth button into the login page. Updates `syncUserFromSteward` to handle wallet-only sessions (unblocks the 269 stranded Privy wallet users).\n\nFiles: `app/login/steward-wallet-providers.tsx` (new), `app/login/steward-login-section.tsx`, `packages/lib/auth.ts`, `packages/lib/auth/steward-client.ts`, `packages/lib/steward-sync.ts`, `packages/lib/services/users.ts`, `packages/db/repositories/users.ts`, `packages/tests/unit/steward-sync.test.ts`, `app/globals.css`, `.env.example`, deps bump (`package.json` + `bun.lock`)\n\n### Steward backend side (already deployed to prod)\n- `@stwd/sdk@0.8.0` + `@stwd/react@0.7.1` published to npm\n- `GET /auth/providers` reports `siws: true`, `github: false` (will flip to true once `GITHUB_CLIENT_ID`/`SECRET` set on Steward's Railway env)\n- `POST /auth/verify/solana` live on `eliza.steward.fi`\n- Steward PR merged as https://github.com/Steward-Fi/steward/pull/8\n\n## Merge strategy\n\nManually promote on Vercel after merging — don't auto-deploy. This lets you smoke-test the preview URL, set env vars (`NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID`), and verify wallet + GH flows before going to prod.\n\n## Replaces\n\n- #461 (server-refresh)\n- #462 (wallet + GH login)\n\nBoth to be closed after this merges.\n\n## Merge conflict resolved\n\n`app/login/steward-login-section.tsx` — both branches added state. Kept:\n- `setSessionCookie(token, refreshToken?)` signature from server-refresh\n- `walletChains`, `hasOAuthProviders`, `walletThemeVars` from wallet-gh-login\n\n## Env vars needed post-merge\n\n**Elizacloud side (Vercel):**\n- `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` — register at https://cloud.walletconnect.com\n\n**Steward side (Railway):**\n- `GITHUB_CLIENT_ID` + `GITHUB_CLIENT_SECRET` — register at https://github.com/settings/developers\n  - Callback URL: `https://eliza.steward.fi/auth/callback/github`\n\nCo-authored-by: wakesync <shadow@shad0w.xyz>",
+      "repository": "elizaos/cloud",
+      "createdAt": "2026-04-21T04:50:18Z",
+      "mergedAt": "2026-04-21T05:34:39Z",
+      "additions": 2585,
+      "deletions": 190
+    },
+    {
+      "id": "PR_kwDOP6BTDM7T1dTF",
+      "title": "feat(login): wallet sign-in (EVM + Solana) + GitHub OAuth",
+      "author": "0xSolace",
+      "number": 462,
+      "body": "Wires the new `<WalletLogin />` from `@stwd/react@0.7.1` into the elizacloud login page, adds GitHub OAuth, and updates `syncUserFromSteward` to handle wallet-only sessions.\n\n**Unblocks the 269 Privy-migrated wallet-only users** who couldn't log in via Steward.\n\n## What's in this PR\n\n### 1. Dep bumps (`e467bbdd`)\n- `@stwd/sdk`: 0.7.x → `^0.8.0`\n- `@stwd/react`: 0.6.x → `^0.7.1`\n- Adds wallet runtime deps: `wagmi`, `viem`, `@rainbow-me/rainbowkit`, `@tanstack/react-query`, `@solana/wallet-adapter-*`, `@solana/web3.js`, `bs58`\n\n### 2. Login page (`68d8ef46`, `e755d9a0`)\n- Adds GitHub OAuth button (`auth.signInWithOAuth(\"github\", ...)`)\n- Adds `<WalletLogin chains=\"both\">` from `@stwd/react/wallet`\n- Wallet providers scoped to login page only (lighter bundle than hoisting)\n- Custom EVM theming (orange accent matches elizacloud brand)\n- Email + passkey paths unchanged\n\n### 3. Sync code (`f12ec11d`)\n- `extractClaims` now surfaces `walletAddress` + `walletChain` from JWT\n- `syncUserFromSteward` adds wallet-only path:\n  - Look up existing user by `wallet_address` (case-insensitive)\n  - Link `stewardUserId` to the Privy wallet user — automatic migration for the 269 stranded users\n  - If no match, create Steward-only wallet user with proper chain\n- Adds `linkStewardId` to user repos\n- `usersService.getByWalletAddress` already existed\n\n### 4. Tests (`9d76faeb`)\n- Wallet-only linking (case-insensitive)\n- New wallet user creation\n- Email-based linking unchanged (no regression)\n\n## Env vars\n\nAdd to your env:\n- `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` — register at https://cloud.walletconnect.com (placeholder works for dev)\n- `NEXT_PUBLIC_SOLANA_RPC_URL` — defaults to `https://api.mainnet-beta.solana.com` if unset\n\nGitHub OAuth credentials live on the **Steward** side:\n- `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` set in Steward's env\n- OAuth callback URL: `https://eliza.steward.fi/auth/callback/github`\n\n## Depends on\n\n- Steward PR: https://github.com/Steward-Fi/steward/pull/8 (ships SDK 0.8.0, React 0.7.1, GH OAuth backend, SIWE/SIWS hardening)\n- Both `@stwd/sdk@0.8.0` and `@stwd/react@0.7.1` are already published to npm\n\n## Verification\n\n- `bun run check-types` passes\n- `bun run test:unit` passes\n- `bun run build` passes (production Next.js build)\n\n## Known follow-ups\n\n- Backpack wallet support: dropped from `@solana/wallet-adapter-wallets` upstream. Their standalone adapter package can be added in a follow-up if there's demand.\n- Browser smoke test not run from the worker — needs human QA on real wallet connections (MetaMask + Phantom recommended)\n\nCo-authored-by: wakesync <shadow@shad0w.xyz>",
+      "repository": "elizaos/cloud",
+      "createdAt": "2026-04-20T06:08:15Z",
+      "mergedAt": null,
+      "additions": 2081,
+      "deletions": 144
+    },
+    {
+      "id": "PR_kwDOP6BTDM7Ue5Lk",
+      "title": "fix(ai-pricing): store gateway token rows under language/embedding",
+      "author": "odilitime",
+      "number": 470,
+      "body": "Image-generation models (e.g. gemini-*-image) were classified as product family image for all pricing rows, including per-token input/output. Chat billing resolves language:input, so lookups failed after catalog refresh. Token and web_search entries now use embedding vs language only; image-specific rows remain under image.\r\n\r\ndeployment must: admin POST /api/v1/admin/ai-pricing\r\n\r\nMade-with: Cursor\n\n<!-- This is an auto-generated comment: release notes by coderabbit.ai -->\n\n## Summary by CodeRabbit\n\n* **Bug Fixes**\n  * Refined how AI models are classified for token-based billing to ensure accurate pricing calculations.\n\n<!-- end of auto-generated comment: release notes by coderabbit.ai -->\n\n<!-- CURSOR_SUMMARY -->\n---\n\n> [!NOTE]\n> **Medium Risk**\n> Medium risk because it changes core pricing resolution (model family classification + alias-based lookup) and DB query patterns, which directly affects billing/cost calculations and could shift charges if mismatched.\n> \n> **Overview**\n> Fixes AI pricing ingestion and lookup for Vercel AI Gateway models so **token/web-search rows are stored and resolved under `language`/`embedding`**, preventing billing lookups from breaking on image-capable models.\n> \n> Adds **model-id alias expansion** (forward + reverse) for gateway renames, plus provider inference for cross-provider alias targets, and optimizes persisted lookups via a new `listActiveEntriesForProviderModelPairs` DB query.\n> \n> Includes follow-up hardening/compat work: switch agent character normalization to `parseCharacter`, make MCP action parameter types internal (and loosen runtime registration casts), add ambient `.d.ts` stubs for optional deps, and small safety/format fixes (e.g., STT duration optional chaining).\n> \n> <sup>Reviewed by [Cursor Bugbot](https://cursor.com/bugbot) for commit 366e7b26a431a10ec17594dd606365b469cbaa0c. Bugbot is set up for automated code reviews on this repo. Configure [here](https://www.cursor.com/dashboard/bugbot).</sup>\n<!-- /CURSOR_SUMMARY -->",
+      "repository": "elizaos/cloud",
+      "createdAt": "2026-04-22T02:00:38Z",
+      "mergedAt": "2026-04-22T06:09:38Z",
+      "additions": 884,
+      "deletions": 391
+    },
+    {
+      "id": "PR_kwDOP6BTDM7T0o0h",
+      "title": "feat(auth): server-side Steward token refresh in edge proxy",
+      "author": "0xSolace",
+      "number": 461,
+      "body": "Fixes the 15-30 min silent-logout bug.\n\n## The bug\nUsers get logged out after ~30 min of idle. Return to tab, refresh, bounced to /login. Client-side refresh (visibilitychange, eager refresh on mount, login-page recovery) was insufficient — race between middleware checking cookies and client JS waking up.\n\n## The fix\nMove refresh out of client JS and into the edge proxy. Store the refresh token in a second httpOnly cookie (`steward-refresh-token`, 30d). When middleware sees expired access token + valid refresh cookie → call Steward's `/auth/refresh` server-side, rotate both cookies, forward the fresh bearer on the SAME request. User never sees a login page for the refresh-token-still-valid case.\n\n## Changes\n- **`proxy.ts`**: refresh flow with structured `[steward-auth]` logging, transient-failure tolerance (5xx/network log but don't redirect), 401 clears cookies. Forwards the new bearer on the same request via `x-middleware-request-authorization` header so downstream auth works on the same round trip (no hop to client).\n- **`app/api/auth/steward-session/route.ts`**: accepts `{ token, refreshToken }`, sets both httpOnly cookies. DELETE clears both.\n- **`packages/lib/providers/StewardProvider.tsx`**: syncs refresh token alongside access token, drops aggressive visibilitychange handler (middleware handles return-from-idle now).\n- **`app/login/steward-login-section.tsx`**: minor body-shape update for new POST signature.\n- **`packages/tests/unit/steward-proxy-refresh.test.ts`**: unit coverage for success/401/5xx/network-error paths + same-request auth forwarding.\n\n## Env vars\n- `STEWARD_API_URL` (server-side, for proxy refresh) — falls back to `NEXT_PUBLIC_STEWARD_API_URL`, final fallback `https://eliza.steward.fi`\n- `NEXT_PUBLIC_STEWARD_API_URL` still used by client provider\n\n## Known edge cases (documented)\n- JWT with no decodable `exp` is treated as usable (refresh skipped) — rare but worth flagging\n- Proxy 401 clears `steward-token` + `steward-refresh-token` only, not `steward-authed`\n\n## Tests\nBun unit tests cover the four proxy paths. Run in CI.\n\nCo-authored-by: wakesync <shadow@shad0w.xyz>",
+      "repository": "elizaos/cloud",
+      "createdAt": "2026-04-20T05:09:45Z",
+      "mergedAt": null,
+      "additions": 504,
+      "deletions": 46
+    },
+    {
+      "id": "PR_kwDOP6BTDM7Ue2De",
+      "title": "fix: auth + migrations consolidation (wallet buttons, journal drift, aggressive refresh)",
+      "author": "0xSolace",
+      "number": 469,
+      "body": "Consolidates PRs #465, #467, #468 into one clean merge.\n\n## 3 fixes in this PR\n\n### 1. Native Ethereum + Solana login buttons (was #465)\nReplaces `<WalletLogin />` with two native buttons matching the Google/Discord login card styling. One-click flow: button → wallet modal → auto-SIWE/SIWS → signed in.\n\nFiles: `app/login/wallet-buttons.tsx` (new), `app/login/steward-login-section.tsx`\n\n### 2. Migration journal drift repair (was #467)\nProd Neon DB was missing 10 tables (`affiliate_codes`, `user_affiliates`, `service_pricing`, `device_bus_*`, `twilio_inbound_calls`, `remote_sessions`, `org_rate_limit_overrides`, `n8n_workflow.credential_mappings`) + 3 columns (`referral_codes.parent_referral_id`, `referral_signups.{app_owner_id,creator_id}`). Both `/api/v1/affiliates` and `/api/v1/referrals` 500ing.\n\nRoot cause: `_journal.json` drifted from the migration files. 7 files had no journal entry so drizzle never ran them. 0067 + 0068 had duplicate `idx=63`.\n\nProd DB already repaired directly via psql (11 migrations applied in single transaction, verified via dry-run BEGIN/ROLLBACK first). `__drizzle_migrations` back-filled. This PR just fixes the journal so it doesn't regenerate in the broken state.\n\nFiles: `packages/db/migrations/meta/_journal.json`\n\n### 3. Aggressive session refresh (was #468)\nShadow reported signing out after exactly ~15min (access token TTL). Two gaps:\n\n- Server middleware only refreshed ALREADY-expired tokens. If the user navigated right as the token hit 0, was a race.\n- Client `setInterval` gets throttled to ~1/min in background tabs; can be fully suspended under memory pressure.\n\nFix:\n- **Server (proxy.ts):** preemptive refresh when <180s remain\n- **Client (StewardProvider):** add `visibilitychange` + `online` event handlers so tab-wakeup / network-reconnect triggers immediate refresh\n\nFiles: `proxy.ts`, `packages/lib/providers/StewardProvider.tsx`\n\n## verification\n\n- GitHub OAuth now `github: true` in `/auth/providers` (Shadow set Railway env for steward-api)\n- `/api/v1/affiliates` + `/api/v1/referrals` return 401 (unauth) instead of 500\n- GH creds used: client_id `Ov23libBNznAM7ZFCmn1` on elizaOS org GH OAuth app\n\n## closes\n\n- Closes #465\n- Closes #467\n- Closes #468\n\nCo-authored-by: wakesync <shadow@shad0w.xyz>",
+      "repository": "elizaos/cloud",
+      "createdAt": "2026-04-22T01:56:34Z",
+      "mergedAt": "2026-04-22T06:09:38Z",
+      "additions": 413,
+      "deletions": 92
+    }
+  ],
+  "codeChanges": {
+    "additions": 3712,
+    "deletions": 947,
+    "files": 75,
+    "commitCount": 80
+  },
+  "completedItems": [
+    {
+      "title": "migrate app-auth/authorize to steward",
+      "prNumber": 466,
+      "type": "other",
+      "body": "## Summary\n- Switches the `/app-auth/authorize` page from Privy (`usePrivy` / `useLogin`) to Steward (`useAuth` + `<StewardLogin>` from `@stwd/react`), and wraps it in `StewardAuthProvider` so the page works independent of the global `NEXT_",
+      "files": [
+        "app/api/v1/app-auth/connect/route.ts",
+        "app/api/v1/app-auth/session/route.ts",
+        "app/app-auth/authorize/page.tsx",
+        "packages/ui/src/components/auth/authorize-content.tsx"
+      ]
+    },
+    {
+      "title": "chore(deps): bump @stwd/react to 0.7.2 (wallet-login style fixes)",
+      "prNumber": 464,
+      "type": "bugfix",
+      "body": "Follow-up to #463. Shadow spotted the 'Connect wallet' + 'Select Wallet' text wrap and inconsistent EVM/Solana button styling in the two-column wallet section.\n\nFixed upstream in `@stwd/react@0.7.2` — https://github.com/Steward-Fi/steward/p",
+      "files": [
+        "bun.lock",
+        "package.json"
+      ]
+    },
+    {
+      "title": "feat(auth): wallet + GH login + server-side refresh (combined)",
+      "prNumber": 463,
+      "type": "feature",
+      "body": "Combines PR #461 (server-side refresh) + PR #462 (wallet + GH login) into one PR for single-merge-and-manual-promote workflow.\n\n## What's in here\n\n### 1. Server-side Steward token refresh (#461 content)\nFixes the 15-30 min silent-logout bug",
+      "files": [
+        ".env.example",
+        "app/api/auth/steward-session/route.ts",
+        "app/globals.css",
+        "app/login/steward-login-section.tsx",
+        "app/login/steward-wallet-providers.tsx",
+        "bun.lock",
+        "package.json",
+        "packages/db/repositories/users.ts",
+        "packages/lib/auth.ts",
+        "packages/lib/auth/steward-client.ts",
+        "packages/lib/providers/StewardProvider.tsx",
+        "packages/lib/services/users.ts",
+        "packages/lib/steward-sync.ts",
+        "packages/tests/unit/steward-proxy-refresh.test.ts",
+        "packages/tests/unit/steward-sync.test.ts",
+        "proxy.ts"
+      ]
+    },
+    {
+      "title": "fix(auth): send tenant_id (snake_case) to Steward oauth authorize",
+      "prNumber": 471,
+      "type": "bugfix",
+      "body": "## the bug\n\n`StewardLoginSection.handleOAuth()` was sending `tenantId=<id>` to `/auth/oauth/<provider>/authorize`. The Steward authorize route reads the query param as `tenant_id` (snake_case). Mismatch → server silently fell back to the us",
+      "files": [
+        "app/login/steward-login-section.tsx",
+        "app/login/steward-oauth-url.ts",
+        "packages/db/migrations/0049_elite_rumiko_fujikawa.sql",
+        "packages/tests/unit/steward-oauth-url.test.ts"
+      ]
+    },
+    {
+      "title": "fix(ai-pricing): store gateway token rows under language/embedding",
+      "prNumber": 470,
+      "type": "bugfix",
+      "body": "Image-generation models (e.g. gemini-*-image) were classified as product family image for all pricing rows, including per-token input/output. Chat billing resolves language:input, so lookups failed after catalog refresh. Token and web_searc",
+      "files": [
+        "app/api/mcp/list/route.ts",
+        "app/api/mcp/tools/browser.ts",
+        "app/api/mcp/tools/search.ts",
+        "app/api/v1/browser/sessions/[id]/command/route.ts",
+        "app/api/v1/browser/sessions/[id]/snapshot/route.ts",
+        "app/api/v1/eliza/launch-sessions/[sessionId]/route.ts",
+        "app/api/v1/extract/route.ts",
+        "app/api/v1/milady/agents/[agentId]/provision/route.ts",
+        "app/api/v1/milady/agents/[agentId]/resume/route.ts",
+        "app/api/v1/milady/agents/route.ts",
+        "app/api/v1/milady/launch-sessions/[sessionId]/route.ts",
+        "app/api/v1/twilio/voice/inbound/route.ts",
+        "app/api/v1/voice/stt/route.ts",
+        "app/api/v1/x/dms/curate/route.ts",
+        "app/api/v1/x/dms/digest/route.ts",
+        "app/api/v1/x/dms/send/route.ts",
+        "app/api/v1/x/posts/route.ts",
+        "app/api/v1/x/status/route.ts",
+        "app/api/webhooks/twilio/[orgId]/route.ts",
+        "app/api/webhooks/whatsapp/[orgId]/route.ts",
+        "app/dashboard/containers/agents/[id]/page.tsx",
+        "app/dashboard/milady/agents/[id]/page.tsx",
+        "app/dashboard/milady/page.tsx",
+        "biome.json",
+        "packages/db/repositories/ai-pricing.ts",
+        "packages/lib/api/a2a/skills.ts",
+        "packages/lib/eliza-agent-web-ui.ts",
+        "packages/lib/eliza/agent-loader.ts",
+        "packages/lib/eliza/plugin-cloud-bootstrap/providers/actions.ts",
+        "packages/lib/eliza/plugin-cloud-bootstrap/providers/character.ts",
+        "packages/lib/eliza/plugin-cloud-bootstrap/types.ts",
+        "packages/lib/eliza/plugin-mcp/actions/dynamic-tool-actions.ts",
+        "packages/lib/eliza/plugin-mcp/actions/search-actions.ts",
+        "packages/lib/eliza/plugin-mcp/service.ts",
+        "packages/lib/eliza/plugin-mcp/utils/schema-converter.ts",
+        "packages/lib/eliza/plugin-web-search/src/services/searchService.ts",
+        "packages/lib/eliza/runtime-factory.ts",
+        "packages/lib/eliza/shared/providers/character.ts",
+        "packages/lib/services/ai-pricing-definitions.ts",
+        "packages/lib/services/ai-pricing.ts",
+        "packages/lib/services/browser-tools.ts",
+        "packages/lib/services/docker-sandbox-provider.ts",
+        "packages/lib/services/eliza-managed-launch.ts",
+        "packages/lib/services/eliza-sandbox.ts",
+        "packages/lib/services/milady-gateway-router.ts",
+        "packages/lib/services/steward-client.ts",
+        "packages/lib/services/x/index.ts",
+        "packages/scripts/provisioning-worker.ts",
+        "packages/services/billing/src/index.ts",
+        "packages/tests/runtime/integration/runtime-factory/pool-closure-race.test.ts"
+      ]
+    },
+    {
+      "title": "fix: auth + migrations consolidation (wallet buttons, journal drift, aggressive refresh)",
+      "prNumber": 469,
+      "type": "bugfix",
+      "body": "Consolidates PRs #465, #467, #468 into one clean merge.\n\n## 3 fixes in this PR\n\n### 1. Native Ethereum + Solana login buttons (was #465)\nReplaces `<WalletLogin />` with two native buttons matching the Google/Discord login card styling. One-",
+      "files": [
+        "app/login/steward-login-section.tsx",
+        "app/login/wallet-buttons.tsx",
+        "packages/db/migrations/meta/_journal.json",
+        "packages/lib/providers/StewardProvider.tsx",
+        "proxy.ts"
+      ]
+    }
+  ],
+  "topContributors": [
+    {
+      "username": "lalalune",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/18633264?u=e2e906c3712c2506ebfa98df01c2cfdc50050b30&v=4",
+      "totalScore": 279.46920088512024,
+      "prScore": 278.29120088512025,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 1.178,
+      "summary": null
+    },
+    {
+      "username": "odilitime",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/16395496?u=c9bac48e632aae594a0d85aaf9e9c9c69b674d8b&v=4",
+      "totalScore": 258.2668694828805,
+      "prScore": 229.5668694828805,
+      "issueScore": 0,
+      "reviewScore": 28.5,
+      "commentScore": 0.2,
+      "summary": null
+    },
+    {
+      "username": "0xSolace",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/257989456?u=e0d4e0c6385403319241eb46ba647b49083d4a05&v=4",
+      "totalScore": 253.2358997759704,
+      "prScore": 252.1178997759704,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 1.1179999999999999,
+      "summary": null
+    },
+    {
+      "username": "RemilioNubilio",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/275382225?u=b1501ee01bb54e5b31ca64895f2a07c69f554a37&v=4",
+      "totalScore": 227.23716406489336,
+      "prScore": 226.63716406489337,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0.6000000000000001,
+      "summary": null
+    },
+    {
+      "username": "greptile-apps",
+      "avatarUrl": "https://avatars.githubusercontent.com/in/867647?v=4",
+      "totalScore": 189,
+      "prScore": 0,
+      "issueScore": 0,
+      "reviewScore": 189,
+      "commentScore": 0,
+      "summary": null
+    },
+    {
+      "username": "NubsCarson",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/192162056?u=d2be9082dbee60fcbad21d32bf6e662ab1af3674&v=4",
+      "totalScore": 164.8064543453133,
+      "prScore": 164.8064543453133,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": null
+    },
+    {
+      "username": "dutchiono",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/86275975?u=0d8badaa81aa47682651f87dc2d363837876de98&v=4",
+      "totalScore": 163.80754691629272,
+      "prScore": 161.26754691629273,
+      "issueScore": 2,
+      "reviewScore": 0,
+      "commentScore": 0.54,
+      "summary": null
+    },
+    {
+      "username": "2-A-M",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/96268540?u=b7d92c0e2a91af580d09eeae862eef576955ab8a&v=4",
+      "totalScore": 148.6450370306403,
+      "prScore": 148.6450370306403,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": null
+    },
+    {
+      "username": "binkyfishai",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/172897890?u=13dcfbbffef5a3f90ae60741795eaf47cc93a244&v=4",
+      "totalScore": 56.12351051090354,
+      "prScore": 56.12351051090354,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": null
+    },
+    {
+      "username": "standujar",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/16385918?u=718bdcd1585be8447bdfffb8c11ce249baa7532d&v=4",
+      "totalScore": 49.82077778474336,
+      "prScore": 49.82077778474336,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": null
+    },
+    {
+      "username": "Dexploarer",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/211557447?u=21a243d61cc1f87574328ae07fc64d7d7577b53d&v=4",
+      "totalScore": 43.7437738965761,
+      "prScore": 43.5437738965761,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0.2,
+      "summary": null
+    },
+    {
+      "username": "meanstackofdoom",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/64149093?u=1a1540f5e733b8c122a2435890eb6f614fb6467c&v=4",
+      "totalScore": 17.31003660326518,
+      "prScore": 17.31003660326518,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": null
+    },
+    {
+      "username": "srotzin",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/140019476?u=68fc1a0ee6d4b68049dfca93735cd9c7ef0d1082&v=4",
+      "totalScore": 16.175621859290715,
+      "prScore": 15.975621859290714,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0.2,
+      "summary": null
+    },
+    {
+      "username": "avasis-ai",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/269456994?u=08cfe83895ed0368a691e592d7a40f448b129347&v=4",
+      "totalScore": 15.38629436111989,
+      "prScore": 15.38629436111989,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": null
+    },
+    {
+      "username": "igor-peregudov",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/20255110?u=19af530bed935319d2f4d5e3ab43e8ef074b2aa6&v=4",
+      "totalScore": 14.693147180559945,
+      "prScore": 14.693147180559945,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": null
+    },
+    {
+      "username": "re-bruce-wayne",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/196209605?u=0f106df5aeadfc126ee7ca9d05c34171fe5b6476&v=4",
+      "totalScore": 14.346573590279972,
+      "prScore": 14.346573590279972,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": null
+    },
+    {
+      "username": "ERROR403agent",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/260345463?v=4",
+      "totalScore": 14.346573590279972,
+      "prScore": 14.346573590279972,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": null
+    },
+    {
+      "username": "MrTalecky",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/27448908?u=ae6c26a3dab091f951977912df874e42d12f02ed&v=4",
+      "totalScore": 13.631573590279972,
+      "prScore": 13.631573590279972,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": null
+    },
+    {
+      "username": "sailorpepe",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/159828807?u=9298c48eb8b41b0a0b0968e987c029e307771855&v=4",
+      "totalScore": 11.32071895621705,
+      "prScore": 11.32071895621705,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": null
+    },
+    {
+      "username": "enigma-zeroclaw",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/264714710?v=4",
+      "totalScore": 6,
+      "prScore": 0,
+      "issueScore": 6,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": null
+    },
+    {
+      "username": "hanzlamateen",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/10975502?u=53f23921078d9a27d96751373bb44f4bd2d58bf4&v=4",
+      "totalScore": 5,
+      "prScore": 0,
+      "issueScore": 0,
+      "reviewScore": 5,
+      "commentScore": 0,
+      "summary": null
+    },
+    {
+      "username": "teodorofodocrispin-cmyk",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/271404169?u=002189b8c20f02c5f0715b1f565abcb67ab53a25&v=4",
+      "totalScore": 4,
+      "prScore": 0,
+      "issueScore": 4,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": null
+    },
+    {
+      "username": "jvonb",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/262670638?u=3911e2ec7a9ef3bf1eccd31e147dea1cdd4ba715&v=4",
+      "totalScore": 2,
+      "prScore": 0,
+      "issueScore": 2,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": null
+    },
+    {
+      "username": "fel123",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/33407903?v=4",
+      "totalScore": 0.4,
+      "prScore": 0,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0.4,
+      "summary": null
+    },
+    {
+      "username": "ColonistOne",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/271974769?u=af6b52db284d4ebb9209e436a1fb003ff9ccf2e4&v=4",
+      "totalScore": 0.2,
+      "prScore": 0,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0.2,
+      "summary": null
+    }
+  ],
+  "newPRs": 12,
+  "mergedPRs": 6,
+  "newIssues": 0,
+  "closedIssues": 0,
+  "activeContributors": 8
+}

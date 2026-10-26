@@ -1,0 +1,209 @@
+1:"$Sreact.fragment"
+2:I[4817319,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"IntervalSelector"]
+3:I[6998365,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"LlmCopyButton"]
+e:I[3642796,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],""]
+f:I[3238488,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"StatCardsDisplay"]
+14:I[4261541,["/eliza-leaderboard/_next/static/chunks/b33bcbdcb3f88354.js","/eliza-leaderboard/_next/static/chunks/8ba59154b6704904.js"],"OutletBoundary"]
+15:"$Sreact.suspense"
+4:T61a,Built a wallet plugin that gives ElizaOS agents non-custodial financial capabilities. Published to npm as `elizaos-plugin-agentwallet`.
+
+## What it does
+
+- **5 actions:** check balances, transfer tokens, swap (Uniswap V3 + Jupiter), bridge cross-chain (CCTP V2, 17 chains), pay x402 endpoints
+- **Wallet provider** that injects balance context into the agent conversation
+- **Non-custodial** — agent holds its own private key. No Privy, no Coinbase CDP, no vendor lock-in
+- **EVM + Solana** — Base, Arbitrum, Optimism, Ethereum + Solana mainnet/devnet
+
+## Install
+
+```bash
+npm install elizaos-plugin-agentwallet agentwallet-sdk
+```
+
+## Quick start
+
+```typescript
+import { agentWalletPlugin } from "elizaos-plugin-agentwallet";
+
+// Add to your ElizaOS agent
+const agent = createAgent({
+  plugins: [agentWalletPlugin],
+  settings: {
+    AGENTWALLET_PRIVATE_KEY: "0x...",
+    AGENTWALLET_CHAIN: "base",
+  },
+});
+
+// Agent can now: check balances, transfer, swap, bridge, pay x402 endpoints
+```
+
+## Why non-custodial matters
+
+The current plugin-evm uses LiFi for bridging but has no spend limits, no x402 micropayments, and no Solana Jupiter swaps. This plugin wraps `agentwallet-sdk` (v3.0.0, 629 tests, MIT) which gives agents a complete financial stack without any custodial risk.
+
+## Links
+
+- npm: https://www.npmjs.com/package/elizaos-plugin-agentwallet
+- SDK: https://www.npmjs.com/package/agentwallet-sdk
+- 14 tests, TypeScript strict, MIT license
+
+Happy to adjust anything to better fit the ElizaOS plugin architecture. Would love feedback from the team.5:T599,Labels: bug, performance, bootstrap
+
+Two bootstrap providers inject identical action result data into the LLM context, wasting tokens:
+
+RECENT_MESSAGES (position 100, recentMessages.ts) — generates # Recent Action Executions
+ACTION_STATE (position 150, actionState.ts) — generates # Recent Action History
+Both fetch action_result messages from DB, group by runId, and format identically. The result: the same action runs appear twice under different headings in every LLM prompt.
+
+Additionally, ACTION_STATE has no limit on the number of runs or text length, causing large thought and reply texts (500-2000 chars each) to bloat the context.
+
+Estimated Token Waste
+From a real production context: 3 runs × (~400 char thought + ~500 char reply) × 2 (duplication) = ~5400 chars (~1350 tokens) wasted per prompt.
+
+Solution
+Three changes in packages/plugin-bootstrap/src/:
+
+1. recentMessages.ts — Remove action results generation
+Set actionResultsText = ''. ACTION_STATE already covers this with richer data (action plan, working memory, recent action memories).
+
+2. actionState.ts — Add .slice(-3) limit on action runs
+Only include the 3 most recent runs. LLM doesn't need full history.
+
+3. actionState.ts — Add character limits on thought + reply text
+planThought: max 200 chars (~50 tokens)
+text (generated reply): max 300 chars (~75 tokens)
+After fix
+3 runs × (200 + 300) × 1 = ~1500 chars (~375 tokens). ~75% reduction.6:T578,# Registry Update Checklist
+
+Registry:
+- [x] I've made the left side of the colon of JSON entry in index.json match the potential NPM package name
+- [x] I've used github not github.com
+- [x] There is no .git extension
+- [x] It's placed it alphabetically in the list
+- [x] I've dealt with commas properly so the list is still valid JSON
+
+If not an eliza-plugins official repo, i.e. new plugin:
+
+The plugin repo has:
+- [x] is publically accessible (not a private repo)
+- [x] uses main as it's default branch
+- [x] I have include `elizaos-plugins` in the topics in the GitHub repo settings. If the plugin is related to `AI` or `crypto`, please add those as topics as well.
+- [x] add simple description in github repo
+- [x] follows this convention
+- [x] an `images/banner.jpg` and `images/logo.jpg` and they
+  - Use clear, high-resolution images (512x512 logo, 1200x675 banner)
+  - Keep file sizes optimized (logo 18KB, banner 68KB)
+- [x] package.json has a agentConfig with `pluginType: "elizaos:plugin:1.0.0"` and `pluginParameters`
+
+## Plugin summary
+
+**eliza-plugin-insumer** — On-chain wallet verification across 33 blockchains via InsumerAPI.
+
+- **npm:** [eliza-plugin-insumer](https://www.npmjs.com/package/eliza-plugin-insumer)
+- **GitHub:** [douglasborthwick-crypto/eliza-plugin-insumer](https://github.com/douglasborthwick-crypto/eliza-plugin-insumer)
+- **Related issues:** elizaOS/eliza#65370:{"buildId":"US8XLB_zHXYj_PVAECGcd","rsc":["$","$1","c",{"children":[["$","div",null,{"className":"container mx-auto px-6 py-8 md:px-8","children":["$","div",null,{"className":"mx-auto max-w-4xl","children":[["$","div",null,{"className":"mb-4 flex flex-col justify-between sm:flex-row","children":[["$","$L2",null,{"currentInterval":"day","currentDate":"2026-03-04"}],["$","$L3",null,{"metrics":{"date":"2026-03-04","interval":{"intervalStart":"$D2026-03-04T00:00:00.000Z","intervalEnd":"$D2026-03-05T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":2,"merged":0,"total":2},"issues":{"new":2,"closed":0,"total":2},"activeContributors":6,"codeChanges":{"additions":0,"deletions":0,"files":0,"commitCount":28},"topContributors":[{"username":"lalalune","avatarUrl":"https://avatars.githubusercontent.com/u/18633264?u=e2e906c3712c2506ebfa98df01c2cfdc50050b30&v=4","totalScore":52.2287738965761,"prScore":52.2287738965761,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":null},{"username":"douglasborthwick-crypto","avatarUrl":"https://avatars.githubusercontent.com/u/256362537?u=d2bcb713a5c90ba7d8bb079bbd0ea91041348838&v=4","totalScore":8.54057359027997,"prScore":8.54057359027997,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":null},{"username":"greptile-apps","avatarUrl":"https://avatars.githubusercontent.com/in/867647?v=4","totalScore":4.5,"prScore":0,"issueScore":0,"reviewScore":4.5,"commentScore":0,"summary":null},{"username":"thewoweffect","avatarUrl":"https://avatars.githubusercontent.com/u/113222443?u=cb21d15b0ce815d0f68167f2eca236aad6c64598&v=4","totalScore":4.1,"prScore":0,"issueScore":4.1,"reviewScore":0,"commentScore":0,"summary":null},{"username":"up2itnow0822","avatarUrl":"https://avatars.githubusercontent.com/u/220628848?u=122901ce09c43502713fd75c969aea3a88d5127b&v=4","totalScore":4,"prScore":0,"issueScore":4,"reviewScore":0,"commentScore":0,"summary":null},{"username":"odilitime","avatarUrl":"https://avatars.githubusercontent.com/u/16395496?u=c9bac48e632aae594a0d85aaf9e9c9c69b674d8b&v=4","totalScore":0.43799999999999994,"prScore":0,"issueScore":0,"reviewScore":0,"commentScore":0.43799999999999994,"summary":null}],"focusAreas":[],"topIssues":[{"id":"I_kwDOMT5cIs7v3vX6","title":"Non-custodial wallet plugin: elizaos-plugin-agentwallet (EVM + Solana, x402, CCTP bridge)","author":"up2itnow0822","number":6552,"repository":"elizaos/eliza","body":"$4","createdAt":"2026-03-04T21:55:31Z","closedAt":"2026-04-05T14:15:59Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7v3DLa","title":"fix: remove duplicate action results from LLM context + add token limits to ACTION_STATE provider","author":"thewoweffect","number":6551,"repository":"elizaos/eliza","body":"$5","createdAt":"2026-03-04T21:12:30Z","closedAt":"2026-04-12T19:26:16Z","state":"CLOSED","commentCount":0}],"topPullRequests":[{"id":"PR_kwDOP6BTDM7HwrCT","title":"Fix unit test suite for affiliates and core","author":"lalalune","number":373,"body":"Resolves all failing unit tests, including SQLite to Postgres UUID format issues, OAuth adapters and generic routes, discord service slugs.\n\n<!-- This is an auto-generated comment: release notes by coderabbit.ai -->\n## Summary by CodeRabbit\n\n* **New Features**\n  * Affiliate program: create/share affiliate codes, set markup, link users, and view affiliate dashboard.\n  * Wallet-based auth: SIWE onboarding and per-request wallet signature support.\n  * Fixed-amount credit top-ups ($10, $50, $100) and improved checkout metadata.\n  * Server wallet provisioning and RPC execution for delegated wallets.\n  * Signup code redemption for one-time org bonuses.\n  * Multi-tier revenue splits for referrals and affiliates.\n\n* **Documentation**\n  * New Wallet API, referrals/affiliates, and signup-codes guides and changelog entries.\n<!-- end of auto-generated comment: release notes by coderabbit.ai -->","repository":"elizaos/cloud","createdAt":"2026-03-04T02:30:56Z","mergedAt":"2026-03-08T00:01:14Z","additions":53541,"deletions":973},{"id":"PR_kwDONkg7v87H275s","title":"Add eliza-plugin-insumer","author":"douglasborthwick-crypto","number":278,"body":"$6","repository":"elizaos-plugins/registry","createdAt":"2026-03-04T11:52:31Z","mergedAt":null,"additions":1,"deletions":0}],"detailedContributorSummaries":{}},"summaryContent":null,"className":"self-end sm:self-start"}]]}],"$L7","$L8","$L9"]}]}],["$La","$Lb","$Lc"],"$Ld"]}],"loading":null,"isPartial":false}
+7:["$","div",null,{"className":"mb-6","children":["$","div",null,{"className":"flex items-center justify-between","children":[[["$","$Le",null,{"href":"/summary/day/2026-03-03","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left mr-2 h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"children":"Previous"}],false],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$Le",null,{"href":"/summary/day/2026-03-03","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Previous"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]],["$","div",null,{"className":"flex flex-col items-center","children":[["$","div",null,{"className":"text-sm font-medium text-gray-500","children":["Daily"," Summary"]}],["$","time",null,{"dateTime":"2026-03-04","className":"text-md font-bold","children":"Mar 4, 2026"}]]}],[["$","$Le",null,{"href":"/summary/day/2026-03-05","children":[false,["$","span",null,{"children":"Next"}],["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right ml-2 h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}]],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$Le",null,{"href":"/summary/day/2026-03-05","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Next"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]]]}]}]
+10:T61a,Built a wallet plugin that gives ElizaOS agents non-custodial financial capabilities. Published to npm as `elizaos-plugin-agentwallet`.
+
+## What it does
+
+- **5 actions:** check balances, transfer tokens, swap (Uniswap V3 + Jupiter), bridge cross-chain (CCTP V2, 17 chains), pay x402 endpoints
+- **Wallet provider** that injects balance context into the agent conversation
+- **Non-custodial** — agent holds its own private key. No Privy, no Coinbase CDP, no vendor lock-in
+- **EVM + Solana** — Base, Arbitrum, Optimism, Ethereum + Solana mainnet/devnet
+
+## Install
+
+```bash
+npm install elizaos-plugin-agentwallet agentwallet-sdk
+```
+
+## Quick start
+
+```typescript
+import { agentWalletPlugin } from "elizaos-plugin-agentwallet";
+
+// Add to your ElizaOS agent
+const agent = createAgent({
+  plugins: [agentWalletPlugin],
+  settings: {
+    AGENTWALLET_PRIVATE_KEY: "0x...",
+    AGENTWALLET_CHAIN: "base",
+  },
+});
+
+// Agent can now: check balances, transfer, swap, bridge, pay x402 endpoints
+```
+
+## Why non-custodial matters
+
+The current plugin-evm uses LiFi for bridging but has no spend limits, no x402 micropayments, and no Solana Jupiter swaps. This plugin wraps `agentwallet-sdk` (v3.0.0, 629 tests, MIT) which gives agents a complete financial stack without any custodial risk.
+
+## Links
+
+- npm: https://www.npmjs.com/package/elizaos-plugin-agentwallet
+- SDK: https://www.npmjs.com/package/agentwallet-sdk
+- 14 tests, TypeScript strict, MIT license
+
+Happy to adjust anything to better fit the ElizaOS plugin architecture. Would love feedback from the team.11:T599,Labels: bug, performance, bootstrap
+
+Two bootstrap providers inject identical action result data into the LLM context, wasting tokens:
+
+RECENT_MESSAGES (position 100, recentMessages.ts) — generates # Recent Action Executions
+ACTION_STATE (position 150, actionState.ts) — generates # Recent Action History
+Both fetch action_result messages from DB, group by runId, and format identically. The result: the same action runs appear twice under different headings in every LLM prompt.
+
+Additionally, ACTION_STATE has no limit on the number of runs or text length, causing large thought and reply texts (500-2000 chars each) to bloat the context.
+
+Estimated Token Waste
+From a real production context: 3 runs × (~400 char thought + ~500 char reply) × 2 (duplication) = ~5400 chars (~1350 tokens) wasted per prompt.
+
+Solution
+Three changes in packages/plugin-bootstrap/src/:
+
+1. recentMessages.ts — Remove action results generation
+Set actionResultsText = ''. ACTION_STATE already covers this with richer data (action plan, working memory, recent action memories).
+
+2. actionState.ts — Add .slice(-3) limit on action runs
+Only include the 3 most recent runs. LLM doesn't need full history.
+
+3. actionState.ts — Add character limits on thought + reply text
+planThought: max 200 chars (~50 tokens)
+text (generated reply): max 300 chars (~75 tokens)
+After fix
+3 runs × (200 + 300) × 1 = ~1500 chars (~375 tokens). ~75% reduction.12:T578,# Registry Update Checklist
+
+Registry:
+- [x] I've made the left side of the colon of JSON entry in index.json match the potential NPM package name
+- [x] I've used github not github.com
+- [x] There is no .git extension
+- [x] It's placed it alphabetically in the list
+- [x] I've dealt with commas properly so the list is still valid JSON
+
+If not an eliza-plugins official repo, i.e. new plugin:
+
+The plugin repo has:
+- [x] is publically accessible (not a private repo)
+- [x] uses main as it's default branch
+- [x] I have include `elizaos-plugins` in the topics in the GitHub repo settings. If the plugin is related to `AI` or `crypto`, please add those as topics as well.
+- [x] add simple description in github repo
+- [x] follows this convention
+- [x] an `images/banner.jpg` and `images/logo.jpg` and they
+  - Use clear, high-resolution images (512x512 logo, 1200x675 banner)
+  - Keep file sizes optimized (logo 18KB, banner 68KB)
+- [x] package.json has a agentConfig with `pluginType: "elizaos:plugin:1.0.0"` and `pluginParameters`
+
+## Plugin summary
+
+**eliza-plugin-insumer** — On-chain wallet verification across 33 blockchains via InsumerAPI.
+
+- **npm:** [eliza-plugin-insumer](https://www.npmjs.com/package/eliza-plugin-insumer)
+- **GitHub:** [douglasborthwick-crypto/eliza-plugin-insumer](https://github.com/douglasborthwick-crypto/eliza-plugin-insumer)
+- **Related issues:** elizaOS/eliza#65378:["$","div",null,{"className":"mb-8 space-y-6","children":[["$","$Lf",null,{"metrics":{"date":"2026-03-04","interval":{"intervalStart":"$D2026-03-04T00:00:00.000Z","intervalEnd":"$D2026-03-05T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":2,"merged":0,"total":2},"issues":{"new":2,"closed":0,"total":2},"activeContributors":6,"codeChanges":{"additions":0,"deletions":0,"files":0,"commitCount":28},"topContributors":[{"username":"lalalune","avatarUrl":"https://avatars.githubusercontent.com/u/18633264?u=e2e906c3712c2506ebfa98df01c2cfdc50050b30&v=4","totalScore":52.2287738965761,"prScore":52.2287738965761,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":null},{"username":"douglasborthwick-crypto","avatarUrl":"https://avatars.githubusercontent.com/u/256362537?u=d2bcb713a5c90ba7d8bb079bbd0ea91041348838&v=4","totalScore":8.54057359027997,"prScore":8.54057359027997,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":null},{"username":"greptile-apps","avatarUrl":"https://avatars.githubusercontent.com/in/867647?v=4","totalScore":4.5,"prScore":0,"issueScore":0,"reviewScore":4.5,"commentScore":0,"summary":null},{"username":"thewoweffect","avatarUrl":"https://avatars.githubusercontent.com/u/113222443?u=cb21d15b0ce815d0f68167f2eca236aad6c64598&v=4","totalScore":4.1,"prScore":0,"issueScore":4.1,"reviewScore":0,"commentScore":0,"summary":null},{"username":"up2itnow0822","avatarUrl":"https://avatars.githubusercontent.com/u/220628848?u=122901ce09c43502713fd75c969aea3a88d5127b&v=4","totalScore":4,"prScore":0,"issueScore":4,"reviewScore":0,"commentScore":0,"summary":null},{"username":"odilitime","avatarUrl":"https://avatars.githubusercontent.com/u/16395496?u=c9bac48e632aae594a0d85aaf9e9c9c69b674d8b&v=4","totalScore":0.43799999999999994,"prScore":0,"issueScore":0,"reviewScore":0,"commentScore":0.43799999999999994,"summary":null}],"focusAreas":[],"topIssues":[{"id":"I_kwDOMT5cIs7v3vX6","title":"Non-custodial wallet plugin: elizaos-plugin-agentwallet (EVM + Solana, x402, CCTP bridge)","author":"up2itnow0822","number":6552,"repository":"elizaos/eliza","body":"$10","createdAt":"2026-03-04T21:55:31Z","closedAt":"2026-04-05T14:15:59Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7v3DLa","title":"fix: remove duplicate action results from LLM context + add token limits to ACTION_STATE provider","author":"thewoweffect","number":6551,"repository":"elizaos/eliza","body":"$11","createdAt":"2026-03-04T21:12:30Z","closedAt":"2026-04-12T19:26:16Z","state":"CLOSED","commentCount":0}],"topPullRequests":[{"id":"PR_kwDOP6BTDM7HwrCT","title":"Fix unit test suite for affiliates and core","author":"lalalune","number":373,"body":"Resolves all failing unit tests, including SQLite to Postgres UUID format issues, OAuth adapters and generic routes, discord service slugs.\n\n<!-- This is an auto-generated comment: release notes by coderabbit.ai -->\n## Summary by CodeRabbit\n\n* **New Features**\n  * Affiliate program: create/share affiliate codes, set markup, link users, and view affiliate dashboard.\n  * Wallet-based auth: SIWE onboarding and per-request wallet signature support.\n  * Fixed-amount credit top-ups ($10, $50, $100) and improved checkout metadata.\n  * Server wallet provisioning and RPC execution for delegated wallets.\n  * Signup code redemption for one-time org bonuses.\n  * Multi-tier revenue splits for referrals and affiliates.\n\n* **Documentation**\n  * New Wallet API, referrals/affiliates, and signup-codes guides and changelog entries.\n<!-- end of auto-generated comment: release notes by coderabbit.ai -->","repository":"elizaos/cloud","createdAt":"2026-03-04T02:30:56Z","mergedAt":"2026-03-08T00:01:14Z","additions":53541,"deletions":973},{"id":"PR_kwDONkg7v87H275s","title":"Add eliza-plugin-insumer","author":"douglasborthwick-crypto","number":278,"body":"$12","repository":"elizaos-plugins/registry","createdAt":"2026-03-04T11:52:31Z","mergedAt":null,"additions":1,"deletions":0}],"detailedContributorSummaries":{}}}],"$L13"]}]
+9:null
+a:["$","script","script-0",{"src":"/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","async":true}]
+b:["$","script","script-1",{"src":"/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","async":true}]
+c:["$","script","script-2",{"src":"/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js","async":true}]
+d:["$","$L14",null,{"children":["$","$15",null,{"name":"Next.MetadataOutlet","children":"$@16"}]}]
+13:["$","div",null,{"className":"rounded-lg border bg-card text-card-foreground shadow-sm","children":[["$","div",null,{"className":"flex flex-col space-y-1.5 p-6 py-4","children":["$","div",null,{"className":"tracking-tight text-sm font-medium","children":["$undefined","Code Changes"]}]}],["$","div",null,{"className":"p-6 pt-0","children":["$","div",null,{"className":"grid grid-cols-2 gap-4 md:grid-cols-4","children":[["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-git-commit-vertical h-5 w-5","aria-hidden":"true","children":[["$","path","1holv5",{"d":"M12 3v6"}],["$","circle","1v7zrd",{"cx":"12","cy":"12","r":"3"}],["$","path","a9ows0",{"d":"M12 15v6"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":28}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Commits"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-file-code h-5 w-5","aria-hidden":"true","children":[["$","path","1oefj6",{"d":"M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"}],["$","path","wfsgrz",{"d":"M14 2v5a1 1 0 0 0 1 1h5"}],["$","path","1tg20x",{"d":"M10 12.5 8 15l2 2.5"}],["$","path","yinavb",{"d":"m14 12.5 2 2.5-2 2.5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":0}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Files Changed"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-green-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-up h-5 w-5 text-green-500","aria-hidden":"true","children":[["$","path","hav0vg",{"d":"m5 12 7-7 7 7"}],["$","path","x0mq9r",{"d":"M12 19V5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-green-500","children":"+0"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Added"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-red-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-down h-5 w-5 text-red-500","aria-hidden":"true","children":[["$","path","s699le",{"d":"M12 5v14"}],["$","path","1idqje",{"d":"m19 12-7 7-7-7"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-red-500","children":"-0"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Deleted"}]]}]]}]]}]}]]}]
+16:null

@@ -1,0 +1,2292 @@
+1:"$Sreact.fragment"
+2:I[4817319,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"IntervalSelector"]
+3:I[6998365,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"LlmCopyButton"]
+1f:I[3642796,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],""]
+20:I[3238488,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"StatCardsDisplay"]
+37:I[4261541,["/eliza-leaderboard/_next/static/chunks/b33bcbdcb3f88354.js","/eliza-leaderboard/_next/static/chunks/8ba59154b6704904.js"],"OutletBoundary"]
+38:"$Sreact.suspense"
+4:Ta13,**Describe the bug**
+
+After upgrading an existing project to use `@elizaos/core` version `1.0.7`, our custom character is no longer registered as an agent. Opening the chat interface/dev environment on `localhost` only shows Eliza as an agent and not our character. This previously worked with `1.0.6`. 
+
+I tested with a newly scaffolded project and set up a character there as well and noticed the same behavior with only Eliza being shown as an agent.
+
+**To Reproduce**
+
+- Upgrade an existing project to use `"@elizaos/core": "^1.0.7"` or start a fresh one using this version
+- Create a new character file with character settings and load that as the agent in the `index.ts`
+- Start the server
+- Open `localhost` to view the chat/dev environment and check if custom character is there -- we only saw Eliza and not our agent
+
+Code snippets for characters:
+
+`herbert.ts` snippet:
+
+```typescript
+export const herbert: Character = {
+  name: 'Herbert',
+  plugins: [
+    '@elizaos/plugin-sql',
+    ...(process.env.EVM_PRIVATE_KEY ? ['@elizaos/plugin-evm'] : []),
+    ...(process.env.ANTHROPIC_API_KEY ? ['@elizaos/plugin-anthropic'] : []),
+    ...(process.env.OPENAI_API_KEY ? ['@elizaos/plugin-openai'] : []),
+    ...(process.env.OPENAI_API_KEY ? ['@elizaos/plugin-knowledge'] : []),
+    ...(!process.env.OPENAI_API_KEY ? ['@elizaos/plugin-local-ai'] : []),
+    ...(process.env.DISCORD_API_TOKEN ? ['@elizaos/plugin-discord'] : []),
+    ...(process.env.TWITTER_USERNAME ? ['@elizaos/plugin-twitter'] : []),
+    ...(process.env.TELEGRAM_BOT_TOKEN ? ['@elizaos/plugin-telegram'] : []),
+    ...(!process.env.IGNORE_BOOTSTRAP ? ['@elizaos/plugin-bootstrap'] : []),
+  ],
+... (more settings)
+}
+```
+
+`index.ts`:
+```typescript
+const herbertAgent: ProjectAgent = {
+  character: herbert,
+  init: async (runtime: IAgentRuntime) => initCharacter({ runtime }),
+};
+const project: Project = {
+  agents: [herbertAgent],
+};
+```
+
+**Expected behavior**
+
+- Expected that Eliza would find the new character (Herbert) and register it as an agent (previous behavior in existing project)
+- We didn't change any config in the existing project but after upgrading versions we could no longer find/interact with Herbert
+
+**Additional context**
+
+- Tested this with both a newly scaffolded project as well as in an existing project. Our existing project had our custom agent/character loading but I then upgraded to `1.0.7` and Eliza is the only registered agent. Seems to possibly be using Eliza as a fallback and ignoring our custom character files, even though they're being detected when the server starts.
+5:Te38,## Summary
+
+Comprehensive refactoring of ALL major CLI commands from monolithic architecture to modular structure for improved maintainability and scalability. This PR systematically transforms large single-file implementations into well-organized, reusable modules following a consistent architectural pattern.
+
+
+
+## Architecture Pattern
+
+Every command now follows this consistent modular structure:
+
+```
+commands/[command]/
+├── index.ts          # Command registration & main entry point
+├── types.ts          # TypeScript interfaces & type definitions  
+├── actions/          # Core business logic & operations
+│   ├── [feature].ts  # Specific action implementations
+│   └── index.ts      # Action exports
+└── utils/           # Helper functions & utilities
+    ├── [utility].ts  # Specific utility implementations
+    └── index.ts      # Utility exports
+```
+
+## Refactoring Strategy
+
+### **Complete Modularization**
+- **87 files** created/modified in commands directory
+- **10 major commands** fully refactored
+- **Consistent patterns** across all modules
+- **Zero breaking changes** - all imports continue to work
+
+## Key Benefits
+
+### **Separation of Concerns**
+- **Actions**: Business logic and core operations
+- **Utils**: Validation, display, and utility functions  
+- **Types**: TypeScript definitions and schemas
+- **Shared**: Common functionality across commands
+
+### **Improved Maintainability**
+- Individual files are focused and manageable (20-200 lines vs 300-800+ line monoliths)
+- Easier to locate and modify specific functionality
+- Clear boundaries between different concerns
+- Consistent patterns across ALL commands
+
+### **Enhanced Reusability**
+- Shared utilities prevent code duplication
+- Modular functions can be imported independently
+- Common patterns for server management, file watching, plugin handling
+- Centralized error handling and validation
+
+### **Better Testing & Development**
+- Individual functions can be unit tested in isolation
+- Mocking dependencies is simplified
+- Development workflows are now standardized
+- Plugin management is consistent across commands
+
+## Backward Compatibility
+
+✅ **Zero breaking changes** - All existing CLI commands, options, and workflows work exactly as before. The modular structure coexists with original interfaces through re-export proxies, ensuring full backward compatibility.
+
+## Technical Highlights
+
+- **Development Workflow**: Enhanced dev command with improved file watching and server management
+- **Plugin System**: Comprehensive plugin loading, installation, and dependency resolution
+- **Registry Integration**: Complete publishing pipeline for npm and GitHub
+- **Environment Management**: Interactive configuration with validation
+- **Testing Framework**: Unified component and E2E testing with auto-detection
+- **Build Orchestration**: Modular build utilities supporting projects, plugins, and monorepos
+- **Error Handling**: Consistent error handling patterns across all commands
+
+## Impact Statistics
+
+- **~4,000+ lines** of monolithic code refactored into focused modules
+- **87 files** changed in commands directory
+- **10 major commands** completely modularized
+- **0 breaking changes** - full backward compatibility maintained
+- **Consistent architecture** established for future development
+
+This comprehensive refactoring transforms the entire ElizaOS CLI from a collection of monolithic commands into a well-organized, modular architecture with improved maintainability, consistency, and developer experience.6:T18e4,## Summary
+
+This PR implements a comprehensive API domain reorganization and improves the client-side confirmation UX.
+
+### Major API Domain Reorganization 🏗️
+
+**Complete restructuring of the `/packages/cli/src/server/api/` directory:**
+
+- **Deleted monolithic files**: Removed large single-file modules (`agent.ts`, `world.ts`) 
+- **Created domain-based structure** with organized subdirectories:
+
+#### `/api/agents/` - Agent Management Domain
+- `crud.ts` - Create, read, update, delete operations
+- `lifecycle.ts` - Start/stop/restart agent lifecycle management  
+- `logs.ts` - Agent logging and diagnostics
+- `panels.ts` - Agent panel/dashboard functionality
+- `worlds.ts` - World/environment management for agents
+- `index.ts` - Agent domain exports and routing
+
+#### `/api/audio/` - Audio Processing Domain  
+- `conversation.ts` - Conversational audio handling
+- `processing.ts` - Audio processing utilities
+- `synthesis.ts` - Text-to-speech and audio synthesis
+- `index.ts` - Audio domain exports
+
+#### `/api/media/` - Media Management Domain
+- `agents.ts` - Agent-specific media operations
+- `channels.ts` - Channel media management
+- `index.ts` - Media domain exports
+
+#### `/api/memory/` - Memory & State Management Domain
+- `agents.ts` - Agent memory operations
+- `groups.ts` - Group/collective memory management  
+- `rooms.ts` - Room-based memory handling
+- `index.ts` - Memory domain exports
+
+#### `/api/messaging/` - Communication Domain
+- `channels.ts` - Channel operations (moved from `messages.ts`)
+- `core.ts` - Core messaging functionality
+- `servers.ts` - Server-level messaging coordination
+- `index.ts` - Messaging domain exports
+
+#### `/api/runtime/` - Runtime Management Domain
+- `debug.ts` - Runtime debugging utilities
+- `health.ts` - Health checks and monitoring
+- `logging.ts` - System-wide logging management
+- `index.ts` - Runtime domain exports
+
+#### `/api/shared/` - Common Utilities Domain
+- `file-utils.ts` - File handling utilities
+- `middleware.ts` - Security middleware (Helmet, rate limiting)
+- `response-utils.ts` - Standardized API response helpers
+- `validation.ts` - Input validation utilities
+- `uploads/index.ts` - File upload handling
+- `index.ts` - Shared utilities exports
+
+#### `/api/system/` - System Configuration Domain
+- `environment.ts` - Environment configuration (moved from `env.ts`)
+- `index.ts` - System domain exports
+
+#### `/api/tee/` - TEE (Trusted Execution Environment) Domain
+- `tee.ts` - TEE operations (moved from `tee.ts`)
+- `index.ts` - TEE domain exports
+
+### Backend API Improvements
+- **Fix agent start/stop endpoints** to use proper REST patterns (`POST /agents/:id/start`, `POST /agents/:id/stop`)
+- **Add missing channel operations** - implemented `deleteChannel` and `updateChannel` methods
+- **Fix URL path mismatch** in frontend `deleteChannelMessage` API call (was using "messaging" instead of "messages")
+- **Add security middleware** with Helmet and rate limiting for production readiness
+- **Standardize response handling** with consistent error/success response utilities
+- **Remove legacy test files** and cleanup obsolete testing infrastructure
+
+### Frontend Confirmation System Improvements  
+- **Replace browser alerts with proper modal confirmations** using Radix UI AlertDialog
+- **Create reusable ConfirmationDialog component** to avoid code duplication
+- **Add useConfirmation hook** for consistent confirmation state management across components
+- **Update confirmation patterns in**:
+  - Agent deletion (agent-settings.tsx) 
+  - Chat deletion and clearing (chat.tsx)
+  - Agent stopping (stop-agent-button.tsx)
+  - Group channel deletion (app-sidebar.tsx)
+- **Use direct JSX rendering** pattern with `<ConfirmationDialog>` components
+
+### Technical Details
+- **Backend**: Complete API domain reorganization, security middleware, missing endpoints, standardized utilities
+- **Frontend**: Eliminated window.confirm usage, implemented accessible modal dialogs
+- **Type Safety**: Proper TypeScript interfaces for all new components and hooks
+- **Architecture**: Modular, domain-driven API structure for better maintainability
+- **UX**: Consistent confirmation dialogs with proper destructive action styling
+
+### Test Plan
+- [x] Build passes successfully
+- [x] All confirmation dialogs work with proper modal UX
+- [x] Agent start/stop operations work correctly
+- [x] Channel operations (create/delete/update) function properly
+- [x] No remaining window.confirm browser alerts
+- [x] API domain reorganization maintains functionality
+
+## Breaking Changes
+- Agent API endpoints moved from `/agents` to `/api/agents` 
+- Agent start/stop now use `POST /agents/:id/start` and `POST /agents/:id/stop` instead of PUT operations
+- API file structure completely reorganized (affects imports for custom extensions)
+
+## Files Changed
+- **Backend**: 47 API files reorganized, security middleware, missing endpoints
+- **Frontend**: Confirmation system, dialog components, hook utilities  
+- **Dependencies**: Added helmet, express-rate-limit, @types/helmet
+- **Structure**: Complete API domain reorganization from monolithic to modular architecture
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+- **New Features**
+  - Introduced robust, modular API endpoints for agent, messaging, media, audio, memory, and system management with improved security, validation, and error handling.
+  - Added new endpoints for audio processing (transcription, text-to-speech, speech conversation) and secure media uploads for agents and channels.
+  - Enhanced confirmation dialogs in the user interface for destructive actions, providing a consistent and user-friendly experience.
+  - Improved documentation with new and updated API endpoint references.
+
+- **Bug Fixes**
+  - Addressed frontend loading issues by aligning API routes and improving chat context detection.
+
+- **Refactor**
+  - Reorganized API routing structure for clarity and scalability, replacing legacy endpoints and consolidating related routes.
+  - Enhanced file upload security and validation, including stricter filename sanitization and MIME type checks.
+
+- **Chores**
+  - Added security middleware and rate limiting for all API endpoints.
+  - Updated dependencies to include security and rate-limiting libraries.
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->7:T978,## Summary
+Replaces the legacy `prompts` library with modern `@clack/prompts` across all CLI commands for enhanced user experience and type safety.
+
+## Changes Made
+- ✅ **All CLI commands migrated**: create, env, publish, update, plugins
+- ✅ **Core utilities updated**: cli-prompts, env-prompt, get-config, github 
+- ✅ **Enhanced UX features added**:
+  - Intro/outro messages for workflows
+  - Spinners for save operations  
+  - Better validation with clearer error messages
+  - Improved cancellation handling with proper exit codes
+  - Setup instruction notes (e.g., GitHub token creation)
+- ✅ **Type safety improvements**: Better TypeScript validation throughout
+- ✅ **Backward compatibility**: All existing CLI flows maintained
+
+## Benefits
+- **Modern UX**: Visual feedback with spinners, structured intro/outro flows
+- **Better Accessibility**: @clack/prompts has superior keyboard navigation and screen reader support
+- **Type Safety**: Improved TypeScript validation and error handling
+- **Consistency**: Unified prompt library across CLI codebase
+- **Maintainability**: Single modern library vs multiple legacy ones
+
+## Testing
+- [x] All CLI tests passing (`bun run test:cli`)
+- [x] Build successful with no TypeScript errors  
+- [x] Interactive flows verified to maintain existing behavior
+- [x] Cancellation handling tested (Ctrl+C)
+
+## Files Changed
+- `package.json`: Added @clack/prompts@^0.11.0 dependency
+- `src/commands/*.ts`: Updated create, env, publish, update commands
+- `src/utils/*.ts`: Updated cli-prompts, env-prompt, get-config, github utilities
+- `bun.lock`: Updated dependency lockfile
+
+## Next Steps
+Future improvements that could be made in separate PRs:
+- [ ] Migrate `plugin-creator.ts` from inquirer to @clack/prompts (complex multi-step forms)
+- [ ] Add more @clack/prompts features like progress bars for long operations
+- [ ] Consider adding `clack.log.step()` for multi-step processes
+- [ ] Evaluate adding `clack.group()` for related prompt groupings
+
+## Migration Details
+### Before (prompts library):
+```typescript
+const response = await prompts({
+  type: 'text', 
+  name: 'value',
+  message: 'Enter value:'
+});
+```
+
+### After (@clack/prompts):
+```typescript
+const value = await clack.text({
+  message: 'Enter value:',
+  validate: (input) => input ? undefined : 'Value required'
+});
+
+if (clack.isCancel(value)) {
+  clack.cancel('Operation cancelled.');
+  process.exit(0);
+}
+```8:T87e,## Overview
+
+In testing passing in calldata, we noticed that the `data` field was always `null` even though we were including it. When adding the changes to the `transferTemplate` to look for data, and also including it in the XML, we no longer saw it coming through as `null`. 
+
+The template now properly extracts and passes through any provided data/calldata, and the extended type guard in `transfer.ts` addresses an edge case where data was sometimes sent as `'null'` which didn't trigger the initial default to `0x`.
+
+## Changes
+
+### Template Updates
+Added support for data/calldata in the transfer template by adding:
+- Instruction to extract "Additional data/calldata (if any is included)"
+- XML response field `<data>string | null</data>`
+
+Previously,  the `TransferParams` interface supported an optional data parameter but it seemed that not being included in the template meant it was always `null`, even when provided in the request.
+
+These changes enable proper handling of transaction data in transfers while protecting against LLM response variations. The template now properly extracts and passes through any provided data/calldata, and the code safely normalizes edge cases to ensure valid transaction data.
+
+The `bun.lock` change is from a fresh install of the repo.
+
+**Note**: I tested this on version `1.0.6` but haven't been able to run `1.0.7` due to the character issue I filed on the main repo. Wanted to put up the PR in the meantime! Thank you -- greatly appreciate all the work ya'll are doing to transition!
+
+### Type Guard Change to Handle Edge Case
+
+Added additional defensive handling in `TransferAction` for LLM response edge cases:
+```typescript
+// Normalize empty or invalid data field to '0x'
+if (!params.data || params.data === '0x') {
+  params.data = '0x';
+} else {
+  // Handle case where template returns 'null' string
+  params.data = (params.data as string) === 'null' ? '0x' : params.data;
+}
+```
+This handles cases where the LLM returns 'null' as a string instead of a null value, ensuring the transaction data is always properly formatted.
+
+- `bun test` tests all pass:
+```
+ 56 pass
+ 0 fail
+```9:T688,## 🔧 Major Refactor: Actions Logic - Callback to Responses
+
+### Overview
+This PR implements a significant architectural change by refactoring the actions logic from callback-based patterns to response-based patterns. This change provides better control, clarity, and debugging capabilities while addressing critical issues that were introduced in versions 1.0.6 and 1.0.7.
+
+### Key Changes
+- **Architecture**: Migrated from callback-based action handling to response-based patterns
+- **Control Flow**: Improved control flow management for better predictability
+- **Debugging**: Enhanced debugging capabilities with clearer error tracking and response handling
+- **Stability**: Fixed major issues that were causing problems in recent releases (1.0.6 and 1.0.7)
+
+### Benefits
+- ✅ **Better Control**: More precise control over action execution and flow
+- ✅ **Improved Clarity**: Cleaner, more readable code structure
+- ✅ **Enhanced Debugging**: Easier to trace and debug action execution
+- ✅ **Issue Resolution**: Addresses critical stability issues from recent versions
+- ✅ **Maintainability**: More maintainable codebase for future development
+
+### Impact
+- **Lines Changed**: +747 additions, -226 deletions
+- **Scope**: Core actions logic and prompt handling
+- **Breaking Changes**: May require updates to existing action implementations
+
+### Testing
+Please ensure thorough testing of action execution flows, especially:
+- Action response handling
+- Error scenarios and debugging
+- Integration with existing workflows
+- Performance impact assessment
+
+---
+*This refactor is essential for the stability and maintainability of the Eliza framework going forward.*a:Tc43,# Risks
+
+**Medium** - Changes to SocketIO event handling and API routing
+- Client-side state management modifications
+
+# Background
+
+## What does this PR do?
+
+- Add messageDeleted and channelCleared SocketIO events
+- Implement client-side handlers for real-time UI updates  
+- Fix routing to exclude /api/messages/ from plugin handler
+- Add DELETE /central-channels/:channelId endpoint
+- Clean up debug logs and improve TypeScript types
+- Prevent 404 errors when deleting channels
+
+Fixes message deletion requiring page refresh
+
+## What kind of change is this?
+
+**Bug fixes** (non-breaking change which fixes an issue)
+**Improvements** (misc. changes to existing features)
+
+## Why are we doing this? Any context or related work?
+
+Users experienced poor UX where deleted messages remained visible in the chat interface until manually refreshing the page. The DELETE API worked correctly but the UI wasn't receiving real-time updates via SocketIO events.
+
+# Documentation changes needed?
+
+My changes do not require a change to the project documentation.
+
+# Testing
+
+## Where should a reviewer start?
+
+1. Review SocketIO event handling in `socketio-manager.ts` and `use-socket-chat.ts`
+2. Check routing exclusion logic in `eliza/packages/cli/src/server/api/index.ts`
+3. Verify new DELETE endpoint in `messages.ts`
+
+## Detailed testing steps
+
+- Start an agent and open the chat interface
+- Send several messages in a DM or group chat
+- Delete a message using the delete button
+  - Verify message disappears immediately without page refresh
+  - Verify SocketIO `messageDeleted` event is received
+- Clear entire channel using clear button
+  - Verify all messages disappear immediately
+  - Verify SocketIO `channelCleared` event is received
+- Delete a DM channel entirely
+  - Verify no 404 errors occur
+  - Verify proper API response
+
+## Screenshots
+
+### Before
+- Messages remained visible after deletion until page refresh
+- 404 errors when deleting channels
+- Verbose debug logs with emojis
+
+### After  
+- Messages disappear instantly upon deletion
+- Clean channel deletion without errors
+- Cleaner log output
+- Real-time UI updates via SocketIO events
+
+# Deploy Notes
+
+## Database changes
+None - only UI and API routing changes
+
+## Deployment instructions
+Standard build and restart required:
+```bash
+cd eliza
+bun run build:client && bun run build:cli
+```
+Then restart the agent process.
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+- **New Features**
+  - Added the ability to clear all messages in a channel via a new endpoint and corresponding UI updates.
+  - Introduced real-time updates for message deletion and channel clearing, ensuring chat views stay synchronized across clients.
+
+- **Bug Fixes**
+  - Improved routing to ensure certain API requests are handled by the correct middleware.
+
+- **Enhancements**
+  - Improved cache management and state updates in the chat interface when messages are deleted or channels are cleared.
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->b:T679,## Summary
+- Complete removal of OpenTelemetry instrumentation and dependencies from the Eliza codebase
+- Preserves all Sentry error tracking functionality as requested
+
+## Changes Made
+- ✅ Removed all 8 OpenTelemetry dependencies from packages/core/package.json
+- ✅ Deleted entire instrumentation service directory and files
+- ✅ Removed OpenTelemetry imports and instrumentation code from runtime.ts
+- ✅ Cleaned up API server OpenTelemetry imports  
+- ✅ Removed instrumentation test files and setup scripts
+- ✅ Removed INSTRUMENTATION service type from service registry
+- ✅ Cleaned up TSUP configuration external dependencies
+- ✅ Preserved all Sentry error tracking functionality
+
+## Technical Details
+This removes over 1000 lines of OpenTelemetry tracing code including:
+- All span creation and management (`startSpan`, `endSpan`, `startActiveSpan`)
+- Instrumentation service initialization and configuration
+- Trace context propagation and span attributes
+- Complex instrumentation in core methods (registerPlugin, initialize, processActions, evaluate, composeState, useModel, etc.)
+
+## Impact
+- **Reduced bundle size** by removing 8 OpenTelemetry dependencies
+- **Improved performance** by eliminating tracing overhead
+- **Simplified codebase** with cleaner, more readable core runtime code
+- **Maintained functionality** - all core agent features work unchanged
+- **Preserved monitoring** - Sentry error tracking remains fully functional
+
+## Test Plan
+- ✅ All packages build successfully without errors
+- ✅ No remaining OpenTelemetry references in source code
+- ✅ Runtime functionality preserved
+- ✅ Sentry error tracking intactc:T160b,# Fix CLI Database and Config File Creation in Wrong Directories
+
+## Problem
+
+The ElizaOS CLI commands (`elizaos start` and `elizaos dev`) were creating database (`.elizadb`) and configuration (`.eliza`) files in incorrect locations, causing several issues:
+
+1. **Monorepo Root Pollution**: When running from projects/plugins inside the monorepo, files were created in the monorepo root instead of the current working directory
+2. **Subdirectory Execution Issues**: Running commands from subdirectories (e.g., `packages/cli`) would create files in the monorepo root, not the intended location
+3. **Poor User Experience**: No clear guidance when users ran commands from inappropriate directories
+4. **Inconsistent Behavior**: Different directory contexts resulted in unpredictable file placement
+
+## Solution
+
+Implemented comprehensive directory validation and centralized error handling:
+
+### 1. **Centralized Directory Validation**
+
+- Added `handleDirectoryContextErrors()` function for consistent validation across commands
+- Integrated directory type detection into both `start` and `dev` commands
+- Ensured database and config files are always created in the current working directory
+
+### 2. **Enhanced User Guidance**
+
+- **Fatal Errors**: Clear error messages for invalid directory contexts (e.g., running from subdirectories)
+- **Warnings**: Styled warnings for monorepo usage with guidance toward best practices
+- **Styled Messaging**: Consistent, color-coded error and warning displays matching existing UI patterns
+
+### 3. **Improved Plugin Detection**
+
+- Refined heuristics to reduce false positives in plugin detection
+- Fixed issue where `project-tee-starter` was incorrectly flagged as a plugin
+
+### 4. **Deferred Warning Display**
+
+- Monorepo warnings now appear after agent initialization to avoid interrupting startup
+- Uses global flag mechanism to schedule warnings for appropriate timing
+
+## Examples
+
+### Before (Problematic Behavior)
+
+```bash
+# Running from monorepo root
+cd /path/to/eliza
+elizaos start
+# ❌ Creates .elizadb and .eliza in /path/to/eliza
+
+# Running from plugin inside monorepo
+cd /path/to/eliza/packages/plugin-bootstrap
+elizaos start
+# ❌ Creates .elizadb and .eliza in /path/to/eliza (monorepo root)
+
+# Running from subdirectory
+cd /path/to/eliza/packages/cli
+elizaos start
+# ❌ Creates .elizadb and .eliza in /path/to/eliza (monorepo root)
+```
+
+### After (Fixed Behavior)
+
+```bash
+# Running from monorepo root
+cd /path/to/eliza
+elizaos start
+# ✅ Creates .elizadb and .eliza in /path/to/eliza
+# ⚠️  Shows warning: "Running from monorepo root is not best practice"
+
+# Running from plugin inside monorepo
+cd /path/to/eliza/packages/plugin-bootstrap
+elizaos start
+# ✅ Creates .elizadb and .eliza in /path/to/eliza/packages/plugin-bootstrap
+# ⚠️  Shows warning: "Running from monorepo root is not best practice"
+
+# Running from subdirectory
+cd /path/to/eliza/packages/cli
+elizaos start
+# ❌ Shows error: "Must run elizaos start from project or plugin directory"
+# 🛑 Exits with helpful guidance to run "elizaos create"
+```
+
+### Validation Matrix
+
+All directory types now behave correctly:
+
+| Directory Type                     | START | DEV  | Database/Config Location |
+| ---------------------------------- | ----- | ---- | ------------------------ |
+| elizaos-project (outside monorepo) | ✅    | ✅   | Current directory        |
+| elizaos-plugin (outside monorepo)  | ✅    | ✅   | Current directory        |
+| elizaos-project (inside monorepo)  | ✅⚠️  | ✅⚠️ | Current directory        |
+| elizaos-plugin (inside monorepo)   | ✅⚠️  | ✅⚠️ | Current directory        |
+| elizaos-monorepo                   | ✅⚠️  | ✅⚠️ | Current directory        |
+| elizaos-subdir                     | ❌    | ❌   | N/A (exits with error)   |
+
+Legend: ✅ = Works, ⚠️ = Warning shown, ❌ = Error shown and exits
+
+## Files Changed
+
+- `packages/cli/src/commands/dev.ts` - Integrated centralized directory validation
+- `packages/cli/src/commands/start.ts` - Added directory validation to start command
+- `packages/cli/src/server/services/message.ts` - Deferred monorepo warning display
+- `packages/cli/src/utils/directory-detection.ts` - Added comprehensive validation and styling functions
+
+## Benefits
+
+1. **Predictable File Placement**: Database and config files always created in current working directory
+2. **Better Developer Experience**: Clear guidance when commands are run from inappropriate locations
+3. **Monorepo Best Practices**: Gentle warnings guide users toward creating projects outside monorepo
+4. **Consistent UX**: Styled error/warning messages match existing CLI design patterns
+5. **Reduced Support Issues**: Self-explanatory error messages with actionable guidance
+
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+- **New Features**
+  - Improved error and warning messages when running CLI commands from unsupported directories, providing clearer guidance and styled console output.
+  - Centralized directory validation and messaging for CLI commands to enhance user feedback and enforce best practices.
+
+- **Bug Fixes**
+  - Fixed directory detection logic to ensure configuration and database paths are consistently resolved relative to the correct project directory.
+
+- **Enhancements**
+  - Reduced repeated logging of directory paths and types during startup for a cleaner console experience.
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->d:T9a9,Click: "delete" on a chat in client would do nothing.
+
+This pull request introduces significant enhancements for handling real-time channel events, improving error feedback, and adding database operations for channel management. The changes include implementing a new `useChannelEvents` hook, extending the `SocketIOManager` class to handle channel-related events, and updating the database adapter to support channel updates and deletions.
+
+### Real-time event handling:
+
+* **New `useChannelEvents` hook**: Introduced a hook to manage real-time channel events such as deletion, updates, clearing, and message deletions. This hook invalidates or removes relevant query caches to ensure the UI reflects the latest state. (`packages/client/src/hooks/use-channel-events.ts`)
+* **Extended `SocketIOManager` class**: Added support for channel-related events (`channelDeleted`, `channelUpdated`, `channelCleared`, `messageDeleted`) in the `SocketIOManager` class, including event definitions and listeners. (`packages/client/src/lib/socketio-manager.ts`) [[1]](diffhunk://#diff-79b3653b1602e46dd91472006eabc9e952f7cf2bb09d2ea811370b3b96c3341aR49-R71) [[2]](diffhunk://#diff-79b3653b1602e46dd91472006eabc9e952f7cf2bb09d2ea811370b3b96c3341aR82-R85) [[3]](diffhunk://#diff-79b3653b1602e46dd91472006eabc9e952f7cf2bb09d2ea811370b3b96c3341aR169-R184) [[4]](diffhunk://#diff-79b3653b1602e46dd91472006eabc9e952f7cf2bb09d2ea811370b3b96c3341aR351-R374)
+
+### Error feedback improvements:
+
+* **Enhanced error handling in `Chat` and `GroupPanel` components**: Updated error messages to provide more specific feedback based on the type of error (e.g., network issues, permissions, or not found). (`packages/client/src/components/chat.tsx`, `packages/client/src/components/group-panel.tsx`) [[1]](diffhunk://#diff-6ede45d69eb212ef94c4b9bc5ae856eed19d120f07edd9a37667f31f41afd5caR409-R426) [[2]](diffhunk://#diff-a425db0f1ccbe573eacb80c8deea577a51ee5ee7d4551acd443b4c53f5962785R136-L152)
+* **Improved error handling in `useDeleteChannel` hook**: Added detailed error messages for failed channel deletions, ensuring users receive actionable feedback. (`packages/client/src/hooks/use-query-hooks.ts`)
+
+### Database operations for channel management:
+
+* **Added `updateChannel` and `deleteChannel` methods**: Extended the `BaseDrizzleAdapter` to include methods for updating channel details and deleting channels along with their associated data. (`packages/plugin-sql/src/base.ts`)e:T8e9,```
+[2025-06-10 10:32:52] ERROR: No world found for user during onboarding
+[2025-06-10 10:32:52] ERROR: Critical error in settings provider: Error: No server ownership found for onboarding
+```
+
+This pull request introduces enhancements to the Socket.IO server and the bootstrap plugin to improve event handling, metadata management, and onboarding processes. Key changes include adding support for `ENTITY_JOINED` events, creating worlds with ownership metadata for DM channels, and initializing settings for user worlds during onboarding.
+
+### Enhancements to Socket.IO server:
+
+* [`packages/cli/src/server/socketio/index.ts`](diffhunk://#diff-dccfb381a823a17c3843573fce899161dd411f5cb46617c657b040d7a0dc0d92L118-R168): Added handling for `ENTITY_JOINED` events when a channel is joined, including emitting events with metadata for world/entity creation. Improved logging for debugging and monitoring event emissions. [[1]](diffhunk://#diff-dccfb381a823a17c3843573fce899161dd411f5cb46617c657b040d7a0dc0d92L118-R168) [[2]](diffhunk://#diff-dccfb381a823a17c3843573fce899161dd411f5cb46617c657b040d7a0dc0d92R205-R228)
+
+### Improvements to bootstrap plugin:
+
+* [`packages/plugin-bootstrap/src/index.ts`](diffhunk://#diff-ade2059be3b14bcc6b85b1f1bd73a46a0e7e1c170a3c4ac96e55853f77429b7fR981-R993): Enhanced `syncSingleUser` to create worlds with ownership metadata for DM channels, including roles and settings initialization. Added verification of created worlds to ensure proper metadata. [[1]](diffhunk://#diff-ade2059be3b14bcc6b85b1f1bd73a46a0e7e1c170a3c4ac96e55853f77429b7fR981-R993) [[2]](diffhunk://#diff-ade2059be3b14bcc6b85b1f1bd73a46a0e7e1c170a3c4ac96e55853f77429b7fR1005-R1015)
+* [`packages/plugin-bootstrap/src/index.ts`](diffhunk://#diff-ade2059be3b14bcc6b85b1f1bd73a46a0e7e1c170a3c4ac96e55853f77429b7fR1178-R1181): Improved handling of `ENTITY_JOINED` events by adding detailed logging and verifying the presence of `worldId` and `roomId`.
+
+### Onboarding enhancements:
+
+* [`packages/plugin-bootstrap/src/providers/settings.ts`](diffhunk://#diff-887a51c9adb1e6cd9a0aeb962a7b8e69f5603558187992376cd13a30612c0a62L177-R189): Updated onboarding mode to initialize settings metadata for user worlds if none exists, ensuring proper setup during world creation.f:T8d9,This pull request introduces a significant refactor to centralize and standardize the directory structure for CLI-generated data under a hidden `.eliza` folder in the project root. Additionally, it includes instrumentation enhancements and legacy path migration logic to ensure backward compatibility. The most important changes are grouped into themes: directory structure updates, instrumentation improvements, and legacy path migration.
+
+### Directory Structure Updates:
+* Added utility functions in `packages/cli/src/utils/eliza-paths.ts` to centralize logic for resolving standard Eliza directories (`getElizaBaseDir`, `getElizaUploadsDir`, etc.). This eliminates scattered hard-coded paths throughout the codebase.
+* Updated all references to CLI-generated data paths (e.g., uploads, characters, database) to use the new `.eliza` folder structure across multiple files, including `index.ts`, `file-utils.ts`, `upload.ts`, and others. [[1]](diffhunk://#diff-1ef067a0d0327a2b5987df32fa0aef8326439f714944e10210e2186b1aca4b47L21-R21) [[2]](diffhunk://#diff-a91c13c0e1052207da309e9e3b25b4888fe04b77a474cd67596354385bd7ea15L384-R385) [[3]](diffhunk://#diff-2a0aa5a354b1e453e84d070ba2e6875e8c9aa0ef656f7466ff3eeaa76cd3f547L255-R255) [[4]](diffhunk://#diff-05f2fe59da01b38ae1723b74d0071f653f6273c61ebc1adbc77bc33e3746a948L128-R128)
+
+### Instrumentation Improvements:
+* Enhanced instrumentation handling in `processSocketMessage` to ensure compatibility with runtime types by replacing `AgentRuntime` with `any`.
+* Added OpenTelemetry imports (`SpanStatusCode`, `Tracer`) to `packages/cli/src/server/api/index.ts` for improved observability.
+
+### Legacy Path Migration:
+* Introduced migration logic in `resolvePgliteDir` (both CLI and plugin versions) to detect and migrate legacy paths (`<projectRoot>/.elizadb`) to the new `.eliza/.elizadb` location. This ensures seamless upgrades for existing projects. [[1]](diffhunk://#diff-8b7927edc3bcd06a96516cca107d1fe93562283386e7b40d268968f077160219L84-R97) [[2]](diffhunk://#diff-f1329523885657a4d509231d2fa0f55c672d87051d847b1373b4ae65a74aa7b7L67-R81)
+
+These changes improve maintainability, standardize the directory structure, and ensure backward compatibility while enhancing instrumentation capabilities.10:T967,# Relates to
+
+Plugin routes with URL parameters (`:id`, `:param`, etc.) returning 404 errors
+
+# Risks
+
+**Medium** - Changes to core plugin route matching logic in agent router
+- Affects ALL plugins using parameterized routes
+- Routing logic modification requires comprehensive testing
+
+# Background
+
+## What does this PR do?
+
+Fixes a fundamental routing issue where plugin routes with URL parameters were returning 404 errors. The agent router was using exact string matching instead of pattern matching, causing any route with parameters (`:id`, `:param`, etc.) to fail.
+
+**Changes:**
+- Added `path-to-regexp` import to agent router
+- Replaced exact path matching (`path === r.path`) with pattern-based matching using `match()` function
+- Properly extract URL parameters into `req.params` for plugin handlers
+
+**Affects all plugins with routes like:**
+- `/documents/:knowledgeId` (knowledge plugin)
+- `/items/:itemId` (any plugin)
+- `/users/:userId/settings` (any plugin)
+
+## What kind of change is this?
+
+Bug fixes (non-breaking change which fixes an issue)
+
+# Documentation changes needed?
+
+My changes do not require a change to the project documentation.
+
+# Testing
+
+## Where should a reviewer start?
+
+Review the changes in `eliza/packages/cli/src/server/api/agent.ts` - specifically the plugin route matching logic
+
+## Detailed testing steps
+
+**Test any plugin with parameterized routes:**
+- Test knowledge plugin DELETE `/documents/:knowledgeId`
+- Test any plugin GET routes with parameters like `/items/:id`
+- Verify parameter extraction works correctly
+
+**Before fix:**
+```javascript
+// path="/documents/12345", r.path="/documents/:knowledgeId"
+if (path === r.path) // false - no match, 404 error
+```
+
+**After fix:**
+```javascript
+// Uses path-to-regexp matching for ANY plugin route
+matcher = match("/documents/:knowledgeId")
+matched = matcher("/documents/12345") // true - extracts parameters
+req.params = { ...req.params, knowledgeId: "12345" }
+```
+
+**Files Changed:**
+- `eliza/packages/cli/src/server/api/agent.ts` - Replace
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+## Summary by CodeRabbit
+
+- **New Features**
+  - Improved plugin route handling to support dynamic and parameterized paths, enabling more flexible API endpoints.
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->11:T544,# Background
+## What does this PR fix?
+In `service.ts` There is a check to see if text content is base64 using an invalid regular expression. 
+
+Old expression: `/^[A-Za-z0-9+/]+=*$/`
+
+## Proposed Fix
+1. Move base64 check to a utility function
+2. New expression: `^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/`
+
+See https://stackoverflow.com/questions/475074/regex-to-parse-or-validate-base64-data for details
+GPT-4o also suggested the above expression.
+
+# Documentation changes needed?
+No.
+
+# Testing
+## Where should a reviewer start?
+1. Several tests were added to `__tests__/utils.test.ts`
+3. Since it's a small, self contained utility function, easy to try locally and add more use-cases. 
+
+# Risks
+**Low Risk** - This function is only used in one place and very easy to test. 
+
+
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+- **New Features**
+  - Added a utility to detect if a string appears to be Base64-encoded.
+- **Refactor**
+  - Updated Base64 detection in document processing to use the new utility for improved consistency.
+- **Tests**
+  - Introduced comprehensive tests to ensure accurate Base64 detection, including various valid, invalid, and edge case inputs.
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->12:T64a,```
+[2025-06-10 10:22:37] ERROR: Error updating agent:
+    agentId: "524873bf-6a97-050d-b70f-673063e0e163"
+    agent: {
+      "id": "524873bf-6a97-050d-b70f-673063e0e163",
+      "enabled": true,
+      "createdAt": 1749550954067,
+      "updatedAt": 1749550957493,
+      "name": "based guy",
+      "username": "based",
+      "system": "very based dude",
+      "bio": [],
+      "messageExamples": [],
+      "postExamples": [],
+      "topics": [],
+      "adjectives": [],
+      "knowledge": [],
+      "plugins": [
+        "@elizaos/plugin-sql",
+        "@elizaos/plugin-openai",
+        "@elizaos/plugin-bootstrap"
+      ],
+      "settings": {
+        "secrets": {}
+      },
+      "style": {
+        "all": [],
+        "chat": [],
+        "post": []
+      }
+    }
+    error: "value.toISOString is not a function"
+    ```
+
+This pull request introduces a significant improvement to the handling of timestamp fields in the `BaseDrizzleAdapter` class within the `packages/plugin-sql/src/base.ts` file. The changes ensure that numeric timestamps are properly converted to `Date` objects for database storage, aligning with the database schema requirements.
+
+### Timestamp handling improvements:
+* Added logic to convert numeric `createdAt` and `updatedAt` timestamps to `Date` objects before updating the database. If `createdAt` is invalid, it is excluded from the update; if `updatedAt` is invalid or absent, it defaults to the current time. (`[packages/plugin-sql/src/base.tsR306-R328](diffhunk://#diff-c0212488c0446f46225384f931dd7dfe141e77896ddeaf45373b859f8121d129R306-R328)`)13:T8e7,## Problem
+
+The CLI had two messaging issues:
+
+1. **Double messaging**: When running `elizaos update`, the banner showed an update notification before the update command itself ran, creating redundant messaging
+2. **Incorrect update instruction**: The update notification told users to run `elizaos update` which updates both packages and CLI, when the more stable and direct approach is `bun i -g @elizaos/cli@latest`
+
+## Solution
+
+1. **Fixed double messaging**: Skip the update check in `displayBanner()` when running the update command by passing `skipUpdateCheck: true`
+2. **Updated instruction**: Changed notification message from "Run elizaos update" to "Run bun i -g @elizaos/cli@latest" for more durable CLI updates
+
+## Examples
+
+**Before:**
+
+```bash
+$ elizaos update
+# Banner shows: "Run elizaos update to get the latest features"
+# Then update command runs, showing additional update messaging
+```
+
+**After:**
+
+```bash
+$ elizaos update
+# Banner shows: "Run bun i -g @elizaos/cli@latest to get the latest features"
+# Update command runs without redundant messaging
+
+$ elizaos -v
+# Clean update notification with correct command
+────────────────────────────────────────────────────────────────────
+│ Update available: 1.0.6 → 1.0.7                                  │
+│ Run bun i -g @elizaos/cli@latest to get the latest features      │
+────────────────────────────────────────────────────────────────────
+```
+
+## Files Changed
+
+- `packages/cli/src/commands/update.ts` - Skip banner update check during update
+- `packages/cli/src/utils/display-banner.ts` - Update notification message text
+
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+- **Enhancements**
+  - Updated the CLI banner to recommend running a new command for updating to the latest version.
+  - Improved banner formatting to accommodate the updated message.
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->14:T907,<!-- Use this template by filling in information and copying and pasting relevant items out of the HTML comments. -->
+
+# Relates to
+
+<!-- LINK TO ISSUE OR TICKET -->
+
+<!-- This risks section must be filled out before the final review and merge. -->
+
+# Risks
+
+<!--
+Low, medium, large. List what kind of risks and what could be affected.
+-->
+
+# Background
+
+## What does this PR do?
+
+fix typos
+
+## What kind of change is this?
+
+<!--
+Bug fixes (non-breaking change which fixes an issue)
+Improvements (misc. changes to existing features)
+Features (non-breaking change which adds functionality)
+Updates (new versions of included code)
+-->
+
+<!-- This "Why" section is most relevant if there are no linked issues explaining why. If there is a related issue, it might make sense to skip this why section. -->
+<!--
+## Why are we doing this? Any context or related work?
+-->
+
+# Documentation changes needed?
+
+<!--
+My changes do not require a change to the project documentation.
+My changes require a change to the project documentation.
+If documentation change is needed: I have updated the documentation accordingly.
+-->
+
+<!-- Please show how you tested the PR. This will really help if the PR needs to be retested and probably help the PR get merged quicker. -->
+
+# Testing
+
+## Where should a reviewer start?
+
+## Detailed testing steps
+
+<!--
+None: Automated tests are acceptable.
+-->
+
+<!--
+- As [anon/admin], go to [link]
+  - [do action]
+  - verify [result]
+-->
+
+<!-- If there is a UI change, please include before and after screenshots or videos. This will speed up PRs being merged. It is extra nice to annotate screenshots with arrows or boxes pointing out the differences. -->
+<!--
+## Screenshots
+### Before
+### After
+-->
+
+<!-- If there is anything about the deployment, please make a note. -->
+<!--
+# Deploy Notes
+-->
+
+<!--  Copy and paste command line output. -->
+<!--
+## Database changes
+-->
+
+<!--  Please specify deploy instructions if there is something more than the automated steps. -->
+<!--
+## Deployment instructions
+-->
+
+<!-- If you are on Discord, please join https://discord.gg/ai16z and state your Discord username here for the contributor role and join us in #development-feed -->
+<!--
+## Discord username
+
+-->
+15:T8fc,Moved repos from notorious-d-e-v github to payai github
+
+# Registry Update Checklist
+
+Registry:
+- [x] I've made the left side of the colon of JSON entry in index.json match the potential NPM package name
+- [x] I've used github not github.com
+- [x] There is no .git extension
+- [x] It's placed it alphabetically in the list
+- [x] I've dealt with commas properly so the list is still valid JSON
+
+If not an eliza-plugins official repo, i.e. new plugin: 
+
+The plugin repo has:
+- [x] is publically accessible (not a private repo)
+- [x] uses main as it's default branch
+- [x] I have include `elizaos-plugins` in the topics in the GitHub repo settings. If the plugin is related to `AI` or `crypto`, please add those as topics as well.
+- [x] add simple description in github repo
+- [x] follows this convention
+```
+plugin-name/
+├── images/
+│   ├── logo.jpg        # Plugin branding logo
+│   ├── banner.jpg      # Plugin banner image
+├── src/
+│   ├── index.ts        # Main plugin entry point
+│   ├── actions/        # Plugin-specific actions
+│   ├── clients/        # Client implementations
+│   ├── adapters/       # Adapter implementations
+│   └── types.ts        # Type definitions
+│   └── environment.ts  # runtime.getSetting, zod validation
+├── package.json        # Plugin dependencies
+└── README.md          # Plugin documentation
+```
+- [x] an `images/banner.jpg` and `images/logo.jpg` and they
+  - Use clear, high-resolution images
+  - Keep file sizes optimized (< 500KB for logos, < 1MB for banners)
+  - Follow the [elizaOS Brand Guidelines](https://github.com/elizaOS/brandkit)
+  - Include alt text for accessibility
+- [x] package.json has a agentConfig like the following
+```json
+{
+  "name": "@myNpmOrg/plugin-example",
+  "version": "1.0.0",
+  "agentConfig": {
+    "pluginType": "elizaos:plugin:1.0.0",
+    "pluginParameters": {
+      "API_KEY": {
+        "type": "string",
+        "description": "API key for the service"
+      }
+    }
+  }
+}
+```
+
+<!-- If you are on Discord, please join https://discord.gg/elizaOS and state your Discord username here for the contributor role and join us in #development-feed -->
+
+## Discord username
+notorious_d_e_v
+16:Td38,# Risks
+
+**Low risk** - This is a targeted bug fix that:
+- Affects only memory creation logic in plugin-sql
+- Improves data integrity without breaking existing functionality
+- Maintains backward compatibility
+- Adds permissive CSP rule for enhanced plugin functionality
+
+# Background
+
+## What does this PR do?
+
+This PR fixes a critical data association bug where documents and memories uploaded by specific agents were being stored with the wrong agent ID. The issue was in the `plugin-sql` package where the database adapter was always using its own `agentId` instead of respecting the `agentId` from incoming memory requests.
+
+**Key Changes:**
+1. **Memory Creation Fix**: Modified `packages/plugin-sql/src/base.ts` to prioritize `memory.agentId` over `this.agentId`
+2. **CSP Enhancement**: Added `data:` URL support to Content Security Policy for display endpoints to enable plugin iframe content
+
+## What kind of change is this?
+
+**Bug fixes** (non-breaking change which fixes an issue)
+
+# Documentation changes needed?
+
+**My changes do not require a change to the project documentation.**
+
+The fix corrects existing behavior to work as intended, without changing APIs or user-facing functionality.
+
+# Testing
+
+## Where should a reviewer start?
+
+Start by reviewing the core fix in `packages/plugin-sql/src/base.ts` line 1663 where we changed:
+```typescript
+// Before
+agentId: this.agentId,
+
+// After  
+agentId: memory.agentId || this.agentId,
+```
+
+## Detailed testing steps
+
+### Setup
+1. Start an ElizaOS agent with a specific character (non-default agent ID)
+2. Use the knowledge plugin to upload documents
+
+### Test Agent ID Association
+```bash
+# 1. Upload a document via agent
+curl -X POST "http://localhost:3000/api/documents" \
+  -H "Content-Type: multipart/form-data" \
+  -F "files=@test.txt" \
+  -F "agentId=a2c1b813-426d-067e-9d29-93b254e358a8"
+
+# 2. Verify document is associated with correct agent ID
+curl -s "http://localhost:3000/documents?agentId=a2c1b813-426d-067e-9d29-93b254e358a8" | \
+  jq '.data.memories[-1].agentId'
+
+# Expected: "a2c1b813-426d-067e-9d29-93b254e358a8"
+# Before fix: "00000000-0000-0000-0000-000000000002"
+```
+
+### Test CSP Data URL Support
+1. Navigate to knowledge plugin UI
+2. Upload a PDF document
+3. View the PDF in the plugin interface
+4. Verify no CSP violations in browser console
+
+### Multi-Agent Testing
+1. Run multiple agents with different agent IDs
+2. Upload documents from each agent
+3. Verify each agent's documents are properly isolated
+4. Confirm no cross-agent data contamination
+
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+- **Bug Fixes**
+  - Improved error messages when an agent is not found or when an invalid agent ID is provided in plugin routes.
+  - Adjusted route paths in agent panel responses for greater clarity.
+
+- **Security**
+  - Enhanced Content Security Policy (CSP) headers for API endpoints, providing stricter policies for API routes and more relaxed policies for UI and asset routes.
+  - Allowed iframe embedding from the same origin and data URLs to support document display features.
+
+- **Other Improvements**
+  - Ensured correct agent ID assignment when creating new memory records in the SQL plugin.
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->17:Tab9,On Jun 10, 2025, ElizaOS development focused on significant framework enhancements, including dynamic database management, a comprehensive API reorganization, and CLI improvements for better user experience. Several critical bugs related to real-time messaging, project loading, and chat functionality were resolved, while a new issue concerning custom character loading post-upgrade has emerged.
+
+## ✅ Completed Work
+
+### Core Framework Enhancements
+- Implemented dynamic loading of database tables and rebuilt `plugin-sql` for improved migration capabilities in `elizaos/eliza` ([elizaos/eliza#5018](https://github.com/elizaos/eliza/pull/5018)).
+- Reorganized API routes into a logical domain-based structure for better clarity and usability in `elizaos/eliza` ([elizaos/eliza#5010](https://github.com/elizaos/eliza/pull/5010)).
+- Migrated all CLI commands to use `@clack/prompts`, enhancing user experience and type safety in `elizaos/eliza` ([elizaos/eliza#5016](https://github.com/elizaos/eliza/pull/5016)).
+
+### Bug Fixes & Stability Improvements
+- Implemented real-time message deletion via SocketIO, improving message handling in `elizaos/eliza` ([elizaos/eliza#4968](https://github.com/elizaos/eliza/pull/4968)).
+- Fixed issues with loading environment configurations and project agents, ensuring smoother startup processes in `elizaos/eliza` ([elizaos/eliza#5048](https://github.com/elizaos/eliza/pull/5048), [elizaos/eliza#5044](https://github.com/elizaos/eliza/pull/5044)).
+- Resolved issues with chat UI and onboarding errors, enhancing overall user experience in `elizaos/eliza` ([elizaos/eliza#5035](https://github.com/elizaos/eliza/pull/5035), [elizaos/eliza#5033](https://github.com/elizaos/eliza/pull/5033)).
+
+### Code Quality & Maintainability
+- Refactored CLI commands into a modular structure for improved maintainability and scalability in `elizaos/eliza` ([elizaos/eliza#5036](https://github.com/elizaos/eliza/pull/5036)).
+- Added dummy services for testing purposes, ensuring all shared service types have implementations in `elizaos/eliza` ([elizaos/eliza#5030](https://github.com/elizaos/eliza/pull/5030)).
+
+## 🐞 Issue Triage
+
+### elizaos/eliza
+- **New Issues**:
+    - Custom Character Loading: Users are experiencing issues with loading custom characters after upgrading to version 1.0.7 ([elizaos/eliza#5039](https://github.com/elizaos/eliza/issues/5039)).
+- **Closed Issues**:
+    - Onboarding Errors: Resolved critical onboarding errors related to user settings and world registration ([elizaos/eliza#5033](https://github.com/elizaos/eliza/issues/5033)).
+    - Chat History Management: Fixed issues with chat history not reloading correctly ([elizaos/eliza#5034](https://github.com/elizaos/eliza/issues/5034)).0:{"buildId":"US8XLB_zHXYj_PVAECGcd","rsc":["$","$1","c",{"children":[["$","div",null,{"className":"container mx-auto px-6 py-8 md:px-8","children":["$","div",null,{"className":"mx-auto max-w-4xl","children":[["$","div",null,{"className":"mb-4 flex flex-col justify-between sm:flex-row","children":[["$","$L2",null,{"currentInterval":"day","currentDate":"2025-06-10"}],["$","$L3",null,{"metrics":{"date":"2025-06-10","interval":{"intervalStart":"$D2025-06-10T00:00:00.000Z","intervalEnd":"$D2025-06-11T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":29,"merged":23,"total":34},"issues":{"new":2,"closed":0,"total":2},"activeContributors":18,"codeChanges":{"additions":23437,"deletions":21489,"files":208,"commitCount":110},"topContributors":[{"username":"ChristopherTrimboli","avatarUrl":"https://avatars.githubusercontent.com/u/27584221?u=de148a498b5af814e037c2975112fadd09df743f&v=4","totalScore":309.61227743166995,"prScore":274.27227743167,"issueScore":0,"reviewScore":35,"commentScore":0.33999999999999997,"summary":"ChristopherTrimboli: Merged 7 PRs, including significant bug fixes such as #5033 \"fix: onboarding user settings error\" (+103/-5 lines) and #5049 \"fix: dup chats\" (+86/-25 lines), while also maintaining a consistent activity pattern with 10 commits and a focus on bugfix work (40%). Additionally, he opened 1 PR (#5037) related to handling delete chats/channels and conducted 7 reviews, all with approvals."},{"username":"wtfsayo","avatarUrl":"https://avatars.githubusercontent.com/u/82053242?u=98209a1f10456f42d4d2fa71db4d5bf4a672cbc3&v=4","totalScore":181.46907491538363,"prScore":181.03107491538364,"issueScore":0,"reviewScore":0,"commentScore":0.43799999999999994,"summary":"wtfsayo: Merged 5 PRs, including a major refactor in #5036 (+8501/-7418 lines) and enhancements to API instrumentation in #5042 (+536/-1662 lines), while actively commenting on 5 issues and 3 PRs. The contributions reflect a strong focus on other work (53%) and feature development (26%), with a total of 19 commits modifying 165 files (+9220/-7383 lines)."},{"username":"lalalune","avatarUrl":"https://avatars.githubusercontent.com/u/18633264?u=e2e906c3712c2506ebfa98df01c2cfdc50050b30&v=4","totalScore":89.33304084196597,"prScore":66.63304084196596,"issueScore":0,"reviewScore":22.5,"commentScore":0.2,"summary":"lalalune: Merged 1 PR (#5030 \"feat: add dummy services\") with significant changes of +1563 lines, while also working on an open PR (#5029 \"fix: project loading\"). Made extensive modifications across 164 files, totaling +13351/-15436 lines, with a balanced focus on bugfix, refactor, and other work."},{"username":"0xbbjoker","avatarUrl":"https://avatars.githubusercontent.com/u/54844437?u=90fe1762420de6ad493a1c1582f1f70c0d87d8e2&v=4","totalScore":81.4863805686042,"prScore":76.4863805686042,"issueScore":0,"reviewScore":5,"commentScore":0,"summary":"0xbbjoker: Merged 2 PRs (#5048 and #5050) with significant contributions totaling +819/-241 lines, demonstrating a balanced focus on both feature work and bug fixes. Active today with consistent contributions, reflecting a strong commitment to the project."},{"username":"yungalgo","avatarUrl":"https://avatars.githubusercontent.com/u/113615973?u=92e0f29f7e2fbb8ce46ed13c51f692ca803de02d&v=4","totalScore":76.73929417603627,"prScore":76.30129417603627,"issueScore":0,"reviewScore":0,"commentScore":0.43799999999999994,"summary":"yungalgo: Merged 1 PR (#5041) with minor changes (+2/-2 lines) and opened another PR (#5040) focused on project structure. Made significant code modifications across 17 files (+302/-87 lines), demonstrating a consistent work pattern with a primary focus on other work (71%)."},{"username":"odilitime","avatarUrl":"https://avatars.githubusercontent.com/u/16395496?u=c9bac48e632aae594a0d85aaf9e9c9c69b674d8b&v=4","totalScore":71.40658509299405,"prScore":43.70658509299405,"issueScore":0,"reviewScore":27.5,"commentScore":0.2,"summary":"odilitime: Merged 1 PR (#5026) with a contribution of +3 lines, while modifying 46 files with a total of +344/-6167 lines across 2 commits, demonstrating a balanced focus on feature and refactor work. Actively engaged in the review process with 6 total reviews, including 1 approval and 5 comments."},{"username":"madjin","avatarUrl":"https://avatars.githubusercontent.com/u/32600939?u=cdcf89f44c7a50906c7a80d889efa85023af2049&v=4","totalScore":51.5237738965761,"prScore":51.5237738965761,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"madjin: Merged 1 pull request (#5046) focused on updating documentation, contributing a significant change of +23453/-28011 lines. Actively modified 10 files with a total of +24/-82 lines, maintaining a consistent work pattern."},{"username":"tcm390","avatarUrl":"https://avatars.githubusercontent.com/u/60634884?u=c6c41679b8322eaa0c81f72e0b4ed95e80f0ac16&v=4","totalScore":44.18275946922806,"prScore":44.18275946922806,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"tcm390: Merged 2 PRs, including #5028 \"fix: remove truncate\" (+1/-4 lines) and #5027 \"fix: Ensure waitForServer uses SERVER_PORT env if provided\" (+5/-2 lines), while modifying 3 files with a total of +6/-6 lines across 3 commits. Maintained a consistent activity pattern, being active every day."},{"username":"jonathanprozzi","avatarUrl":"https://avatars.githubusercontent.com/u/9438776?u=25b5a5b22cfe26724ee1ebd869c378fc65196987&v=4","totalScore":36.52513216897283,"prScore":31.88513216897283,"issueScore":4.3,"reviewScore":0,"commentScore":0.33999999999999997,"summary":"jonathanprozzi: Created 1 issue (#5039 \"Unable to load custom characters after upgrading to 1.0.7\", CLOSED) and commented on 2 issues, demonstrating sporadic activity today."},{"username":"standujar","avatarUrl":"https://avatars.githubusercontent.com/u/16385918?u=718bdcd1585be8447bdfffb8c11ce249baa7532d&v=4","totalScore":30.987306144334053,"prScore":30.549306144334054,"issueScore":0,"reviewScore":0,"commentScore":0.43799999999999994,"summary":"standujar: Merged 1 PR (#5045) with significant changes (+1784/-4849 lines) and modified 55 files, focusing primarily on feature work (67%). Maintained a consistent activity pattern with 9 commits today."},{"username":"wookosh","avatarUrl":"https://avatars.githubusercontent.com/u/120273332?u=493e01d0863a55ed139425760447079b96ef931d&v=4","totalScore":29.819221402565088,"prScore":29.819221402565088,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":null},{"username":"coderwander","avatarUrl":"https://avatars.githubusercontent.com/u/166724773?u=2d717dae44015c39a79eb7a509a5d7d0912d59b6&v=4","totalScore":28.5304379124341,"prScore":28.5304379124341,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"coderwander: Merged 1 PR (#5031) focused on fixing typos, contributing a total of +2/-2 lines across 2 modified files. Maintained a consistent activity pattern, dedicating 100% of efforts to bugfix work in documentation."},{"username":"notorious-d-e-v","avatarUrl":"https://avatars.githubusercontent.com/u/189247757?u=57d631abf52f54843d1e3e9b3311d5ca4820429a&v=4","totalScore":27.44071895621705,"prScore":27.44071895621705,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":null},{"username":"META-DREAMER","avatarUrl":"https://avatars.githubusercontent.com/u/7143583?u=96f63f10e066a06d5ad592c8efc659e2b84a68fc&v=4","totalScore":5.34,"prScore":0,"issueScore":0,"reviewScore":5,"commentScore":0.33999999999999997,"summary":null},{"username":"jackleeio","avatarUrl":"https://avatars.githubusercontent.com/u/20477587?u=c5184dab6d021733d10c8f975b20e391856303d6&v=4","totalScore":2,"prScore":0,"issueScore":2,"reviewScore":0,"commentScore":0,"summary":null},{"username":"Dangoz","avatarUrl":"https://avatars.githubusercontent.com/u/71613713?u=1839f372422c7a5503a713dca22981490b4ea7da&v=4","totalScore":0.2,"prScore":0,"issueScore":0,"reviewScore":0,"commentScore":0.2,"summary":null}],"focusAreas":[{"area":"cli","count":135},{"area":"core","count":53},{"area":"plugin-sql","count":17},{"area":"plugin-dummy-services","count":12},{"area":"client","count":11},{"area":"plugin-bootstrap","count":9},{"area":"docs","count":3},{"area":".github/workflows","count":1},{"area":"scripts","count":1}],"topIssues":[{"id":"I_kwDOMT5cIs66yPsU","title":"Unable to load custom characters after upgrading to 1.0.7","author":"jonathanprozzi","number":5039,"repository":"elizaos/eliza","body":"$4","createdAt":"2025-06-10T14:02:57Z","closedAt":"2025-06-11T05:11:31Z","state":"CLOSED","commentCount":5},{"id":"I_kwDONkwNcc66yAZc","title":"Conflict issue between TWITTER_INTERACTION_ENABLE and TWITTER_TARGET_USERS","author":"jackleeio","number":21,"repository":"elizaos-plugins/plugin-twitter","body":"When TWITTER_INTERACTION_ENABLE is set to True, interactions will occur with all tweets even if TWITTER_TARGET_USERS is set.","createdAt":"2025-06-10T13:45:51Z","closedAt":null,"state":"OPEN","commentCount":0}],"topPullRequests":[{"id":"PR_kwDOMT5cIs6Z8Ksx","title":"chore: v1.0.8","author":"ChristopherTrimboli","number":5051,"body":"includes PRs:\r\n\r\n- #5026\r\n- #5028\r\n- #5027\r\n- #5018\r\n- #5016\r\n- #5010\r\n- #5038\r\n- #5042\r\n- #5041\r\n- #5031\r\n- #5032\r\n- #5034\r\n- #5035\r\n- #4968\r\n- #5033\r\n- #5036\r\n- #5030\r\n- #5044\r\n- #5048\r\n- #5043\r\n- #5049\r\n- #5047\r\n- #5050 ","repository":"elizaos/eliza","createdAt":"2025-06-10T23:34:04Z","mergedAt":"2025-06-11T01:04:51Z","additions":24253,"deletions":20227},{"id":"PR_kwDOMT5cIs6Z7fmU","title":"chore: Update docs","author":"madjin","number":5046,"body":"Twitter plugin will be undergoing maintenance, updating docs to reflect that\r\n \r\n- ✅ Added deprecation notices to Twitter plugin and client documentation\r\n- ✅ Removed Twitter from main intro/README featured connectors lists\r\n- ✅ Removed entire Twitter troubleshooting section from FAQ\r\n- ✅ Marked Twitter environment variables as deprecated in .env.example\r\n- ✅ Updated quickstart guide\r\n- ✅ Replaced Twitter examples in migration tutorial with Telegram/Farcaster\r\n- ✅ Updated plugin examples in core documentation to use Farcaster instead\r\n- ✅ Removed Twitter from plugin showcase lists\r\n- ✅ Added \"Twitter/X integration undergoing maintenance\" to changelog\r\n","repository":"elizaos/eliza","createdAt":"2025-06-10T21:19:56Z","mergedAt":"2025-06-12T20:41:55Z","additions":15515,"deletions":17614},{"id":"PR_kwDOMT5cIs6ZvyIq","title":"feat: Dynamic loading of database tables, rebuild plugin-sql, ","author":"lalalune","number":5018,"body":"This is a big PR\r\n\r\n- Rewrite plugin-sql to dynamically migrate code\r\n- Rewrite CLI commands to load plugin dependencies, migrate db tables\r\n- Refactor types and add service types which can be inherited by dependent plugins\r\n\r\nOverall should not change a ton of functionality but should enable fully modular plugins. We can move konwledge / document table to the knowledge plugin, for example","repository":"elizaos/eliza","createdAt":"2025-06-09T20:43:10Z","mergedAt":"2025-06-10T07:14:13Z","additions":12195,"deletions":10105},{"id":"PR_kwDOMT5cIs6Z2CDP","title":"refactor: reorganize cli commands into modular structure","author":"wtfsayo","number":5036,"body":"$5","repository":"elizaos/eliza","createdAt":"2025-06-10T11:48:28Z","mergedAt":"2025-06-10T18:02:22Z","additions":6749,"deletions":5221},{"id":"PR_kwDOMT5cIs6Zmx7d","title":"feat: Reorganize API routes into logical domain-based structure","author":"wtfsayo","number":5010,"body":"$6","repository":"elizaos/eliza","createdAt":"2025-06-09T00:36:47Z","mergedAt":"2025-06-10T09:10:17Z","additions":4896,"deletions":3816},{"id":"PR_kwDOMT5cIs6ZvMAx","title":"feat: migrate CLI prompts from prompts library to @clack/prompts","author":"wtfsayo","number":5016,"body":"$7","repository":"elizaos/eliza","createdAt":"2025-06-09T19:39:53Z","mergedAt":"2025-06-10T08:54:09Z","additions":2108,"deletions":6553},{"id":"PR_kwDOMT5cIs6Zzc-w","title":"feat: add dummy services","author":"lalalune","number":5030,"body":"This PR adds dummy services which can be depended on by other plugins\r\n\r\nAll shared service types should have a dummy implementation for use in testing","repository":"elizaos/eliza","createdAt":"2025-06-10T07:54:14Z","mergedAt":"2025-06-10T18:02:36Z","additions":1563,"deletions":0},{"id":"PR_kwDOMT5cIs6Z7pzv","title":"chore: add comprehensive Postman collection for elizaOS APIs","author":"wtfsayo","number":5047,"body":"## Summary\n• Added complete Postman collection with 90+ REST API endpoints covering all Eliza framework APIs\n• Fixed URL paths and organized endpoints into logical categories (agents, messaging, memory, audio, etc.)\n• Includes collection variables and auto-generated test UUIDs for easy testing\n\n## Test plan\n- [x] Import eliza.postman.json into Postman\n- [x] Verify all endpoint URLs match actual implementation  \n- [x] Test collection variables work correctly\n- [x] Confirm coverage of all discovered API endpoints","repository":"elizaos/eliza","createdAt":"2025-06-10T21:44:58Z","mergedAt":"2025-06-10T23:33:20Z","additions":1386,"deletions":0},{"id":"PR_kwDONkwHXM6Z7T_p","title":"feat: support optional data param in transfer template","author":"jonathanprozzi","number":16,"body":"$8","repository":"elizaos-plugins/plugin-evm","createdAt":"2025-06-10T20:51:39Z","mergedAt":"2025-09-08T14:39:25Z","additions":1307,"deletions":250},{"id":"PR_kwDOMT5cIs6Zh6ua","title":"feat: Load dependencies when loading plugins","author":"lalalune","number":4994,"body":"This PR loads dependencies from the 'dependencies' list in the Plugin\r\n\r\nThis enables plugins to import other plugins and for tests to pass when running them\r\n\r\nWe need to verify that this will work correctly with a variety of plugins and edge cases on main when actually running plugins","repository":"elizaos/eliza","createdAt":"2025-06-07T18:44:42Z","mergedAt":null,"additions":946,"deletions":272},{"id":"PR_kwDOMT5cIs6Z8KlY","title":"fix: update prompt, change actions logic, adjust for responses inste…","author":"0xbbjoker","number":5050,"body":"$9","repository":"elizaos/eliza","createdAt":"2025-06-10T23:33:35Z","mergedAt":"2025-06-11T00:02:06Z","additions":809,"deletions":235},{"id":"PR_kwDOMT5cIs6ZX7Qb","title":"fix: implement real-time message deletion via SocketIO","author":"standujar","number":4968,"body":"$a","repository":"elizaos/eliza","createdAt":"2025-06-06T11:00:53Z","mergedAt":"2025-06-10T17:59:58Z","additions":607,"deletions":48},{"id":"PR_kwDOMT5cIs6Z46y1","title":"chore: OpenTelemetry instrumentation while preserving Sentry","author":"wtfsayo","number":5042,"body":"$b","repository":"elizaos/eliza","createdAt":"2025-06-10T15:52:38Z","mergedAt":"2025-06-10T17:43:34Z","additions":536,"deletions":1662},{"id":"PR_kwDOMT5cIs6Z4UIg","title":"Fix: Ensure correct .elizadb, .eliza placement for projects + plugins across monorepo contexts","author":"yungalgo","number":5040,"body":"$c","repository":"elizaos/eliza","createdAt":"2025-06-10T14:58:25Z","mergedAt":null,"additions":297,"deletions":82},{"id":"PR_kwDOMT5cIs6Z2R4A","title":"feat: handle delete chats / channels","author":"ChristopherTrimboli","number":5037,"body":"$d","repository":"elizaos/eliza","createdAt":"2025-06-10T12:10:13Z","mergedAt":null,"additions":297,"deletions":17},{"id":"PR_kwDOMT5cIs6Zv1E2","title":"feat: refactor / split core types","author":"lalalune","number":5020,"body":"This PR splits up core types, cleans up some issues, adds new service interfaces for common service types\r\n\r\nThis shouldn't break or change anything. Everything should continue to work on merge.","repository":"elizaos/eliza","createdAt":"2025-06-09T20:49:32Z","mergedAt":"2025-06-10T07:14:14Z","additions":247,"deletions":228},{"id":"PR_kwDOMT5cIs6ZzZjh","title":"fix: project loading","author":"lalalune","number":5029,"body":"This PR fixes project and plugin loading, which had a regression","repository":"elizaos/eliza","createdAt":"2025-06-10T07:48:08Z","mergedAt":null,"additions":123,"deletions":19},{"id":"PR_kwDOMT5cIs6Z1fYp","title":"fix: onboarding user settings error","author":"ChristopherTrimboli","number":5033,"body":"$e","repository":"elizaos/eliza","createdAt":"2025-06-10T10:56:49Z","mergedAt":"2025-06-10T18:01:27Z","additions":103,"deletions":5},{"id":"PR_kwDOMT5cIs6Z8I0B","title":"fix: dup chats","author":"ChristopherTrimboli","number":5049,"body":"","repository":"elizaos/eliza","createdAt":"2025-06-10T23:25:52Z","mergedAt":"2025-06-10T23:33:03Z","additions":86,"deletions":25},{"id":"PR_kwDOMT5cIs6Z6iKy","title":"chore: migrate all generated files into .eliza","author":"ChristopherTrimboli","number":5043,"body":"$f","repository":"elizaos/eliza","createdAt":"2025-06-10T19:03:38Z","mergedAt":"2025-06-10T23:32:56Z","additions":77,"deletions":18},{"id":"PR_kwDOMT5cIs6ZYB_L","title":"Fix: plugin route parameter matching in agent router","author":"standujar","number":4969,"body":"$10","repository":"elizaos/eliza","createdAt":"2025-06-06T11:14:22Z","mergedAt":null,"additions":76,"deletions":14},{"id":"PR_kwDOMT5cIs6Z6iWB","title":"Fix: Enable loading project agents when no character files specified","author":"wtfsayo","number":5044,"body":"## Summary\n- Enables automatic loading of project agents when no `--character` flag is provided to the start command\n- Adds support for `ProjectAgent` type with initialization functions and plugins\n- Improves agent discovery by checking project configuration first\n\n## Test plan\n- [ ] Test starting agents with `--character` flag (existing behavior)\n- [ ] Test starting agents without any flags in a project directory\n- [ ] Test fallback to default Eliza character when no project config exists\n- [ ] Verify agents start with their proper initialization functions","repository":"elizaos/eliza","createdAt":"2025-06-10T19:04:02Z","mergedAt":"2025-06-10T19:07:30Z","additions":53,"deletions":5},{"id":"PR_kwDOOu4gVs6ZxgWo","title":"Fix: Bad base64 regex","author":"wookosh","number":18,"body":"$11","repository":"elizaos-plugins/plugin-knowledge","createdAt":"2025-06-10T02:33:06Z","mergedAt":"2025-06-16T22:46:05Z","additions":40,"deletions":6},{"id":"PR_kwDOMT5cIs6Z1Pcp","title":"fix: convert dates, fix agent create","author":"ChristopherTrimboli","number":5032,"body":"$12","repository":"elizaos/eliza","createdAt":"2025-06-10T10:37:00Z","mergedAt":"2025-06-10T17:57:04Z","additions":21,"deletions":4},{"id":"PR_kwDOMT5cIs6Z1otw","title":"fix: chat history selector reloads","author":"ChristopherTrimboli","number":5034,"body":"Clicking the chat history did not reload the chats.\r\n\r\nThis pull request adds a safeguard to ensure that the current DM channel is cleared if it does not belong to the active agent, improving the handling of agent switching in the `Chat` component.\r\n\r\nKey change:\r\n\r\n* [`packages/client/src/components/chat.tsx`](diffhunk://#diff-6ede45d69eb212ef94c4b9bc5ae856eed19d120f07edd9a37667f31f41afd5caR419-R431): Added logic in the `useEffect` hook to verify if the current DM channel belongs to the active agent. If not, the channel is cleared, and the effect exits early to rerun with the updated state. This prevents issues when switching agents.","repository":"elizaos/eliza","createdAt":"2025-06-10T11:09:06Z","mergedAt":"2025-06-10T17:57:50Z","additions":13,"deletions":0},{"id":"PR_kwDOMT5cIs6Z7qRP","title":"fix: load the env config before agent project is loaded","author":"0xbbjoker","number":5048,"body":"Fixes project load as project is loaded without .env.\r\n\r\nSo we need to load the .env first and only then we can proceed to project load otherwise we would need dynamic project load. ","repository":"elizaos/eliza","createdAt":"2025-06-10T21:46:18Z","mergedAt":"2025-06-10T21:52:50Z","additions":10,"deletions":6},{"id":"PR_kwDOMT5cIs6Z1upX","title":"fix: remove message from chat UI on delete","author":"ChristopherTrimboli","number":5035,"body":"","repository":"elizaos/eliza","createdAt":"2025-06-10T11:18:57Z","mergedAt":"2025-06-10T17:58:02Z","additions":4,"deletions":2},{"id":"PR_kwDOMT5cIs6ZyAO6","title":"fix: Ensure waitForServer uses SERVER_PORT env if provided","author":"tcm390","number":5027,"body":"I ran into this issue on a port other than 3000 (in my case, 3050). \r\nThis happened because the waitForServer() function was hardcoded to check http://localhost:3000/api/ping, ignoring the SERVER_PORT environment variable.\r\n\r\nThis PR updates the script to dynamically build the health check URL using SERVER_PORT env\r\n\r\n\r\n<img width=\"879\" alt=\"Screenshot 2025-06-10 at 12 30 31 PM\" src=\"https://github.com/user-attachments/assets/0eec2099-546c-4ae8-85e1-6c92320b0a3a\" />\r\n","repository":"elizaos/eliza","createdAt":"2025-06-10T04:33:22Z","mergedAt":"2025-06-10T06:40:38Z","additions":4,"deletions":1},{"id":"PR_kwDOMT5cIs6ZxcUH","title":"feat: Add target to Content","author":"odilitime","number":5026,"body":"# Risks\r\n\r\nLow\r\n\r\n# Background\r\n\r\n## What does this PR do?\r\n\r\nadd an optional target to Content type\r\n\r\n## What kind of change is this?\r\n\r\nImprovements (misc. changes to existing features)\r\n\r\n## Why are we doing this? Any context or related work?\r\n\r\nSo we have a clear way for plugin to describe when a response should be sent over DM\r\n\r\n# Documentation changes needed?\r\n\r\nMy changes do not require a change to the project documentation.","repository":"elizaos/eliza","createdAt":"2025-06-10T02:19:58Z","mergedAt":"2025-06-10T02:40:53Z","additions":3,"deletions":0},{"id":"PR_kwDONkwLhs6Zw8a3","title":"Set chain/service & change service name to chain_solana","author":"odilitime","number":8,"body":"Potentially breaking for others","repository":"elizaos-plugins/plugin-solana","createdAt":"2025-06-10T00:10:33Z","mergedAt":"2025-08-15T09:26:44Z","additions":3,"deletions":1},{"id":"PR_kwDOMT5cIs6Z4f4V","title":"fix: (cli) resolve double update messaging and improve elizaos update instructions","author":"yungalgo","number":5041,"body":"$13","repository":"elizaos/eliza","createdAt":"2025-06-10T15:15:02Z","mergedAt":"2025-06-10T17:44:15Z","additions":2,"deletions":2},{"id":"PR_kwDOMT5cIs6Z0lPJ","title":"chore: fix typos","author":"coderwander","number":5031,"body":"$14","repository":"elizaos/eliza","createdAt":"2025-06-10T09:40:03Z","mergedAt":"2025-06-10T17:45:04Z","additions":2,"deletions":2},{"id":"PR_kwDONkg7v86Z3m_s","title":"Update index.json","author":"notorious-d-e-v","number":172,"body":"$15","repository":"elizaos-plugins/registry","createdAt":"2025-06-10T14:03:47Z","mergedAt":"2025-06-19T14:47:48Z","additions":2,"deletions":2},{"id":"PR_kwDOMT5cIs6Z7auT","title":"fix(plugin-sql): use correct agentId from memory in database operations","author":"standujar","number":5045,"body":"$16","repository":"elizaos/eliza","createdAt":"2025-06-10T21:07:54Z","mergedAt":"2025-06-11T17:44:36Z","additions":1,"deletions":1},{"id":"PR_kwDOMT5cIs6ZynDu","title":"fix: remove truncate","author":"tcm390","number":5028,"body":"We don't need to truncate Twitter posts manually. I've already handled this in the Twitter plugin: if a post exceeds 280 characters and the account isn't premium, it falls back to truncateToCompleteSentence.\r\n\r\n\r\nhttps://github.com/elizaos-plugins/plugin-twitter/blob/891433de508eb4d9ce952c8c7512942f3e26620e/src/utils.ts#L97","repository":"elizaos/eliza","createdAt":"2025-06-10T06:21:47Z","mergedAt":"2025-06-10T06:40:11Z","additions":1,"deletions":4},{"id":"PR_kwDOMT5cIs6Z2x54","title":"chore: remove model caching since its slower","author":"wtfsayo","number":5038,"body":"its faster do download models than caching / un-compressing","repository":"elizaos/eliza","createdAt":"2025-06-10T12:56:20Z","mergedAt":"2025-06-10T12:56:28Z","additions":0,"deletions":8}],"detailedContributorSummaries":{"0xbbjoker":"0xbbjoker: Merged 2 PRs (#5048 and #5050) with significant contributions totaling +819/-241 lines, demonstrating a balanced focus on both feature work and bug fixes. Active today with consistent contributions, reflecting a strong commitment to the project.","ChristopherTrimboli":"ChristopherTrimboli: Merged 7 PRs, including significant bug fixes such as #5033 \"fix: onboarding user settings error\" (+103/-5 lines) and #5049 \"fix: dup chats\" (+86/-25 lines), while also maintaining a consistent activity pattern with 10 commits and a focus on bugfix work (40%). Additionally, he opened 1 PR (#5037) related to handling delete chats/channels and conducted 7 reviews, all with approvals.","coderwander":"coderwander: Merged 1 PR (#5031) focused on fixing typos, contributing a total of +2/-2 lines across 2 modified files. Maintained a consistent activity pattern, dedicating 100% of efforts to bugfix work in documentation.","jonathanprozzi":"jonathanprozzi: Created 1 issue (#5039 \"Unable to load custom characters after upgrading to 1.0.7\", CLOSED) and commented on 2 issues, demonstrating sporadic activity today.","lalalune":"lalalune: Merged 1 PR (#5030 \"feat: add dummy services\") with significant changes of +1563 lines, while also working on an open PR (#5029 \"fix: project loading\"). Made extensive modifications across 164 files, totaling +13351/-15436 lines, with a balanced focus on bugfix, refactor, and other work.","madjin":"madjin: Merged 1 pull request (#5046) focused on updating documentation, contributing a significant change of +23453/-28011 lines. Actively modified 10 files with a total of +24/-82 lines, maintaining a consistent work pattern.","odilitime":"odilitime: Merged 1 PR (#5026) with a contribution of +3 lines, while modifying 46 files with a total of +344/-6167 lines across 2 commits, demonstrating a balanced focus on feature and refactor work. Actively engaged in the review process with 6 total reviews, including 1 approval and 5 comments.","standujar":"standujar: Merged 1 PR (#5045) with significant changes (+1784/-4849 lines) and modified 55 files, focusing primarily on feature work (67%). Maintained a consistent activity pattern with 9 commits today.","tcm390":"tcm390: Merged 2 PRs, including #5028 \"fix: remove truncate\" (+1/-4 lines) and #5027 \"fix: Ensure waitForServer uses SERVER_PORT env if provided\" (+5/-2 lines), while modifying 3 files with a total of +6/-6 lines across 3 commits. Maintained a consistent activity pattern, being active every day.","wtfsayo":"wtfsayo: Merged 5 PRs, including a major refactor in #5036 (+8501/-7418 lines) and enhancements to API instrumentation in #5042 (+536/-1662 lines), while actively commenting on 5 issues and 3 PRs. The contributions reflect a strong focus on other work (53%) and feature development (26%), with a total of 19 commits modifying 165 files (+9220/-7383 lines).","yungalgo":"yungalgo: Merged 1 PR (#5041) with minor changes (+2/-2 lines) and opened another PR (#5040) focused on project structure. Made significant code modifications across 17 files (+302/-87 lines), demonstrating a consistent work pattern with a primary focus on other work (71%)."}},"summaryContent":"$17","className":"self-end sm:self-start"}]]}],"$L18","$L19","$L1a"]}]}],["$L1b","$L1c","$L1d"],"$L1e"]}],"loading":null,"isPartial":false}
+18:["$","div",null,{"className":"mb-6","children":["$","div",null,{"className":"flex items-center justify-between","children":[[["$","$L1f",null,{"href":"/summary/day/2025-06-09","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left mr-2 h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"children":"Previous"}],false],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$L1f",null,{"href":"/summary/day/2025-06-09","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Previous"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]],["$","div",null,{"className":"flex flex-col items-center","children":[["$","div",null,{"className":"text-sm font-medium text-gray-500","children":["Daily"," Summary"]}],["$","time",null,{"dateTime":"2025-06-10","className":"text-md font-bold","children":"Jun 10, 2025"}]]}],[["$","$L1f",null,{"href":"/summary/day/2025-06-11","children":[false,["$","span",null,{"children":"Next"}],["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right ml-2 h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}]],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$L1f",null,{"href":"/summary/day/2025-06-11","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Next"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]]]}]}]
+21:Ta13,**Describe the bug**
+
+After upgrading an existing project to use `@elizaos/core` version `1.0.7`, our custom character is no longer registered as an agent. Opening the chat interface/dev environment on `localhost` only shows Eliza as an agent and not our character. This previously worked with `1.0.6`. 
+
+I tested with a newly scaffolded project and set up a character there as well and noticed the same behavior with only Eliza being shown as an agent.
+
+**To Reproduce**
+
+- Upgrade an existing project to use `"@elizaos/core": "^1.0.7"` or start a fresh one using this version
+- Create a new character file with character settings and load that as the agent in the `index.ts`
+- Start the server
+- Open `localhost` to view the chat/dev environment and check if custom character is there -- we only saw Eliza and not our agent
+
+Code snippets for characters:
+
+`herbert.ts` snippet:
+
+```typescript
+export const herbert: Character = {
+  name: 'Herbert',
+  plugins: [
+    '@elizaos/plugin-sql',
+    ...(process.env.EVM_PRIVATE_KEY ? ['@elizaos/plugin-evm'] : []),
+    ...(process.env.ANTHROPIC_API_KEY ? ['@elizaos/plugin-anthropic'] : []),
+    ...(process.env.OPENAI_API_KEY ? ['@elizaos/plugin-openai'] : []),
+    ...(process.env.OPENAI_API_KEY ? ['@elizaos/plugin-knowledge'] : []),
+    ...(!process.env.OPENAI_API_KEY ? ['@elizaos/plugin-local-ai'] : []),
+    ...(process.env.DISCORD_API_TOKEN ? ['@elizaos/plugin-discord'] : []),
+    ...(process.env.TWITTER_USERNAME ? ['@elizaos/plugin-twitter'] : []),
+    ...(process.env.TELEGRAM_BOT_TOKEN ? ['@elizaos/plugin-telegram'] : []),
+    ...(!process.env.IGNORE_BOOTSTRAP ? ['@elizaos/plugin-bootstrap'] : []),
+  ],
+... (more settings)
+}
+```
+
+`index.ts`:
+```typescript
+const herbertAgent: ProjectAgent = {
+  character: herbert,
+  init: async (runtime: IAgentRuntime) => initCharacter({ runtime }),
+};
+const project: Project = {
+  agents: [herbertAgent],
+};
+```
+
+**Expected behavior**
+
+- Expected that Eliza would find the new character (Herbert) and register it as an agent (previous behavior in existing project)
+- We didn't change any config in the existing project but after upgrading versions we could no longer find/interact with Herbert
+
+**Additional context**
+
+- Tested this with both a newly scaffolded project as well as in an existing project. Our existing project had our custom agent/character loading but I then upgraded to `1.0.7` and Eliza is the only registered agent. Seems to possibly be using Eliza as a fallback and ignoring our custom character files, even though they're being detected when the server starts.
+22:Te38,## Summary
+
+Comprehensive refactoring of ALL major CLI commands from monolithic architecture to modular structure for improved maintainability and scalability. This PR systematically transforms large single-file implementations into well-organized, reusable modules following a consistent architectural pattern.
+
+
+
+## Architecture Pattern
+
+Every command now follows this consistent modular structure:
+
+```
+commands/[command]/
+├── index.ts          # Command registration & main entry point
+├── types.ts          # TypeScript interfaces & type definitions  
+├── actions/          # Core business logic & operations
+│   ├── [feature].ts  # Specific action implementations
+│   └── index.ts      # Action exports
+└── utils/           # Helper functions & utilities
+    ├── [utility].ts  # Specific utility implementations
+    └── index.ts      # Utility exports
+```
+
+## Refactoring Strategy
+
+### **Complete Modularization**
+- **87 files** created/modified in commands directory
+- **10 major commands** fully refactored
+- **Consistent patterns** across all modules
+- **Zero breaking changes** - all imports continue to work
+
+## Key Benefits
+
+### **Separation of Concerns**
+- **Actions**: Business logic and core operations
+- **Utils**: Validation, display, and utility functions  
+- **Types**: TypeScript definitions and schemas
+- **Shared**: Common functionality across commands
+
+### **Improved Maintainability**
+- Individual files are focused and manageable (20-200 lines vs 300-800+ line monoliths)
+- Easier to locate and modify specific functionality
+- Clear boundaries between different concerns
+- Consistent patterns across ALL commands
+
+### **Enhanced Reusability**
+- Shared utilities prevent code duplication
+- Modular functions can be imported independently
+- Common patterns for server management, file watching, plugin handling
+- Centralized error handling and validation
+
+### **Better Testing & Development**
+- Individual functions can be unit tested in isolation
+- Mocking dependencies is simplified
+- Development workflows are now standardized
+- Plugin management is consistent across commands
+
+## Backward Compatibility
+
+✅ **Zero breaking changes** - All existing CLI commands, options, and workflows work exactly as before. The modular structure coexists with original interfaces through re-export proxies, ensuring full backward compatibility.
+
+## Technical Highlights
+
+- **Development Workflow**: Enhanced dev command with improved file watching and server management
+- **Plugin System**: Comprehensive plugin loading, installation, and dependency resolution
+- **Registry Integration**: Complete publishing pipeline for npm and GitHub
+- **Environment Management**: Interactive configuration with validation
+- **Testing Framework**: Unified component and E2E testing with auto-detection
+- **Build Orchestration**: Modular build utilities supporting projects, plugins, and monorepos
+- **Error Handling**: Consistent error handling patterns across all commands
+
+## Impact Statistics
+
+- **~4,000+ lines** of monolithic code refactored into focused modules
+- **87 files** changed in commands directory
+- **10 major commands** completely modularized
+- **0 breaking changes** - full backward compatibility maintained
+- **Consistent architecture** established for future development
+
+This comprehensive refactoring transforms the entire ElizaOS CLI from a collection of monolithic commands into a well-organized, modular architecture with improved maintainability, consistency, and developer experience.23:T18e4,## Summary
+
+This PR implements a comprehensive API domain reorganization and improves the client-side confirmation UX.
+
+### Major API Domain Reorganization 🏗️
+
+**Complete restructuring of the `/packages/cli/src/server/api/` directory:**
+
+- **Deleted monolithic files**: Removed large single-file modules (`agent.ts`, `world.ts`) 
+- **Created domain-based structure** with organized subdirectories:
+
+#### `/api/agents/` - Agent Management Domain
+- `crud.ts` - Create, read, update, delete operations
+- `lifecycle.ts` - Start/stop/restart agent lifecycle management  
+- `logs.ts` - Agent logging and diagnostics
+- `panels.ts` - Agent panel/dashboard functionality
+- `worlds.ts` - World/environment management for agents
+- `index.ts` - Agent domain exports and routing
+
+#### `/api/audio/` - Audio Processing Domain  
+- `conversation.ts` - Conversational audio handling
+- `processing.ts` - Audio processing utilities
+- `synthesis.ts` - Text-to-speech and audio synthesis
+- `index.ts` - Audio domain exports
+
+#### `/api/media/` - Media Management Domain
+- `agents.ts` - Agent-specific media operations
+- `channels.ts` - Channel media management
+- `index.ts` - Media domain exports
+
+#### `/api/memory/` - Memory & State Management Domain
+- `agents.ts` - Agent memory operations
+- `groups.ts` - Group/collective memory management  
+- `rooms.ts` - Room-based memory handling
+- `index.ts` - Memory domain exports
+
+#### `/api/messaging/` - Communication Domain
+- `channels.ts` - Channel operations (moved from `messages.ts`)
+- `core.ts` - Core messaging functionality
+- `servers.ts` - Server-level messaging coordination
+- `index.ts` - Messaging domain exports
+
+#### `/api/runtime/` - Runtime Management Domain
+- `debug.ts` - Runtime debugging utilities
+- `health.ts` - Health checks and monitoring
+- `logging.ts` - System-wide logging management
+- `index.ts` - Runtime domain exports
+
+#### `/api/shared/` - Common Utilities Domain
+- `file-utils.ts` - File handling utilities
+- `middleware.ts` - Security middleware (Helmet, rate limiting)
+- `response-utils.ts` - Standardized API response helpers
+- `validation.ts` - Input validation utilities
+- `uploads/index.ts` - File upload handling
+- `index.ts` - Shared utilities exports
+
+#### `/api/system/` - System Configuration Domain
+- `environment.ts` - Environment configuration (moved from `env.ts`)
+- `index.ts` - System domain exports
+
+#### `/api/tee/` - TEE (Trusted Execution Environment) Domain
+- `tee.ts` - TEE operations (moved from `tee.ts`)
+- `index.ts` - TEE domain exports
+
+### Backend API Improvements
+- **Fix agent start/stop endpoints** to use proper REST patterns (`POST /agents/:id/start`, `POST /agents/:id/stop`)
+- **Add missing channel operations** - implemented `deleteChannel` and `updateChannel` methods
+- **Fix URL path mismatch** in frontend `deleteChannelMessage` API call (was using "messaging" instead of "messages")
+- **Add security middleware** with Helmet and rate limiting for production readiness
+- **Standardize response handling** with consistent error/success response utilities
+- **Remove legacy test files** and cleanup obsolete testing infrastructure
+
+### Frontend Confirmation System Improvements  
+- **Replace browser alerts with proper modal confirmations** using Radix UI AlertDialog
+- **Create reusable ConfirmationDialog component** to avoid code duplication
+- **Add useConfirmation hook** for consistent confirmation state management across components
+- **Update confirmation patterns in**:
+  - Agent deletion (agent-settings.tsx) 
+  - Chat deletion and clearing (chat.tsx)
+  - Agent stopping (stop-agent-button.tsx)
+  - Group channel deletion (app-sidebar.tsx)
+- **Use direct JSX rendering** pattern with `<ConfirmationDialog>` components
+
+### Technical Details
+- **Backend**: Complete API domain reorganization, security middleware, missing endpoints, standardized utilities
+- **Frontend**: Eliminated window.confirm usage, implemented accessible modal dialogs
+- **Type Safety**: Proper TypeScript interfaces for all new components and hooks
+- **Architecture**: Modular, domain-driven API structure for better maintainability
+- **UX**: Consistent confirmation dialogs with proper destructive action styling
+
+### Test Plan
+- [x] Build passes successfully
+- [x] All confirmation dialogs work with proper modal UX
+- [x] Agent start/stop operations work correctly
+- [x] Channel operations (create/delete/update) function properly
+- [x] No remaining window.confirm browser alerts
+- [x] API domain reorganization maintains functionality
+
+## Breaking Changes
+- Agent API endpoints moved from `/agents` to `/api/agents` 
+- Agent start/stop now use `POST /agents/:id/start` and `POST /agents/:id/stop` instead of PUT operations
+- API file structure completely reorganized (affects imports for custom extensions)
+
+## Files Changed
+- **Backend**: 47 API files reorganized, security middleware, missing endpoints
+- **Frontend**: Confirmation system, dialog components, hook utilities  
+- **Dependencies**: Added helmet, express-rate-limit, @types/helmet
+- **Structure**: Complete API domain reorganization from monolithic to modular architecture
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+- **New Features**
+  - Introduced robust, modular API endpoints for agent, messaging, media, audio, memory, and system management with improved security, validation, and error handling.
+  - Added new endpoints for audio processing (transcription, text-to-speech, speech conversation) and secure media uploads for agents and channels.
+  - Enhanced confirmation dialogs in the user interface for destructive actions, providing a consistent and user-friendly experience.
+  - Improved documentation with new and updated API endpoint references.
+
+- **Bug Fixes**
+  - Addressed frontend loading issues by aligning API routes and improving chat context detection.
+
+- **Refactor**
+  - Reorganized API routing structure for clarity and scalability, replacing legacy endpoints and consolidating related routes.
+  - Enhanced file upload security and validation, including stricter filename sanitization and MIME type checks.
+
+- **Chores**
+  - Added security middleware and rate limiting for all API endpoints.
+  - Updated dependencies to include security and rate-limiting libraries.
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->24:T978,## Summary
+Replaces the legacy `prompts` library with modern `@clack/prompts` across all CLI commands for enhanced user experience and type safety.
+
+## Changes Made
+- ✅ **All CLI commands migrated**: create, env, publish, update, plugins
+- ✅ **Core utilities updated**: cli-prompts, env-prompt, get-config, github 
+- ✅ **Enhanced UX features added**:
+  - Intro/outro messages for workflows
+  - Spinners for save operations  
+  - Better validation with clearer error messages
+  - Improved cancellation handling with proper exit codes
+  - Setup instruction notes (e.g., GitHub token creation)
+- ✅ **Type safety improvements**: Better TypeScript validation throughout
+- ✅ **Backward compatibility**: All existing CLI flows maintained
+
+## Benefits
+- **Modern UX**: Visual feedback with spinners, structured intro/outro flows
+- **Better Accessibility**: @clack/prompts has superior keyboard navigation and screen reader support
+- **Type Safety**: Improved TypeScript validation and error handling
+- **Consistency**: Unified prompt library across CLI codebase
+- **Maintainability**: Single modern library vs multiple legacy ones
+
+## Testing
+- [x] All CLI tests passing (`bun run test:cli`)
+- [x] Build successful with no TypeScript errors  
+- [x] Interactive flows verified to maintain existing behavior
+- [x] Cancellation handling tested (Ctrl+C)
+
+## Files Changed
+- `package.json`: Added @clack/prompts@^0.11.0 dependency
+- `src/commands/*.ts`: Updated create, env, publish, update commands
+- `src/utils/*.ts`: Updated cli-prompts, env-prompt, get-config, github utilities
+- `bun.lock`: Updated dependency lockfile
+
+## Next Steps
+Future improvements that could be made in separate PRs:
+- [ ] Migrate `plugin-creator.ts` from inquirer to @clack/prompts (complex multi-step forms)
+- [ ] Add more @clack/prompts features like progress bars for long operations
+- [ ] Consider adding `clack.log.step()` for multi-step processes
+- [ ] Evaluate adding `clack.group()` for related prompt groupings
+
+## Migration Details
+### Before (prompts library):
+```typescript
+const response = await prompts({
+  type: 'text', 
+  name: 'value',
+  message: 'Enter value:'
+});
+```
+
+### After (@clack/prompts):
+```typescript
+const value = await clack.text({
+  message: 'Enter value:',
+  validate: (input) => input ? undefined : 'Value required'
+});
+
+if (clack.isCancel(value)) {
+  clack.cancel('Operation cancelled.');
+  process.exit(0);
+}
+```25:T87e,## Overview
+
+In testing passing in calldata, we noticed that the `data` field was always `null` even though we were including it. When adding the changes to the `transferTemplate` to look for data, and also including it in the XML, we no longer saw it coming through as `null`. 
+
+The template now properly extracts and passes through any provided data/calldata, and the extended type guard in `transfer.ts` addresses an edge case where data was sometimes sent as `'null'` which didn't trigger the initial default to `0x`.
+
+## Changes
+
+### Template Updates
+Added support for data/calldata in the transfer template by adding:
+- Instruction to extract "Additional data/calldata (if any is included)"
+- XML response field `<data>string | null</data>`
+
+Previously,  the `TransferParams` interface supported an optional data parameter but it seemed that not being included in the template meant it was always `null`, even when provided in the request.
+
+These changes enable proper handling of transaction data in transfers while protecting against LLM response variations. The template now properly extracts and passes through any provided data/calldata, and the code safely normalizes edge cases to ensure valid transaction data.
+
+The `bun.lock` change is from a fresh install of the repo.
+
+**Note**: I tested this on version `1.0.6` but haven't been able to run `1.0.7` due to the character issue I filed on the main repo. Wanted to put up the PR in the meantime! Thank you -- greatly appreciate all the work ya'll are doing to transition!
+
+### Type Guard Change to Handle Edge Case
+
+Added additional defensive handling in `TransferAction` for LLM response edge cases:
+```typescript
+// Normalize empty or invalid data field to '0x'
+if (!params.data || params.data === '0x') {
+  params.data = '0x';
+} else {
+  // Handle case where template returns 'null' string
+  params.data = (params.data as string) === 'null' ? '0x' : params.data;
+}
+```
+This handles cases where the LLM returns 'null' as a string instead of a null value, ensuring the transaction data is always properly formatted.
+
+- `bun test` tests all pass:
+```
+ 56 pass
+ 0 fail
+```26:T688,## 🔧 Major Refactor: Actions Logic - Callback to Responses
+
+### Overview
+This PR implements a significant architectural change by refactoring the actions logic from callback-based patterns to response-based patterns. This change provides better control, clarity, and debugging capabilities while addressing critical issues that were introduced in versions 1.0.6 and 1.0.7.
+
+### Key Changes
+- **Architecture**: Migrated from callback-based action handling to response-based patterns
+- **Control Flow**: Improved control flow management for better predictability
+- **Debugging**: Enhanced debugging capabilities with clearer error tracking and response handling
+- **Stability**: Fixed major issues that were causing problems in recent releases (1.0.6 and 1.0.7)
+
+### Benefits
+- ✅ **Better Control**: More precise control over action execution and flow
+- ✅ **Improved Clarity**: Cleaner, more readable code structure
+- ✅ **Enhanced Debugging**: Easier to trace and debug action execution
+- ✅ **Issue Resolution**: Addresses critical stability issues from recent versions
+- ✅ **Maintainability**: More maintainable codebase for future development
+
+### Impact
+- **Lines Changed**: +747 additions, -226 deletions
+- **Scope**: Core actions logic and prompt handling
+- **Breaking Changes**: May require updates to existing action implementations
+
+### Testing
+Please ensure thorough testing of action execution flows, especially:
+- Action response handling
+- Error scenarios and debugging
+- Integration with existing workflows
+- Performance impact assessment
+
+---
+*This refactor is essential for the stability and maintainability of the Eliza framework going forward.*27:Tc43,# Risks
+
+**Medium** - Changes to SocketIO event handling and API routing
+- Client-side state management modifications
+
+# Background
+
+## What does this PR do?
+
+- Add messageDeleted and channelCleared SocketIO events
+- Implement client-side handlers for real-time UI updates  
+- Fix routing to exclude /api/messages/ from plugin handler
+- Add DELETE /central-channels/:channelId endpoint
+- Clean up debug logs and improve TypeScript types
+- Prevent 404 errors when deleting channels
+
+Fixes message deletion requiring page refresh
+
+## What kind of change is this?
+
+**Bug fixes** (non-breaking change which fixes an issue)
+**Improvements** (misc. changes to existing features)
+
+## Why are we doing this? Any context or related work?
+
+Users experienced poor UX where deleted messages remained visible in the chat interface until manually refreshing the page. The DELETE API worked correctly but the UI wasn't receiving real-time updates via SocketIO events.
+
+# Documentation changes needed?
+
+My changes do not require a change to the project documentation.
+
+# Testing
+
+## Where should a reviewer start?
+
+1. Review SocketIO event handling in `socketio-manager.ts` and `use-socket-chat.ts`
+2. Check routing exclusion logic in `eliza/packages/cli/src/server/api/index.ts`
+3. Verify new DELETE endpoint in `messages.ts`
+
+## Detailed testing steps
+
+- Start an agent and open the chat interface
+- Send several messages in a DM or group chat
+- Delete a message using the delete button
+  - Verify message disappears immediately without page refresh
+  - Verify SocketIO `messageDeleted` event is received
+- Clear entire channel using clear button
+  - Verify all messages disappear immediately
+  - Verify SocketIO `channelCleared` event is received
+- Delete a DM channel entirely
+  - Verify no 404 errors occur
+  - Verify proper API response
+
+## Screenshots
+
+### Before
+- Messages remained visible after deletion until page refresh
+- 404 errors when deleting channels
+- Verbose debug logs with emojis
+
+### After  
+- Messages disappear instantly upon deletion
+- Clean channel deletion without errors
+- Cleaner log output
+- Real-time UI updates via SocketIO events
+
+# Deploy Notes
+
+## Database changes
+None - only UI and API routing changes
+
+## Deployment instructions
+Standard build and restart required:
+```bash
+cd eliza
+bun run build:client && bun run build:cli
+```
+Then restart the agent process.
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+- **New Features**
+  - Added the ability to clear all messages in a channel via a new endpoint and corresponding UI updates.
+  - Introduced real-time updates for message deletion and channel clearing, ensuring chat views stay synchronized across clients.
+
+- **Bug Fixes**
+  - Improved routing to ensure certain API requests are handled by the correct middleware.
+
+- **Enhancements**
+  - Improved cache management and state updates in the chat interface when messages are deleted or channels are cleared.
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->28:T679,## Summary
+- Complete removal of OpenTelemetry instrumentation and dependencies from the Eliza codebase
+- Preserves all Sentry error tracking functionality as requested
+
+## Changes Made
+- ✅ Removed all 8 OpenTelemetry dependencies from packages/core/package.json
+- ✅ Deleted entire instrumentation service directory and files
+- ✅ Removed OpenTelemetry imports and instrumentation code from runtime.ts
+- ✅ Cleaned up API server OpenTelemetry imports  
+- ✅ Removed instrumentation test files and setup scripts
+- ✅ Removed INSTRUMENTATION service type from service registry
+- ✅ Cleaned up TSUP configuration external dependencies
+- ✅ Preserved all Sentry error tracking functionality
+
+## Technical Details
+This removes over 1000 lines of OpenTelemetry tracing code including:
+- All span creation and management (`startSpan`, `endSpan`, `startActiveSpan`)
+- Instrumentation service initialization and configuration
+- Trace context propagation and span attributes
+- Complex instrumentation in core methods (registerPlugin, initialize, processActions, evaluate, composeState, useModel, etc.)
+
+## Impact
+- **Reduced bundle size** by removing 8 OpenTelemetry dependencies
+- **Improved performance** by eliminating tracing overhead
+- **Simplified codebase** with cleaner, more readable core runtime code
+- **Maintained functionality** - all core agent features work unchanged
+- **Preserved monitoring** - Sentry error tracking remains fully functional
+
+## Test Plan
+- ✅ All packages build successfully without errors
+- ✅ No remaining OpenTelemetry references in source code
+- ✅ Runtime functionality preserved
+- ✅ Sentry error tracking intact29:T160b,# Fix CLI Database and Config File Creation in Wrong Directories
+
+## Problem
+
+The ElizaOS CLI commands (`elizaos start` and `elizaos dev`) were creating database (`.elizadb`) and configuration (`.eliza`) files in incorrect locations, causing several issues:
+
+1. **Monorepo Root Pollution**: When running from projects/plugins inside the monorepo, files were created in the monorepo root instead of the current working directory
+2. **Subdirectory Execution Issues**: Running commands from subdirectories (e.g., `packages/cli`) would create files in the monorepo root, not the intended location
+3. **Poor User Experience**: No clear guidance when users ran commands from inappropriate directories
+4. **Inconsistent Behavior**: Different directory contexts resulted in unpredictable file placement
+
+## Solution
+
+Implemented comprehensive directory validation and centralized error handling:
+
+### 1. **Centralized Directory Validation**
+
+- Added `handleDirectoryContextErrors()` function for consistent validation across commands
+- Integrated directory type detection into both `start` and `dev` commands
+- Ensured database and config files are always created in the current working directory
+
+### 2. **Enhanced User Guidance**
+
+- **Fatal Errors**: Clear error messages for invalid directory contexts (e.g., running from subdirectories)
+- **Warnings**: Styled warnings for monorepo usage with guidance toward best practices
+- **Styled Messaging**: Consistent, color-coded error and warning displays matching existing UI patterns
+
+### 3. **Improved Plugin Detection**
+
+- Refined heuristics to reduce false positives in plugin detection
+- Fixed issue where `project-tee-starter` was incorrectly flagged as a plugin
+
+### 4. **Deferred Warning Display**
+
+- Monorepo warnings now appear after agent initialization to avoid interrupting startup
+- Uses global flag mechanism to schedule warnings for appropriate timing
+
+## Examples
+
+### Before (Problematic Behavior)
+
+```bash
+# Running from monorepo root
+cd /path/to/eliza
+elizaos start
+# ❌ Creates .elizadb and .eliza in /path/to/eliza
+
+# Running from plugin inside monorepo
+cd /path/to/eliza/packages/plugin-bootstrap
+elizaos start
+# ❌ Creates .elizadb and .eliza in /path/to/eliza (monorepo root)
+
+# Running from subdirectory
+cd /path/to/eliza/packages/cli
+elizaos start
+# ❌ Creates .elizadb and .eliza in /path/to/eliza (monorepo root)
+```
+
+### After (Fixed Behavior)
+
+```bash
+# Running from monorepo root
+cd /path/to/eliza
+elizaos start
+# ✅ Creates .elizadb and .eliza in /path/to/eliza
+# ⚠️  Shows warning: "Running from monorepo root is not best practice"
+
+# Running from plugin inside monorepo
+cd /path/to/eliza/packages/plugin-bootstrap
+elizaos start
+# ✅ Creates .elizadb and .eliza in /path/to/eliza/packages/plugin-bootstrap
+# ⚠️  Shows warning: "Running from monorepo root is not best practice"
+
+# Running from subdirectory
+cd /path/to/eliza/packages/cli
+elizaos start
+# ❌ Shows error: "Must run elizaos start from project or plugin directory"
+# 🛑 Exits with helpful guidance to run "elizaos create"
+```
+
+### Validation Matrix
+
+All directory types now behave correctly:
+
+| Directory Type                     | START | DEV  | Database/Config Location |
+| ---------------------------------- | ----- | ---- | ------------------------ |
+| elizaos-project (outside monorepo) | ✅    | ✅   | Current directory        |
+| elizaos-plugin (outside monorepo)  | ✅    | ✅   | Current directory        |
+| elizaos-project (inside monorepo)  | ✅⚠️  | ✅⚠️ | Current directory        |
+| elizaos-plugin (inside monorepo)   | ✅⚠️  | ✅⚠️ | Current directory        |
+| elizaos-monorepo                   | ✅⚠️  | ✅⚠️ | Current directory        |
+| elizaos-subdir                     | ❌    | ❌   | N/A (exits with error)   |
+
+Legend: ✅ = Works, ⚠️ = Warning shown, ❌ = Error shown and exits
+
+## Files Changed
+
+- `packages/cli/src/commands/dev.ts` - Integrated centralized directory validation
+- `packages/cli/src/commands/start.ts` - Added directory validation to start command
+- `packages/cli/src/server/services/message.ts` - Deferred monorepo warning display
+- `packages/cli/src/utils/directory-detection.ts` - Added comprehensive validation and styling functions
+
+## Benefits
+
+1. **Predictable File Placement**: Database and config files always created in current working directory
+2. **Better Developer Experience**: Clear guidance when commands are run from inappropriate locations
+3. **Monorepo Best Practices**: Gentle warnings guide users toward creating projects outside monorepo
+4. **Consistent UX**: Styled error/warning messages match existing CLI design patterns
+5. **Reduced Support Issues**: Self-explanatory error messages with actionable guidance
+
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+- **New Features**
+  - Improved error and warning messages when running CLI commands from unsupported directories, providing clearer guidance and styled console output.
+  - Centralized directory validation and messaging for CLI commands to enhance user feedback and enforce best practices.
+
+- **Bug Fixes**
+  - Fixed directory detection logic to ensure configuration and database paths are consistently resolved relative to the correct project directory.
+
+- **Enhancements**
+  - Reduced repeated logging of directory paths and types during startup for a cleaner console experience.
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->2a:T9a9,Click: "delete" on a chat in client would do nothing.
+
+This pull request introduces significant enhancements for handling real-time channel events, improving error feedback, and adding database operations for channel management. The changes include implementing a new `useChannelEvents` hook, extending the `SocketIOManager` class to handle channel-related events, and updating the database adapter to support channel updates and deletions.
+
+### Real-time event handling:
+
+* **New `useChannelEvents` hook**: Introduced a hook to manage real-time channel events such as deletion, updates, clearing, and message deletions. This hook invalidates or removes relevant query caches to ensure the UI reflects the latest state. (`packages/client/src/hooks/use-channel-events.ts`)
+* **Extended `SocketIOManager` class**: Added support for channel-related events (`channelDeleted`, `channelUpdated`, `channelCleared`, `messageDeleted`) in the `SocketIOManager` class, including event definitions and listeners. (`packages/client/src/lib/socketio-manager.ts`) [[1]](diffhunk://#diff-79b3653b1602e46dd91472006eabc9e952f7cf2bb09d2ea811370b3b96c3341aR49-R71) [[2]](diffhunk://#diff-79b3653b1602e46dd91472006eabc9e952f7cf2bb09d2ea811370b3b96c3341aR82-R85) [[3]](diffhunk://#diff-79b3653b1602e46dd91472006eabc9e952f7cf2bb09d2ea811370b3b96c3341aR169-R184) [[4]](diffhunk://#diff-79b3653b1602e46dd91472006eabc9e952f7cf2bb09d2ea811370b3b96c3341aR351-R374)
+
+### Error feedback improvements:
+
+* **Enhanced error handling in `Chat` and `GroupPanel` components**: Updated error messages to provide more specific feedback based on the type of error (e.g., network issues, permissions, or not found). (`packages/client/src/components/chat.tsx`, `packages/client/src/components/group-panel.tsx`) [[1]](diffhunk://#diff-6ede45d69eb212ef94c4b9bc5ae856eed19d120f07edd9a37667f31f41afd5caR409-R426) [[2]](diffhunk://#diff-a425db0f1ccbe573eacb80c8deea577a51ee5ee7d4551acd443b4c53f5962785R136-L152)
+* **Improved error handling in `useDeleteChannel` hook**: Added detailed error messages for failed channel deletions, ensuring users receive actionable feedback. (`packages/client/src/hooks/use-query-hooks.ts`)
+
+### Database operations for channel management:
+
+* **Added `updateChannel` and `deleteChannel` methods**: Extended the `BaseDrizzleAdapter` to include methods for updating channel details and deleting channels along with their associated data. (`packages/plugin-sql/src/base.ts`)2b:T8e9,```
+[2025-06-10 10:32:52] ERROR: No world found for user during onboarding
+[2025-06-10 10:32:52] ERROR: Critical error in settings provider: Error: No server ownership found for onboarding
+```
+
+This pull request introduces enhancements to the Socket.IO server and the bootstrap plugin to improve event handling, metadata management, and onboarding processes. Key changes include adding support for `ENTITY_JOINED` events, creating worlds with ownership metadata for DM channels, and initializing settings for user worlds during onboarding.
+
+### Enhancements to Socket.IO server:
+
+* [`packages/cli/src/server/socketio/index.ts`](diffhunk://#diff-dccfb381a823a17c3843573fce899161dd411f5cb46617c657b040d7a0dc0d92L118-R168): Added handling for `ENTITY_JOINED` events when a channel is joined, including emitting events with metadata for world/entity creation. Improved logging for debugging and monitoring event emissions. [[1]](diffhunk://#diff-dccfb381a823a17c3843573fce899161dd411f5cb46617c657b040d7a0dc0d92L118-R168) [[2]](diffhunk://#diff-dccfb381a823a17c3843573fce899161dd411f5cb46617c657b040d7a0dc0d92R205-R228)
+
+### Improvements to bootstrap plugin:
+
+* [`packages/plugin-bootstrap/src/index.ts`](diffhunk://#diff-ade2059be3b14bcc6b85b1f1bd73a46a0e7e1c170a3c4ac96e55853f77429b7fR981-R993): Enhanced `syncSingleUser` to create worlds with ownership metadata for DM channels, including roles and settings initialization. Added verification of created worlds to ensure proper metadata. [[1]](diffhunk://#diff-ade2059be3b14bcc6b85b1f1bd73a46a0e7e1c170a3c4ac96e55853f77429b7fR981-R993) [[2]](diffhunk://#diff-ade2059be3b14bcc6b85b1f1bd73a46a0e7e1c170a3c4ac96e55853f77429b7fR1005-R1015)
+* [`packages/plugin-bootstrap/src/index.ts`](diffhunk://#diff-ade2059be3b14bcc6b85b1f1bd73a46a0e7e1c170a3c4ac96e55853f77429b7fR1178-R1181): Improved handling of `ENTITY_JOINED` events by adding detailed logging and verifying the presence of `worldId` and `roomId`.
+
+### Onboarding enhancements:
+
+* [`packages/plugin-bootstrap/src/providers/settings.ts`](diffhunk://#diff-887a51c9adb1e6cd9a0aeb962a7b8e69f5603558187992376cd13a30612c0a62L177-R189): Updated onboarding mode to initialize settings metadata for user worlds if none exists, ensuring proper setup during world creation.2c:T8d9,This pull request introduces a significant refactor to centralize and standardize the directory structure for CLI-generated data under a hidden `.eliza` folder in the project root. Additionally, it includes instrumentation enhancements and legacy path migration logic to ensure backward compatibility. The most important changes are grouped into themes: directory structure updates, instrumentation improvements, and legacy path migration.
+
+### Directory Structure Updates:
+* Added utility functions in `packages/cli/src/utils/eliza-paths.ts` to centralize logic for resolving standard Eliza directories (`getElizaBaseDir`, `getElizaUploadsDir`, etc.). This eliminates scattered hard-coded paths throughout the codebase.
+* Updated all references to CLI-generated data paths (e.g., uploads, characters, database) to use the new `.eliza` folder structure across multiple files, including `index.ts`, `file-utils.ts`, `upload.ts`, and others. [[1]](diffhunk://#diff-1ef067a0d0327a2b5987df32fa0aef8326439f714944e10210e2186b1aca4b47L21-R21) [[2]](diffhunk://#diff-a91c13c0e1052207da309e9e3b25b4888fe04b77a474cd67596354385bd7ea15L384-R385) [[3]](diffhunk://#diff-2a0aa5a354b1e453e84d070ba2e6875e8c9aa0ef656f7466ff3eeaa76cd3f547L255-R255) [[4]](diffhunk://#diff-05f2fe59da01b38ae1723b74d0071f653f6273c61ebc1adbc77bc33e3746a948L128-R128)
+
+### Instrumentation Improvements:
+* Enhanced instrumentation handling in `processSocketMessage` to ensure compatibility with runtime types by replacing `AgentRuntime` with `any`.
+* Added OpenTelemetry imports (`SpanStatusCode`, `Tracer`) to `packages/cli/src/server/api/index.ts` for improved observability.
+
+### Legacy Path Migration:
+* Introduced migration logic in `resolvePgliteDir` (both CLI and plugin versions) to detect and migrate legacy paths (`<projectRoot>/.elizadb`) to the new `.eliza/.elizadb` location. This ensures seamless upgrades for existing projects. [[1]](diffhunk://#diff-8b7927edc3bcd06a96516cca107d1fe93562283386e7b40d268968f077160219L84-R97) [[2]](diffhunk://#diff-f1329523885657a4d509231d2fa0f55c672d87051d847b1373b4ae65a74aa7b7L67-R81)
+
+These changes improve maintainability, standardize the directory structure, and ensure backward compatibility while enhancing instrumentation capabilities.2d:T967,# Relates to
+
+Plugin routes with URL parameters (`:id`, `:param`, etc.) returning 404 errors
+
+# Risks
+
+**Medium** - Changes to core plugin route matching logic in agent router
+- Affects ALL plugins using parameterized routes
+- Routing logic modification requires comprehensive testing
+
+# Background
+
+## What does this PR do?
+
+Fixes a fundamental routing issue where plugin routes with URL parameters were returning 404 errors. The agent router was using exact string matching instead of pattern matching, causing any route with parameters (`:id`, `:param`, etc.) to fail.
+
+**Changes:**
+- Added `path-to-regexp` import to agent router
+- Replaced exact path matching (`path === r.path`) with pattern-based matching using `match()` function
+- Properly extract URL parameters into `req.params` for plugin handlers
+
+**Affects all plugins with routes like:**
+- `/documents/:knowledgeId` (knowledge plugin)
+- `/items/:itemId` (any plugin)
+- `/users/:userId/settings` (any plugin)
+
+## What kind of change is this?
+
+Bug fixes (non-breaking change which fixes an issue)
+
+# Documentation changes needed?
+
+My changes do not require a change to the project documentation.
+
+# Testing
+
+## Where should a reviewer start?
+
+Review the changes in `eliza/packages/cli/src/server/api/agent.ts` - specifically the plugin route matching logic
+
+## Detailed testing steps
+
+**Test any plugin with parameterized routes:**
+- Test knowledge plugin DELETE `/documents/:knowledgeId`
+- Test any plugin GET routes with parameters like `/items/:id`
+- Verify parameter extraction works correctly
+
+**Before fix:**
+```javascript
+// path="/documents/12345", r.path="/documents/:knowledgeId"
+if (path === r.path) // false - no match, 404 error
+```
+
+**After fix:**
+```javascript
+// Uses path-to-regexp matching for ANY plugin route
+matcher = match("/documents/:knowledgeId")
+matched = matcher("/documents/12345") // true - extracts parameters
+req.params = { ...req.params, knowledgeId: "12345" }
+```
+
+**Files Changed:**
+- `eliza/packages/cli/src/server/api/agent.ts` - Replace
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+## Summary by CodeRabbit
+
+- **New Features**
+  - Improved plugin route handling to support dynamic and parameterized paths, enabling more flexible API endpoints.
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->2e:T544,# Background
+## What does this PR fix?
+In `service.ts` There is a check to see if text content is base64 using an invalid regular expression. 
+
+Old expression: `/^[A-Za-z0-9+/]+=*$/`
+
+## Proposed Fix
+1. Move base64 check to a utility function
+2. New expression: `^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/`
+
+See https://stackoverflow.com/questions/475074/regex-to-parse-or-validate-base64-data for details
+GPT-4o also suggested the above expression.
+
+# Documentation changes needed?
+No.
+
+# Testing
+## Where should a reviewer start?
+1. Several tests were added to `__tests__/utils.test.ts`
+3. Since it's a small, self contained utility function, easy to try locally and add more use-cases. 
+
+# Risks
+**Low Risk** - This function is only used in one place and very easy to test. 
+
+
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+- **New Features**
+  - Added a utility to detect if a string appears to be Base64-encoded.
+- **Refactor**
+  - Updated Base64 detection in document processing to use the new utility for improved consistency.
+- **Tests**
+  - Introduced comprehensive tests to ensure accurate Base64 detection, including various valid, invalid, and edge case inputs.
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->2f:T64a,```
+[2025-06-10 10:22:37] ERROR: Error updating agent:
+    agentId: "524873bf-6a97-050d-b70f-673063e0e163"
+    agent: {
+      "id": "524873bf-6a97-050d-b70f-673063e0e163",
+      "enabled": true,
+      "createdAt": 1749550954067,
+      "updatedAt": 1749550957493,
+      "name": "based guy",
+      "username": "based",
+      "system": "very based dude",
+      "bio": [],
+      "messageExamples": [],
+      "postExamples": [],
+      "topics": [],
+      "adjectives": [],
+      "knowledge": [],
+      "plugins": [
+        "@elizaos/plugin-sql",
+        "@elizaos/plugin-openai",
+        "@elizaos/plugin-bootstrap"
+      ],
+      "settings": {
+        "secrets": {}
+      },
+      "style": {
+        "all": [],
+        "chat": [],
+        "post": []
+      }
+    }
+    error: "value.toISOString is not a function"
+    ```
+
+This pull request introduces a significant improvement to the handling of timestamp fields in the `BaseDrizzleAdapter` class within the `packages/plugin-sql/src/base.ts` file. The changes ensure that numeric timestamps are properly converted to `Date` objects for database storage, aligning with the database schema requirements.
+
+### Timestamp handling improvements:
+* Added logic to convert numeric `createdAt` and `updatedAt` timestamps to `Date` objects before updating the database. If `createdAt` is invalid, it is excluded from the update; if `updatedAt` is invalid or absent, it defaults to the current time. (`[packages/plugin-sql/src/base.tsR306-R328](diffhunk://#diff-c0212488c0446f46225384f931dd7dfe141e77896ddeaf45373b859f8121d129R306-R328)`)30:T8e7,## Problem
+
+The CLI had two messaging issues:
+
+1. **Double messaging**: When running `elizaos update`, the banner showed an update notification before the update command itself ran, creating redundant messaging
+2. **Incorrect update instruction**: The update notification told users to run `elizaos update` which updates both packages and CLI, when the more stable and direct approach is `bun i -g @elizaos/cli@latest`
+
+## Solution
+
+1. **Fixed double messaging**: Skip the update check in `displayBanner()` when running the update command by passing `skipUpdateCheck: true`
+2. **Updated instruction**: Changed notification message from "Run elizaos update" to "Run bun i -g @elizaos/cli@latest" for more durable CLI updates
+
+## Examples
+
+**Before:**
+
+```bash
+$ elizaos update
+# Banner shows: "Run elizaos update to get the latest features"
+# Then update command runs, showing additional update messaging
+```
+
+**After:**
+
+```bash
+$ elizaos update
+# Banner shows: "Run bun i -g @elizaos/cli@latest to get the latest features"
+# Update command runs without redundant messaging
+
+$ elizaos -v
+# Clean update notification with correct command
+────────────────────────────────────────────────────────────────────
+│ Update available: 1.0.6 → 1.0.7                                  │
+│ Run bun i -g @elizaos/cli@latest to get the latest features      │
+────────────────────────────────────────────────────────────────────
+```
+
+## Files Changed
+
+- `packages/cli/src/commands/update.ts` - Skip banner update check during update
+- `packages/cli/src/utils/display-banner.ts` - Update notification message text
+
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+- **Enhancements**
+  - Updated the CLI banner to recommend running a new command for updating to the latest version.
+  - Improved banner formatting to accommodate the updated message.
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->31:T907,<!-- Use this template by filling in information and copying and pasting relevant items out of the HTML comments. -->
+
+# Relates to
+
+<!-- LINK TO ISSUE OR TICKET -->
+
+<!-- This risks section must be filled out before the final review and merge. -->
+
+# Risks
+
+<!--
+Low, medium, large. List what kind of risks and what could be affected.
+-->
+
+# Background
+
+## What does this PR do?
+
+fix typos
+
+## What kind of change is this?
+
+<!--
+Bug fixes (non-breaking change which fixes an issue)
+Improvements (misc. changes to existing features)
+Features (non-breaking change which adds functionality)
+Updates (new versions of included code)
+-->
+
+<!-- This "Why" section is most relevant if there are no linked issues explaining why. If there is a related issue, it might make sense to skip this why section. -->
+<!--
+## Why are we doing this? Any context or related work?
+-->
+
+# Documentation changes needed?
+
+<!--
+My changes do not require a change to the project documentation.
+My changes require a change to the project documentation.
+If documentation change is needed: I have updated the documentation accordingly.
+-->
+
+<!-- Please show how you tested the PR. This will really help if the PR needs to be retested and probably help the PR get merged quicker. -->
+
+# Testing
+
+## Where should a reviewer start?
+
+## Detailed testing steps
+
+<!--
+None: Automated tests are acceptable.
+-->
+
+<!--
+- As [anon/admin], go to [link]
+  - [do action]
+  - verify [result]
+-->
+
+<!-- If there is a UI change, please include before and after screenshots or videos. This will speed up PRs being merged. It is extra nice to annotate screenshots with arrows or boxes pointing out the differences. -->
+<!--
+## Screenshots
+### Before
+### After
+-->
+
+<!-- If there is anything about the deployment, please make a note. -->
+<!--
+# Deploy Notes
+-->
+
+<!--  Copy and paste command line output. -->
+<!--
+## Database changes
+-->
+
+<!--  Please specify deploy instructions if there is something more than the automated steps. -->
+<!--
+## Deployment instructions
+-->
+
+<!-- If you are on Discord, please join https://discord.gg/ai16z and state your Discord username here for the contributor role and join us in #development-feed -->
+<!--
+## Discord username
+
+-->
+32:T8fc,Moved repos from notorious-d-e-v github to payai github
+
+# Registry Update Checklist
+
+Registry:
+- [x] I've made the left side of the colon of JSON entry in index.json match the potential NPM package name
+- [x] I've used github not github.com
+- [x] There is no .git extension
+- [x] It's placed it alphabetically in the list
+- [x] I've dealt with commas properly so the list is still valid JSON
+
+If not an eliza-plugins official repo, i.e. new plugin: 
+
+The plugin repo has:
+- [x] is publically accessible (not a private repo)
+- [x] uses main as it's default branch
+- [x] I have include `elizaos-plugins` in the topics in the GitHub repo settings. If the plugin is related to `AI` or `crypto`, please add those as topics as well.
+- [x] add simple description in github repo
+- [x] follows this convention
+```
+plugin-name/
+├── images/
+│   ├── logo.jpg        # Plugin branding logo
+│   ├── banner.jpg      # Plugin banner image
+├── src/
+│   ├── index.ts        # Main plugin entry point
+│   ├── actions/        # Plugin-specific actions
+│   ├── clients/        # Client implementations
+│   ├── adapters/       # Adapter implementations
+│   └── types.ts        # Type definitions
+│   └── environment.ts  # runtime.getSetting, zod validation
+├── package.json        # Plugin dependencies
+└── README.md          # Plugin documentation
+```
+- [x] an `images/banner.jpg` and `images/logo.jpg` and they
+  - Use clear, high-resolution images
+  - Keep file sizes optimized (< 500KB for logos, < 1MB for banners)
+  - Follow the [elizaOS Brand Guidelines](https://github.com/elizaOS/brandkit)
+  - Include alt text for accessibility
+- [x] package.json has a agentConfig like the following
+```json
+{
+  "name": "@myNpmOrg/plugin-example",
+  "version": "1.0.0",
+  "agentConfig": {
+    "pluginType": "elizaos:plugin:1.0.0",
+    "pluginParameters": {
+      "API_KEY": {
+        "type": "string",
+        "description": "API key for the service"
+      }
+    }
+  }
+}
+```
+
+<!-- If you are on Discord, please join https://discord.gg/elizaOS and state your Discord username here for the contributor role and join us in #development-feed -->
+
+## Discord username
+notorious_d_e_v
+33:Td38,# Risks
+
+**Low risk** - This is a targeted bug fix that:
+- Affects only memory creation logic in plugin-sql
+- Improves data integrity without breaking existing functionality
+- Maintains backward compatibility
+- Adds permissive CSP rule for enhanced plugin functionality
+
+# Background
+
+## What does this PR do?
+
+This PR fixes a critical data association bug where documents and memories uploaded by specific agents were being stored with the wrong agent ID. The issue was in the `plugin-sql` package where the database adapter was always using its own `agentId` instead of respecting the `agentId` from incoming memory requests.
+
+**Key Changes:**
+1. **Memory Creation Fix**: Modified `packages/plugin-sql/src/base.ts` to prioritize `memory.agentId` over `this.agentId`
+2. **CSP Enhancement**: Added `data:` URL support to Content Security Policy for display endpoints to enable plugin iframe content
+
+## What kind of change is this?
+
+**Bug fixes** (non-breaking change which fixes an issue)
+
+# Documentation changes needed?
+
+**My changes do not require a change to the project documentation.**
+
+The fix corrects existing behavior to work as intended, without changing APIs or user-facing functionality.
+
+# Testing
+
+## Where should a reviewer start?
+
+Start by reviewing the core fix in `packages/plugin-sql/src/base.ts` line 1663 where we changed:
+```typescript
+// Before
+agentId: this.agentId,
+
+// After  
+agentId: memory.agentId || this.agentId,
+```
+
+## Detailed testing steps
+
+### Setup
+1. Start an ElizaOS agent with a specific character (non-default agent ID)
+2. Use the knowledge plugin to upload documents
+
+### Test Agent ID Association
+```bash
+# 1. Upload a document via agent
+curl -X POST "http://localhost:3000/api/documents" \
+  -H "Content-Type: multipart/form-data" \
+  -F "files=@test.txt" \
+  -F "agentId=a2c1b813-426d-067e-9d29-93b254e358a8"
+
+# 2. Verify document is associated with correct agent ID
+curl -s "http://localhost:3000/documents?agentId=a2c1b813-426d-067e-9d29-93b254e358a8" | \
+  jq '.data.memories[-1].agentId'
+
+# Expected: "a2c1b813-426d-067e-9d29-93b254e358a8"
+# Before fix: "00000000-0000-0000-0000-000000000002"
+```
+
+### Test CSP Data URL Support
+1. Navigate to knowledge plugin UI
+2. Upload a PDF document
+3. View the PDF in the plugin interface
+4. Verify no CSP violations in browser console
+
+### Multi-Agent Testing
+1. Run multiple agents with different agent IDs
+2. Upload documents from each agent
+3. Verify each agent's documents are properly isolated
+4. Confirm no cross-agent data contamination
+
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+- **Bug Fixes**
+  - Improved error messages when an agent is not found or when an invalid agent ID is provided in plugin routes.
+  - Adjusted route paths in agent panel responses for greater clarity.
+
+- **Security**
+  - Enhanced Content Security Policy (CSP) headers for API endpoints, providing stricter policies for API routes and more relaxed policies for UI and asset routes.
+  - Allowed iframe embedding from the same origin and data URLs to support document display features.
+
+- **Other Improvements**
+  - Ensured correct agent ID assignment when creating new memory records in the SQL plugin.
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->19:["$","div",null,{"className":"mb-8 space-y-6","children":[["$","$L20",null,{"metrics":{"date":"2025-06-10","interval":{"intervalStart":"$D2025-06-10T00:00:00.000Z","intervalEnd":"$D2025-06-11T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":29,"merged":23,"total":34},"issues":{"new":2,"closed":0,"total":2},"activeContributors":18,"codeChanges":{"additions":23437,"deletions":21489,"files":208,"commitCount":110},"topContributors":[{"username":"ChristopherTrimboli","avatarUrl":"https://avatars.githubusercontent.com/u/27584221?u=de148a498b5af814e037c2975112fadd09df743f&v=4","totalScore":309.61227743166995,"prScore":274.27227743167,"issueScore":0,"reviewScore":35,"commentScore":0.33999999999999997,"summary":"ChristopherTrimboli: Merged 7 PRs, including significant bug fixes such as #5033 \"fix: onboarding user settings error\" (+103/-5 lines) and #5049 \"fix: dup chats\" (+86/-25 lines), while also maintaining a consistent activity pattern with 10 commits and a focus on bugfix work (40%). Additionally, he opened 1 PR (#5037) related to handling delete chats/channels and conducted 7 reviews, all with approvals."},{"username":"wtfsayo","avatarUrl":"https://avatars.githubusercontent.com/u/82053242?u=98209a1f10456f42d4d2fa71db4d5bf4a672cbc3&v=4","totalScore":181.46907491538363,"prScore":181.03107491538364,"issueScore":0,"reviewScore":0,"commentScore":0.43799999999999994,"summary":"wtfsayo: Merged 5 PRs, including a major refactor in #5036 (+8501/-7418 lines) and enhancements to API instrumentation in #5042 (+536/-1662 lines), while actively commenting on 5 issues and 3 PRs. The contributions reflect a strong focus on other work (53%) and feature development (26%), with a total of 19 commits modifying 165 files (+9220/-7383 lines)."},{"username":"lalalune","avatarUrl":"https://avatars.githubusercontent.com/u/18633264?u=e2e906c3712c2506ebfa98df01c2cfdc50050b30&v=4","totalScore":89.33304084196597,"prScore":66.63304084196596,"issueScore":0,"reviewScore":22.5,"commentScore":0.2,"summary":"lalalune: Merged 1 PR (#5030 \"feat: add dummy services\") with significant changes of +1563 lines, while also working on an open PR (#5029 \"fix: project loading\"). Made extensive modifications across 164 files, totaling +13351/-15436 lines, with a balanced focus on bugfix, refactor, and other work."},{"username":"0xbbjoker","avatarUrl":"https://avatars.githubusercontent.com/u/54844437?u=90fe1762420de6ad493a1c1582f1f70c0d87d8e2&v=4","totalScore":81.4863805686042,"prScore":76.4863805686042,"issueScore":0,"reviewScore":5,"commentScore":0,"summary":"0xbbjoker: Merged 2 PRs (#5048 and #5050) with significant contributions totaling +819/-241 lines, demonstrating a balanced focus on both feature work and bug fixes. Active today with consistent contributions, reflecting a strong commitment to the project."},{"username":"yungalgo","avatarUrl":"https://avatars.githubusercontent.com/u/113615973?u=92e0f29f7e2fbb8ce46ed13c51f692ca803de02d&v=4","totalScore":76.73929417603627,"prScore":76.30129417603627,"issueScore":0,"reviewScore":0,"commentScore":0.43799999999999994,"summary":"yungalgo: Merged 1 PR (#5041) with minor changes (+2/-2 lines) and opened another PR (#5040) focused on project structure. Made significant code modifications across 17 files (+302/-87 lines), demonstrating a consistent work pattern with a primary focus on other work (71%)."},{"username":"odilitime","avatarUrl":"https://avatars.githubusercontent.com/u/16395496?u=c9bac48e632aae594a0d85aaf9e9c9c69b674d8b&v=4","totalScore":71.40658509299405,"prScore":43.70658509299405,"issueScore":0,"reviewScore":27.5,"commentScore":0.2,"summary":"odilitime: Merged 1 PR (#5026) with a contribution of +3 lines, while modifying 46 files with a total of +344/-6167 lines across 2 commits, demonstrating a balanced focus on feature and refactor work. Actively engaged in the review process with 6 total reviews, including 1 approval and 5 comments."},{"username":"madjin","avatarUrl":"https://avatars.githubusercontent.com/u/32600939?u=cdcf89f44c7a50906c7a80d889efa85023af2049&v=4","totalScore":51.5237738965761,"prScore":51.5237738965761,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"madjin: Merged 1 pull request (#5046) focused on updating documentation, contributing a significant change of +23453/-28011 lines. Actively modified 10 files with a total of +24/-82 lines, maintaining a consistent work pattern."},{"username":"tcm390","avatarUrl":"https://avatars.githubusercontent.com/u/60634884?u=c6c41679b8322eaa0c81f72e0b4ed95e80f0ac16&v=4","totalScore":44.18275946922806,"prScore":44.18275946922806,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"tcm390: Merged 2 PRs, including #5028 \"fix: remove truncate\" (+1/-4 lines) and #5027 \"fix: Ensure waitForServer uses SERVER_PORT env if provided\" (+5/-2 lines), while modifying 3 files with a total of +6/-6 lines across 3 commits. Maintained a consistent activity pattern, being active every day."},{"username":"jonathanprozzi","avatarUrl":"https://avatars.githubusercontent.com/u/9438776?u=25b5a5b22cfe26724ee1ebd869c378fc65196987&v=4","totalScore":36.52513216897283,"prScore":31.88513216897283,"issueScore":4.3,"reviewScore":0,"commentScore":0.33999999999999997,"summary":"jonathanprozzi: Created 1 issue (#5039 \"Unable to load custom characters after upgrading to 1.0.7\", CLOSED) and commented on 2 issues, demonstrating sporadic activity today."},{"username":"standujar","avatarUrl":"https://avatars.githubusercontent.com/u/16385918?u=718bdcd1585be8447bdfffb8c11ce249baa7532d&v=4","totalScore":30.987306144334053,"prScore":30.549306144334054,"issueScore":0,"reviewScore":0,"commentScore":0.43799999999999994,"summary":"standujar: Merged 1 PR (#5045) with significant changes (+1784/-4849 lines) and modified 55 files, focusing primarily on feature work (67%). Maintained a consistent activity pattern with 9 commits today."},{"username":"wookosh","avatarUrl":"https://avatars.githubusercontent.com/u/120273332?u=493e01d0863a55ed139425760447079b96ef931d&v=4","totalScore":29.819221402565088,"prScore":29.819221402565088,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":null},{"username":"coderwander","avatarUrl":"https://avatars.githubusercontent.com/u/166724773?u=2d717dae44015c39a79eb7a509a5d7d0912d59b6&v=4","totalScore":28.5304379124341,"prScore":28.5304379124341,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"coderwander: Merged 1 PR (#5031) focused on fixing typos, contributing a total of +2/-2 lines across 2 modified files. Maintained a consistent activity pattern, dedicating 100% of efforts to bugfix work in documentation."},{"username":"notorious-d-e-v","avatarUrl":"https://avatars.githubusercontent.com/u/189247757?u=57d631abf52f54843d1e3e9b3311d5ca4820429a&v=4","totalScore":27.44071895621705,"prScore":27.44071895621705,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":null},{"username":"META-DREAMER","avatarUrl":"https://avatars.githubusercontent.com/u/7143583?u=96f63f10e066a06d5ad592c8efc659e2b84a68fc&v=4","totalScore":5.34,"prScore":0,"issueScore":0,"reviewScore":5,"commentScore":0.33999999999999997,"summary":null},{"username":"jackleeio","avatarUrl":"https://avatars.githubusercontent.com/u/20477587?u=c5184dab6d021733d10c8f975b20e391856303d6&v=4","totalScore":2,"prScore":0,"issueScore":2,"reviewScore":0,"commentScore":0,"summary":null},{"username":"Dangoz","avatarUrl":"https://avatars.githubusercontent.com/u/71613713?u=1839f372422c7a5503a713dca22981490b4ea7da&v=4","totalScore":0.2,"prScore":0,"issueScore":0,"reviewScore":0,"commentScore":0.2,"summary":null}],"focusAreas":[{"area":"cli","count":135},{"area":"core","count":53},{"area":"plugin-sql","count":17},{"area":"plugin-dummy-services","count":12},{"area":"client","count":11},{"area":"plugin-bootstrap","count":9},{"area":"docs","count":3},{"area":".github/workflows","count":1},{"area":"scripts","count":1}],"topIssues":[{"id":"I_kwDOMT5cIs66yPsU","title":"Unable to load custom characters after upgrading to 1.0.7","author":"jonathanprozzi","number":5039,"repository":"elizaos/eliza","body":"$21","createdAt":"2025-06-10T14:02:57Z","closedAt":"2025-06-11T05:11:31Z","state":"CLOSED","commentCount":5},{"id":"I_kwDONkwNcc66yAZc","title":"Conflict issue between TWITTER_INTERACTION_ENABLE and TWITTER_TARGET_USERS","author":"jackleeio","number":21,"repository":"elizaos-plugins/plugin-twitter","body":"When TWITTER_INTERACTION_ENABLE is set to True, interactions will occur with all tweets even if TWITTER_TARGET_USERS is set.","createdAt":"2025-06-10T13:45:51Z","closedAt":null,"state":"OPEN","commentCount":0}],"topPullRequests":[{"id":"PR_kwDOMT5cIs6Z8Ksx","title":"chore: v1.0.8","author":"ChristopherTrimboli","number":5051,"body":"includes PRs:\r\n\r\n- #5026\r\n- #5028\r\n- #5027\r\n- #5018\r\n- #5016\r\n- #5010\r\n- #5038\r\n- #5042\r\n- #5041\r\n- #5031\r\n- #5032\r\n- #5034\r\n- #5035\r\n- #4968\r\n- #5033\r\n- #5036\r\n- #5030\r\n- #5044\r\n- #5048\r\n- #5043\r\n- #5049\r\n- #5047\r\n- #5050 ","repository":"elizaos/eliza","createdAt":"2025-06-10T23:34:04Z","mergedAt":"2025-06-11T01:04:51Z","additions":24253,"deletions":20227},{"id":"PR_kwDOMT5cIs6Z7fmU","title":"chore: Update docs","author":"madjin","number":5046,"body":"Twitter plugin will be undergoing maintenance, updating docs to reflect that\r\n \r\n- ✅ Added deprecation notices to Twitter plugin and client documentation\r\n- ✅ Removed Twitter from main intro/README featured connectors lists\r\n- ✅ Removed entire Twitter troubleshooting section from FAQ\r\n- ✅ Marked Twitter environment variables as deprecated in .env.example\r\n- ✅ Updated quickstart guide\r\n- ✅ Replaced Twitter examples in migration tutorial with Telegram/Farcaster\r\n- ✅ Updated plugin examples in core documentation to use Farcaster instead\r\n- ✅ Removed Twitter from plugin showcase lists\r\n- ✅ Added \"Twitter/X integration undergoing maintenance\" to changelog\r\n","repository":"elizaos/eliza","createdAt":"2025-06-10T21:19:56Z","mergedAt":"2025-06-12T20:41:55Z","additions":15515,"deletions":17614},{"id":"PR_kwDOMT5cIs6ZvyIq","title":"feat: Dynamic loading of database tables, rebuild plugin-sql, ","author":"lalalune","number":5018,"body":"This is a big PR\r\n\r\n- Rewrite plugin-sql to dynamically migrate code\r\n- Rewrite CLI commands to load plugin dependencies, migrate db tables\r\n- Refactor types and add service types which can be inherited by dependent plugins\r\n\r\nOverall should not change a ton of functionality but should enable fully modular plugins. We can move konwledge / document table to the knowledge plugin, for example","repository":"elizaos/eliza","createdAt":"2025-06-09T20:43:10Z","mergedAt":"2025-06-10T07:14:13Z","additions":12195,"deletions":10105},{"id":"PR_kwDOMT5cIs6Z2CDP","title":"refactor: reorganize cli commands into modular structure","author":"wtfsayo","number":5036,"body":"$22","repository":"elizaos/eliza","createdAt":"2025-06-10T11:48:28Z","mergedAt":"2025-06-10T18:02:22Z","additions":6749,"deletions":5221},{"id":"PR_kwDOMT5cIs6Zmx7d","title":"feat: Reorganize API routes into logical domain-based structure","author":"wtfsayo","number":5010,"body":"$23","repository":"elizaos/eliza","createdAt":"2025-06-09T00:36:47Z","mergedAt":"2025-06-10T09:10:17Z","additions":4896,"deletions":3816},{"id":"PR_kwDOMT5cIs6ZvMAx","title":"feat: migrate CLI prompts from prompts library to @clack/prompts","author":"wtfsayo","number":5016,"body":"$24","repository":"elizaos/eliza","createdAt":"2025-06-09T19:39:53Z","mergedAt":"2025-06-10T08:54:09Z","additions":2108,"deletions":6553},{"id":"PR_kwDOMT5cIs6Zzc-w","title":"feat: add dummy services","author":"lalalune","number":5030,"body":"This PR adds dummy services which can be depended on by other plugins\r\n\r\nAll shared service types should have a dummy implementation for use in testing","repository":"elizaos/eliza","createdAt":"2025-06-10T07:54:14Z","mergedAt":"2025-06-10T18:02:36Z","additions":1563,"deletions":0},{"id":"PR_kwDOMT5cIs6Z7pzv","title":"chore: add comprehensive Postman collection for elizaOS APIs","author":"wtfsayo","number":5047,"body":"## Summary\n• Added complete Postman collection with 90+ REST API endpoints covering all Eliza framework APIs\n• Fixed URL paths and organized endpoints into logical categories (agents, messaging, memory, audio, etc.)\n• Includes collection variables and auto-generated test UUIDs for easy testing\n\n## Test plan\n- [x] Import eliza.postman.json into Postman\n- [x] Verify all endpoint URLs match actual implementation  \n- [x] Test collection variables work correctly\n- [x] Confirm coverage of all discovered API endpoints","repository":"elizaos/eliza","createdAt":"2025-06-10T21:44:58Z","mergedAt":"2025-06-10T23:33:20Z","additions":1386,"deletions":0},{"id":"PR_kwDONkwHXM6Z7T_p","title":"feat: support optional data param in transfer template","author":"jonathanprozzi","number":16,"body":"$25","repository":"elizaos-plugins/plugin-evm","createdAt":"2025-06-10T20:51:39Z","mergedAt":"2025-09-08T14:39:25Z","additions":1307,"deletions":250},{"id":"PR_kwDOMT5cIs6Zh6ua","title":"feat: Load dependencies when loading plugins","author":"lalalune","number":4994,"body":"This PR loads dependencies from the 'dependencies' list in the Plugin\r\n\r\nThis enables plugins to import other plugins and for tests to pass when running them\r\n\r\nWe need to verify that this will work correctly with a variety of plugins and edge cases on main when actually running plugins","repository":"elizaos/eliza","createdAt":"2025-06-07T18:44:42Z","mergedAt":null,"additions":946,"deletions":272},{"id":"PR_kwDOMT5cIs6Z8KlY","title":"fix: update prompt, change actions logic, adjust for responses inste…","author":"0xbbjoker","number":5050,"body":"$26","repository":"elizaos/eliza","createdAt":"2025-06-10T23:33:35Z","mergedAt":"2025-06-11T00:02:06Z","additions":809,"deletions":235},{"id":"PR_kwDOMT5cIs6ZX7Qb","title":"fix: implement real-time message deletion via SocketIO","author":"standujar","number":4968,"body":"$27","repository":"elizaos/eliza","createdAt":"2025-06-06T11:00:53Z","mergedAt":"2025-06-10T17:59:58Z","additions":607,"deletions":48},{"id":"PR_kwDOMT5cIs6Z46y1","title":"chore: OpenTelemetry instrumentation while preserving Sentry","author":"wtfsayo","number":5042,"body":"$28","repository":"elizaos/eliza","createdAt":"2025-06-10T15:52:38Z","mergedAt":"2025-06-10T17:43:34Z","additions":536,"deletions":1662},{"id":"PR_kwDOMT5cIs6Z4UIg","title":"Fix: Ensure correct .elizadb, .eliza placement for projects + plugins across monorepo contexts","author":"yungalgo","number":5040,"body":"$29","repository":"elizaos/eliza","createdAt":"2025-06-10T14:58:25Z","mergedAt":null,"additions":297,"deletions":82},{"id":"PR_kwDOMT5cIs6Z2R4A","title":"feat: handle delete chats / channels","author":"ChristopherTrimboli","number":5037,"body":"$2a","repository":"elizaos/eliza","createdAt":"2025-06-10T12:10:13Z","mergedAt":null,"additions":297,"deletions":17},{"id":"PR_kwDOMT5cIs6Zv1E2","title":"feat: refactor / split core types","author":"lalalune","number":5020,"body":"This PR splits up core types, cleans up some issues, adds new service interfaces for common service types\r\n\r\nThis shouldn't break or change anything. Everything should continue to work on merge.","repository":"elizaos/eliza","createdAt":"2025-06-09T20:49:32Z","mergedAt":"2025-06-10T07:14:14Z","additions":247,"deletions":228},{"id":"PR_kwDOMT5cIs6ZzZjh","title":"fix: project loading","author":"lalalune","number":5029,"body":"This PR fixes project and plugin loading, which had a regression","repository":"elizaos/eliza","createdAt":"2025-06-10T07:48:08Z","mergedAt":null,"additions":123,"deletions":19},{"id":"PR_kwDOMT5cIs6Z1fYp","title":"fix: onboarding user settings error","author":"ChristopherTrimboli","number":5033,"body":"$2b","repository":"elizaos/eliza","createdAt":"2025-06-10T10:56:49Z","mergedAt":"2025-06-10T18:01:27Z","additions":103,"deletions":5},{"id":"PR_kwDOMT5cIs6Z8I0B","title":"fix: dup chats","author":"ChristopherTrimboli","number":5049,"body":"","repository":"elizaos/eliza","createdAt":"2025-06-10T23:25:52Z","mergedAt":"2025-06-10T23:33:03Z","additions":86,"deletions":25},{"id":"PR_kwDOMT5cIs6Z6iKy","title":"chore: migrate all generated files into .eliza","author":"ChristopherTrimboli","number":5043,"body":"$2c","repository":"elizaos/eliza","createdAt":"2025-06-10T19:03:38Z","mergedAt":"2025-06-10T23:32:56Z","additions":77,"deletions":18},{"id":"PR_kwDOMT5cIs6ZYB_L","title":"Fix: plugin route parameter matching in agent router","author":"standujar","number":4969,"body":"$2d","repository":"elizaos/eliza","createdAt":"2025-06-06T11:14:22Z","mergedAt":null,"additions":76,"deletions":14},{"id":"PR_kwDOMT5cIs6Z6iWB","title":"Fix: Enable loading project agents when no character files specified","author":"wtfsayo","number":5044,"body":"## Summary\n- Enables automatic loading of project agents when no `--character` flag is provided to the start command\n- Adds support for `ProjectAgent` type with initialization functions and plugins\n- Improves agent discovery by checking project configuration first\n\n## Test plan\n- [ ] Test starting agents with `--character` flag (existing behavior)\n- [ ] Test starting agents without any flags in a project directory\n- [ ] Test fallback to default Eliza character when no project config exists\n- [ ] Verify agents start with their proper initialization functions","repository":"elizaos/eliza","createdAt":"2025-06-10T19:04:02Z","mergedAt":"2025-06-10T19:07:30Z","additions":53,"deletions":5},{"id":"PR_kwDOOu4gVs6ZxgWo","title":"Fix: Bad base64 regex","author":"wookosh","number":18,"body":"$2e","repository":"elizaos-plugins/plugin-knowledge","createdAt":"2025-06-10T02:33:06Z","mergedAt":"2025-06-16T22:46:05Z","additions":40,"deletions":6},{"id":"PR_kwDOMT5cIs6Z1Pcp","title":"fix: convert dates, fix agent create","author":"ChristopherTrimboli","number":5032,"body":"$2f","repository":"elizaos/eliza","createdAt":"2025-06-10T10:37:00Z","mergedAt":"2025-06-10T17:57:04Z","additions":21,"deletions":4},{"id":"PR_kwDOMT5cIs6Z1otw","title":"fix: chat history selector reloads","author":"ChristopherTrimboli","number":5034,"body":"Clicking the chat history did not reload the chats.\r\n\r\nThis pull request adds a safeguard to ensure that the current DM channel is cleared if it does not belong to the active agent, improving the handling of agent switching in the `Chat` component.\r\n\r\nKey change:\r\n\r\n* [`packages/client/src/components/chat.tsx`](diffhunk://#diff-6ede45d69eb212ef94c4b9bc5ae856eed19d120f07edd9a37667f31f41afd5caR419-R431): Added logic in the `useEffect` hook to verify if the current DM channel belongs to the active agent. If not, the channel is cleared, and the effect exits early to rerun with the updated state. This prevents issues when switching agents.","repository":"elizaos/eliza","createdAt":"2025-06-10T11:09:06Z","mergedAt":"2025-06-10T17:57:50Z","additions":13,"deletions":0},{"id":"PR_kwDOMT5cIs6Z7qRP","title":"fix: load the env config before agent project is loaded","author":"0xbbjoker","number":5048,"body":"Fixes project load as project is loaded without .env.\r\n\r\nSo we need to load the .env first and only then we can proceed to project load otherwise we would need dynamic project load. ","repository":"elizaos/eliza","createdAt":"2025-06-10T21:46:18Z","mergedAt":"2025-06-10T21:52:50Z","additions":10,"deletions":6},{"id":"PR_kwDOMT5cIs6Z1upX","title":"fix: remove message from chat UI on delete","author":"ChristopherTrimboli","number":5035,"body":"","repository":"elizaos/eliza","createdAt":"2025-06-10T11:18:57Z","mergedAt":"2025-06-10T17:58:02Z","additions":4,"deletions":2},{"id":"PR_kwDOMT5cIs6ZyAO6","title":"fix: Ensure waitForServer uses SERVER_PORT env if provided","author":"tcm390","number":5027,"body":"I ran into this issue on a port other than 3000 (in my case, 3050). \r\nThis happened because the waitForServer() function was hardcoded to check http://localhost:3000/api/ping, ignoring the SERVER_PORT environment variable.\r\n\r\nThis PR updates the script to dynamically build the health check URL using SERVER_PORT env\r\n\r\n\r\n<img width=\"879\" alt=\"Screenshot 2025-06-10 at 12 30 31 PM\" src=\"https://github.com/user-attachments/assets/0eec2099-546c-4ae8-85e1-6c92320b0a3a\" />\r\n","repository":"elizaos/eliza","createdAt":"2025-06-10T04:33:22Z","mergedAt":"2025-06-10T06:40:38Z","additions":4,"deletions":1},{"id":"PR_kwDOMT5cIs6ZxcUH","title":"feat: Add target to Content","author":"odilitime","number":5026,"body":"# Risks\r\n\r\nLow\r\n\r\n# Background\r\n\r\n## What does this PR do?\r\n\r\nadd an optional target to Content type\r\n\r\n## What kind of change is this?\r\n\r\nImprovements (misc. changes to existing features)\r\n\r\n## Why are we doing this? Any context or related work?\r\n\r\nSo we have a clear way for plugin to describe when a response should be sent over DM\r\n\r\n# Documentation changes needed?\r\n\r\nMy changes do not require a change to the project documentation.","repository":"elizaos/eliza","createdAt":"2025-06-10T02:19:58Z","mergedAt":"2025-06-10T02:40:53Z","additions":3,"deletions":0},{"id":"PR_kwDONkwLhs6Zw8a3","title":"Set chain/service & change service name to chain_solana","author":"odilitime","number":8,"body":"Potentially breaking for others","repository":"elizaos-plugins/plugin-solana","createdAt":"2025-06-10T00:10:33Z","mergedAt":"2025-08-15T09:26:44Z","additions":3,"deletions":1},{"id":"PR_kwDOMT5cIs6Z4f4V","title":"fix: (cli) resolve double update messaging and improve elizaos update instructions","author":"yungalgo","number":5041,"body":"$30","repository":"elizaos/eliza","createdAt":"2025-06-10T15:15:02Z","mergedAt":"2025-06-10T17:44:15Z","additions":2,"deletions":2},{"id":"PR_kwDOMT5cIs6Z0lPJ","title":"chore: fix typos","author":"coderwander","number":5031,"body":"$31","repository":"elizaos/eliza","createdAt":"2025-06-10T09:40:03Z","mergedAt":"2025-06-10T17:45:04Z","additions":2,"deletions":2},{"id":"PR_kwDONkg7v86Z3m_s","title":"Update index.json","author":"notorious-d-e-v","number":172,"body":"$32","repository":"elizaos-plugins/registry","createdAt":"2025-06-10T14:03:47Z","mergedAt":"2025-06-19T14:47:48Z","additions":2,"deletions":2},{"id":"PR_kwDOMT5cIs6Z7auT","title":"fix(plugin-sql): use correct agentId from memory in database operations","author":"standujar","number":5045,"body":"$33","repository":"elizaos/eliza","createdAt":"2025-06-10T21:07:54Z","mergedAt":"2025-06-11T17:44:36Z","additions":1,"deletions":1},{"id":"PR_kwDOMT5cIs6ZynDu","title":"fix: remove truncate","author":"tcm390","number":5028,"body":"We don't need to truncate Twitter posts manually. I've already handled this in the Twitter plugin: if a post exceeds 280 characters and the account isn't premium, it falls back to truncateToCompleteSentence.\r\n\r\n\r\nhttps://github.com/elizaos-plugins/plugin-twitter/blob/891433de508eb4d9ce952c8c7512942f3e26620e/src/utils.ts#L97","repository":"elizaos/eliza","createdAt":"2025-06-10T06:21:47Z","mergedAt":"2025-06-10T06:40:11Z","additions":1,"deletions":4},{"id":"PR_kwDOMT5cIs6Z2x54","title":"chore: remove model caching since its slower","author":"wtfsayo","number":5038,"body":"its faster do download models than caching / un-compressing","repository":"elizaos/eliza","createdAt":"2025-06-10T12:56:20Z","mergedAt":"2025-06-10T12:56:28Z","additions":0,"deletions":8}],"detailedContributorSummaries":{"0xbbjoker":"0xbbjoker: Merged 2 PRs (#5048 and #5050) with significant contributions totaling +819/-241 lines, demonstrating a balanced focus on both feature work and bug fixes. Active today with consistent contributions, reflecting a strong commitment to the project.","ChristopherTrimboli":"ChristopherTrimboli: Merged 7 PRs, including significant bug fixes such as #5033 \"fix: onboarding user settings error\" (+103/-5 lines) and #5049 \"fix: dup chats\" (+86/-25 lines), while also maintaining a consistent activity pattern with 10 commits and a focus on bugfix work (40%). Additionally, he opened 1 PR (#5037) related to handling delete chats/channels and conducted 7 reviews, all with approvals.","coderwander":"coderwander: Merged 1 PR (#5031) focused on fixing typos, contributing a total of +2/-2 lines across 2 modified files. Maintained a consistent activity pattern, dedicating 100% of efforts to bugfix work in documentation.","jonathanprozzi":"jonathanprozzi: Created 1 issue (#5039 \"Unable to load custom characters after upgrading to 1.0.7\", CLOSED) and commented on 2 issues, demonstrating sporadic activity today.","lalalune":"lalalune: Merged 1 PR (#5030 \"feat: add dummy services\") with significant changes of +1563 lines, while also working on an open PR (#5029 \"fix: project loading\"). Made extensive modifications across 164 files, totaling +13351/-15436 lines, with a balanced focus on bugfix, refactor, and other work.","madjin":"madjin: Merged 1 pull request (#5046) focused on updating documentation, contributing a significant change of +23453/-28011 lines. Actively modified 10 files with a total of +24/-82 lines, maintaining a consistent work pattern.","odilitime":"odilitime: Merged 1 PR (#5026) with a contribution of +3 lines, while modifying 46 files with a total of +344/-6167 lines across 2 commits, demonstrating a balanced focus on feature and refactor work. Actively engaged in the review process with 6 total reviews, including 1 approval and 5 comments.","standujar":"standujar: Merged 1 PR (#5045) with significant changes (+1784/-4849 lines) and modified 55 files, focusing primarily on feature work (67%). Maintained a consistent activity pattern with 9 commits today.","tcm390":"tcm390: Merged 2 PRs, including #5028 \"fix: remove truncate\" (+1/-4 lines) and #5027 \"fix: Ensure waitForServer uses SERVER_PORT env if provided\" (+5/-2 lines), while modifying 3 files with a total of +6/-6 lines across 3 commits. Maintained a consistent activity pattern, being active every day.","wtfsayo":"wtfsayo: Merged 5 PRs, including a major refactor in #5036 (+8501/-7418 lines) and enhancements to API instrumentation in #5042 (+536/-1662 lines), while actively commenting on 5 issues and 3 PRs. The contributions reflect a strong focus on other work (53%) and feature development (26%), with a total of 19 commits modifying 165 files (+9220/-7383 lines).","yungalgo":"yungalgo: Merged 1 PR (#5041) with minor changes (+2/-2 lines) and opened another PR (#5040) focused on project structure. Made significant code modifications across 17 files (+302/-87 lines), demonstrating a consistent work pattern with a primary focus on other work (71%)."}}}],"$L34"]}]
+1a:["$","div",null,{"className":"prose prose-sm mx-auto mt-8 dark:prose-invert sm:prose lg:prose-lg xl:prose-xl","children":[["$","p","p-0",{"children":"On Jun 10, 2025, ElizaOS development focused on significant framework enhancements, including dynamic database management, a comprehensive API reorganization, and CLI improvements for better user experience. Several critical bugs related to real-time messaging, project loading, and chat functionality were resolved, while a new issue concerning custom character loading post-upgrade has emerged."}],"\n",["$","h2","h2-0",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"✅ Completed Work","position":{"start":{"line":3,"column":4,"offset":401},"end":{"line":3,"column":20,"offset":417}}}],"position":{"start":{"line":3,"column":1,"offset":398},"end":{"line":3,"column":20,"offset":417}}},"children":"✅ Completed Work"}],"\n",["$","h3","h3-0",{"children":"Core Framework Enhancements"}],"\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["Implemented dynamic loading of database tables and rebuilt ",["$","code","code-0",{"children":"plugin-sql"}]," for improved migration capabilities in ",["$","code","code-1",{"children":"elizaos/eliza"}]," (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5018","children":"elizaos/eliza#5018"}],")."]}],"\n",["$","li","li-1",{"children":["Reorganized API routes into a logical domain-based structure for better clarity and usability in ",["$","code","code-0",{"children":"elizaos/eliza"}]," (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5010","children":"elizaos/eliza#5010"}],")."]}],"\n",["$","li","li-2",{"children":["Migrated all CLI commands to use ",["$","code","code-0",{"children":"@clack/prompts"}],", enhancing user experience and type safety in ",["$","code","code-1",{"children":"elizaos/eliza"}]," (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5016","children":"elizaos/eliza#5016"}],")."]}],"\n"]}],"\n",["$","h3","h3-1",{"children":"Bug Fixes & Stability Improvements"}],"\n",["$","ul","ul-1",{"children":["\n",["$","li","li-0",{"children":["Implemented real-time message deletion via SocketIO, improving message handling in ",["$","code","code-0",{"children":"elizaos/eliza"}]," (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/4968","children":"elizaos/eliza#4968"}],")."]}],"\n",["$","li","li-1",{"children":["Fixed issues with loading environment configurations and project agents, ensuring smoother startup processes in ",["$","code","code-0",{"children":"elizaos/eliza"}]," (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5048","children":"elizaos/eliza#5048"}],", ",["$","a","a-1",{"href":"https://github.com/elizaos/eliza/pull/5044","children":"elizaos/eliza#5044"}],")."]}],"\n",["$","li","li-2",{"children":["Resolved issues with chat UI and onboarding errors, enhancing overall user experience in ",["$","code","code-0",{"children":"elizaos/eliza"}]," (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5035","children":"elizaos/eliza#5035"}],", ",["$","a","a-1",{"href":"https://github.com/elizaos/eliza/pull/5033","children":"elizaos/eliza#5033"}],")."]}],"\n"]}],"\n",["$","h3","h3-2",{"children":"Code Quality & Maintainability"}],"\n",["$","ul","ul-2",{"children":["\n",["$","li","li-0",{"children":["Refactored CLI commands into a modular structure for improved maintainability and scalability in ",["$","code","code-0",{"children":"elizaos/eliza"}]," (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5036","children":"elizaos/eliza#5036"}],")."]}],"\n",["$","li","li-1",{"children":["Added dummy services for testing purposes, ensuring all shared service types have implementations in ",["$","code","code-0",{"children":"elizaos/eliza"}]," (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5030","children":"elizaos/eliza#5030"}],")."]}],"\n"]}],"\n",["$","h2","h2-1",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"🐞 Issue Triage","position":{"start":{"line":19,"column":4,"offset":2137},"end":{"line":19,"column":19,"offset":2152}}}],"position":{"start":{"line":19,"column":1,"offset":2134},"end":{"line":19,"column":19,"offset":2152}}},"children":"🐞 Issue Triage"}],"\n","$L35","\n","$L36"]}]
+1b:["$","script","script-0",{"src":"/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","async":true}]
+1c:["$","script","script-1",{"src":"/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","async":true}]
+1d:["$","script","script-2",{"src":"/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js","async":true}]
+1e:["$","$L37",null,{"children":["$","$38",null,{"name":"Next.MetadataOutlet","children":"$@39"}]}]
+34:["$","div",null,{"className":"rounded-lg border bg-card text-card-foreground shadow-sm","children":[["$","div",null,{"className":"flex flex-col space-y-1.5 p-6 py-4","children":["$","div",null,{"className":"tracking-tight text-sm font-medium","children":["$undefined","Code Changes"]}]}],["$","div",null,{"className":"p-6 pt-0","children":["$","div",null,{"className":"grid grid-cols-2 gap-4 md:grid-cols-4","children":[["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-git-commit-vertical h-5 w-5","aria-hidden":"true","children":[["$","path","1holv5",{"d":"M12 3v6"}],["$","circle","1v7zrd",{"cx":"12","cy":"12","r":"3"}],["$","path","a9ows0",{"d":"M12 15v6"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":110}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Commits"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-file-code h-5 w-5","aria-hidden":"true","children":[["$","path","1oefj6",{"d":"M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"}],["$","path","wfsgrz",{"d":"M14 2v5a1 1 0 0 0 1 1h5"}],["$","path","1tg20x",{"d":"M10 12.5 8 15l2 2.5"}],["$","path","yinavb",{"d":"m14 12.5 2 2.5-2 2.5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":208}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Files Changed"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-green-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-up h-5 w-5 text-green-500","aria-hidden":"true","children":[["$","path","hav0vg",{"d":"m5 12 7-7 7 7"}],["$","path","x0mq9r",{"d":"M12 19V5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-green-500","children":"+23,437"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Added"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-red-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-down h-5 w-5 text-red-500","aria-hidden":"true","children":[["$","path","s699le",{"d":"M12 5v14"}],["$","path","1idqje",{"d":"m19 12-7 7-7-7"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-red-500","children":"-21,489"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Deleted"}]]}]]}]]}]}]]}]
+35:["$","h3","h3-3",{"children":"elizaos/eliza"}]
+36:["$","ul","ul-3",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"New Issues"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["Custom Character Loading: Users are experiencing issues with loading custom characters after upgrading to version 1.0.7 (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/5039","children":"elizaos/eliza#5039"}],")."]}],"\n"]}],"\n"]}],"\n",["$","li","li-1",{"children":[["$","strong","strong-0",{"children":"Closed Issues"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["Onboarding Errors: Resolved critical onboarding errors related to user settings and world registration (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/5033","children":"elizaos/eliza#5033"}],")."]}],"\n",["$","li","li-1",{"children":["Chat History Management: Fixed issues with chat history not reloading correctly (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/5034","children":"elizaos/eliza#5034"}],")."]}],"\n"]}],"\n"]}],"\n"]}]
+39:null

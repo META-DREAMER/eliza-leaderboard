@@ -1,0 +1,1820 @@
+1:"$Sreact.fragment"
+2:I[4817319,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"IntervalSelector"]
+3:I[6998365,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"LlmCopyButton"]
+1c:I[3642796,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],""]
+1d:I[3238488,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"StatCardsDisplay"]
+36:I[4261541,["/eliza-leaderboard/_next/static/chunks/b33bcbdcb3f88354.js","/eliza-leaderboard/_next/static/chunks/8ba59154b6704904.js"],"OutletBoundary"]
+37:"$Sreact.suspense"
+4:T1545,**Describe the bug**
+
+In using the `plugin-evm` transfer function we expect to see a followup message with either the success or failure of the transaction.
+
+In the plugin's `transfer.ts` callback, we see the following:
+
+https://github.com/elizaos-plugins/plugin-evm/blob/6bf9c4c54b9e1a558c7fb092f071f2e374435887/src/actions/transfer.ts#L133
+
+```typescript
+ if (callback) {
+        callback({
+          text: `Successfully transferred ${paramOptions.amount} tokens to ${paramOptions.toAddress}\nTransaction Hash: ${transferResp.hash}`,
+          content: {
+            success: true,
+            hash: transferResp.hash,
+            amount: formatEther(transferResp.value),
+            recipient: transferResp.to,
+            chain: paramOptions.fromChain,
+          },
+        });
+      }
+... (other error logging as well)
+```
+
+We see the following in our logs (added additional debugging console.log statements):
+
+```bash
+LOG:in the transfer action
+CALLBACK IN EVM_TRANSFER_TOKENS [AsyncFunction (anonymous)]
+in the transferResponse try block
+transferResponse try block completed {
+  hash: '0xd2680982067e0258612119a58497208428613debcd314d667bd758b93ea86ed8',
+  from: '0x7850f8a9825d6dadfF5621300ee11f2dED76b76b',
+  to: '0x25709998B542f1Be27D19Fa0B3A9A67302bc1b94',
+  value: 20000000000000000n,
+  data: '0x'
+}
+[2025-06-09 19:25:35] INFO: [Eliza] Agent generated response for message. Preparing to send back to bus.
+[2025-06-09 19:25:35] INFO: [Eliza] MessageBusService: Sending payload to central server API endpoint (/api/messages/submit):
+    channel_id: "93487822-03c0-4119-bffc-13aca04fb41f"
+    server_id: "00000000-0000-0000-0000-000000000000"
+    author_id: "b850bc30-45f8-0041-a00a-83df46d8555d"
+    content: "I'll help you transfer 0.02 ETH to 0x25709998B542f1Be27D19Fa0B3A9A67302bc1b94 on Sepolia. Processing the transaction now."
+    in_reply_to_message_id: "18489676-ba76-4673-9a39-9f17fe686bc3"
+    source_type: "agent_response"
+    raw_message: {
+      "text": "I'll help you transfer 0.02 ETH to 0x25709998B542f1Be27D19Fa0B3A9A67302bc1b94 on Sepolia. Processing the transaction now.",
+      "thought": "Process ETH transfer request on Sepolia network after checking balance",
+      "actions": [
+        "REPLY",
+        "EVM_TRANSFER_TOKENS"
+      ]
+    }
+    metadata: {
+      "agent_id": "b850bc30-45f8-0041-a00a-83df46d8555d",
+      "agentName": "Eliza",
+      "channelType": "DM",
+      "isDm": true
+    }
+
+```
+
+The transfer is successful, but we only see the initial message of `"text": "I'll help you transfer 0.02 ETH to 0x25709998B542f1Be27D19Fa0B3A9A67302bc1b94 on Sepolia. Processing the transaction now.",` in the Eliza chat interface.
+
+We would expect to see a followup message with the success (or failure) text from the callback in the `transfer.ts` function.
+
+We also triggered an unsuccessful transaction and did not receive a followup error message which the callback suggests we should see.
+
+**To Reproduce**
+
+- Bare Eliza scaffolded as a fresh project with the `plugin-anthropic` and `plugin-evm` added:
+
+```bash
+    "@elizaos/cli": "^1.0.6",
+    "@elizaos/core": "^1.0.6",
+    "@elizaos/plugin-anthropic": "^1.0.0",
+    "@elizaos/plugin-bootstrap": "^1.0.6",
+    "@elizaos/plugin-evm": "file:../plugin-evm",
+    "@elizaos/plugin-knowledge": "^1.0.1",
+    "@elizaos/plugin-openai": "^1.0.3",
+    "@elizaos/plugin-sql": "^1.0.6",
+    "zod": "3.24.2"
+```
+
+and the following Character config:
+
+```typescript
+ name: 'Eliza',
+  plugins: [
+    '@elizaos/plugin-sql',
+    ...(process.env.EVM_PRIVATE_KEY ? ['@elizaos/plugin-evm'] : []),
+    ...(process.env.ANTHROPIC_API_KEY ? ['@elizaos/plugin-anthropic'] : []),
+    ...(process.env.OPENAI_API_KEY ? ['@elizaos/plugin-openai'] : []),
+    ...(process.env.OPENAI_API_KEY ? ['@elizaos/plugin-knowledge'] : []),
+    ...(!process.env.OPENAI_API_KEY ? ['@elizaos/plugin-local-ai'] : []),
+    ...(process.env.DISCORD_API_TOKEN ? ['@elizaos/plugin-discord'] : []),
+    ...(process.env.TWITTER_USERNAME ? ['@elizaos/plugin-twitter'] : []),
+    ...(process.env.TELEGRAM_BOT_TOKEN ? ['@elizaos/plugin-telegram'] : []),
+    ...(!process.env.IGNORE_BOOTSTRAP ? ['@elizaos/plugin-bootstrap'] : []),
+  ],
+  settings: {
+    secrets: {},
+    chains: {
+      evm: ['sepolia'],
+    },
+    ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
+    ANTHROPIC_SMALL_MODEL: 'claude-3-5-sonnet-latest',
+    ANTHROPIC_LARGE_MODEL: 'claude-3-5-sonnet-latest',
+  },
+
+```
+Our private key and RPC are configured and work as the transfer is successful.
+
+
+**Expected behavior**
+
+Based on the callback in `transfer.ts` we expect to see a followup message indicating the success or failure of the transfer call.
+
+**Screenshots**
+
+![Image](https://github.com/user-attachments/assets/06dae3fa-9b2c-4e49-b660-42f2d9f9837f)
+
+At this stage, the transfer succeeds but this is the last message we received.
+
+We would expect that there would be a followup message after this indicating the success or the failure, including (or similar to) the text in the `transfer.ts` callback (in the `plugin-evm` plugin):
+
+`Successfully transferred ${paramOptions.amount} tokens to ${paramOptions.toAddress}\nTransaction Hash: ${transferResp.hash}`
+
+**Additional context**
+
+We're under the impression that this is a core callback issue and not with the `plugin-evm` itself as we're seeing similar behavior with a barebones example using the `plugin-mcp`. This is a more direct and more easily reproducible example to file.
+5:T649,**Describe the bug**
+
+I am trying to send messages through the API using postman. The message goes through
+
+POST /messages
+```
+{
+  "entityId": "b8af647b-f617-0ae3-ab07-acb81861d7e2",
+  "roomId": "46bf60b4-cfa4-4ec4-a9f3-db1ec9ab0aa1",
+  "channelId": "89591c0f-7b20-45a0-9266-56a6ce68de13",
+  "serverId": "00000000-0000-0000-0000-000000000000",
+  "text": "Test Message!",
+  "source": "postman"
+}
+```
+
+Response:
+```
+{
+    "success": true,
+    "data": {
+        "message": "Message submitted to central store. Target agent b8af647b-f617-0ae3-ab07-acb81861d7e2 will process it.",
+        "messageId": "11346cd8-46f2-4a7e-ae71-b6e72ee865ee",
+        "targetAgentId": "b8af647b-f617-0ae3-ab07-acb81861d7e2",
+        "submittedChannelId": "89591c0f-7b20-45a0-9266-56a6ce68de13"
+    }
+}
+```
+
+However in the logs it says `[test-agent] MessageBusService: Agent not a participant in channel 89591c0f-7b20-45a0-9266-56a6ce68de13, ignoring message`
+
+The strange thing is that I am already running a setup routine through a custom plugin to set a channel, room and add the agent as participant on this channel. See here:
+
+![Image](https://github.com/user-attachments/assets/fe11e37b-0925-4498-a3a2-0985c70151ab)
+
+
+After running this I am inspecting the live database and the channel_participants relation is there:
+
+![Image](https://github.com/user-attachments/assets/d5524f18-31e9-46bb-983e-3973c7140c44)
+
+![Image](https://github.com/user-attachments/assets/18921312-949d-47b2-83e3-73cc663fce73)
+
+**Theory**: 
+MessageBusService seems to access stale data in regards to channel participants.
+
+Is there any way to fix this?
+6:T49f,### Version
+1.0.3
+
+### Description
+`processKnowledgeAction` uses the following to generate an unique uuid for new memories:
+`clientDocumentId: createUniqueUuid(runtime.agentId + "text" + Date.now(), "user-knowledge"),`
+
+However, createUniqueUuid does the following:
+```
+export const createUniqueUuid = (runtime, baseUserId: UUID | string): UUID => {
+  // If the base user ID is the agent ID, return it directly
+  if (baseUserId === runtime.agentId) {
+    return runtime.agentId;
+  }
+
+  // Use a deterministic approach to generate a new UUID based on both IDs
+  // This creates a unique ID for each user+agent combination while still being deterministic
+  const combinedString = `${baseUserId}:${runtime.agentId}`;
+
+  // Create a namespace UUID (version 5) from the combined string
+  return stringToUuid(combinedString);
+};
+```
+
+Meaning that `createUniqueUuid` will always return: `stringToUuid("user-knowledge:undefined")` ie: `4e394ea6-af35-0010-8047-94bccb8b8e5b`
+
+### Expected Result
+The generated ID should be unique, the easiest approach would be to us `stringToUuid` directly.
+
+If possible, I would love to contribute. I can fix this issue, and others I've discovered.
+
+Thanks,7:T1141,**Describe the bug**
+
+When you reload the page/refresh the browser with an agent chat open it shows an error.
+
+**To Reproduce**
+
+1. `eliza create`
+2. `eliza start`
+3. view web client
+4. navigate to agent chat
+5. refresh the page
+
+```sh
+ERROR: [SocketIO] agentId and roomId are required # this log appears before the refresh
+# refresh
+NotFoundError: Not Found
+    at createHttpError (file:///Users/scott/.nvm/versions/node/v20.18.3/lib/node_modules/@elizaos/cli/dist/chunk-JT3O6PBU.js:30940:16)
+    at SendStream.error (file:///Users/scott/.nvm/versions/node/v20.18.3/lib/node_modules/@elizaos/cli/dist/chunk-JT3O6PBU.js:30578:35)
+    at SendStream.pipe (file:///Users/scott/.nvm/versions/node/v20.18.3/lib/node_modules/@elizaos/cli/dist/chunk-JT3O6PBU.js:30734:18)
+    at sendfile (file:///Users/scott/.nvm/versions/node/v20.18.3/lib/node_modules/@elizaos/cli/dist/chunk-JT3O6PBU.js:31440:12)
+    at ServerResponse.sendFile (file:///Users/scott/.nvm/versions/node/v20.18.3/lib/node_modules/@elizaos/cli/dist/chunk-JT3O6PBU.js:31193:7)
+    at file:///Users/scott/.nvm/versions/node/v20.18.3/lib/node_modules/@elizaos/cli/dist/chunk-JT3O6PBU.js:115550:15
+    at Layer.handleRequest (file:///Users/scott/.nvm/versions/node/v20.18.3/lib/node_modules/@elizaos/cli/dist/chunk-JT3O6PBU.js:28379:21)
+    at trimPrefix (file:///Users/scott/.nvm/versions/node/v20.18.3/lib/node_modules/@elizaos/cli/dist/chunk-JT3O6PBU.js:28738:17)
+    at file:///Users/scott/.nvm/versions/node/v20.18.3/lib/node_modules/@elizaos/cli/dist/chunk-JT3O6PBU.js:28709:13
+    at processParams (file:///Users/scott/.nvm/versions/node/v20.18.3/lib/node_modules/@elizaos/cli/dist/chunk-JT3O6PBU.js:28854:16)
+    at next (file:///Users/scott/.nvm/versions/node/v20.18.3/lib/node_modules/@elizaos/cli/dist/chunk-JT3O6PBU.js:28703:9)
+    at file:///Users/scott/.nvm/versions/node/v20.18.3/lib/node_modules/@elizaos/cli/dist/chunk-JT3O6PBU.js:115541:11
+    at Layer.handleRequest (file:///Users/scott/.nvm/versions/node/v20.18.3/lib/node_modules/@elizaos/cli/dist/chunk-JT3O6PBU.js:28379:21)
+    at trimPrefix (file:///Users/scott/.nvm/versions/node/v20.18.3/lib/node_modules/@elizaos/cli/dist/chunk-JT3O6PBU.js:28738:17)
+    at file:///Users/scott/.nvm/versions/node/v20.18.3/lib/node_modules/@elizaos/cli/dist/chunk-JT3O6PBU.js:28709:13
+    at processParams (file:///Users/scott/.nvm/versions/node/v20.18.3/lib/node_modules/@elizaos/cli/dist/chunk-JT3O6PBU.js:28854:16)
+    at next (file:///Users/scott/.nvm/versions/node/v20.18.3/lib/node_modules/@elizaos/cli/dist/chunk-JT3O6PBU.js:28703:9)
+    at file:///Users/scott/.nvm/versions/node/v20.18.3/lib/node_modules/@elizaos/cli/dist/chunk-JT3O6PBU.js:115164:5
+    at Layer.handleRequest (file:///Users/scott/.nvm/versions/node/v20.18.3/lib/node_modules/@elizaos/cli/dist/chunk-JT3O6PBU.js:28379:21)
+    at trimPrefix (file:///Users/scott/.nvm/versions/node/v20.18.3/lib/node_modules/@elizaos/cli/dist/chunk-JT3O6PBU.js:28738:17)
+    at file:///Users/scott/.nvm/versions/node/v20.18.3/lib/node_modules/@elizaos/cli/dist/chunk-JT3O6PBU.js:28709:13
+    at processParams (file:///Users/scott/.nvm/versions/node/v20.18.3/lib/node_modules/@elizaos/cli/dist/chunk-JT3O6PBU.js:28854:16)
+    at next (file:///Users/scott/.nvm/versions/node/v20.18.3/lib/node_modules/@elizaos/cli/dist/chunk-JT3O6PBU.js:28703:9)
+    at SendStream.error (file:///Users/scott/.nvm/versions/node/v20.18.3/lib/node_modules/@elizaos/cli/dist/chunk-JT3O6PBU.js:31524:11)
+    at SendStream.emit (node:events:518:28)
+    at SendStream.error (file:///Users/scott/.nvm/versions/node/v20.18.3/lib/node_modules/@elizaos/cli/dist/chunk-JT3O6PBU.js:30578:21)
+    at SendStream.onStatError (file:///Users/scott/.nvm/versions/node/v20.18.3/lib/node_modules/@elizaos/cli/dist/chunk-JT3O6PBU.js:30646:16)
+    at next (file:///Users/scott/.nvm/versions/node/v20.18.3/lib/node_modules/@elizaos/cli/dist/chunk-JT3O6PBU.js:30827:30)
+    at onstat (file:///Users/scott/.nvm/versions/node/v20.18.3/lib/node_modules/@elizaos/cli/dist/chunk-JT3O6PBU.js:30817:18)
+    at FSReqCallback.oncomplete (node:fs:198:21)
+```
+
+**Expected behavior**
+
+Please show the existing chat with the agent
+
+**Screenshots**
+
+Error:
+
+<img width="1215" alt="Image" src="https://github.com/user-attachments/assets/7443ac4b-a3df-4aef-b342-079e4bc8bd08" />
+
+**Additional context**
+
+elizaos: `v1.0.4`
+
+Navigating back to the home page and then to the agent chat loads the same URL fine.8:T958,   Bug Report: thanks to claude code....
+
+  Issue Summary
+
+  LOG_LEVEL set in .env files is ignored, but works when
+  set via command line environment variables.
+
+  Root Cause
+
+  Timing/Order of Operations Problem: The core logger is
+  initialized during module import (before .env loading)
+  and never rechecks environment variables.
+
+  Technical Details
+
+  Problem Code Locations:
+
+  1. Early Logger Initialization
+  (packages/core/src/logger.ts):
+  // Lines 148-152 - Logger configured at module import 
+  time
+  const isDebugMode = (process?.env?.LOG_LEVEL ||
+  '').toLowerCase() === 'debug';
+  const effectiveLogLevel = isDebugMode ? 'debug' :
+  process?.env?.DEFAULT_LOG_LEVEL || 'info';
+
+  2. Late .env Loading
+  (packages/cli/src/commands/start.ts):
+  // Lines 334-380 - .env loaded much later in start 
+  command
+  const loadEnvConfig = () => {
+    // ... .env file processing happens here
+  }
+
+  Problematic Sequence:
+
+  1. Node.js starts → CLI imports modules
+  2. logger.ts imported → reads process.env.LOG_LEVEL 
+  (empty) → configures 'info' level
+  3. Much later: start command executes
+  4. Much later: .env file loaded → LOG_LEVEL set in
+  process.env
+  5. Logger already configured, never rechecks LOG_LEVEL
+
+  Why Command Line Works:
+
+  Command line env vars are set before Node.js starts, so
+  they're available during early logger initialization.
+
+  Evidence
+
+  - ✅ Command line: LOG_LEVEL=debug elizaos start → Debug
+   logs appear
+  - ❌ .env file: LOG_LEVEL=debug → Debug logs don't
+  appear
+  - ❌ Runtime check: Logger configuration is static after
+   module import
+
+  Code Snippets
+
+  Logger reads LOG_LEVEL too early:
+  // packages/core/src/logger.ts:151-152
+  const isDebugMode = (process?.env?.LOG_LEVEL ||
+  '').toLowerCase() === 'debug';
+  const effectiveLogLevel = isDebugMode ? 'debug' :
+  process?.env?.DEFAULT_LOG_LEVEL || 'info';
+
+  But .env loading happens later:
+  // packages/cli/src/commands/start.ts:334-380  
+  const loadEnvConfig = () => {
+    // Environment loading happens in start command, after
+   logger init
+  }
+
+  Proposed Fix
+
+  Make logger initialization lazy/dynamic - defer
+  LOG_LEVEL reading until after .env files are loaded, or
+  add a mechanism to reconfigure logger when environment
+  changes.
+
+  This is a clear architectural issue where static module
+  initialization happens before dynamic environment
+  loading.9:T18e4,## Summary
+
+This PR implements a comprehensive API domain reorganization and improves the client-side confirmation UX.
+
+### Major API Domain Reorganization 🏗️
+
+**Complete restructuring of the `/packages/cli/src/server/api/` directory:**
+
+- **Deleted monolithic files**: Removed large single-file modules (`agent.ts`, `world.ts`) 
+- **Created domain-based structure** with organized subdirectories:
+
+#### `/api/agents/` - Agent Management Domain
+- `crud.ts` - Create, read, update, delete operations
+- `lifecycle.ts` - Start/stop/restart agent lifecycle management  
+- `logs.ts` - Agent logging and diagnostics
+- `panels.ts` - Agent panel/dashboard functionality
+- `worlds.ts` - World/environment management for agents
+- `index.ts` - Agent domain exports and routing
+
+#### `/api/audio/` - Audio Processing Domain  
+- `conversation.ts` - Conversational audio handling
+- `processing.ts` - Audio processing utilities
+- `synthesis.ts` - Text-to-speech and audio synthesis
+- `index.ts` - Audio domain exports
+
+#### `/api/media/` - Media Management Domain
+- `agents.ts` - Agent-specific media operations
+- `channels.ts` - Channel media management
+- `index.ts` - Media domain exports
+
+#### `/api/memory/` - Memory & State Management Domain
+- `agents.ts` - Agent memory operations
+- `groups.ts` - Group/collective memory management  
+- `rooms.ts` - Room-based memory handling
+- `index.ts` - Memory domain exports
+
+#### `/api/messaging/` - Communication Domain
+- `channels.ts` - Channel operations (moved from `messages.ts`)
+- `core.ts` - Core messaging functionality
+- `servers.ts` - Server-level messaging coordination
+- `index.ts` - Messaging domain exports
+
+#### `/api/runtime/` - Runtime Management Domain
+- `debug.ts` - Runtime debugging utilities
+- `health.ts` - Health checks and monitoring
+- `logging.ts` - System-wide logging management
+- `index.ts` - Runtime domain exports
+
+#### `/api/shared/` - Common Utilities Domain
+- `file-utils.ts` - File handling utilities
+- `middleware.ts` - Security middleware (Helmet, rate limiting)
+- `response-utils.ts` - Standardized API response helpers
+- `validation.ts` - Input validation utilities
+- `uploads/index.ts` - File upload handling
+- `index.ts` - Shared utilities exports
+
+#### `/api/system/` - System Configuration Domain
+- `environment.ts` - Environment configuration (moved from `env.ts`)
+- `index.ts` - System domain exports
+
+#### `/api/tee/` - TEE (Trusted Execution Environment) Domain
+- `tee.ts` - TEE operations (moved from `tee.ts`)
+- `index.ts` - TEE domain exports
+
+### Backend API Improvements
+- **Fix agent start/stop endpoints** to use proper REST patterns (`POST /agents/:id/start`, `POST /agents/:id/stop`)
+- **Add missing channel operations** - implemented `deleteChannel` and `updateChannel` methods
+- **Fix URL path mismatch** in frontend `deleteChannelMessage` API call (was using "messaging" instead of "messages")
+- **Add security middleware** with Helmet and rate limiting for production readiness
+- **Standardize response handling** with consistent error/success response utilities
+- **Remove legacy test files** and cleanup obsolete testing infrastructure
+
+### Frontend Confirmation System Improvements  
+- **Replace browser alerts with proper modal confirmations** using Radix UI AlertDialog
+- **Create reusable ConfirmationDialog component** to avoid code duplication
+- **Add useConfirmation hook** for consistent confirmation state management across components
+- **Update confirmation patterns in**:
+  - Agent deletion (agent-settings.tsx) 
+  - Chat deletion and clearing (chat.tsx)
+  - Agent stopping (stop-agent-button.tsx)
+  - Group channel deletion (app-sidebar.tsx)
+- **Use direct JSX rendering** pattern with `<ConfirmationDialog>` components
+
+### Technical Details
+- **Backend**: Complete API domain reorganization, security middleware, missing endpoints, standardized utilities
+- **Frontend**: Eliminated window.confirm usage, implemented accessible modal dialogs
+- **Type Safety**: Proper TypeScript interfaces for all new components and hooks
+- **Architecture**: Modular, domain-driven API structure for better maintainability
+- **UX**: Consistent confirmation dialogs with proper destructive action styling
+
+### Test Plan
+- [x] Build passes successfully
+- [x] All confirmation dialogs work with proper modal UX
+- [x] Agent start/stop operations work correctly
+- [x] Channel operations (create/delete/update) function properly
+- [x] No remaining window.confirm browser alerts
+- [x] API domain reorganization maintains functionality
+
+## Breaking Changes
+- Agent API endpoints moved from `/agents` to `/api/agents` 
+- Agent start/stop now use `POST /agents/:id/start` and `POST /agents/:id/stop` instead of PUT operations
+- API file structure completely reorganized (affects imports for custom extensions)
+
+## Files Changed
+- **Backend**: 47 API files reorganized, security middleware, missing endpoints
+- **Frontend**: Confirmation system, dialog components, hook utilities  
+- **Dependencies**: Added helmet, express-rate-limit, @types/helmet
+- **Structure**: Complete API domain reorganization from monolithic to modular architecture
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+- **New Features**
+  - Introduced robust, modular API endpoints for agent, messaging, media, audio, memory, and system management with improved security, validation, and error handling.
+  - Added new endpoints for audio processing (transcription, text-to-speech, speech conversation) and secure media uploads for agents and channels.
+  - Enhanced confirmation dialogs in the user interface for destructive actions, providing a consistent and user-friendly experience.
+  - Improved documentation with new and updated API endpoint references.
+
+- **Bug Fixes**
+  - Addressed frontend loading issues by aligning API routes and improving chat context detection.
+
+- **Refactor**
+  - Reorganized API routing structure for clarity and scalability, replacing legacy endpoints and consolidating related routes.
+  - Enhanced file upload security and validation, including stricter filename sanitization and MIME type checks.
+
+- **Chores**
+  - Added security middleware and rate limiting for all API endpoints.
+  - Updated dependencies to include security and rate-limiting libraries.
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->a:T978,## Summary
+Replaces the legacy `prompts` library with modern `@clack/prompts` across all CLI commands for enhanced user experience and type safety.
+
+## Changes Made
+- ✅ **All CLI commands migrated**: create, env, publish, update, plugins
+- ✅ **Core utilities updated**: cli-prompts, env-prompt, get-config, github 
+- ✅ **Enhanced UX features added**:
+  - Intro/outro messages for workflows
+  - Spinners for save operations  
+  - Better validation with clearer error messages
+  - Improved cancellation handling with proper exit codes
+  - Setup instruction notes (e.g., GitHub token creation)
+- ✅ **Type safety improvements**: Better TypeScript validation throughout
+- ✅ **Backward compatibility**: All existing CLI flows maintained
+
+## Benefits
+- **Modern UX**: Visual feedback with spinners, structured intro/outro flows
+- **Better Accessibility**: @clack/prompts has superior keyboard navigation and screen reader support
+- **Type Safety**: Improved TypeScript validation and error handling
+- **Consistency**: Unified prompt library across CLI codebase
+- **Maintainability**: Single modern library vs multiple legacy ones
+
+## Testing
+- [x] All CLI tests passing (`bun run test:cli`)
+- [x] Build successful with no TypeScript errors  
+- [x] Interactive flows verified to maintain existing behavior
+- [x] Cancellation handling tested (Ctrl+C)
+
+## Files Changed
+- `package.json`: Added @clack/prompts@^0.11.0 dependency
+- `src/commands/*.ts`: Updated create, env, publish, update commands
+- `src/utils/*.ts`: Updated cli-prompts, env-prompt, get-config, github utilities
+- `bun.lock`: Updated dependency lockfile
+
+## Next Steps
+Future improvements that could be made in separate PRs:
+- [ ] Migrate `plugin-creator.ts` from inquirer to @clack/prompts (complex multi-step forms)
+- [ ] Add more @clack/prompts features like progress bars for long operations
+- [ ] Consider adding `clack.log.step()` for multi-step processes
+- [ ] Evaluate adding `clack.group()` for related prompt groupings
+
+## Migration Details
+### Before (prompts library):
+```typescript
+const response = await prompts({
+  type: 'text', 
+  name: 'value',
+  message: 'Enter value:'
+});
+```
+
+### After (@clack/prompts):
+```typescript
+const value = await clack.text({
+  message: 'Enter value:',
+  validate: (input) => input ? undefined : 'Value required'
+});
+
+if (clack.isCancel(value)) {
+  clack.cancel('Operation cancelled.');
+  process.exit(0);
+}
+```b:Tfaa,## Problem
+
+The ElizaOS CLI had scattered and inconsistent directory detection logic throughout the codebase:
+
+1. **Missing monorepo structure detection** - No proper classification for subdirectories within the ElizaOS monorepo
+2. **Scattered detection functions** - Multiple functions like `isMonorepoContext()` duplicated detection logic across different files
+3. **Infrastructure packages misclassified** - CLI, client, and other monorepo packages were incorrectly detected as `elizaos-project` instead of infrastructure components
+4. **Inconsistent detection patterns** - Different commands used different approaches to determine directory types
+5. **Over-aggressive heuristics** - Dependency-based detection caused false positives for infrastructure packages within the monorepo
+
+## Solution
+
+Implemented a centralized, hierarchical directory detection system with a new `elizaos-subdir` type:
+
+### New Directory Type
+
+- Added `elizaos-subdir` type for subdirectories within the ElizaOS monorepo that aren't projects or plugins
+
+### Simplified Logic
+
+- **Outside monorepo**: Check if project/plugin → if not, classify as `non-elizaos-dir`
+- **Inside monorepo**: Check if project/plugin → if not, classify as `elizaos-subdir`
+
+### Conservative Detection
+
+- Made `isElizaOSProject()` more conservative inside monorepos by only using explicit indicators
+- Disabled heuristic-based detection (dependency patterns, file structure analysis) within monorepos
+- Consolidated duplicate detection functions
+
+## Details
+
+### Core Changes
+
+**Directory Detection (`packages/cli/src/utils/directory-detection.ts`)**
+
+- Added `elizaos-subdir` to `DirectoryInfo` type union
+- Simplified main detection logic to use clear inside/outside monorepo branching
+- Made `isElizaOSProject()` accept `monorepoRoot` parameter for context-aware detection
+- Disabled heuristic checks inside monorepos to prevent infrastructure package misclassification
+
+**CLI Commands**
+
+- All CLI commands now use the standardized `detectDirectoryType()` function
+- Removed deprecated `isMonorepoContext()` function usage
+
+**Dependencies**
+
+- Eliminated duplicate logic in `get-package-info.ts`
+- Added `monorepoRoot` property to `DirectoryInfo` for consistent access
+- Updated registry logic to use consolidated detection
+
+### Test Results
+
+Before fix:
+
+```bash
+# CLI directory incorrectly detected as project
+✅ Directory Type: elizaos-project  # ❌ Wrong
+
+# Client directory correctly detected
+✅ Directory Type: elizaos-subdir   # ✅ Correct
+```
+
+After fix (expected):
+
+```bash
+# Both CLI and client correctly detected as subdirs
+✅ Directory Type: elizaos-subdir   # ✅ Correct for both
+```
+
+### Directory Type Hierarchy
+
+1. **elizaos-monorepo** - Root of ElizaOS monorepo
+2. **elizaos-project** - User projects with agents/characters
+3. **elizaos-plugin** - ElizaOS plugins
+4. **elizaos-subdir** - Infrastructure packages within monorepo (CLI, client, core, etc.)
+5. **non-elizaos-dir** - Regular directories outside ElizaOS context
+
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+- **New Features**
+  - Enhanced support for ElizaOS monorepos, including improved detection, build, and update handling for monorepo and subdirectory types.
+
+- **Bug Fixes**
+  - Improved error handling and messaging for invalid or inaccessible directories across CLI commands.
+  - Safer project and plugin startup with added checks and error logging.
+
+- **Refactor**
+  - Streamlined directory detection logic for more accurate classification and reduced code complexity.
+  - Updated internal naming for clarity (e.g., distinguishing plugin name checks).
+
+- **Style**
+  - Standardized string quoting and formatting in test files for consistency.
+
+- **Tests**
+  - Updated tests to reflect new directory detection logic and improved error messaging.
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->c:T72e,This pull request introduces several updates to the development workflow, build configurations, and client-server interaction, aiming to enhance development efficiency and improve maintainability. Key changes include the addition of a new `dev-watch.js` script for streamlined development, updates to Vite server configuration, and improvements to client-side behavior in development mode.
+
+### Development Workflow Enhancements:
+* Added a new `scripts/dev-watch.js` script to orchestrate backend and frontend development environments. This script includes server health checks, process management, and automatic startup of Vite with HMR.
+* Updated the `dev` script in `package.json` to use the new `dev-watch.js` script instead of the previous Turbo-based command.
+
+### Client-Side Configuration:
+* Modified `vite.config.ts` to include a detailed server configuration with proxy settings for backend API, WebSocket connections, and other endpoints, along with stricter port binding and CORS support.
+* Adjusted the `logLevel` in `vite.config.ts` to show `info` logs during development for better debugging visibility.
+* Added a script to `index.html` that dynamically loads a development refresh script when running on localhost, improving the developer experience.
+
+### Build and Start Script Updates:
+* Simplified the `start` and `build` scripts in `package.json` by removing unnecessary flags, aligning them with the updated development workflow.
+* Updated `turbo.json` to remove the `cache: false` configuration for `start` and `dev` tasks, simplifying task definitions.
+
+### Minor Improvements:
+* Updated the `AgentCreator` component to simplify the description text for default plugins.
+* Improved logging in `AgentServer` to clarify when the dashboard URL is displayed (only during `start` and not in `dev` mode).d:Tc6f,This pull request refactors several GitHub Actions workflows to optimize job execution by introducing setup jobs for dependency installation and caching, and by restructuring workflows to enable parallel execution of tasks. The changes focus on improving efficiency and maintainability across CI, CLI tests, integration tests, and Tauri CI workflows.
+
+### Workflow Optimizations
+
+#### Common Improvements:
+* Introduced setup jobs in `.github/workflows/ci.yaml`, `.github/workflows/integrationTests.yaml`, and `.github/workflows/tauri-ci.yml` to centralize dependency installation and build artifact caching. These setup jobs are shared across subsequent workflow jobs to reduce redundant steps. [[1]](diffhunk://#diff-944291df2c9c06359d37cc8833d182d705c9e8c3108e7cfe132d61a06e9133ddL8-L19) [[2]](diffhunk://#diff-40e5e841155651e834bcd8287c765008aeda5f7195af86d381f9c2e9f9f78349L19-R26) [[3]](diffhunk://#diff-b793b0c0165d8293e0fd85058c04b9e7e1b700dff5797a5164c014e84ab9a66eR21-R68)
+
+* Added caching mechanisms for dependencies (`node_modules`) and build artifacts (`packages/*/dist`, `packages/*/build`) using `actions/cache` to speed up subsequent workflow runs. [[1]](diffhunk://#diff-944291df2c9c06359d37cc8833d182d705c9e8c3108e7cfe132d61a06e9133ddR35-R63) [[2]](diffhunk://#diff-40e5e841155651e834bcd8287c765008aeda5f7195af86d381f9c2e9f9f78349L48-R94) [[3]](diffhunk://#diff-b793b0c0165d8293e0fd85058c04b9e7e1b700dff5797a5164c014e84ab9a66eR21-R68)
+
+#### CI Workflow (`ci.yaml`):
+* Split the CI workflow into four parallel jobs: `test`, `lint-and-format`, `build`, and `setup`. Each job restores dependencies from the setup job to avoid redundant installations.
+
+* Integrated Codecov for uploading test coverage reports as part of the `test` job.
+
+#### CLI Tests Workflow (`cli-tests.yml`):
+* Modified the matrix strategy to only run the full OS matrix (`ubuntu-latest`, `macos-latest`, `windows-latest`) on pushes to the main branch, while PRs run tests on `ubuntu-latest` only.
+
+* Updated the cache key for model files to use the hash of the workflow file itself for better invalidation control.
+
+#### Integration Tests Workflow (`integrationTests.yaml`):
+* Split into three parallel jobs: `setup`, `validate`, and `integration-tests`. The `validate` job performs environment validation, while `integration-tests` runs the actual tests. Both jobs reuse build artifacts cached by the `setup` job. [[1]](diffhunk://#diff-40e5e841155651e834bcd8287c765008aeda5f7195af86d381f9c2e9f9f78349L19-R26) [[2]](diffhunk://#diff-40e5e841155651e834bcd8287c765008aeda5f7195af86d381f9c2e9f9f78349R112-R150)
+
+* Reintroduced the creation of a `.env` file for tests in the `integration-tests` job to include required environment variables.
+
+#### Tauri CI Workflow (`tauri-ci.yml`):
+* Added a `setup` job to build packages once and share the artifacts across platform-specific builds. This ensures consistency and reduces redundant builds in the `test-build` job.
+
+* Updated the `test-build` job to restore cached build artifacts instead of rebuilding packages.
+
+These changes collectively enhance the efficiency, maintainability, and reliability of the CI/CD pipelines.e:T9b8,# Relates to
+
+https://github.com/elizaos-plugins/plugin-knowledge/issues/16
+
+This most likely went unnoticed for three reasons:
+1. Eliza still responds postively even if the memory is not stored as 'knowledge'.
+2. Because the last few messages are in the context window, both the request to store the memory and the positive response from Eliza are in subsequent queries.
+3. The browser client correctly calls `createUniqueUuid` with the agent runtime. 
+
+# Risks
+**Low Risk** - Instead of using `createUniqueUuid`, we are using `stringToUuid` in two different places
+
+# Background
+## What does this PR fix?
+The way we generate unique ids for memories, specifically in `actions.ts`:
+
+```ts
+// for documents
+clientDocumentId: createUniqueUuid(runtime.agentId + fileName + Date.now(), fileName),
+// ...
+// for text
+clientDocumentId: createUniqueUuid(runtime.agentId + "text" + Date.now(), "user-knowledge"),
+```
+
+is not unique at all. for text, the result is always `4e394ea6-af35-0010-8047-94bccb8b8e5b` since `createUniqueUuid(runtime.agentId + "text" + Date.now(), "user-knowledge")` always results in `stringToUuid("user-knowledge:undefined")`. 
+
+For documents, the result is `stringToUuid(fileName)` which is only unique if the file name is unique.
+
+## Proposed Fix
+To maintain the initial intent of the code, we should use `stringToUuid` for both text and documents using the existing seeds: `runtime.agentId + fileName + Date.now()` and `runtime.agentId + "text" + Date.now() + "user-knowledge"`.
+
+# Documentation changes needed?
+No.
+
+# Testing
+## Where should a reviewer start?
+1. Two new tests were added to `__tests__/action.test.ts` to ensure that the unique ids are generated correctly.
+2. Existings tests were updated to Mock `Date.now()` to generate predictable ids. 
+3. To truly verify knowledge is being stored, the "memories" table needs to be checked. 
+
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+- **Tests**
+	- Enhanced tests to ensure that document IDs are uniquely and deterministically generated based on file content, text, and timestamps.
+	- Added new tests to verify uniqueness and time-sensitivity of document IDs in different scenarios.
+
+- **Refactor**
+	- Updated the method for generating document IDs to improve consistency and reliability. No changes to user-facing features or public APIs.
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->f:T7bc,## Description
+
+**Problem:**
+- `elizaos publish -n` (npm-only) falsely claimed GitHub repository availability and required GitHub credentials
+- `elizaos publish -sr` (skip registry) showed contradictory registry messages  
+- Console messaging didn't reflect actual publish actions taken
+
+**Solution:**
+- Made GitHub credential validation conditional on publish mode (skip for `-n` flag)
+- Added tracking for what was actually published (`publishedToGitHub`)  
+- Fixed final availability URLs to only show platforms where publishing occurred
+- Cleaned up registry messaging logic to prevent contradictions
+- Added proper fallback to npm username when GitHub credentials unavailable
+
+**Changes:**
+- GitHub credentials now only required when publishing to GitHub
+- Registry PR creation messages only show when registry not skipped
+- Final summary accurately reflects published platforms (NPM always, GitHub conditionally)
+- Placeholder replacements skip GitHub-specific fields in npm-only mode
+
+**Testing:**
+- `elizaos publish -n` - No GitHub credential prompt, only NPM URL shown
+- `elizaos publish -sr` - No contradictory registry messages  
+- `elizaos publish` - Full publish flow with accurate messaging
+
+Fixes false repository claims and eliminates unnecessary credential requirements for npm-only publishing.
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+- **New Features**
+  - Improved support for npm-only publishing mode, allowing users to skip GitHub-related steps and credentials when using the `--npm` flag.
+
+- **Bug Fixes**
+  - Ensured that GitHub credential prompts and repository information are only shown when relevant, providing clearer and more accurate messaging during the publishing process.
+
+- **Refactor**
+  - Streamlined username handling and output messaging for a more consistent publishing experience.
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->10:T47c,## Summary
+- Adds automatic lockfile cleanup when falling back to GitHub installations
+- Prevents circular dependency issues during npm-to-GitHub fallback scenarios
+
+## Changes
+- **New `removeFromBunLock()` function**: Safely removes package entries from bun.lock using `bun remove`
+- **New `executeInstallationWithFallback()` function**: Handles npm installation with automatic GitHub fallback and lockfile cleanup
+- **Updated `installPlugin()` function**: Uses the new fallback mechanism for registry-based installations
+
+## How it works
+1. Attempts npm installation first
+2. If npm fails and GitHub fallback is available:
+   - Calls `removeFromBunLock()` to clean up any partial lockfile entries
+   - Attempts GitHub installation with clean lockfile
+3. Prevents circular dependency errors that can occur with stale lockfile entries
+
+## Test plan
+- [ ] Test npm installation success (should work as before)
+- [ ] Test npm installation failure with GitHub fallback available
+- [ ] Verify lockfile cleanup occurs before GitHub installation
+- [ ] Test with and without existing bun.lock file
+- [ ] Verify no regression in existing installation flows11:T540,This pull request enhances the CI/CD workflows by introducing caching mechanisms to optimize dependency and model management. The changes aim to reduce build times and improve efficiency across various workflows.
+
+### Dependency Caching Improvements:
+* **Added Bun dependency caching**: Implemented caching for Bun dependencies (`~/.bun/install/cache` and `node_modules`) in multiple workflows, including `ci.yaml` [[1]](diffhunk://#diff-944291df2c9c06359d37cc8833d182d705c9e8c3108e7cfe132d61a06e9133ddR24-R33) `cli-tests.yml` [[2]](diffhunk://#diff-af054d6a0a6a2b916a965c13fdb7ada5b764685705aaaa85a716c73dc31a1290R54-R63) `integrationTests.yaml` [[3]](diffhunk://#diff-40e5e841155651e834bcd8287c765008aeda5f7195af86d381f9c2e9f9f78349R33-R42) `release.yaml` [[4]](diffhunk://#diff-e426ed45842837026e10e66af23d9c7077e89eacbe6958ce7cb991130ad05adaR27-R36) and `tauri-ci.yml` [[5]](diffhunk://#diff-b793b0c0165d8293e0fd85058c04b9e7e1b700dff5797a5164c014e84ab9a66eR44-R53). This uses `actions/cache@v4` with a key based on the OS and `bun.lock` hash for efficient restoration.
+
+### Model Caching Enhancements:
+* **Added model caching in CLI tests**: Introduced caching for models (`~/.eliza/models`) in `cli-tests.yml`, with a key based on the OS and the workflow file hash. This ensures faster access to pre-downloaded models during CI runs.12:T6b3,This pull request introduces changes to improve the handling of database directories during end-to-end (E2E) tests and updates the CI workflow configuration. The key changes include ensuring unique and clean database directories for each test run, adding cleanup logic after tests, and introducing a new environment variable in the CI workflow.
+
+### Improvements to E2E Test Database Handling:
+* Modified `runE2eTests` to create a unique database directory for each test run using the package name and a timestamp, preventing conflicts between test runs. (`packages/cli/src/commands/test.ts`, [packages/cli/src/commands/test.tsL167-R200](diffhunk://#diff-1e127a5e0035493241bed339c064acd5235272cf6841f1e539240118da2133eaL167-R200))
+* Added logic to clean up existing database directories before initializing a new one to avoid potential corruption. (`packages/cli/src/commands/test.ts`, [packages/cli/src/commands/test.tsL167-R200](diffhunk://#diff-1e127a5e0035493241bed339c064acd5235272cf6841f1e539240118da2133eaL167-R200))
+* Introduced a cleanup process in the `finally` block to remove the test database directory and its parent if empty after tests complete, ensuring no leftover files. (`packages/cli/src/commands/test.ts`, [packages/cli/src/commands/test.tsR581-R597](diffhunk://#diff-1e127a5e0035493241bed339c064acd5235272cf6841f1e539240118da2133eaR581-R597))
+
+### CI Workflow Update:
+* Added the `PGLITE_WASM_MODE` environment variable with the value `node` to the CI workflow configuration, likely to ensure compatibility with the testing environment. (`.github/workflows/ci.yaml`, [.github/workflows/ci.yamlR15](diffhunk://#diff-944291df2c9c06359d37cc8833d182d705c9e8c3108e7cfe132d61a06e9133ddR15))13:T8bb,# Registry Update Checklist
+
+Registry:
+- [ ] I've made the left side of the colon of JSON entry in index.json match the potential NPM package name
+- [ ] I've used github not github.com
+- [ ] There is no .git extension
+- [ ] It's placed it alphabetically in the list
+- [ ] I've dealt with commas properly so the list is still valid JSON
+
+If not an eliza-plugins official repo, i.e. new plugin: 
+
+The plugin repo has:
+- [ ] is publically accessible (not a private repo)
+- [ ] uses main as it's default branch
+- [ ] I have include `elizaos-plugins` in the topics in the GitHub repo settings. If the plugin is related to `AI` or `crypto`, please add those as topics as well.
+- [ ] add simple description in github repo
+- [ ] follows this convention
+```
+plugin-name/
+├── images/
+│   ├── logo.jpg        # Plugin branding logo
+│   ├── banner.jpg      # Plugin banner image
+├── src/
+│   ├── index.ts        # Main plugin entry point
+│   ├── actions/        # Plugin-specific actions
+│   ├── clients/        # Client implementations
+│   ├── adapters/       # Adapter implementations
+│   └── types.ts        # Type definitions
+│   └── environment.ts  # runtime.getSetting, zod validation
+├── package.json        # Plugin dependencies
+└── README.md          # Plugin documentation
+```
+- [ ] an `images/banner.jpg` and `images/logo.jpg` and they
+  - Use clear, high-resolution images
+  - Keep file sizes optimized (< 500KB for logos, < 1MB for banners)
+  - Follow the [elizaOS Brand Guidelines](https://github.com/elizaOS/brandkit)
+  - Include alt text for accessibility
+- [ ] package.json has a agentConfig like the following
+```json
+{
+  "name": "@myNpmOrg/plugin-example",
+  "version": "1.0.0",
+  "agentConfig": {
+    "pluginType": "elizaos:plugin:1.0.0",
+    "pluginParameters": {
+      "API_KEY": {
+        "type": "string",
+        "description": "API key for the service"
+      }
+    }
+  }
+}
+```
+
+<!-- If you are on Discord, please join https://discord.gg/elizaOS and state your Discord username here for the contributor role and join us in #development-feed -->
+<!--
+## Discord username
+
+-->
+14:Tfca,Today, the ElizaOS project focused on core framework stability and developer experience. Key achievements include significant CI/CD workflow optimizations, crucial bug fixes across logging and database handling, and the introduction of a new submodule for cursor rules to improve sharing. Emerging challenges involve OpenAI API key access and issues with plugin action callbacks not reaching end-user responses.
+
+## 🚨 Needs Attention 
+- **Urgent Discussions**:
+    - [elizaos/eliza#5023](https://github.com/elizaos/eliza/issues/5023): An access error with the OpenAI API key for GPT-4o needs investigation, particularly regarding the availability of a mini version.
+    - [elizaos/eliza#5017](https://github.com/elizaos/eliza/issues/5017): A bug where callbacks from plugin actions are not reaching the end user response in chat, specifically with the `plugin-evm` transfer function, requires immediate attention.
+
+## ✅ Completed Work
+- **CI/CD and Workflow Enhancements**:
+    - Centralized directory detection logic to support monorepo structures ([elizaos/eliza#5011](https://github.com/elizaos/eliza/pull/5011)).
+    - Refactored CI workflows to optimize job execution and introduced caching mechanisms to reduce build times ([elizaos/eliza#5015](https://github.com/elizaos/eliza/pull/5015), [elizaos/eliza#5014](https://github.com/elizaos/eliza/pull/5014)).
+    - Fixed duplicate CI runs and ensured workflows are canceled on push events ([elizaos/eliza#5022](https://github.com/elizaos/eliza/pull/5022)).
+- **Framework Stability and Feature Improvements**:
+    - Added automatic lockfile cleanup for GitHub fallback installations to prevent circular dependency issues ([elizaos/eliza#5009](https://github.com/elizaos/eliza/pull/5009)).
+    - Introduced a new `buildGitHubSpecifier` function to streamline GitHub specifications ([elizaos/eliza#5024](https://github.com/elizaos/eliza/pull/5024)).
+    - Replaced the `.cursor` folder with a submodule for better sharing and updates across the team ([elizaos/eliza#5021](https://github.com/elizaos/eliza/pull/5021)).
+    - Resolved logging issues and conditional GitHub authentication for the `publish` command ([elizaos/eliza#4986](https://github.com/elizaos/eliza/pull/4986)).
+    - Improved database handling in end-to-end tests to ensure unique and clean directories ([elizaos/eliza#5013](https://github.com/elizaos/eliza/pull/5013)).
+
+## 🏗️ Work in Progress
+- **New Pull Requests**:
+    - elizaos/eliza:
+        - [elizaos/eliza#5009](https://github.com/elizaos/eliza/pull/5009)
+        - [elizaos/eliza#5024](https://github.com/elizaos/eliza/pull/5024)
+        - [elizaos/eliza#5021](https://github.com/elizaos/eliza/pull/5021)
+        - [elizaos/eliza#4986](https://github.com/elizaos/eliza/pull/4986)
+        - [elizaos/eliza#5022](https://github.com/elizaos/eliza/pull/5022)
+        - [elizaos/eliza#5013](https://github.com/elizaos/eliza/pull/5013)
+        - [elizaos/eliza#5011](https://github.com/elizaos/eliza/pull/5011)
+        - [elizaos/eliza#5015](https://github.com/elizaos/eliza/pull/5015)
+        - [elizaos/eliza#5014](https://github.com/elizaos/eliza/pull/5014)
+
+## 🐞 Issue Triage
+- **New Issues**:
+    - elizaos/eliza:
+        - [elizaos/eliza#5023](https://github.com/elizaos/eliza/issues/5023): Access error with OpenAI API key for GPT-4o.
+        - [elizaos/eliza#5017](https://github.com/elizaos/eliza/issues/5017): Callbacks from plugin actions not reaching end user response.
+- **Closed Issues**:
+    - elizaos/eliza:
+        - [elizaos/eliza#4894](https://github.com/elizaos/eliza/issues/4894): Twitter Client failed to start with new release 1.0.2.
+        - [elizaos/eliza#4927](https://github.com/elizaos/eliza/issues/4927): Refreshing an agent chat caused errors.
+        - [elizaos/eliza#4972](https://github.com/elizaos/eliza/issues/4972): MessageBusService not recognizing agents as participants in channels.
+        - [elizaos/eliza#5005](https://github.com/elizaos/eliza/issues/5005): `LOG_LEVEL` from `.env` not working in version 1.0.6.0:{"buildId":"US8XLB_zHXYj_PVAECGcd","rsc":["$","$1","c",{"children":[["$","div",null,{"className":"container mx-auto px-6 py-8 md:px-8","children":["$","div",null,{"className":"mx-auto max-w-4xl","children":[["$","div",null,{"className":"mb-4 flex flex-col justify-between sm:flex-row","children":[["$","$L2",null,{"currentInterval":"day","currentDate":"2025-06-09"}],["$","$L3",null,{"metrics":{"date":"2025-06-09","interval":{"intervalStart":"$D2025-06-09T00:00:00.000Z","intervalEnd":"$D2025-06-10T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":17,"merged":13,"total":20},"issues":{"new":3,"closed":4,"total":7},"activeContributors":15,"codeChanges":{"additions":5005,"deletions":12321,"files":89,"commitCount":104},"topContributors":[{"username":"ChristopherTrimboli","avatarUrl":"https://avatars.githubusercontent.com/u/27584221?u=de148a498b5af814e037c2975112fadd09df743f&v=4","totalScore":273.4758359824854,"prScore":237.7758359824854,"issueScore":0,"reviewScore":35.5,"commentScore":0.2,"summary":"ChristopherTrimboli: Merged 6 PRs, including significant updates like #5025 \"chore: v1.0.7\" (+536/-162 lines) and #5015 \"chore: Parallelize CI actions.\" (+219/-32 lines), while modifying 104 files with a total of +10364/-3151 lines across 11 commits. Maintained a consistent work pattern, focusing primarily on other work (55%) and bugfixes (18%)."},{"username":"wtfsayo","avatarUrl":"https://avatars.githubusercontent.com/u/82053242?u=98209a1f10456f42d4d2fa71db4d5bf4a672cbc3&v=4","totalScore":176.820458278888,"prScore":176.382458278888,"issueScore":0,"reviewScore":0,"commentScore":0.43799999999999994,"summary":"wtfsayo: Merged 4 PRs, including a significant reorganization of API routes in PR #5010 (+4405/-4382 lines) and a major migration of CLI prompts in PR #5016 (+12671/-20638 lines). Active with 39 commits, focusing primarily on other work (59%) and modifying 257 files overall (+5433/-10920 lines)."},{"username":"lalalune","avatarUrl":"https://avatars.githubusercontent.com/u/18633264?u=e2e906c3712c2506ebfa98df01c2cfdc50050b30&v=4","totalScore":157.7736370643093,"prScore":157.7736370643093,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"lalalune: Merged 3 significant PRs, including #5018 with a major contribution of +29086/-29485 lines, while modifying 2318 files overall (+13732/-19090 lines). The work primarily focused on other tasks (60%) and refactoring (20%), demonstrating consistent activity with 10 commits today."},{"username":"yungalgo","avatarUrl":"https://avatars.githubusercontent.com/u/113615973?u=92e0f29f7e2fbb8ce46ed13c51f692ca803de02d&v=4","totalScore":63.3826323876676,"prScore":62.944632387667596,"issueScore":0,"reviewScore":0,"commentScore":0.43799999999999994,"summary":"yungalgo: Merged 1 PR (#5011) focused on refactoring with significant changes (+584/-400 lines) and modified 25 files overall (+1266/-623 lines) across 15 commits. Actively engaged with 2 PR comments and 1 issue comment, demonstrating consistent work patterns."},{"username":"Dangoz","avatarUrl":"https://avatars.githubusercontent.com/u/71613713?u=1839f372422c7a5503a713dca22981490b4ea7da&v=4","totalScore":51.4297738965761,"prScore":51.2297738965761,"issueScore":0,"reviewScore":0,"commentScore":0.2,"summary":null},{"username":"wookosh","avatarUrl":"https://avatars.githubusercontent.com/u/120273332?u=493e01d0863a55ed139425760447079b96ef931d&v=4","totalScore":51.36659503302697,"prScore":37.526595033026965,"issueScore":0,"reviewScore":13.5,"commentScore":0.33999999999999997,"summary":null},{"username":"github-advanced-security","avatarUrl":"https://avatars.githubusercontent.com/in/57789?v=4","totalScore":31.5,"prScore":0,"issueScore":0,"reviewScore":31.5,"commentScore":0,"summary":"github-advanced-security: Reviewed 7 pull requests with a total of 7 comments but did not approve or request changes. Activity was sporadic, being active on only 1 out of 1 days during this period."},{"username":"odilitime","avatarUrl":"https://avatars.githubusercontent.com/u/16395496?u=c9bac48e632aae594a0d85aaf9e9c9c69b674d8b&v=4","totalScore":13.5,"prScore":0,"issueScore":0,"reviewScore":13.5,"commentScore":0,"summary":"odilitime: Engaged in code reviews with a total of 3 comments but did not approve or request changes on any PRs. Activity was sporadic, being active on only 0 out of 1 days during this period."},{"username":"Dexploarer","avatarUrl":"https://avatars.githubusercontent.com/u/211557447?u=21a243d61cc1f87574328ae07fc64d7d7577b53d&v=4","totalScore":12.232759469228053,"prScore":12.232759469228053,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":null},{"username":"standujar","avatarUrl":"https://avatars.githubusercontent.com/u/16385918?u=718bdcd1585be8447bdfffb8c11ce249baa7532d&v=4","totalScore":5.34,"prScore":0,"issueScore":0,"reviewScore":5,"commentScore":0.33999999999999997,"summary":"standujar: Made significant code changes with a focus on bugfix work, modifying 209 files (+18199/-17132 lines) across 2 commits. Additionally, provided 1 review with an approval, demonstrating consistent activity today."},{"username":"jonathanprozzi","avatarUrl":"https://avatars.githubusercontent.com/u/9438776?u=25b5a5b22cfe26724ee1ebd869c378fc65196987&v=4","totalScore":4.5,"prScore":0,"issueScore":4.3,"reviewScore":0,"commentScore":0.2,"summary":"jonathanprozzi: Created 1 issue (#5017 \"Callback from plugin action not making it to end user respons...\") and commented on another issue, showing sporadic activity today."},{"username":"ceeriil","avatarUrl":"https://avatars.githubusercontent.com/u/84419154?u=5e4524c176cdae6a8ff3fffc83c3e4f2392842c7&v=4","totalScore":4.2,"prScore":0,"issueScore":4.2,"reviewScore":0,"commentScore":0,"summary":"ceeriil: Created 1 issue today, #5023 \"GPT-4o access error with OpenAI API key,\" which has been closed. Activity has been sporadic, with engagement on only 1 out of the last 1 days."},{"username":"lkoczorowski","avatarUrl":"https://avatars.githubusercontent.com/u/16906921?v=4","totalScore":4,"prScore":0,"issueScore":4,"reviewScore":0,"commentScore":0,"summary":null}],"focusAreas":[{"area":"cli","count":84},{"area":".github/workflows","count":29},{"area":".cursor/rules","count":18},{"area":"scripts","count":2},{"area":"docs","count":1}],"topIssues":[{"id":"I_kwDOMT5cIs66o8ku","title":"Callback from plugin action not making it to end user response in chat","author":"jonathanprozzi","number":5017,"repository":"elizaos/eliza","body":"$4","createdAt":"2025-06-09T19:45:43Z","closedAt":"2025-06-19T10:57:22Z","state":"CLOSED","commentCount":2},{"id":"I_kwDOMT5cIs66PtlW","title":"MessageBusService: Agent not a participant in channel {channelId}, ignoring message","author":"exitsimulation","number":4972,"repository":"elizaos/eliza","body":"$5","createdAt":"2025-06-06T12:44:57Z","closedAt":"2025-06-09T19:53:07Z","state":"CLOSED","commentCount":1},{"id":"I_kwDOOu4gVs66mpXr","title":"processKnowledgeAction: Generates the same clientDocumentId for every memory","author":"lkoczorowski","number":16,"repository":"elizaos-plugins/plugin-knowledge","body":"$6","createdAt":"2025-06-09T15:45:23Z","closedAt":"2025-07-01T22:28:06Z","state":"CLOSED","commentCount":1},{"id":"I_kwDOMT5cIs65cJo8","title":"Twitter Client fails to start with the new release 1.0.2","author":"affanmustafa","number":4894,"repository":"elizaos/eliza","body":"**Describe the bug**\n\nWhen you launch the agent, it gives the following error:\n```\nERROR: Eliza() - Failed to register service twitter: Cannot read properties of undefined (reading 'id_str')\n```\n\n**To Reproduce**\n\nCreate a new project with Eliza 1.0.2. Fill the env variables and then start the project\n\n**Expected behavior**\n\nIt should not generate this error and launch successfully.\n\n","createdAt":"2025-06-02T18:17:37Z","closedAt":"2025-06-09T20:30:22Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs653Uth","title":"Refreshing on an agent chat shows error","author":"scottrepreneur","number":4927,"repository":"elizaos/eliza","body":"$7","createdAt":"2025-06-04T15:42:29Z","closedAt":"2025-06-09T01:19:13Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs66bQZc","title":"LOG_LEVEL from .env Not Working in 1.0.6","author":"harperaa","number":5005,"repository":"elizaos/eliza","body":"$8","createdAt":"2025-06-08T00:14:19Z","closedAt":"2025-06-09T18:48:17Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs66p5jZ","title":"GPT-4o access error with OpenAI API key","author":"ceeriil","number":5023,"repository":"elizaos/eliza","body":"Any option to use gpt04o mini instead? \nI get this error \nProject `my key' does not have access to model `gpt-4o`","createdAt":"2025-06-09T21:35:00Z","closedAt":"2025-06-11T01:15:38Z","state":"CLOSED","commentCount":0}],"topPullRequests":[{"id":"PR_kwDOMT5cIs6ZvyIq","title":"feat: Dynamic loading of database tables, rebuild plugin-sql, ","author":"lalalune","number":5018,"body":"This is a big PR\r\n\r\n- Rewrite plugin-sql to dynamically migrate code\r\n- Rewrite CLI commands to load plugin dependencies, migrate db tables\r\n- Refactor types and add service types which can be inherited by dependent plugins\r\n\r\nOverall should not change a ton of functionality but should enable fully modular plugins. We can move konwledge / document table to the knowledge plugin, for example","repository":"elizaos/eliza","createdAt":"2025-06-09T20:43:10Z","mergedAt":"2025-06-10T07:14:13Z","additions":12195,"deletions":10105},{"id":"PR_kwDOMT5cIs6Zv1Bc","title":"chore: 1.0.7","author":"ChristopherTrimboli","number":5019,"body":"","repository":"elizaos/eliza","createdAt":"2025-06-09T20:49:25Z","mergedAt":"2025-06-09T21:39:11Z","additions":11527,"deletions":6221},{"id":"PR_kwDOMT5cIs6ZwMEA","title":"chore: v1.0.7","author":"ChristopherTrimboli","number":5025,"body":"","repository":"elizaos/eliza","createdAt":"2025-06-09T21:45:13Z","mergedAt":"2025-06-09T21:45:42Z","additions":11522,"deletions":6216},{"id":"PR_kwDOMT5cIs6Zmx7d","title":"feat: Reorganize API routes into logical domain-based structure","author":"wtfsayo","number":5010,"body":"$9","repository":"elizaos/eliza","createdAt":"2025-06-09T00:36:47Z","mergedAt":"2025-06-10T09:10:17Z","additions":4896,"deletions":3816},{"id":"PR_kwDONNAI986ZvBTy","title":"feat: wallet_addresses table with CAIP-2/10 adoption","author":"Dangoz","number":128,"body":"#### Based on feedback from #124, this PR targets several issues as following:\r\n- Remove the fetching logic from client component UserProfile.tsx, and refactor it to fetch/synchronize server-side during build time at src/app/profile/queries.ts.\r\n- Remove ethAddress & sol Address from users table. Create a new table called wallet_addresses and adjust database access logic for the new table.\r\n- Adopt Chain Identifier based on [CAIP-2](https://github.com/ChainAgnostic/CAIPs/blob/master/CAIPs/caip-2.md). ChainId instead of Chain name are saved to the database.","repository":"elizaos/elizaos.github.io","createdAt":"2025-06-09T19:21:11Z","mergedAt":"2025-06-19T22:07:10Z","additions":2910,"deletions":165},{"id":"PR_kwDOMT5cIs6ZvMAx","title":"feat: migrate CLI prompts from prompts library to @clack/prompts","author":"wtfsayo","number":5016,"body":"$a","repository":"elizaos/eliza","createdAt":"2025-06-09T19:39:53Z","mergedAt":"2025-06-10T08:54:09Z","additions":2108,"deletions":6553},{"id":"PR_kwDOMT5cIs6ZpWei","title":"refactor: centralize directory detection with monorepo support","author":"yungalgo","number":5011,"body":"$b","repository":"elizaos/eliza","createdAt":"2025-06-09T08:27:55Z","mergedAt":"2025-06-09T16:55:59Z","additions":455,"deletions":271},{"id":"PR_kwDOMT5cIs6ZhX9I","title":"chore: HMR client dev","author":"ChristopherTrimboli","number":4989,"body":"$c","repository":"elizaos/eliza","createdAt":"2025-06-07T15:59:46Z","mergedAt":"2025-06-09T16:56:36Z","additions":417,"deletions":63},{"id":"PR_kwDOMT5cIs6Zv1E2","title":"feat: refactor / split core types","author":"lalalune","number":5020,"body":"This PR splits up core types, cleans up some issues, adds new service interfaces for common service types\r\n\r\nThis shouldn't break or change anything. Everything should continue to work on merge.","repository":"elizaos/eliza","createdAt":"2025-06-09T20:49:32Z","mergedAt":"2025-06-10T07:14:14Z","additions":247,"deletions":228},{"id":"PR_kwDOMT5cIs6ZvEih","title":"chore: Parallelize CI actions.","author":"ChristopherTrimboli","number":5015,"body":"$d","repository":"elizaos/eliza","createdAt":"2025-06-09T19:27:38Z","mergedAt":"2025-06-09T20:02:34Z","additions":217,"deletions":30},{"id":"PR_kwDOOu4gVs6ZvdJC","title":"Fix: Unique Knowledge/Memory Ids in actions.ts","author":"wookosh","number":17,"body":"$e","repository":"elizaos-plugins/plugin-knowledge","createdAt":"2025-06-09T20:05:33Z","mergedAt":"2025-06-16T22:45:34Z","additions":148,"deletions":9},{"id":"PR_kwDOMT5cIs6Zf_dI","title":"fix:publish command logging issues and conditional GitHub authentication","author":"yungalgo","number":4986,"body":"$f","repository":"elizaos/eliza","createdAt":"2025-06-07T09:55:05Z","mergedAt":"2025-06-09T04:59:47Z","additions":103,"deletions":77},{"id":"PR_kwDOMT5cIs6ZmWSH","title":"feat: add lockfile cleanup for GitHub fallback installations","author":"wtfsayo","number":5009,"body":"$10","repository":"elizaos/eliza","createdAt":"2025-06-08T20:45:32Z","mergedAt":"2025-06-09T17:00:07Z","additions":92,"deletions":15},{"id":"PR_kwDOMT5cIs6Zu5FX","title":"chore: cache bun / models in github actions","author":"ChristopherTrimboli","number":5014,"body":"$11","repository":"elizaos/eliza","createdAt":"2025-06-09T19:06:57Z","mergedAt":"2025-06-09T19:22:27Z","additions":58,"deletions":0},{"id":"PR_kwDOMT5cIs6Zv-Oj","title":"fix: dup CI runs and cancel workflows on push","author":"ChristopherTrimboli","number":5022,"body":"","repository":"elizaos/eliza","createdAt":"2025-06-09T21:09:51Z","mergedAt":"2025-06-09T21:22:11Z","additions":45,"deletions":5},{"id":"PR_kwDOMT5cIs6Zuf71","title":"fix: cleanup DB in E2E tests, make fresh unique DB, PGLITE_WASM_MODE: node","author":"ChristopherTrimboli","number":5013,"body":"$12","repository":"elizaos/eliza","createdAt":"2025-06-09T18:17:32Z","mergedAt":"2025-06-09T18:49:11Z","additions":41,"deletions":8},{"id":"PR_kwDOMT5cIs6ZwIo5","title":"add buildGitHubSpecifier","author":"wtfsayo","number":5024,"body":"","repository":"elizaos/eliza","createdAt":"2025-06-09T21:35:34Z","mergedAt":"2025-06-09T21:38:54Z","additions":22,"deletions":5},{"id":"PR_kwDOMT5cIs6Zshj3","title":"chore: update versions","author":"wtfsayo","number":5012,"body":"update lagging versions","repository":"elizaos/eliza","createdAt":"2025-06-09T14:32:33Z","mergedAt":"2025-06-09T16:09:16Z","additions":19,"deletions":19},{"id":"PR_kwDOMT5cIs6Zv5as","title":"feat: replace cursor rules with elizaos/.cursor submodule","author":"lalalune","number":5021,"body":"This PR replaces the .cursor folder with a submodule so we can share the .cursor folder across the team, update it and make it available anywhere in any plugin during development. I found I had to copy and paste across a lot of projects, and it was annoying. The submodule setup guarantees that people are getting the rules on startup so they dont have to go get them","repository":"elizaos/eliza","createdAt":"2025-06-09T20:59:13Z","mergedAt":"2025-06-09T21:22:45Z","additions":18,"deletions":5884},{"id":"PR_kwDONkg7v86ZnwvT","title":"Added RSS Plugin","author":"Dexploarer","number":171,"body":"$13","repository":"elizaos-plugins/registry","createdAt":"2025-06-09T04:39:10Z","mergedAt":null,"additions":3,"deletions":2}],"detailedContributorSummaries":{"ChristopherTrimboli":"ChristopherTrimboli: Merged 6 PRs, including significant updates like #5025 \"chore: v1.0.7\" (+536/-162 lines) and #5015 \"chore: Parallelize CI actions.\" (+219/-32 lines), while modifying 104 files with a total of +10364/-3151 lines across 11 commits. Maintained a consistent work pattern, focusing primarily on other work (55%) and bugfixes (18%).","ceeriil":"ceeriil: Created 1 issue today, #5023 \"GPT-4o access error with OpenAI API key,\" which has been closed. Activity has been sporadic, with engagement on only 1 out of the last 1 days.","github-advanced-security":"github-advanced-security: Reviewed 7 pull requests with a total of 7 comments but did not approve or request changes. Activity was sporadic, being active on only 1 out of 1 days during this period.","jonathanprozzi":"jonathanprozzi: Created 1 issue (#5017 \"Callback from plugin action not making it to end user respons...\") and commented on another issue, showing sporadic activity today.","lalalune":"lalalune: Merged 3 significant PRs, including #5018 with a major contribution of +29086/-29485 lines, while modifying 2318 files overall (+13732/-19090 lines). The work primarily focused on other tasks (60%) and refactoring (20%), demonstrating consistent activity with 10 commits today.","odilitime":"odilitime: Engaged in code reviews with a total of 3 comments but did not approve or request changes on any PRs. Activity was sporadic, being active on only 0 out of 1 days during this period.","standujar":"standujar: Made significant code changes with a focus on bugfix work, modifying 209 files (+18199/-17132 lines) across 2 commits. Additionally, provided 1 review with an approval, demonstrating consistent activity today.","wtfsayo":"wtfsayo: Merged 4 PRs, including a significant reorganization of API routes in PR #5010 (+4405/-4382 lines) and a major migration of CLI prompts in PR #5016 (+12671/-20638 lines). Active with 39 commits, focusing primarily on other work (59%) and modifying 257 files overall (+5433/-10920 lines).","yungalgo":"yungalgo: Merged 1 PR (#5011) focused on refactoring with significant changes (+584/-400 lines) and modified 25 files overall (+1266/-623 lines) across 15 commits. Actively engaged with 2 PR comments and 1 issue comment, demonstrating consistent work patterns."}},"summaryContent":"$14","className":"self-end sm:self-start"}]]}],"$L15","$L16","$L17"]}]}],["$L18","$L19","$L1a"],"$L1b"]}],"loading":null,"isPartial":false}
+15:["$","div",null,{"className":"mb-6","children":["$","div",null,{"className":"flex items-center justify-between","children":[[["$","$L1c",null,{"href":"/summary/day/2025-06-08","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left mr-2 h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"children":"Previous"}],false],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$L1c",null,{"href":"/summary/day/2025-06-08","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Previous"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]],["$","div",null,{"className":"flex flex-col items-center","children":[["$","div",null,{"className":"text-sm font-medium text-gray-500","children":["Daily"," Summary"]}],["$","time",null,{"dateTime":"2025-06-09","className":"text-md font-bold","children":"Jun 9, 2025"}]]}],[["$","$L1c",null,{"href":"/summary/day/2025-06-10","children":[false,["$","span",null,{"children":"Next"}],["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right ml-2 h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}]],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$L1c",null,{"href":"/summary/day/2025-06-10","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Next"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]]]}]}]
+1e:T1545,**Describe the bug**
+
+In using the `plugin-evm` transfer function we expect to see a followup message with either the success or failure of the transaction.
+
+In the plugin's `transfer.ts` callback, we see the following:
+
+https://github.com/elizaos-plugins/plugin-evm/blob/6bf9c4c54b9e1a558c7fb092f071f2e374435887/src/actions/transfer.ts#L133
+
+```typescript
+ if (callback) {
+        callback({
+          text: `Successfully transferred ${paramOptions.amount} tokens to ${paramOptions.toAddress}\nTransaction Hash: ${transferResp.hash}`,
+          content: {
+            success: true,
+            hash: transferResp.hash,
+            amount: formatEther(transferResp.value),
+            recipient: transferResp.to,
+            chain: paramOptions.fromChain,
+          },
+        });
+      }
+... (other error logging as well)
+```
+
+We see the following in our logs (added additional debugging console.log statements):
+
+```bash
+LOG:in the transfer action
+CALLBACK IN EVM_TRANSFER_TOKENS [AsyncFunction (anonymous)]
+in the transferResponse try block
+transferResponse try block completed {
+  hash: '0xd2680982067e0258612119a58497208428613debcd314d667bd758b93ea86ed8',
+  from: '0x7850f8a9825d6dadfF5621300ee11f2dED76b76b',
+  to: '0x25709998B542f1Be27D19Fa0B3A9A67302bc1b94',
+  value: 20000000000000000n,
+  data: '0x'
+}
+[2025-06-09 19:25:35] INFO: [Eliza] Agent generated response for message. Preparing to send back to bus.
+[2025-06-09 19:25:35] INFO: [Eliza] MessageBusService: Sending payload to central server API endpoint (/api/messages/submit):
+    channel_id: "93487822-03c0-4119-bffc-13aca04fb41f"
+    server_id: "00000000-0000-0000-0000-000000000000"
+    author_id: "b850bc30-45f8-0041-a00a-83df46d8555d"
+    content: "I'll help you transfer 0.02 ETH to 0x25709998B542f1Be27D19Fa0B3A9A67302bc1b94 on Sepolia. Processing the transaction now."
+    in_reply_to_message_id: "18489676-ba76-4673-9a39-9f17fe686bc3"
+    source_type: "agent_response"
+    raw_message: {
+      "text": "I'll help you transfer 0.02 ETH to 0x25709998B542f1Be27D19Fa0B3A9A67302bc1b94 on Sepolia. Processing the transaction now.",
+      "thought": "Process ETH transfer request on Sepolia network after checking balance",
+      "actions": [
+        "REPLY",
+        "EVM_TRANSFER_TOKENS"
+      ]
+    }
+    metadata: {
+      "agent_id": "b850bc30-45f8-0041-a00a-83df46d8555d",
+      "agentName": "Eliza",
+      "channelType": "DM",
+      "isDm": true
+    }
+
+```
+
+The transfer is successful, but we only see the initial message of `"text": "I'll help you transfer 0.02 ETH to 0x25709998B542f1Be27D19Fa0B3A9A67302bc1b94 on Sepolia. Processing the transaction now.",` in the Eliza chat interface.
+
+We would expect to see a followup message with the success (or failure) text from the callback in the `transfer.ts` function.
+
+We also triggered an unsuccessful transaction and did not receive a followup error message which the callback suggests we should see.
+
+**To Reproduce**
+
+- Bare Eliza scaffolded as a fresh project with the `plugin-anthropic` and `plugin-evm` added:
+
+```bash
+    "@elizaos/cli": "^1.0.6",
+    "@elizaos/core": "^1.0.6",
+    "@elizaos/plugin-anthropic": "^1.0.0",
+    "@elizaos/plugin-bootstrap": "^1.0.6",
+    "@elizaos/plugin-evm": "file:../plugin-evm",
+    "@elizaos/plugin-knowledge": "^1.0.1",
+    "@elizaos/plugin-openai": "^1.0.3",
+    "@elizaos/plugin-sql": "^1.0.6",
+    "zod": "3.24.2"
+```
+
+and the following Character config:
+
+```typescript
+ name: 'Eliza',
+  plugins: [
+    '@elizaos/plugin-sql',
+    ...(process.env.EVM_PRIVATE_KEY ? ['@elizaos/plugin-evm'] : []),
+    ...(process.env.ANTHROPIC_API_KEY ? ['@elizaos/plugin-anthropic'] : []),
+    ...(process.env.OPENAI_API_KEY ? ['@elizaos/plugin-openai'] : []),
+    ...(process.env.OPENAI_API_KEY ? ['@elizaos/plugin-knowledge'] : []),
+    ...(!process.env.OPENAI_API_KEY ? ['@elizaos/plugin-local-ai'] : []),
+    ...(process.env.DISCORD_API_TOKEN ? ['@elizaos/plugin-discord'] : []),
+    ...(process.env.TWITTER_USERNAME ? ['@elizaos/plugin-twitter'] : []),
+    ...(process.env.TELEGRAM_BOT_TOKEN ? ['@elizaos/plugin-telegram'] : []),
+    ...(!process.env.IGNORE_BOOTSTRAP ? ['@elizaos/plugin-bootstrap'] : []),
+  ],
+  settings: {
+    secrets: {},
+    chains: {
+      evm: ['sepolia'],
+    },
+    ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
+    ANTHROPIC_SMALL_MODEL: 'claude-3-5-sonnet-latest',
+    ANTHROPIC_LARGE_MODEL: 'claude-3-5-sonnet-latest',
+  },
+
+```
+Our private key and RPC are configured and work as the transfer is successful.
+
+
+**Expected behavior**
+
+Based on the callback in `transfer.ts` we expect to see a followup message indicating the success or failure of the transfer call.
+
+**Screenshots**
+
+![Image](https://github.com/user-attachments/assets/06dae3fa-9b2c-4e49-b660-42f2d9f9837f)
+
+At this stage, the transfer succeeds but this is the last message we received.
+
+We would expect that there would be a followup message after this indicating the success or the failure, including (or similar to) the text in the `transfer.ts` callback (in the `plugin-evm` plugin):
+
+`Successfully transferred ${paramOptions.amount} tokens to ${paramOptions.toAddress}\nTransaction Hash: ${transferResp.hash}`
+
+**Additional context**
+
+We're under the impression that this is a core callback issue and not with the `plugin-evm` itself as we're seeing similar behavior with a barebones example using the `plugin-mcp`. This is a more direct and more easily reproducible example to file.
+1f:T649,**Describe the bug**
+
+I am trying to send messages through the API using postman. The message goes through
+
+POST /messages
+```
+{
+  "entityId": "b8af647b-f617-0ae3-ab07-acb81861d7e2",
+  "roomId": "46bf60b4-cfa4-4ec4-a9f3-db1ec9ab0aa1",
+  "channelId": "89591c0f-7b20-45a0-9266-56a6ce68de13",
+  "serverId": "00000000-0000-0000-0000-000000000000",
+  "text": "Test Message!",
+  "source": "postman"
+}
+```
+
+Response:
+```
+{
+    "success": true,
+    "data": {
+        "message": "Message submitted to central store. Target agent b8af647b-f617-0ae3-ab07-acb81861d7e2 will process it.",
+        "messageId": "11346cd8-46f2-4a7e-ae71-b6e72ee865ee",
+        "targetAgentId": "b8af647b-f617-0ae3-ab07-acb81861d7e2",
+        "submittedChannelId": "89591c0f-7b20-45a0-9266-56a6ce68de13"
+    }
+}
+```
+
+However in the logs it says `[test-agent] MessageBusService: Agent not a participant in channel 89591c0f-7b20-45a0-9266-56a6ce68de13, ignoring message`
+
+The strange thing is that I am already running a setup routine through a custom plugin to set a channel, room and add the agent as participant on this channel. See here:
+
+![Image](https://github.com/user-attachments/assets/fe11e37b-0925-4498-a3a2-0985c70151ab)
+
+
+After running this I am inspecting the live database and the channel_participants relation is there:
+
+![Image](https://github.com/user-attachments/assets/d5524f18-31e9-46bb-983e-3973c7140c44)
+
+![Image](https://github.com/user-attachments/assets/18921312-949d-47b2-83e3-73cc663fce73)
+
+**Theory**: 
+MessageBusService seems to access stale data in regards to channel participants.
+
+Is there any way to fix this?
+20:T49f,### Version
+1.0.3
+
+### Description
+`processKnowledgeAction` uses the following to generate an unique uuid for new memories:
+`clientDocumentId: createUniqueUuid(runtime.agentId + "text" + Date.now(), "user-knowledge"),`
+
+However, createUniqueUuid does the following:
+```
+export const createUniqueUuid = (runtime, baseUserId: UUID | string): UUID => {
+  // If the base user ID is the agent ID, return it directly
+  if (baseUserId === runtime.agentId) {
+    return runtime.agentId;
+  }
+
+  // Use a deterministic approach to generate a new UUID based on both IDs
+  // This creates a unique ID for each user+agent combination while still being deterministic
+  const combinedString = `${baseUserId}:${runtime.agentId}`;
+
+  // Create a namespace UUID (version 5) from the combined string
+  return stringToUuid(combinedString);
+};
+```
+
+Meaning that `createUniqueUuid` will always return: `stringToUuid("user-knowledge:undefined")` ie: `4e394ea6-af35-0010-8047-94bccb8b8e5b`
+
+### Expected Result
+The generated ID should be unique, the easiest approach would be to us `stringToUuid` directly.
+
+If possible, I would love to contribute. I can fix this issue, and others I've discovered.
+
+Thanks,21:T1141,**Describe the bug**
+
+When you reload the page/refresh the browser with an agent chat open it shows an error.
+
+**To Reproduce**
+
+1. `eliza create`
+2. `eliza start`
+3. view web client
+4. navigate to agent chat
+5. refresh the page
+
+```sh
+ERROR: [SocketIO] agentId and roomId are required # this log appears before the refresh
+# refresh
+NotFoundError: Not Found
+    at createHttpError (file:///Users/scott/.nvm/versions/node/v20.18.3/lib/node_modules/@elizaos/cli/dist/chunk-JT3O6PBU.js:30940:16)
+    at SendStream.error (file:///Users/scott/.nvm/versions/node/v20.18.3/lib/node_modules/@elizaos/cli/dist/chunk-JT3O6PBU.js:30578:35)
+    at SendStream.pipe (file:///Users/scott/.nvm/versions/node/v20.18.3/lib/node_modules/@elizaos/cli/dist/chunk-JT3O6PBU.js:30734:18)
+    at sendfile (file:///Users/scott/.nvm/versions/node/v20.18.3/lib/node_modules/@elizaos/cli/dist/chunk-JT3O6PBU.js:31440:12)
+    at ServerResponse.sendFile (file:///Users/scott/.nvm/versions/node/v20.18.3/lib/node_modules/@elizaos/cli/dist/chunk-JT3O6PBU.js:31193:7)
+    at file:///Users/scott/.nvm/versions/node/v20.18.3/lib/node_modules/@elizaos/cli/dist/chunk-JT3O6PBU.js:115550:15
+    at Layer.handleRequest (file:///Users/scott/.nvm/versions/node/v20.18.3/lib/node_modules/@elizaos/cli/dist/chunk-JT3O6PBU.js:28379:21)
+    at trimPrefix (file:///Users/scott/.nvm/versions/node/v20.18.3/lib/node_modules/@elizaos/cli/dist/chunk-JT3O6PBU.js:28738:17)
+    at file:///Users/scott/.nvm/versions/node/v20.18.3/lib/node_modules/@elizaos/cli/dist/chunk-JT3O6PBU.js:28709:13
+    at processParams (file:///Users/scott/.nvm/versions/node/v20.18.3/lib/node_modules/@elizaos/cli/dist/chunk-JT3O6PBU.js:28854:16)
+    at next (file:///Users/scott/.nvm/versions/node/v20.18.3/lib/node_modules/@elizaos/cli/dist/chunk-JT3O6PBU.js:28703:9)
+    at file:///Users/scott/.nvm/versions/node/v20.18.3/lib/node_modules/@elizaos/cli/dist/chunk-JT3O6PBU.js:115541:11
+    at Layer.handleRequest (file:///Users/scott/.nvm/versions/node/v20.18.3/lib/node_modules/@elizaos/cli/dist/chunk-JT3O6PBU.js:28379:21)
+    at trimPrefix (file:///Users/scott/.nvm/versions/node/v20.18.3/lib/node_modules/@elizaos/cli/dist/chunk-JT3O6PBU.js:28738:17)
+    at file:///Users/scott/.nvm/versions/node/v20.18.3/lib/node_modules/@elizaos/cli/dist/chunk-JT3O6PBU.js:28709:13
+    at processParams (file:///Users/scott/.nvm/versions/node/v20.18.3/lib/node_modules/@elizaos/cli/dist/chunk-JT3O6PBU.js:28854:16)
+    at next (file:///Users/scott/.nvm/versions/node/v20.18.3/lib/node_modules/@elizaos/cli/dist/chunk-JT3O6PBU.js:28703:9)
+    at file:///Users/scott/.nvm/versions/node/v20.18.3/lib/node_modules/@elizaos/cli/dist/chunk-JT3O6PBU.js:115164:5
+    at Layer.handleRequest (file:///Users/scott/.nvm/versions/node/v20.18.3/lib/node_modules/@elizaos/cli/dist/chunk-JT3O6PBU.js:28379:21)
+    at trimPrefix (file:///Users/scott/.nvm/versions/node/v20.18.3/lib/node_modules/@elizaos/cli/dist/chunk-JT3O6PBU.js:28738:17)
+    at file:///Users/scott/.nvm/versions/node/v20.18.3/lib/node_modules/@elizaos/cli/dist/chunk-JT3O6PBU.js:28709:13
+    at processParams (file:///Users/scott/.nvm/versions/node/v20.18.3/lib/node_modules/@elizaos/cli/dist/chunk-JT3O6PBU.js:28854:16)
+    at next (file:///Users/scott/.nvm/versions/node/v20.18.3/lib/node_modules/@elizaos/cli/dist/chunk-JT3O6PBU.js:28703:9)
+    at SendStream.error (file:///Users/scott/.nvm/versions/node/v20.18.3/lib/node_modules/@elizaos/cli/dist/chunk-JT3O6PBU.js:31524:11)
+    at SendStream.emit (node:events:518:28)
+    at SendStream.error (file:///Users/scott/.nvm/versions/node/v20.18.3/lib/node_modules/@elizaos/cli/dist/chunk-JT3O6PBU.js:30578:21)
+    at SendStream.onStatError (file:///Users/scott/.nvm/versions/node/v20.18.3/lib/node_modules/@elizaos/cli/dist/chunk-JT3O6PBU.js:30646:16)
+    at next (file:///Users/scott/.nvm/versions/node/v20.18.3/lib/node_modules/@elizaos/cli/dist/chunk-JT3O6PBU.js:30827:30)
+    at onstat (file:///Users/scott/.nvm/versions/node/v20.18.3/lib/node_modules/@elizaos/cli/dist/chunk-JT3O6PBU.js:30817:18)
+    at FSReqCallback.oncomplete (node:fs:198:21)
+```
+
+**Expected behavior**
+
+Please show the existing chat with the agent
+
+**Screenshots**
+
+Error:
+
+<img width="1215" alt="Image" src="https://github.com/user-attachments/assets/7443ac4b-a3df-4aef-b342-079e4bc8bd08" />
+
+**Additional context**
+
+elizaos: `v1.0.4`
+
+Navigating back to the home page and then to the agent chat loads the same URL fine.22:T958,   Bug Report: thanks to claude code....
+
+  Issue Summary
+
+  LOG_LEVEL set in .env files is ignored, but works when
+  set via command line environment variables.
+
+  Root Cause
+
+  Timing/Order of Operations Problem: The core logger is
+  initialized during module import (before .env loading)
+  and never rechecks environment variables.
+
+  Technical Details
+
+  Problem Code Locations:
+
+  1. Early Logger Initialization
+  (packages/core/src/logger.ts):
+  // Lines 148-152 - Logger configured at module import 
+  time
+  const isDebugMode = (process?.env?.LOG_LEVEL ||
+  '').toLowerCase() === 'debug';
+  const effectiveLogLevel = isDebugMode ? 'debug' :
+  process?.env?.DEFAULT_LOG_LEVEL || 'info';
+
+  2. Late .env Loading
+  (packages/cli/src/commands/start.ts):
+  // Lines 334-380 - .env loaded much later in start 
+  command
+  const loadEnvConfig = () => {
+    // ... .env file processing happens here
+  }
+
+  Problematic Sequence:
+
+  1. Node.js starts → CLI imports modules
+  2. logger.ts imported → reads process.env.LOG_LEVEL 
+  (empty) → configures 'info' level
+  3. Much later: start command executes
+  4. Much later: .env file loaded → LOG_LEVEL set in
+  process.env
+  5. Logger already configured, never rechecks LOG_LEVEL
+
+  Why Command Line Works:
+
+  Command line env vars are set before Node.js starts, so
+  they're available during early logger initialization.
+
+  Evidence
+
+  - ✅ Command line: LOG_LEVEL=debug elizaos start → Debug
+   logs appear
+  - ❌ .env file: LOG_LEVEL=debug → Debug logs don't
+  appear
+  - ❌ Runtime check: Logger configuration is static after
+   module import
+
+  Code Snippets
+
+  Logger reads LOG_LEVEL too early:
+  // packages/core/src/logger.ts:151-152
+  const isDebugMode = (process?.env?.LOG_LEVEL ||
+  '').toLowerCase() === 'debug';
+  const effectiveLogLevel = isDebugMode ? 'debug' :
+  process?.env?.DEFAULT_LOG_LEVEL || 'info';
+
+  But .env loading happens later:
+  // packages/cli/src/commands/start.ts:334-380  
+  const loadEnvConfig = () => {
+    // Environment loading happens in start command, after
+   logger init
+  }
+
+  Proposed Fix
+
+  Make logger initialization lazy/dynamic - defer
+  LOG_LEVEL reading until after .env files are loaded, or
+  add a mechanism to reconfigure logger when environment
+  changes.
+
+  This is a clear architectural issue where static module
+  initialization happens before dynamic environment
+  loading.23:T18e4,## Summary
+
+This PR implements a comprehensive API domain reorganization and improves the client-side confirmation UX.
+
+### Major API Domain Reorganization 🏗️
+
+**Complete restructuring of the `/packages/cli/src/server/api/` directory:**
+
+- **Deleted monolithic files**: Removed large single-file modules (`agent.ts`, `world.ts`) 
+- **Created domain-based structure** with organized subdirectories:
+
+#### `/api/agents/` - Agent Management Domain
+- `crud.ts` - Create, read, update, delete operations
+- `lifecycle.ts` - Start/stop/restart agent lifecycle management  
+- `logs.ts` - Agent logging and diagnostics
+- `panels.ts` - Agent panel/dashboard functionality
+- `worlds.ts` - World/environment management for agents
+- `index.ts` - Agent domain exports and routing
+
+#### `/api/audio/` - Audio Processing Domain  
+- `conversation.ts` - Conversational audio handling
+- `processing.ts` - Audio processing utilities
+- `synthesis.ts` - Text-to-speech and audio synthesis
+- `index.ts` - Audio domain exports
+
+#### `/api/media/` - Media Management Domain
+- `agents.ts` - Agent-specific media operations
+- `channels.ts` - Channel media management
+- `index.ts` - Media domain exports
+
+#### `/api/memory/` - Memory & State Management Domain
+- `agents.ts` - Agent memory operations
+- `groups.ts` - Group/collective memory management  
+- `rooms.ts` - Room-based memory handling
+- `index.ts` - Memory domain exports
+
+#### `/api/messaging/` - Communication Domain
+- `channels.ts` - Channel operations (moved from `messages.ts`)
+- `core.ts` - Core messaging functionality
+- `servers.ts` - Server-level messaging coordination
+- `index.ts` - Messaging domain exports
+
+#### `/api/runtime/` - Runtime Management Domain
+- `debug.ts` - Runtime debugging utilities
+- `health.ts` - Health checks and monitoring
+- `logging.ts` - System-wide logging management
+- `index.ts` - Runtime domain exports
+
+#### `/api/shared/` - Common Utilities Domain
+- `file-utils.ts` - File handling utilities
+- `middleware.ts` - Security middleware (Helmet, rate limiting)
+- `response-utils.ts` - Standardized API response helpers
+- `validation.ts` - Input validation utilities
+- `uploads/index.ts` - File upload handling
+- `index.ts` - Shared utilities exports
+
+#### `/api/system/` - System Configuration Domain
+- `environment.ts` - Environment configuration (moved from `env.ts`)
+- `index.ts` - System domain exports
+
+#### `/api/tee/` - TEE (Trusted Execution Environment) Domain
+- `tee.ts` - TEE operations (moved from `tee.ts`)
+- `index.ts` - TEE domain exports
+
+### Backend API Improvements
+- **Fix agent start/stop endpoints** to use proper REST patterns (`POST /agents/:id/start`, `POST /agents/:id/stop`)
+- **Add missing channel operations** - implemented `deleteChannel` and `updateChannel` methods
+- **Fix URL path mismatch** in frontend `deleteChannelMessage` API call (was using "messaging" instead of "messages")
+- **Add security middleware** with Helmet and rate limiting for production readiness
+- **Standardize response handling** with consistent error/success response utilities
+- **Remove legacy test files** and cleanup obsolete testing infrastructure
+
+### Frontend Confirmation System Improvements  
+- **Replace browser alerts with proper modal confirmations** using Radix UI AlertDialog
+- **Create reusable ConfirmationDialog component** to avoid code duplication
+- **Add useConfirmation hook** for consistent confirmation state management across components
+- **Update confirmation patterns in**:
+  - Agent deletion (agent-settings.tsx) 
+  - Chat deletion and clearing (chat.tsx)
+  - Agent stopping (stop-agent-button.tsx)
+  - Group channel deletion (app-sidebar.tsx)
+- **Use direct JSX rendering** pattern with `<ConfirmationDialog>` components
+
+### Technical Details
+- **Backend**: Complete API domain reorganization, security middleware, missing endpoints, standardized utilities
+- **Frontend**: Eliminated window.confirm usage, implemented accessible modal dialogs
+- **Type Safety**: Proper TypeScript interfaces for all new components and hooks
+- **Architecture**: Modular, domain-driven API structure for better maintainability
+- **UX**: Consistent confirmation dialogs with proper destructive action styling
+
+### Test Plan
+- [x] Build passes successfully
+- [x] All confirmation dialogs work with proper modal UX
+- [x] Agent start/stop operations work correctly
+- [x] Channel operations (create/delete/update) function properly
+- [x] No remaining window.confirm browser alerts
+- [x] API domain reorganization maintains functionality
+
+## Breaking Changes
+- Agent API endpoints moved from `/agents` to `/api/agents` 
+- Agent start/stop now use `POST /agents/:id/start` and `POST /agents/:id/stop` instead of PUT operations
+- API file structure completely reorganized (affects imports for custom extensions)
+
+## Files Changed
+- **Backend**: 47 API files reorganized, security middleware, missing endpoints
+- **Frontend**: Confirmation system, dialog components, hook utilities  
+- **Dependencies**: Added helmet, express-rate-limit, @types/helmet
+- **Structure**: Complete API domain reorganization from monolithic to modular architecture
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+- **New Features**
+  - Introduced robust, modular API endpoints for agent, messaging, media, audio, memory, and system management with improved security, validation, and error handling.
+  - Added new endpoints for audio processing (transcription, text-to-speech, speech conversation) and secure media uploads for agents and channels.
+  - Enhanced confirmation dialogs in the user interface for destructive actions, providing a consistent and user-friendly experience.
+  - Improved documentation with new and updated API endpoint references.
+
+- **Bug Fixes**
+  - Addressed frontend loading issues by aligning API routes and improving chat context detection.
+
+- **Refactor**
+  - Reorganized API routing structure for clarity and scalability, replacing legacy endpoints and consolidating related routes.
+  - Enhanced file upload security and validation, including stricter filename sanitization and MIME type checks.
+
+- **Chores**
+  - Added security middleware and rate limiting for all API endpoints.
+  - Updated dependencies to include security and rate-limiting libraries.
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->24:T978,## Summary
+Replaces the legacy `prompts` library with modern `@clack/prompts` across all CLI commands for enhanced user experience and type safety.
+
+## Changes Made
+- ✅ **All CLI commands migrated**: create, env, publish, update, plugins
+- ✅ **Core utilities updated**: cli-prompts, env-prompt, get-config, github 
+- ✅ **Enhanced UX features added**:
+  - Intro/outro messages for workflows
+  - Spinners for save operations  
+  - Better validation with clearer error messages
+  - Improved cancellation handling with proper exit codes
+  - Setup instruction notes (e.g., GitHub token creation)
+- ✅ **Type safety improvements**: Better TypeScript validation throughout
+- ✅ **Backward compatibility**: All existing CLI flows maintained
+
+## Benefits
+- **Modern UX**: Visual feedback with spinners, structured intro/outro flows
+- **Better Accessibility**: @clack/prompts has superior keyboard navigation and screen reader support
+- **Type Safety**: Improved TypeScript validation and error handling
+- **Consistency**: Unified prompt library across CLI codebase
+- **Maintainability**: Single modern library vs multiple legacy ones
+
+## Testing
+- [x] All CLI tests passing (`bun run test:cli`)
+- [x] Build successful with no TypeScript errors  
+- [x] Interactive flows verified to maintain existing behavior
+- [x] Cancellation handling tested (Ctrl+C)
+
+## Files Changed
+- `package.json`: Added @clack/prompts@^0.11.0 dependency
+- `src/commands/*.ts`: Updated create, env, publish, update commands
+- `src/utils/*.ts`: Updated cli-prompts, env-prompt, get-config, github utilities
+- `bun.lock`: Updated dependency lockfile
+
+## Next Steps
+Future improvements that could be made in separate PRs:
+- [ ] Migrate `plugin-creator.ts` from inquirer to @clack/prompts (complex multi-step forms)
+- [ ] Add more @clack/prompts features like progress bars for long operations
+- [ ] Consider adding `clack.log.step()` for multi-step processes
+- [ ] Evaluate adding `clack.group()` for related prompt groupings
+
+## Migration Details
+### Before (prompts library):
+```typescript
+const response = await prompts({
+  type: 'text', 
+  name: 'value',
+  message: 'Enter value:'
+});
+```
+
+### After (@clack/prompts):
+```typescript
+const value = await clack.text({
+  message: 'Enter value:',
+  validate: (input) => input ? undefined : 'Value required'
+});
+
+if (clack.isCancel(value)) {
+  clack.cancel('Operation cancelled.');
+  process.exit(0);
+}
+```25:Tfaa,## Problem
+
+The ElizaOS CLI had scattered and inconsistent directory detection logic throughout the codebase:
+
+1. **Missing monorepo structure detection** - No proper classification for subdirectories within the ElizaOS monorepo
+2. **Scattered detection functions** - Multiple functions like `isMonorepoContext()` duplicated detection logic across different files
+3. **Infrastructure packages misclassified** - CLI, client, and other monorepo packages were incorrectly detected as `elizaos-project` instead of infrastructure components
+4. **Inconsistent detection patterns** - Different commands used different approaches to determine directory types
+5. **Over-aggressive heuristics** - Dependency-based detection caused false positives for infrastructure packages within the monorepo
+
+## Solution
+
+Implemented a centralized, hierarchical directory detection system with a new `elizaos-subdir` type:
+
+### New Directory Type
+
+- Added `elizaos-subdir` type for subdirectories within the ElizaOS monorepo that aren't projects or plugins
+
+### Simplified Logic
+
+- **Outside monorepo**: Check if project/plugin → if not, classify as `non-elizaos-dir`
+- **Inside monorepo**: Check if project/plugin → if not, classify as `elizaos-subdir`
+
+### Conservative Detection
+
+- Made `isElizaOSProject()` more conservative inside monorepos by only using explicit indicators
+- Disabled heuristic-based detection (dependency patterns, file structure analysis) within monorepos
+- Consolidated duplicate detection functions
+
+## Details
+
+### Core Changes
+
+**Directory Detection (`packages/cli/src/utils/directory-detection.ts`)**
+
+- Added `elizaos-subdir` to `DirectoryInfo` type union
+- Simplified main detection logic to use clear inside/outside monorepo branching
+- Made `isElizaOSProject()` accept `monorepoRoot` parameter for context-aware detection
+- Disabled heuristic checks inside monorepos to prevent infrastructure package misclassification
+
+**CLI Commands**
+
+- All CLI commands now use the standardized `detectDirectoryType()` function
+- Removed deprecated `isMonorepoContext()` function usage
+
+**Dependencies**
+
+- Eliminated duplicate logic in `get-package-info.ts`
+- Added `monorepoRoot` property to `DirectoryInfo` for consistent access
+- Updated registry logic to use consolidated detection
+
+### Test Results
+
+Before fix:
+
+```bash
+# CLI directory incorrectly detected as project
+✅ Directory Type: elizaos-project  # ❌ Wrong
+
+# Client directory correctly detected
+✅ Directory Type: elizaos-subdir   # ✅ Correct
+```
+
+After fix (expected):
+
+```bash
+# Both CLI and client correctly detected as subdirs
+✅ Directory Type: elizaos-subdir   # ✅ Correct for both
+```
+
+### Directory Type Hierarchy
+
+1. **elizaos-monorepo** - Root of ElizaOS monorepo
+2. **elizaos-project** - User projects with agents/characters
+3. **elizaos-plugin** - ElizaOS plugins
+4. **elizaos-subdir** - Infrastructure packages within monorepo (CLI, client, core, etc.)
+5. **non-elizaos-dir** - Regular directories outside ElizaOS context
+
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+- **New Features**
+  - Enhanced support for ElizaOS monorepos, including improved detection, build, and update handling for monorepo and subdirectory types.
+
+- **Bug Fixes**
+  - Improved error handling and messaging for invalid or inaccessible directories across CLI commands.
+  - Safer project and plugin startup with added checks and error logging.
+
+- **Refactor**
+  - Streamlined directory detection logic for more accurate classification and reduced code complexity.
+  - Updated internal naming for clarity (e.g., distinguishing plugin name checks).
+
+- **Style**
+  - Standardized string quoting and formatting in test files for consistency.
+
+- **Tests**
+  - Updated tests to reflect new directory detection logic and improved error messaging.
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->26:T72e,This pull request introduces several updates to the development workflow, build configurations, and client-server interaction, aiming to enhance development efficiency and improve maintainability. Key changes include the addition of a new `dev-watch.js` script for streamlined development, updates to Vite server configuration, and improvements to client-side behavior in development mode.
+
+### Development Workflow Enhancements:
+* Added a new `scripts/dev-watch.js` script to orchestrate backend and frontend development environments. This script includes server health checks, process management, and automatic startup of Vite with HMR.
+* Updated the `dev` script in `package.json` to use the new `dev-watch.js` script instead of the previous Turbo-based command.
+
+### Client-Side Configuration:
+* Modified `vite.config.ts` to include a detailed server configuration with proxy settings for backend API, WebSocket connections, and other endpoints, along with stricter port binding and CORS support.
+* Adjusted the `logLevel` in `vite.config.ts` to show `info` logs during development for better debugging visibility.
+* Added a script to `index.html` that dynamically loads a development refresh script when running on localhost, improving the developer experience.
+
+### Build and Start Script Updates:
+* Simplified the `start` and `build` scripts in `package.json` by removing unnecessary flags, aligning them with the updated development workflow.
+* Updated `turbo.json` to remove the `cache: false` configuration for `start` and `dev` tasks, simplifying task definitions.
+
+### Minor Improvements:
+* Updated the `AgentCreator` component to simplify the description text for default plugins.
+* Improved logging in `AgentServer` to clarify when the dashboard URL is displayed (only during `start` and not in `dev` mode).27:Tc6f,This pull request refactors several GitHub Actions workflows to optimize job execution by introducing setup jobs for dependency installation and caching, and by restructuring workflows to enable parallel execution of tasks. The changes focus on improving efficiency and maintainability across CI, CLI tests, integration tests, and Tauri CI workflows.
+
+### Workflow Optimizations
+
+#### Common Improvements:
+* Introduced setup jobs in `.github/workflows/ci.yaml`, `.github/workflows/integrationTests.yaml`, and `.github/workflows/tauri-ci.yml` to centralize dependency installation and build artifact caching. These setup jobs are shared across subsequent workflow jobs to reduce redundant steps. [[1]](diffhunk://#diff-944291df2c9c06359d37cc8833d182d705c9e8c3108e7cfe132d61a06e9133ddL8-L19) [[2]](diffhunk://#diff-40e5e841155651e834bcd8287c765008aeda5f7195af86d381f9c2e9f9f78349L19-R26) [[3]](diffhunk://#diff-b793b0c0165d8293e0fd85058c04b9e7e1b700dff5797a5164c014e84ab9a66eR21-R68)
+
+* Added caching mechanisms for dependencies (`node_modules`) and build artifacts (`packages/*/dist`, `packages/*/build`) using `actions/cache` to speed up subsequent workflow runs. [[1]](diffhunk://#diff-944291df2c9c06359d37cc8833d182d705c9e8c3108e7cfe132d61a06e9133ddR35-R63) [[2]](diffhunk://#diff-40e5e841155651e834bcd8287c765008aeda5f7195af86d381f9c2e9f9f78349L48-R94) [[3]](diffhunk://#diff-b793b0c0165d8293e0fd85058c04b9e7e1b700dff5797a5164c014e84ab9a66eR21-R68)
+
+#### CI Workflow (`ci.yaml`):
+* Split the CI workflow into four parallel jobs: `test`, `lint-and-format`, `build`, and `setup`. Each job restores dependencies from the setup job to avoid redundant installations.
+
+* Integrated Codecov for uploading test coverage reports as part of the `test` job.
+
+#### CLI Tests Workflow (`cli-tests.yml`):
+* Modified the matrix strategy to only run the full OS matrix (`ubuntu-latest`, `macos-latest`, `windows-latest`) on pushes to the main branch, while PRs run tests on `ubuntu-latest` only.
+
+* Updated the cache key for model files to use the hash of the workflow file itself for better invalidation control.
+
+#### Integration Tests Workflow (`integrationTests.yaml`):
+* Split into three parallel jobs: `setup`, `validate`, and `integration-tests`. The `validate` job performs environment validation, while `integration-tests` runs the actual tests. Both jobs reuse build artifacts cached by the `setup` job. [[1]](diffhunk://#diff-40e5e841155651e834bcd8287c765008aeda5f7195af86d381f9c2e9f9f78349L19-R26) [[2]](diffhunk://#diff-40e5e841155651e834bcd8287c765008aeda5f7195af86d381f9c2e9f9f78349R112-R150)
+
+* Reintroduced the creation of a `.env` file for tests in the `integration-tests` job to include required environment variables.
+
+#### Tauri CI Workflow (`tauri-ci.yml`):
+* Added a `setup` job to build packages once and share the artifacts across platform-specific builds. This ensures consistency and reduces redundant builds in the `test-build` job.
+
+* Updated the `test-build` job to restore cached build artifacts instead of rebuilding packages.
+
+These changes collectively enhance the efficiency, maintainability, and reliability of the CI/CD pipelines.28:T9b8,# Relates to
+
+https://github.com/elizaos-plugins/plugin-knowledge/issues/16
+
+This most likely went unnoticed for three reasons:
+1. Eliza still responds postively even if the memory is not stored as 'knowledge'.
+2. Because the last few messages are in the context window, both the request to store the memory and the positive response from Eliza are in subsequent queries.
+3. The browser client correctly calls `createUniqueUuid` with the agent runtime. 
+
+# Risks
+**Low Risk** - Instead of using `createUniqueUuid`, we are using `stringToUuid` in two different places
+
+# Background
+## What does this PR fix?
+The way we generate unique ids for memories, specifically in `actions.ts`:
+
+```ts
+// for documents
+clientDocumentId: createUniqueUuid(runtime.agentId + fileName + Date.now(), fileName),
+// ...
+// for text
+clientDocumentId: createUniqueUuid(runtime.agentId + "text" + Date.now(), "user-knowledge"),
+```
+
+is not unique at all. for text, the result is always `4e394ea6-af35-0010-8047-94bccb8b8e5b` since `createUniqueUuid(runtime.agentId + "text" + Date.now(), "user-knowledge")` always results in `stringToUuid("user-knowledge:undefined")`. 
+
+For documents, the result is `stringToUuid(fileName)` which is only unique if the file name is unique.
+
+## Proposed Fix
+To maintain the initial intent of the code, we should use `stringToUuid` for both text and documents using the existing seeds: `runtime.agentId + fileName + Date.now()` and `runtime.agentId + "text" + Date.now() + "user-knowledge"`.
+
+# Documentation changes needed?
+No.
+
+# Testing
+## Where should a reviewer start?
+1. Two new tests were added to `__tests__/action.test.ts` to ensure that the unique ids are generated correctly.
+2. Existings tests were updated to Mock `Date.now()` to generate predictable ids. 
+3. To truly verify knowledge is being stored, the "memories" table needs to be checked. 
+
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+- **Tests**
+	- Enhanced tests to ensure that document IDs are uniquely and deterministically generated based on file content, text, and timestamps.
+	- Added new tests to verify uniqueness and time-sensitivity of document IDs in different scenarios.
+
+- **Refactor**
+	- Updated the method for generating document IDs to improve consistency and reliability. No changes to user-facing features or public APIs.
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->29:T7bc,## Description
+
+**Problem:**
+- `elizaos publish -n` (npm-only) falsely claimed GitHub repository availability and required GitHub credentials
+- `elizaos publish -sr` (skip registry) showed contradictory registry messages  
+- Console messaging didn't reflect actual publish actions taken
+
+**Solution:**
+- Made GitHub credential validation conditional on publish mode (skip for `-n` flag)
+- Added tracking for what was actually published (`publishedToGitHub`)  
+- Fixed final availability URLs to only show platforms where publishing occurred
+- Cleaned up registry messaging logic to prevent contradictions
+- Added proper fallback to npm username when GitHub credentials unavailable
+
+**Changes:**
+- GitHub credentials now only required when publishing to GitHub
+- Registry PR creation messages only show when registry not skipped
+- Final summary accurately reflects published platforms (NPM always, GitHub conditionally)
+- Placeholder replacements skip GitHub-specific fields in npm-only mode
+
+**Testing:**
+- `elizaos publish -n` - No GitHub credential prompt, only NPM URL shown
+- `elizaos publish -sr` - No contradictory registry messages  
+- `elizaos publish` - Full publish flow with accurate messaging
+
+Fixes false repository claims and eliminates unnecessary credential requirements for npm-only publishing.
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+- **New Features**
+  - Improved support for npm-only publishing mode, allowing users to skip GitHub-related steps and credentials when using the `--npm` flag.
+
+- **Bug Fixes**
+  - Ensured that GitHub credential prompts and repository information are only shown when relevant, providing clearer and more accurate messaging during the publishing process.
+
+- **Refactor**
+  - Streamlined username handling and output messaging for a more consistent publishing experience.
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->2a:T47c,## Summary
+- Adds automatic lockfile cleanup when falling back to GitHub installations
+- Prevents circular dependency issues during npm-to-GitHub fallback scenarios
+
+## Changes
+- **New `removeFromBunLock()` function**: Safely removes package entries from bun.lock using `bun remove`
+- **New `executeInstallationWithFallback()` function**: Handles npm installation with automatic GitHub fallback and lockfile cleanup
+- **Updated `installPlugin()` function**: Uses the new fallback mechanism for registry-based installations
+
+## How it works
+1. Attempts npm installation first
+2. If npm fails and GitHub fallback is available:
+   - Calls `removeFromBunLock()` to clean up any partial lockfile entries
+   - Attempts GitHub installation with clean lockfile
+3. Prevents circular dependency errors that can occur with stale lockfile entries
+
+## Test plan
+- [ ] Test npm installation success (should work as before)
+- [ ] Test npm installation failure with GitHub fallback available
+- [ ] Verify lockfile cleanup occurs before GitHub installation
+- [ ] Test with and without existing bun.lock file
+- [ ] Verify no regression in existing installation flows2b:T540,This pull request enhances the CI/CD workflows by introducing caching mechanisms to optimize dependency and model management. The changes aim to reduce build times and improve efficiency across various workflows.
+
+### Dependency Caching Improvements:
+* **Added Bun dependency caching**: Implemented caching for Bun dependencies (`~/.bun/install/cache` and `node_modules`) in multiple workflows, including `ci.yaml` [[1]](diffhunk://#diff-944291df2c9c06359d37cc8833d182d705c9e8c3108e7cfe132d61a06e9133ddR24-R33) `cli-tests.yml` [[2]](diffhunk://#diff-af054d6a0a6a2b916a965c13fdb7ada5b764685705aaaa85a716c73dc31a1290R54-R63) `integrationTests.yaml` [[3]](diffhunk://#diff-40e5e841155651e834bcd8287c765008aeda5f7195af86d381f9c2e9f9f78349R33-R42) `release.yaml` [[4]](diffhunk://#diff-e426ed45842837026e10e66af23d9c7077e89eacbe6958ce7cb991130ad05adaR27-R36) and `tauri-ci.yml` [[5]](diffhunk://#diff-b793b0c0165d8293e0fd85058c04b9e7e1b700dff5797a5164c014e84ab9a66eR44-R53). This uses `actions/cache@v4` with a key based on the OS and `bun.lock` hash for efficient restoration.
+
+### Model Caching Enhancements:
+* **Added model caching in CLI tests**: Introduced caching for models (`~/.eliza/models`) in `cli-tests.yml`, with a key based on the OS and the workflow file hash. This ensures faster access to pre-downloaded models during CI runs.2c:T6b3,This pull request introduces changes to improve the handling of database directories during end-to-end (E2E) tests and updates the CI workflow configuration. The key changes include ensuring unique and clean database directories for each test run, adding cleanup logic after tests, and introducing a new environment variable in the CI workflow.
+
+### Improvements to E2E Test Database Handling:
+* Modified `runE2eTests` to create a unique database directory for each test run using the package name and a timestamp, preventing conflicts between test runs. (`packages/cli/src/commands/test.ts`, [packages/cli/src/commands/test.tsL167-R200](diffhunk://#diff-1e127a5e0035493241bed339c064acd5235272cf6841f1e539240118da2133eaL167-R200))
+* Added logic to clean up existing database directories before initializing a new one to avoid potential corruption. (`packages/cli/src/commands/test.ts`, [packages/cli/src/commands/test.tsL167-R200](diffhunk://#diff-1e127a5e0035493241bed339c064acd5235272cf6841f1e539240118da2133eaL167-R200))
+* Introduced a cleanup process in the `finally` block to remove the test database directory and its parent if empty after tests complete, ensuring no leftover files. (`packages/cli/src/commands/test.ts`, [packages/cli/src/commands/test.tsR581-R597](diffhunk://#diff-1e127a5e0035493241bed339c064acd5235272cf6841f1e539240118da2133eaR581-R597))
+
+### CI Workflow Update:
+* Added the `PGLITE_WASM_MODE` environment variable with the value `node` to the CI workflow configuration, likely to ensure compatibility with the testing environment. (`.github/workflows/ci.yaml`, [.github/workflows/ci.yamlR15](diffhunk://#diff-944291df2c9c06359d37cc8833d182d705c9e8c3108e7cfe132d61a06e9133ddR15))2d:T8bb,# Registry Update Checklist
+
+Registry:
+- [ ] I've made the left side of the colon of JSON entry in index.json match the potential NPM package name
+- [ ] I've used github not github.com
+- [ ] There is no .git extension
+- [ ] It's placed it alphabetically in the list
+- [ ] I've dealt with commas properly so the list is still valid JSON
+
+If not an eliza-plugins official repo, i.e. new plugin: 
+
+The plugin repo has:
+- [ ] is publically accessible (not a private repo)
+- [ ] uses main as it's default branch
+- [ ] I have include `elizaos-plugins` in the topics in the GitHub repo settings. If the plugin is related to `AI` or `crypto`, please add those as topics as well.
+- [ ] add simple description in github repo
+- [ ] follows this convention
+```
+plugin-name/
+├── images/
+│   ├── logo.jpg        # Plugin branding logo
+│   ├── banner.jpg      # Plugin banner image
+├── src/
+│   ├── index.ts        # Main plugin entry point
+│   ├── actions/        # Plugin-specific actions
+│   ├── clients/        # Client implementations
+│   ├── adapters/       # Adapter implementations
+│   └── types.ts        # Type definitions
+│   └── environment.ts  # runtime.getSetting, zod validation
+├── package.json        # Plugin dependencies
+└── README.md          # Plugin documentation
+```
+- [ ] an `images/banner.jpg` and `images/logo.jpg` and they
+  - Use clear, high-resolution images
+  - Keep file sizes optimized (< 500KB for logos, < 1MB for banners)
+  - Follow the [elizaOS Brand Guidelines](https://github.com/elizaOS/brandkit)
+  - Include alt text for accessibility
+- [ ] package.json has a agentConfig like the following
+```json
+{
+  "name": "@myNpmOrg/plugin-example",
+  "version": "1.0.0",
+  "agentConfig": {
+    "pluginType": "elizaos:plugin:1.0.0",
+    "pluginParameters": {
+      "API_KEY": {
+        "type": "string",
+        "description": "API key for the service"
+      }
+    }
+  }
+}
+```
+
+<!-- If you are on Discord, please join https://discord.gg/elizaOS and state your Discord username here for the contributor role and join us in #development-feed -->
+<!--
+## Discord username
+
+-->
+16:["$","div",null,{"className":"mb-8 space-y-6","children":[["$","$L1d",null,{"metrics":{"date":"2025-06-09","interval":{"intervalStart":"$D2025-06-09T00:00:00.000Z","intervalEnd":"$D2025-06-10T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":17,"merged":13,"total":20},"issues":{"new":3,"closed":4,"total":7},"activeContributors":15,"codeChanges":{"additions":5005,"deletions":12321,"files":89,"commitCount":104},"topContributors":[{"username":"ChristopherTrimboli","avatarUrl":"https://avatars.githubusercontent.com/u/27584221?u=de148a498b5af814e037c2975112fadd09df743f&v=4","totalScore":273.4758359824854,"prScore":237.7758359824854,"issueScore":0,"reviewScore":35.5,"commentScore":0.2,"summary":"ChristopherTrimboli: Merged 6 PRs, including significant updates like #5025 \"chore: v1.0.7\" (+536/-162 lines) and #5015 \"chore: Parallelize CI actions.\" (+219/-32 lines), while modifying 104 files with a total of +10364/-3151 lines across 11 commits. Maintained a consistent work pattern, focusing primarily on other work (55%) and bugfixes (18%)."},{"username":"wtfsayo","avatarUrl":"https://avatars.githubusercontent.com/u/82053242?u=98209a1f10456f42d4d2fa71db4d5bf4a672cbc3&v=4","totalScore":176.820458278888,"prScore":176.382458278888,"issueScore":0,"reviewScore":0,"commentScore":0.43799999999999994,"summary":"wtfsayo: Merged 4 PRs, including a significant reorganization of API routes in PR #5010 (+4405/-4382 lines) and a major migration of CLI prompts in PR #5016 (+12671/-20638 lines). Active with 39 commits, focusing primarily on other work (59%) and modifying 257 files overall (+5433/-10920 lines)."},{"username":"lalalune","avatarUrl":"https://avatars.githubusercontent.com/u/18633264?u=e2e906c3712c2506ebfa98df01c2cfdc50050b30&v=4","totalScore":157.7736370643093,"prScore":157.7736370643093,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"lalalune: Merged 3 significant PRs, including #5018 with a major contribution of +29086/-29485 lines, while modifying 2318 files overall (+13732/-19090 lines). The work primarily focused on other tasks (60%) and refactoring (20%), demonstrating consistent activity with 10 commits today."},{"username":"yungalgo","avatarUrl":"https://avatars.githubusercontent.com/u/113615973?u=92e0f29f7e2fbb8ce46ed13c51f692ca803de02d&v=4","totalScore":63.3826323876676,"prScore":62.944632387667596,"issueScore":0,"reviewScore":0,"commentScore":0.43799999999999994,"summary":"yungalgo: Merged 1 PR (#5011) focused on refactoring with significant changes (+584/-400 lines) and modified 25 files overall (+1266/-623 lines) across 15 commits. Actively engaged with 2 PR comments and 1 issue comment, demonstrating consistent work patterns."},{"username":"Dangoz","avatarUrl":"https://avatars.githubusercontent.com/u/71613713?u=1839f372422c7a5503a713dca22981490b4ea7da&v=4","totalScore":51.4297738965761,"prScore":51.2297738965761,"issueScore":0,"reviewScore":0,"commentScore":0.2,"summary":null},{"username":"wookosh","avatarUrl":"https://avatars.githubusercontent.com/u/120273332?u=493e01d0863a55ed139425760447079b96ef931d&v=4","totalScore":51.36659503302697,"prScore":37.526595033026965,"issueScore":0,"reviewScore":13.5,"commentScore":0.33999999999999997,"summary":null},{"username":"github-advanced-security","avatarUrl":"https://avatars.githubusercontent.com/in/57789?v=4","totalScore":31.5,"prScore":0,"issueScore":0,"reviewScore":31.5,"commentScore":0,"summary":"github-advanced-security: Reviewed 7 pull requests with a total of 7 comments but did not approve or request changes. Activity was sporadic, being active on only 1 out of 1 days during this period."},{"username":"odilitime","avatarUrl":"https://avatars.githubusercontent.com/u/16395496?u=c9bac48e632aae594a0d85aaf9e9c9c69b674d8b&v=4","totalScore":13.5,"prScore":0,"issueScore":0,"reviewScore":13.5,"commentScore":0,"summary":"odilitime: Engaged in code reviews with a total of 3 comments but did not approve or request changes on any PRs. Activity was sporadic, being active on only 0 out of 1 days during this period."},{"username":"Dexploarer","avatarUrl":"https://avatars.githubusercontent.com/u/211557447?u=21a243d61cc1f87574328ae07fc64d7d7577b53d&v=4","totalScore":12.232759469228053,"prScore":12.232759469228053,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":null},{"username":"standujar","avatarUrl":"https://avatars.githubusercontent.com/u/16385918?u=718bdcd1585be8447bdfffb8c11ce249baa7532d&v=4","totalScore":5.34,"prScore":0,"issueScore":0,"reviewScore":5,"commentScore":0.33999999999999997,"summary":"standujar: Made significant code changes with a focus on bugfix work, modifying 209 files (+18199/-17132 lines) across 2 commits. Additionally, provided 1 review with an approval, demonstrating consistent activity today."},{"username":"jonathanprozzi","avatarUrl":"https://avatars.githubusercontent.com/u/9438776?u=25b5a5b22cfe26724ee1ebd869c378fc65196987&v=4","totalScore":4.5,"prScore":0,"issueScore":4.3,"reviewScore":0,"commentScore":0.2,"summary":"jonathanprozzi: Created 1 issue (#5017 \"Callback from plugin action not making it to end user respons...\") and commented on another issue, showing sporadic activity today."},{"username":"ceeriil","avatarUrl":"https://avatars.githubusercontent.com/u/84419154?u=5e4524c176cdae6a8ff3fffc83c3e4f2392842c7&v=4","totalScore":4.2,"prScore":0,"issueScore":4.2,"reviewScore":0,"commentScore":0,"summary":"ceeriil: Created 1 issue today, #5023 \"GPT-4o access error with OpenAI API key,\" which has been closed. Activity has been sporadic, with engagement on only 1 out of the last 1 days."},{"username":"lkoczorowski","avatarUrl":"https://avatars.githubusercontent.com/u/16906921?v=4","totalScore":4,"prScore":0,"issueScore":4,"reviewScore":0,"commentScore":0,"summary":null}],"focusAreas":[{"area":"cli","count":84},{"area":".github/workflows","count":29},{"area":".cursor/rules","count":18},{"area":"scripts","count":2},{"area":"docs","count":1}],"topIssues":[{"id":"I_kwDOMT5cIs66o8ku","title":"Callback from plugin action not making it to end user response in chat","author":"jonathanprozzi","number":5017,"repository":"elizaos/eliza","body":"$1e","createdAt":"2025-06-09T19:45:43Z","closedAt":"2025-06-19T10:57:22Z","state":"CLOSED","commentCount":2},{"id":"I_kwDOMT5cIs66PtlW","title":"MessageBusService: Agent not a participant in channel {channelId}, ignoring message","author":"exitsimulation","number":4972,"repository":"elizaos/eliza","body":"$1f","createdAt":"2025-06-06T12:44:57Z","closedAt":"2025-06-09T19:53:07Z","state":"CLOSED","commentCount":1},{"id":"I_kwDOOu4gVs66mpXr","title":"processKnowledgeAction: Generates the same clientDocumentId for every memory","author":"lkoczorowski","number":16,"repository":"elizaos-plugins/plugin-knowledge","body":"$20","createdAt":"2025-06-09T15:45:23Z","closedAt":"2025-07-01T22:28:06Z","state":"CLOSED","commentCount":1},{"id":"I_kwDOMT5cIs65cJo8","title":"Twitter Client fails to start with the new release 1.0.2","author":"affanmustafa","number":4894,"repository":"elizaos/eliza","body":"**Describe the bug**\n\nWhen you launch the agent, it gives the following error:\n```\nERROR: Eliza() - Failed to register service twitter: Cannot read properties of undefined (reading 'id_str')\n```\n\n**To Reproduce**\n\nCreate a new project with Eliza 1.0.2. Fill the env variables and then start the project\n\n**Expected behavior**\n\nIt should not generate this error and launch successfully.\n\n","createdAt":"2025-06-02T18:17:37Z","closedAt":"2025-06-09T20:30:22Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs653Uth","title":"Refreshing on an agent chat shows error","author":"scottrepreneur","number":4927,"repository":"elizaos/eliza","body":"$21","createdAt":"2025-06-04T15:42:29Z","closedAt":"2025-06-09T01:19:13Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs66bQZc","title":"LOG_LEVEL from .env Not Working in 1.0.6","author":"harperaa","number":5005,"repository":"elizaos/eliza","body":"$22","createdAt":"2025-06-08T00:14:19Z","closedAt":"2025-06-09T18:48:17Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs66p5jZ","title":"GPT-4o access error with OpenAI API key","author":"ceeriil","number":5023,"repository":"elizaos/eliza","body":"Any option to use gpt04o mini instead? \nI get this error \nProject `my key' does not have access to model `gpt-4o`","createdAt":"2025-06-09T21:35:00Z","closedAt":"2025-06-11T01:15:38Z","state":"CLOSED","commentCount":0}],"topPullRequests":[{"id":"PR_kwDOMT5cIs6ZvyIq","title":"feat: Dynamic loading of database tables, rebuild plugin-sql, ","author":"lalalune","number":5018,"body":"This is a big PR\r\n\r\n- Rewrite plugin-sql to dynamically migrate code\r\n- Rewrite CLI commands to load plugin dependencies, migrate db tables\r\n- Refactor types and add service types which can be inherited by dependent plugins\r\n\r\nOverall should not change a ton of functionality but should enable fully modular plugins. We can move konwledge / document table to the knowledge plugin, for example","repository":"elizaos/eliza","createdAt":"2025-06-09T20:43:10Z","mergedAt":"2025-06-10T07:14:13Z","additions":12195,"deletions":10105},{"id":"PR_kwDOMT5cIs6Zv1Bc","title":"chore: 1.0.7","author":"ChristopherTrimboli","number":5019,"body":"","repository":"elizaos/eliza","createdAt":"2025-06-09T20:49:25Z","mergedAt":"2025-06-09T21:39:11Z","additions":11527,"deletions":6221},{"id":"PR_kwDOMT5cIs6ZwMEA","title":"chore: v1.0.7","author":"ChristopherTrimboli","number":5025,"body":"","repository":"elizaos/eliza","createdAt":"2025-06-09T21:45:13Z","mergedAt":"2025-06-09T21:45:42Z","additions":11522,"deletions":6216},{"id":"PR_kwDOMT5cIs6Zmx7d","title":"feat: Reorganize API routes into logical domain-based structure","author":"wtfsayo","number":5010,"body":"$23","repository":"elizaos/eliza","createdAt":"2025-06-09T00:36:47Z","mergedAt":"2025-06-10T09:10:17Z","additions":4896,"deletions":3816},{"id":"PR_kwDONNAI986ZvBTy","title":"feat: wallet_addresses table with CAIP-2/10 adoption","author":"Dangoz","number":128,"body":"#### Based on feedback from #124, this PR targets several issues as following:\r\n- Remove the fetching logic from client component UserProfile.tsx, and refactor it to fetch/synchronize server-side during build time at src/app/profile/queries.ts.\r\n- Remove ethAddress & sol Address from users table. Create a new table called wallet_addresses and adjust database access logic for the new table.\r\n- Adopt Chain Identifier based on [CAIP-2](https://github.com/ChainAgnostic/CAIPs/blob/master/CAIPs/caip-2.md). ChainId instead of Chain name are saved to the database.","repository":"elizaos/elizaos.github.io","createdAt":"2025-06-09T19:21:11Z","mergedAt":"2025-06-19T22:07:10Z","additions":2910,"deletions":165},{"id":"PR_kwDOMT5cIs6ZvMAx","title":"feat: migrate CLI prompts from prompts library to @clack/prompts","author":"wtfsayo","number":5016,"body":"$24","repository":"elizaos/eliza","createdAt":"2025-06-09T19:39:53Z","mergedAt":"2025-06-10T08:54:09Z","additions":2108,"deletions":6553},{"id":"PR_kwDOMT5cIs6ZpWei","title":"refactor: centralize directory detection with monorepo support","author":"yungalgo","number":5011,"body":"$25","repository":"elizaos/eliza","createdAt":"2025-06-09T08:27:55Z","mergedAt":"2025-06-09T16:55:59Z","additions":455,"deletions":271},{"id":"PR_kwDOMT5cIs6ZhX9I","title":"chore: HMR client dev","author":"ChristopherTrimboli","number":4989,"body":"$26","repository":"elizaos/eliza","createdAt":"2025-06-07T15:59:46Z","mergedAt":"2025-06-09T16:56:36Z","additions":417,"deletions":63},{"id":"PR_kwDOMT5cIs6Zv1E2","title":"feat: refactor / split core types","author":"lalalune","number":5020,"body":"This PR splits up core types, cleans up some issues, adds new service interfaces for common service types\r\n\r\nThis shouldn't break or change anything. Everything should continue to work on merge.","repository":"elizaos/eliza","createdAt":"2025-06-09T20:49:32Z","mergedAt":"2025-06-10T07:14:14Z","additions":247,"deletions":228},{"id":"PR_kwDOMT5cIs6ZvEih","title":"chore: Parallelize CI actions.","author":"ChristopherTrimboli","number":5015,"body":"$27","repository":"elizaos/eliza","createdAt":"2025-06-09T19:27:38Z","mergedAt":"2025-06-09T20:02:34Z","additions":217,"deletions":30},{"id":"PR_kwDOOu4gVs6ZvdJC","title":"Fix: Unique Knowledge/Memory Ids in actions.ts","author":"wookosh","number":17,"body":"$28","repository":"elizaos-plugins/plugin-knowledge","createdAt":"2025-06-09T20:05:33Z","mergedAt":"2025-06-16T22:45:34Z","additions":148,"deletions":9},{"id":"PR_kwDOMT5cIs6Zf_dI","title":"fix:publish command logging issues and conditional GitHub authentication","author":"yungalgo","number":4986,"body":"$29","repository":"elizaos/eliza","createdAt":"2025-06-07T09:55:05Z","mergedAt":"2025-06-09T04:59:47Z","additions":103,"deletions":77},{"id":"PR_kwDOMT5cIs6ZmWSH","title":"feat: add lockfile cleanup for GitHub fallback installations","author":"wtfsayo","number":5009,"body":"$2a","repository":"elizaos/eliza","createdAt":"2025-06-08T20:45:32Z","mergedAt":"2025-06-09T17:00:07Z","additions":92,"deletions":15},{"id":"PR_kwDOMT5cIs6Zu5FX","title":"chore: cache bun / models in github actions","author":"ChristopherTrimboli","number":5014,"body":"$2b","repository":"elizaos/eliza","createdAt":"2025-06-09T19:06:57Z","mergedAt":"2025-06-09T19:22:27Z","additions":58,"deletions":0},{"id":"PR_kwDOMT5cIs6Zv-Oj","title":"fix: dup CI runs and cancel workflows on push","author":"ChristopherTrimboli","number":5022,"body":"","repository":"elizaos/eliza","createdAt":"2025-06-09T21:09:51Z","mergedAt":"2025-06-09T21:22:11Z","additions":45,"deletions":5},{"id":"PR_kwDOMT5cIs6Zuf71","title":"fix: cleanup DB in E2E tests, make fresh unique DB, PGLITE_WASM_MODE: node","author":"ChristopherTrimboli","number":5013,"body":"$2c","repository":"elizaos/eliza","createdAt":"2025-06-09T18:17:32Z","mergedAt":"2025-06-09T18:49:11Z","additions":41,"deletions":8},{"id":"PR_kwDOMT5cIs6ZwIo5","title":"add buildGitHubSpecifier","author":"wtfsayo","number":5024,"body":"","repository":"elizaos/eliza","createdAt":"2025-06-09T21:35:34Z","mergedAt":"2025-06-09T21:38:54Z","additions":22,"deletions":5},{"id":"PR_kwDOMT5cIs6Zshj3","title":"chore: update versions","author":"wtfsayo","number":5012,"body":"update lagging versions","repository":"elizaos/eliza","createdAt":"2025-06-09T14:32:33Z","mergedAt":"2025-06-09T16:09:16Z","additions":19,"deletions":19},{"id":"PR_kwDOMT5cIs6Zv5as","title":"feat: replace cursor rules with elizaos/.cursor submodule","author":"lalalune","number":5021,"body":"This PR replaces the .cursor folder with a submodule so we can share the .cursor folder across the team, update it and make it available anywhere in any plugin during development. I found I had to copy and paste across a lot of projects, and it was annoying. The submodule setup guarantees that people are getting the rules on startup so they dont have to go get them","repository":"elizaos/eliza","createdAt":"2025-06-09T20:59:13Z","mergedAt":"2025-06-09T21:22:45Z","additions":18,"deletions":5884},{"id":"PR_kwDONkg7v86ZnwvT","title":"Added RSS Plugin","author":"Dexploarer","number":171,"body":"$2d","repository":"elizaos-plugins/registry","createdAt":"2025-06-09T04:39:10Z","mergedAt":null,"additions":3,"deletions":2}],"detailedContributorSummaries":{"ChristopherTrimboli":"ChristopherTrimboli: Merged 6 PRs, including significant updates like #5025 \"chore: v1.0.7\" (+536/-162 lines) and #5015 \"chore: Parallelize CI actions.\" (+219/-32 lines), while modifying 104 files with a total of +10364/-3151 lines across 11 commits. Maintained a consistent work pattern, focusing primarily on other work (55%) and bugfixes (18%).","ceeriil":"ceeriil: Created 1 issue today, #5023 \"GPT-4o access error with OpenAI API key,\" which has been closed. Activity has been sporadic, with engagement on only 1 out of the last 1 days.","github-advanced-security":"github-advanced-security: Reviewed 7 pull requests with a total of 7 comments but did not approve or request changes. Activity was sporadic, being active on only 1 out of 1 days during this period.","jonathanprozzi":"jonathanprozzi: Created 1 issue (#5017 \"Callback from plugin action not making it to end user respons...\") and commented on another issue, showing sporadic activity today.","lalalune":"lalalune: Merged 3 significant PRs, including #5018 with a major contribution of +29086/-29485 lines, while modifying 2318 files overall (+13732/-19090 lines). The work primarily focused on other tasks (60%) and refactoring (20%), demonstrating consistent activity with 10 commits today.","odilitime":"odilitime: Engaged in code reviews with a total of 3 comments but did not approve or request changes on any PRs. Activity was sporadic, being active on only 0 out of 1 days during this period.","standujar":"standujar: Made significant code changes with a focus on bugfix work, modifying 209 files (+18199/-17132 lines) across 2 commits. Additionally, provided 1 review with an approval, demonstrating consistent activity today.","wtfsayo":"wtfsayo: Merged 4 PRs, including a significant reorganization of API routes in PR #5010 (+4405/-4382 lines) and a major migration of CLI prompts in PR #5016 (+12671/-20638 lines). Active with 39 commits, focusing primarily on other work (59%) and modifying 257 files overall (+5433/-10920 lines).","yungalgo":"yungalgo: Merged 1 PR (#5011) focused on refactoring with significant changes (+584/-400 lines) and modified 25 files overall (+1266/-623 lines) across 15 commits. Actively engaged with 2 PR comments and 1 issue comment, demonstrating consistent work patterns."}}}],"$L2e"]}]
+17:["$","div",null,{"className":"prose prose-sm mx-auto mt-8 dark:prose-invert sm:prose lg:prose-lg xl:prose-xl","children":[["$","p","p-0",{"children":"Today, the ElizaOS project focused on core framework stability and developer experience. Key achievements include significant CI/CD workflow optimizations, crucial bug fixes across logging and database handling, and the introduction of a new submodule for cursor rules to improve sharing. Emerging challenges involve OpenAI API key access and issues with plugin action callbacks not reaching end-user responses."}],"\n",["$","h2","h2-0",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"🚨 Needs Attention","position":{"start":{"line":3,"column":4,"offset":416},"end":{"line":3,"column":22,"offset":434}}}],"position":{"start":{"line":3,"column":1,"offset":413},"end":{"line":3,"column":23,"offset":435}}},"children":"🚨 Needs Attention"}],"\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"Urgent Discussions"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/5023","children":"elizaos/eliza#5023"}],": An access error with the OpenAI API key for GPT-4o needs investigation, particularly regarding the availability of a mini version."]}],"\n",["$","li","li-1",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/5017","children":"elizaos/eliza#5017"}],": A bug where callbacks from plugin actions are not reaching the end user response in chat, specifically with the ",["$","code","code-0",{"children":"plugin-evm"}]," transfer function, requires immediate attention."]}],"\n"]}],"\n"]}],"\n"]}],"\n",["$","h2","h2-1",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"✅ Completed Work","position":{"start":{"line":8,"column":4,"offset":919},"end":{"line":8,"column":20,"offset":935}}}],"position":{"start":{"line":8,"column":1,"offset":916},"end":{"line":8,"column":20,"offset":935}}},"children":"✅ Completed Work"}],"\n",["$","ul","ul-1",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"CI/CD and Workflow Enhancements"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["Centralized directory detection logic to support monorepo structures (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5011","children":"elizaos/eliza#5011"}],")."]}],"\n",["$","li","li-1",{"children":["Refactored CI workflows to optimize job execution and introduced caching mechanisms to reduce build times (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5015","children":"elizaos/eliza#5015"}],", ",["$","a","a-1",{"href":"https://github.com/elizaos/eliza/pull/5014","children":"elizaos/eliza#5014"}],")."]}],"\n",["$","li","li-2",{"children":["Fixed duplicate CI runs and ensured workflows are canceled on push events (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5022","children":"elizaos/eliza#5022"}],")."]}],"\n"]}],"\n"]}],"\n",["$","li","li-1",{"children":[["$","strong","strong-0",{"children":"Framework Stability and Feature Improvements"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["Added automatic lockfile cleanup for GitHub fallback installations to prevent circular dependency issues (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5009","children":"elizaos/eliza#5009"}],")."]}],"\n",["$","li","li-1",{"children":["Introduced a new ",["$","code","code-0",{"children":"buildGitHubSpecifier"}]," function to streamline GitHub specifications (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5024","children":"elizaos/eliza#5024"}],")."]}],"\n",["$","li","li-2",{"children":["Replaced the ",["$","code","code-0",{"children":".cursor"}]," folder with a submodule for better sharing and updates across the team (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5021","children":"elizaos/eliza#5021"}],")."]}],"\n",["$","li","li-3",{"children":["Resolved logging issues and conditional GitHub authentication for the ","$L2f"," command (","$L30",")."]}],"\n","$L31","\n"]}],"\n"]}],"\n"]}],"\n","$L32","\n","$L33","\n","$L34","\n","$L35"]}]
+18:["$","script","script-0",{"src":"/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","async":true}]
+19:["$","script","script-1",{"src":"/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","async":true}]
+1a:["$","script","script-2",{"src":"/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js","async":true}]
+1b:["$","$L36",null,{"children":["$","$37",null,{"name":"Next.MetadataOutlet","children":"$@38"}]}]
+2e:["$","div",null,{"className":"rounded-lg border bg-card text-card-foreground shadow-sm","children":[["$","div",null,{"className":"flex flex-col space-y-1.5 p-6 py-4","children":["$","div",null,{"className":"tracking-tight text-sm font-medium","children":["$undefined","Code Changes"]}]}],["$","div",null,{"className":"p-6 pt-0","children":["$","div",null,{"className":"grid grid-cols-2 gap-4 md:grid-cols-4","children":[["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-git-commit-vertical h-5 w-5","aria-hidden":"true","children":[["$","path","1holv5",{"d":"M12 3v6"}],["$","circle","1v7zrd",{"cx":"12","cy":"12","r":"3"}],["$","path","a9ows0",{"d":"M12 15v6"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":104}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Commits"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-file-code h-5 w-5","aria-hidden":"true","children":[["$","path","1oefj6",{"d":"M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"}],["$","path","wfsgrz",{"d":"M14 2v5a1 1 0 0 0 1 1h5"}],["$","path","1tg20x",{"d":"M10 12.5 8 15l2 2.5"}],["$","path","yinavb",{"d":"m14 12.5 2 2.5-2 2.5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":89}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Files Changed"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-green-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-up h-5 w-5 text-green-500","aria-hidden":"true","children":[["$","path","hav0vg",{"d":"m5 12 7-7 7 7"}],["$","path","x0mq9r",{"d":"M12 19V5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-green-500","children":"+5,005"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Added"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-red-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-down h-5 w-5 text-red-500","aria-hidden":"true","children":[["$","path","s699le",{"d":"M12 5v14"}],["$","path","1idqje",{"d":"m19 12-7 7-7-7"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-red-500","children":"-12,321"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Deleted"}]]}]]}]]}]}]]}]
+2f:["$","code","code-0",{"children":"publish"}]
+30:["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/4986","children":"elizaos/eliza#4986"}]
+31:["$","li","li-4",{"children":["Improved database handling in end-to-end tests to ensure unique and clean directories (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5013","children":"elizaos/eliza#5013"}],")."]}]
+32:["$","h2","h2-2",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"🏗️ Work in Progress","position":{"start":{"line":20,"column":4,"offset":2396},"end":{"line":20,"column":24,"offset":2416}}}],"position":{"start":{"line":20,"column":1,"offset":2393},"end":{"line":20,"column":24,"offset":2416}}},"children":"🏗️ Work in Progress"}]
+33:["$","ul","ul-2",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"New Pull Requests"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["elizaos/eliza:","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5009","children":"elizaos/eliza#5009"}]}],"\n",["$","li","li-1",{"children":["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5024","children":"elizaos/eliza#5024"}]}],"\n",["$","li","li-2",{"children":["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5021","children":"elizaos/eliza#5021"}]}],"\n",["$","li","li-3",{"children":["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/4986","children":"elizaos/eliza#4986"}]}],"\n",["$","li","li-4",{"children":["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5022","children":"elizaos/eliza#5022"}]}],"\n",["$","li","li-5",{"children":["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5013","children":"elizaos/eliza#5013"}]}],"\n",["$","li","li-6",{"children":["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5011","children":"elizaos/eliza#5011"}]}],"\n",["$","li","li-7",{"children":["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5015","children":"elizaos/eliza#5015"}]}],"\n",["$","li","li-8",{"children":["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5014","children":"elizaos/eliza#5014"}]}],"\n"]}],"\n"]}],"\n"]}],"\n"]}],"\n"]}]
+34:["$","h2","h2-3",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"🐞 Issue Triage","position":{"start":{"line":33,"column":4,"offset":3142},"end":{"line":33,"column":19,"offset":3157}}}],"position":{"start":{"line":33,"column":1,"offset":3139},"end":{"line":33,"column":19,"offset":3157}}},"children":"🐞 Issue Triage"}]
+35:["$","ul","ul-3",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"New Issues"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["elizaos/eliza:","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/5023","children":"elizaos/eliza#5023"}],": Access error with OpenAI API key for GPT-4o."]}],"\n",["$","li","li-1",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/5017","children":"elizaos/eliza#5017"}],": Callbacks from plugin actions not reaching end user response."]}],"\n"]}],"\n"]}],"\n"]}],"\n"]}],"\n",["$","li","li-1",{"children":[["$","strong","strong-0",{"children":"Closed Issues"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["elizaos/eliza:","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/4894","children":"elizaos/eliza#4894"}],": Twitter Client failed to start with new release 1.0.2."]}],"\n",["$","li","li-1",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/4927","children":"elizaos/eliza#4927"}],": Refreshing an agent chat caused errors."]}],"\n",["$","li","li-2",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/4972","children":"elizaos/eliza#4972"}],": MessageBusService not recognizing agents as participants in channels."]}],"\n",["$","li","li-3",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/5005","children":"elizaos/eliza#5005"}],": ",["$","code","code-0",{"children":"LOG_LEVEL"}]," from ",["$","code","code-1",{"children":".env"}]," not working in version 1.0.6."]}],"\n"]}],"\n"]}],"\n"]}],"\n"]}],"\n"]}]
+38:null

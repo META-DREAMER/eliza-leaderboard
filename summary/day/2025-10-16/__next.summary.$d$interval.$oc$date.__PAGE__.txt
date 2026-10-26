@@ -1,0 +1,720 @@
+1:"$Sreact.fragment"
+2:I[4817319,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"IntervalSelector"]
+3:I[6998365,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"LlmCopyButton"]
+13:I[3642796,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],""]
+14:I[3238488,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"StatCardsDisplay"]
+24:I[4261541,["/eliza-leaderboard/_next/static/chunks/b33bcbdcb3f88354.js","/eliza-leaderboard/_next/static/chunks/8ba59154b6704904.js"],"OutletBoundary"]
+25:"$Sreact.suspense"
+4:T8ee,<!-- CURSOR_SUMMARY -->
+> [!NOTE]
+> Refactors plugin config/init and Solana service, adds Token-2022 metadata parsing and batch utilities, updates docs/env and dependencies.
+> 
+> - **Core/Service**:
+>   - Add Token-2022 metadata support (inline and pointer) with batch symbol/supply/decimals retrieval and improved caching.
+>   - New utilities: `verifySignature`, `isValidAddress`, batch helpers (`getAddressesTypes`, `getCirculatingSupplies`, `getDecimals`, `getTokenAccountsByKeypairs`).
+>   - Refactor Jupiter integration (async service load), account subscriptions, and `unsubscribeFromAccount` (now removes listener).
+>   - Enhance `parseTokenAccounts` output (symbol, supply, tokenProgram, isMutable), safer math, and logging.
+> - **Plugin Init**:
+>   - Require `SOLANA_RPC_URL`; optional action registration via `SOLANA_NO_ACTIONS`.
+>   - Register provider/actions dynamically; register chain on `INTEL_CHAIN`.
+> - **Config/Env**:
+>   - Replace `WALLET_*` with `SOLANA_*` keys in schema; relax some required fields; validation now reads from runtime settings.
+>   - Add `env.example` and ignore local env/db files.
+> - **Docs/Deps/Build**:
+>   - Rename package usage to `@elizaos/plugin-solana` in README.
+>   - Bump deps and add `@solana/spl-token-metadata`; update TypeScript/tsup; add declarationDir and test excludes.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit e93026c3b2ab695b2ca2dbef679e7bff9ca7c8e8. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->
+
+
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+## Summary by CodeRabbit
+
+* **New Features**
+  * Batch token utilities (decimals, circulating supply, token accounts, address-type detection), improved token metadata parsing, and a modernized signature verification API; safer startup behavior and optional action registration.
+
+* **Documentation**
+  * Plugin name corrected and an env.example added with Solana configuration guidance and example values.
+
+* **Chores**
+  * Dependency updates, TypeScript build config refinement, and updated .gitignore to exclude local env/database files.
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->5:T93f,<!-- CURSOR_SUMMARY -->
+> [!NOTE]
+> Adds Token-2022-aware token parsing (symbols, mutability, supply), batch symbol backfill, combined SPL+Token-2022 account discovery, and live wallet data updates via account subscriptions.
+> 
+> - **Tokens / Metadata**:
+>   - Parse Token-2022 TLV metadata via `unpackMint`/extensions; derive `symbol`, `isMutable`, `supply`, and update `decimalsCache`.
+>   - Fallback to Metaplex PDA parsing for symbols and mutability when TLV absent.
+>   - New `getTokensSymbols(mints[])` for batched symbol lookup; `parseTokenAccounts` now accepts options and returns `symbol`, `supply`, `tokenProgram`, `isMutable`, `balanceUi` with background caching.
+> - **Wallet Data**:
+>   - Initialize wallet data immediately after public key load and subscribe to account changes to refresh on updates.
+>   - Birdeye results now backfill missing symbols via `getTokensSymbols`.
+>   - `getTokenAccountsByKeypair` now merges SPL and Token-2022 accounts, supports freshness via `notOlderThan`, and filters zero balances.
+> - **Swaps**:
+>   - Safer logging and amount formatting; improved post-balance diffing (including SOL sells) and decimals updates.
+> - **Subscriptions / Lifecycle**:
+>   - Account change subscription added; periodic updater removed from `start()`; `unsubscribeFromAccount` adjusted (RPC WS path commented out).
+> - **Misc**:
+>   - Minor constants/log tweaks; numeric literal cleanup; expanded SPL imports.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit cbd9a3f24f6dce80b56e9577716e74d0cee01227. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+## Summary by CodeRabbit
+
+- New Features
+  - Token-2022 TLV metadata parsing with robust token symbol extraction.
+  - Public APIs to fetch token symbols for single or multiple mints.
+
+- Improvements
+  - Immediate wallet data initialization and live updates on account changes.
+  - More accurate token balance parsing for classic SPL and Token-2022 with cached decimals/symbols.
+  - Bulk symbol backfill when external sources lack symbols and improved caching/freshness.
+  - Enhanced logging for cache/parsing flows.
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->6:Tee1,## 🎯 Phase: CLI Cleanup
+
+**Status**: 🟡 Draft
+**Priority**: MEDIUM - Proper architecture  
+**Breaking**: No  
+
+---
+
+## 📋 Summary
+
+This PR removes massive duplication from the CLI by deleting the custom module-loader and using published packages (`@elizaos/server`, `@elizaos/core`) directly.
+
+### Impact
+- 📉 **237 lines deleted** (module-loader.ts + tests)
+- 🎯 **Zero duplication**: CLI uses published packages only
+- ✅ **Proper separation**: CLI = command parsing + file loading
+- ✅ **All builds pass**: 14/14 packages build successfully
+
+---
+
+## 🔧 Changes
+
+### 1. Delete Module Loader ❌ (237 lines removed!)
+- Deleted `packages/cli/src/utils/module-loader.ts` (236 lines)
+- Deleted `packages/cli/src/utils/module-loader.test.ts`
+- Updated `packages/cli/src/utils/index.ts` (removed export)
+
+**Why?** The module loader was a hack to dynamically require plugins. We moved all config/plugin logic to Core, so we don't need it anymore.
+
+### 2. Simplify CLI Commands ✅
+
+**commands/start/index.ts**
+```diff
+- import { getModuleLoader } from '@/src/utils/module-loader';
++ import { AgentServer, loadCharacterTryPath } from '@elizaos/server';
+
+- const moduleLoader = getModuleLoader();
+- const { AgentServer } = await moduleLoader.load('@elizaos/server');
+- const { loadCharacterTryPath } = serverModule;
++ // Direct imports - no dynamic loading needed!
+```
+
+**commands/scenario/src/runtime-factory.ts**
+```diff
+- import { setDefaultSecretsFromEnv } from '@elizaos/core';
+- await setDefaultSecretsFromEnv(character);
++ // ElizaOS.addAgents() now handles secrets automatically
+```
+
+**commands/scenario/src/plugin-parser.ts**
+```diff
+- const moduleLoader = getModuleLoader();
+- const { PluginLoader } = await moduleLoader.load('@elizaos/server');
+- const loader = new PluginLoader();
+- const loadedPlugin = await loader.loadAndPreparePlugin(plugin.name);
++ // Plugin loading delegated to ElizaOS/AgentServer
++ // Just validate the plugin reference here
+```
+
+---
+
+## 🏗️ Architecture Now
+
+```
+CLI Layer (thin)
+  ├─ Command parsing (Commander.js)
+  ├─ File loading (characters, .env)
+  └─ Delegation to @elizaos/server
+      └─ AgentServer
+          └─ ElizaOS (from @elizaos/core)
+              └─ Config + Plugin + Secrets Management
+```
+
+**Clean Separation**:
+- **CLI**: Parse commands → Load files → Call Server
+- **Server**: HTTP + WebSocket + Agent orchestration
+- **Core**: ElizaOS + Config + Plugins + Secrets
+
+---
+
+## ✅ Testing
+
+### Builds
+```bash
+bun run build
+# ✅ 14/14 packages build successfully
+```
+
+### Manual Testing
+- ✅ CLI imports are direct (no module-loader)
+- ✅ start command works
+- ✅ project-starter templates unaffected
+
+### Automated Tests
+- 🟡 CLI tests running (some timeout, investigating)
+- ✅ Core tests: 541 passing
+- ✅ Server tests: 38 passing
+
+---
+
+## 📋 Tasks Status
+
+- [x] **Task 1**: Remove Embedded Server ✅
+- [x] **Task 2**: Delete Module Loader ✅
+- [ ] **Task 3**: Use Core Configuration 🟡 In Progress
+- [ ] **Task 4**: Improve Server API 🟡 In Progress
+- [ ] **Task 5**: Update Tests 🟡 In Progress
+
+---
+
+## 🔗 Related
+
+- **Depends on**: Config & Plugin in Core ✅ Merged
+
+---
+
+## 📝 Notes for Reviewers
+
+### Key Points
+1. **No breaking changes** - CLI commands work identically
+2. **237 lines deleted** - Massive code reduction
+3. **Proper architecture** - CLI is now a thin layer
+4. **Dependencies verified** - `@elizaos/server` already in package.json
+
+### Areas to Review
+- [ ] CLI start command still works as expected
+- [ ] Direct imports from @elizaos/server are correct
+- [ ] No regression in character loading
+- [ ] project-starter templates still work7:T451,<!-- CURSOR_SUMMARY -->
+> [!NOTE]
+> Evaluators now run asynchronously with robust error handling/logging, and the bootstrap message flow triggers evaluator execution non-blockingly with streamlined logging.
+> 
+> - **Core (`packages/core/src/runtime.ts`)**:
+>   - **Evaluator execution hardening**: Wrap `evaluate` in try/catch; add per-evaluator try/catch for `validate` and `handler`, logging errors with `evaluator.name`; safely return `[]` on failures; compose state once before handler execution.
+> - **Bootstrap (`packages/plugin-bootstrap/src/index.ts`)**:
+>   - **Background evaluators**: Invoke `runtime.evaluate(...)` without awaiting; attach `.catch` to log errors, keeping message handling non-blocking.
+>   - **Logging/cleanup**: More concise debug logs and minor formatting; no behavioral changes beyond async evaluator run.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit e8028b9e3c9de09173707edb7f26a666ff55fc06. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->8:T73e,<!-- CURSOR_SUMMARY -->
+> [!NOTE]
+> Convert channelId to agent-unique roomId in room memories endpoint and add/use entityId in memory types/mapping to correctly distinguish user vs agent messages.
+> 
+> - **Backend**:
+>   - **Room Memories Endpoint**: `GET /api/memory/:agentId/rooms/:roomId/memories` now treats `roomId` as `channelId`, converts via `createUniqueUuid(runtime, channelId)`, and updates validation/logging.
+> - **Client/Types**:
+>   - **Memory Type**: Add `entityId?: UUID` to `packages/api-client/src/types/memory.ts`.
+>   - **Type Mapper**: `mapApiMemoryToClient` now reads `apiMemory.entityId` (with metadata fallbacks) to set `entityId`.
+> - **Tests**:
+>   - Update `MemoryService` tests to use full memory/room shapes (UUIDs, timestamps, `entityId`, `metadata`) and new room params.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit 419049736da4385e656cfb13f814c363d42cc2c6. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->
+
+
+
+Fixed two filtering issues in the agent memory viewer:
+
+1. Current Chat Filter: Backend endpoint now converts channelId to agent-specific roomId
+   - Updated /api/memory/:agentId/rooms/:roomId/memories endpoint to use createUniqueUuid()
+   - Memories are stored with agent-unique roomIds, not global channelIds
+
+2. User Messages Filter: Fixed entityId mapping to distinguish user vs agent messages
+   - Added entityId field to API Memory type definition
+   - Updated mapApiMemoryToClient to use apiMemory.entityId directly
+   - Removed incorrect fallback to agentId that was causing all messages to appear as agent messages
+
+Changes:
+- packages/server/src/api/memory/agents.ts
+- packages/api-client/src/types/memory.ts
+- packages/client/src/lib/api-type-mappers.ts9:T4dc,- Changed error.errors to error.issues to match ZodError API
+- Fixed error handling in plugin-starter and project-starter
+- Added proper error handling for non-ZodError cases
+- Ensures consistency with plugin-quick-starter implementation
+
+<!-- CURSOR_SUMMARY -->
+---
+
+> [!NOTE]
+> Switches validation to ZodError.issues with fallback and unified non-ZodError messages; adds tests to verify error handling.
+> 
+> - **Validation/Error Handling**:
+>   - Update `init` in `packages/plugin-quick-starter/src/plugin.ts`, `packages/plugin-starter/src/plugin.ts`, and `packages/project-starter/src/plugin.ts` to use `z.ZodError.issues` (with fallback) and wrap non-ZodError exceptions as `Invalid plugin configuration: ...`.
+>   - Minor import cleanup in `plugin-quick-starter` plugin file.
+> - **Tests**:
+>   - Add tests in `packages/plugin-quick-starter/src/__tests__/plugin.test.ts` covering ZodError `issues` messages, fallback when `issues` is undefined, and non-ZodError cases.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit b863d1ac0967e494b9d9a1667b3757abbd07edd7. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->a:Tb4d,# Risks
+
+**Low**
+
+- Bootstrap and SQL plugins are now automatically injected by the server
+- Character files no longer need to specify these plugins manually
+- Backward compatible: if a character file still includes bootstrap/SQL, they will be handled by `resolvePlugins()`
+- Opt-out available via `IGNORE_BOOTSTRAP=true` environment variable
+
+# Background
+
+## What does this PR do?
+
+This PR implements automatic injection of server-required plugins (bootstrap and SQL) in the AgentServer, eliminating the need for users to manually specify them in character files.
+
+**Changes:**
+- Bootstrap plugin is now automatically prepended to all agents started via `AgentServer.startAgents()`
+- SQL plugin continues to be automatically appended (already existing behavior)
+- Updated default character to remove redundant plugin declarations
+- Added documentation explaining the auto-injection behavior
+
+**Benefits:**
+- Cleaner character files (no need to remember bootstrap/SQL)
+- Reduced boilerplate
+- Consistent plugin loading (server ensures required plugins are present)
+- Better separation of concerns (server-required vs user-specified plugins)
+
+## What kind of change is this?
+
+- Improvements (misc. changes to existing features)
+- Features (non-breaking change which adds functionality)
+
+# Documentation changes needed?
+
+# Testing
+
+## Where should a reviewer start?
+
+1. Review `packages/server/src/index.ts` (lines 199-203) - the auto-injection logic
+2. Review `packages/server/src/characters/default.ts` (lines 8-10) - cleaned character file
+3. Verify server builds successfully
+4. Run server tests to confirm agents start correctly with auto-injected plugins
+
+## Detailed testing steps
+
+**As a developer:**
+1. Build the server package: `bun run build --filter=@elizaos/server`
+2. Verify build succeeds ✅
+3. Run server tests: `cd packages/server && bun test`
+4. Verify all tests pass (especially agent startup tests)
+5. Create a character file without bootstrap/SQL plugins
+6. Start the server with this character
+7. Verify agent starts successfully and has bootstrap actions available
+
+**Plugin injection order:**
+```typescript
+const allPlugins = [
+  ...(!process.env.IGNORE_BOOTSTRAP ? [bootstrapPlugin] : []),  // 1. Bootstrap (auto)
+  ...(agent.character.plugins || []),                            // 2. Character plugins
+  ...(agent.plugins || []),                                      // 3. Runtime plugins
+  sqlPlugin,                                                     // 4. SQL (auto)
+];
+```
+
+**Opt-out test:**
+- Set `IGNORE_BOOTSTRAP=true`
+- Verify bootstrap is not injected
+- Server should still function (though agent features will be limited)
+
+# Deploy Notes
+
+No special deployment steps required.
+
+**Breaking changes:** None
+
+**Migration:** Optional - users can remove `@elizaos/plugin-bootstrap` and `@elizaos/plugin-sql` from their character files for cleaner configuration.b:Tccd,Today, the project saw significant advancements in both core framework architecture and plugin capabilities. The `elizaos/eliza` repository focused on streamlining the CLI by integrating server/core functionalities and refining plugin error handling, while `elizaos-plugins/plugin-solana` made critical progress on Token-2022 support and bug fixes, enhancing wallet data management and application resilience. These efforts collectively improve the framework's stability, modularity, and ability to interact with advanced blockchain features.
+
+## ✅ Completed Work
+
+### Core CLI Simplification and Architectural Alignment
+- The CLI has been significantly simplified by removing redundant module loaders and integrating server/core functionalities directly, reducing duplication and improving overall architecture. [elizaos/eliza#6060](https://github.com/elizaos/eliza/pull/6060)
+- Server code was refactored to utilize ElizaOS global functions, and bootstrap logic was decoupled from the CLI, centralizing it within the core for a cleaner architecture. [elizaos/eliza#5933](https://github.com/elizaos/eliza/issues/5933)
+
+### Enhanced Plugin Error Handling
+- Plugin error handling was improved to correctly use the `ZodError.issues` API, ensuring consistent and proper error reporting across different plugin starters. [elizaos/eliza#6035](https://github.com/elizaos/eliza/pull/6035)
+
+### Solana Plugin Token-2022 Support and Wallet Data
+- The Solana plugin now includes Token-2022-aware token parsing, supporting symbols, mutability, and supply, along with batch symbol backfill and combined SPL+Token-2022 account discovery. [elizaos-plugins/plugin-solana#14](https://github.com/elizaos-plugins/plugin-solana/pull/14)
+
+### Solana Plugin Bug Fixes and Resilience
+- Critical TypeScript errors were resolved, logging was improved, and the application now continues in standalone mode if trading services are unavailable, enhancing stability. [elizaos-plugins/plugin-solana#15](https://github.com/elizaos-plugins/plugin-solana/pull/15)
+
+## 🏗️ Work in Progress
+
+### New Pull Requests
+- **elizaos/eliza**
+    - [elizaos/eliza#6069](https://github.com/elizaos/eliza/pull/6069): refactor(tests): Move character builder logic to core (Draft)
+    - [elizaos/eliza#6068](https://github.com/elizaos/eliza/pull/6068): feat(server): auto-inject bootstrap and SQL plugins (Draft)
+    - [elizaos/eliza#6067](https://github.com/elizaos/eliza/pull/6067): fix: current chat and user messages filters in memory viewer (Draft)
+    - [elizaos/eliza#6066](https://github.com/elizaos/eliza/pull/6066): feat: make evaluators run asynchronously in background (Draft)
+- **elizaos-plugins/plugin-solana**
+    - [elizaos-plugins/plugin-solana#16](https://github.com/elizaos-plugins/plugin-solana/pull/16): This pull request introduces further improvements, type fixes, and incorporates items from a previous PR9, indicating ongoing refinement and integration efforts.
+
+## 🐞 Issue Triage
+
+### Closed Issues
+- **elizaos/eliza**
+    - [elizaos/eliza#5933](https://github.com/elizaos/eliza/issues/5933): Core Refactoring and CLI Decoupling - This issue was closed following a significant refactoring effort to align server code with ElizaOS global functions and decouple bootstrap logic from the CLI.0:{"buildId":"US8XLB_zHXYj_PVAECGcd","rsc":["$","$1","c",{"children":[["$","div",null,{"className":"container mx-auto px-6 py-8 md:px-8","children":["$","div",null,{"className":"mx-auto max-w-4xl","children":[["$","div",null,{"className":"mb-4 flex flex-col justify-between sm:flex-row","children":[["$","$L2",null,{"currentInterval":"day","currentDate":"2025-10-16"}],["$","$L3",null,{"metrics":{"date":"2025-10-16","interval":{"intervalStart":"$D2025-10-16T00:00:00.000Z","intervalEnd":"$D2025-10-17T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":5,"merged":4,"total":9},"issues":{"new":0,"closed":1,"total":1},"activeContributors":6,"codeChanges":{"additions":1458,"deletions":1341,"files":36,"commitCount":35},"topContributors":[{"username":"0xbbjoker","avatarUrl":"https://avatars.githubusercontent.com/u/54844437?u=90fe1762420de6ad493a1c1582f1f70c0d87d8e2&v=4","totalScore":78.75066737402825,"prScore":73.41066737402825,"issueScore":0,"reviewScore":5,"commentScore":0.33999999999999997,"summary":"0xbbjoker: Focused on improving the Eliza application, merging two significant PRs: elizaos/eliza#6067, which fixed current chat and user messages filters in the memory viewer, and elizaos/eliza#6066, which enabled evaluators to run asynchronously in the background. Their work primarily involved bug fixes and other development, with a focus on code and tests, as evidenced by modifying 186 files with 10 commits."},{"username":"standujar","avatarUrl":"https://avatars.githubusercontent.com/u/16385918?u=718bdcd1585be8447bdfffb8c11ce249baa7532d&v=4","totalScore":65.48568054636411,"prScore":65.1456805463641,"issueScore":0,"reviewScore":0,"commentScore":0.33999999999999997,"summary":"standujar: Focused on significant refactoring and feature development, notably merging a large refactor in elizaos/eliza (#6069) that moved character builder logic to core, and also opened a new feature PR to auto-inject bootstrap and SQL plugins. Their work today spanned feature development, bug fixes, refactoring, and tests, primarily impacting code and test files."},{"username":"odilitime","avatarUrl":"https://avatars.githubusercontent.com/u/16395496?u=c9bac48e632aae594a0d85aaf9e9c9c69b674d8b&v=4","totalScore":56.4017738965761,"prScore":56.4017738965761,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"odilitime: Focused on improvements and type fixes, opening PR elizaos-plugins/plugin-solana#16, while also making substantial code changes across 21 files (+2159/-413 lines) with a primary focus on other work and bug fixes."}],"focusAreas":[{"area":"server","count":14},{"area":"cli","count":12},{"area":"src","count":3},{"area":"plugin-quick-starter","count":2},{"area":"plugin-starter","count":1},{"area":"project-starter","count":1},{"area":"core","count":1},{"area":"src/providers","count":1}],"topIssues":[{"id":"I_kwDOMT5cIs7KjCY9","title":"Refactors & Core Alignment","author":"borisudovicic","number":5933,"repository":"elizaos/eliza","body":"* Refactor server code to call ElizaOS global functions instead of custom logic.\n* Decouple bootstrap logic from CLI (bootstrap only in core).\n* Remove CLI “server-start” embedding.\n* Clean up modular loaders and resolution hacks.\n* Strip dead code paths from server startup.","createdAt":"2025-09-09T12:19:15Z","closedAt":"2025-10-16T07:37:11Z","state":"CLOSED","commentCount":0}],"topPullRequests":[{"id":"PR_kwDONkwLhs6uLDf_","title":"improvements, type fixes, items from PR9","author":"odilitime","number":16,"body":"$4","repository":"elizaos-plugins/plugin-solana","createdAt":"2025-10-16T21:04:02Z","mergedAt":"2025-10-21T02:16:34Z","additions":849,"deletions":311},{"id":"PR_kwDONkwLhs6sZ9J8","title":"token 2022 upgrades","author":"odilitime","number":14,"body":"$5","repository":"elizaos-plugins/plugin-solana","createdAt":"2025-10-07T03:12:30Z","mergedAt":"2025-10-16T02:24:01Z","additions":838,"deletions":63},{"id":"PR_kwDOMT5cIs6uKQsE","title":"refactor(tests): Move character builder logic to core","author":"standujar","number":6069,"body":"\n- Move buildCharacterPlugins() to core (business logic)\n\n- Keep Eliza character to cli\n\n- Remove duplicate code from server\n\n- Add 27 tests on core","repository":"elizaos/eliza","createdAt":"2025-10-16T19:42:50Z","mergedAt":"2025-10-17T15:37:44Z","additions":706,"deletions":789},{"id":"PR_kwDOMT5cIs6tQqot","title":"feat(cli): Simplify CLI to use server / core","author":"standujar","number":6060,"body":"$6","repository":"elizaos/eliza","createdAt":"2025-10-11T16:51:07Z","mergedAt":"2025-10-16T06:09:54Z","additions":337,"deletions":1073},{"id":"PR_kwDONkwLhs6tEXAN","title":"fix: resolve TypeScript errors and improve logging","author":"standujar","number":15,"body":"\n\n<!-- This is an auto-generated comment: release notes by coderabbit.ai -->\n## Summary by CodeRabbit\n\n* New Features\n  * App now continues in standalone mode if trading services are unavailable.\n  * Added startup retry with clearer progress logs for initialization.\n\n* Bug Fixes\n  * More reliable swap execution with consistent error handling.\n  * Wallet initialization is more resilient; portfolio shows $0 instead of blank when data is missing.\n  * Safer token/account parsing to prevent crashes on unexpected data.\n\n* Refactor\n  * Standardized logging and improved robustness across network, encoding, and parsing paths.\n\n* Chores\n  * Bumped version to 1.2.0.\n<!-- end of auto-generated comment: release notes by coderabbit.ai -->","repository":"elizaos-plugins/plugin-solana","createdAt":"2025-10-10T11:24:22Z","mergedAt":"2025-10-16T02:45:48Z","additions":141,"deletions":104},{"id":"PR_kwDOMT5cIs6uDX_q","title":"feat: make evaluators run asynchronously in background","author":"0xbbjoker","number":6066,"body":"$7","repository":"elizaos/eliza","createdAt":"2025-10-16T10:23:14Z","mergedAt":"2025-10-17T11:58:32Z","additions":116,"deletions":69},{"id":"PR_kwDOMT5cIs6uFDTB","title":"fix: current chat and user messages filters in memory viewer","author":"0xbbjoker","number":6067,"body":"$8","repository":"elizaos/eliza","createdAt":"2025-10-16T12:44:29Z","mergedAt":"2025-10-17T11:58:00Z","additions":88,"deletions":16},{"id":"PR_kwDOMT5cIs6sMNek","title":"fix(plugins): use correct ZodError.issues API instead of .errors","author":"0xbbjoker","number":6035,"body":"$9","repository":"elizaos/eliza","createdAt":"2025-10-06T05:43:31Z","mergedAt":"2025-10-16T06:35:37Z","additions":72,"deletions":13},{"id":"PR_kwDOMT5cIs6uHd8H","title":"feat(server): auto-inject bootstrap and SQL plugins","author":"standujar","number":6068,"body":"$a","repository":"elizaos/eliza","createdAt":"2025-10-16T15:43:41Z","mergedAt":null,"additions":7,"deletions":4}],"detailedContributorSummaries":{"0xbbjoker":"0xbbjoker: Focused on improving the Eliza application, merging two significant PRs: elizaos/eliza#6067, which fixed current chat and user messages filters in the memory viewer, and elizaos/eliza#6066, which enabled evaluators to run asynchronously in the background. Their work primarily involved bug fixes and other development, with a focus on code and tests, as evidenced by modifying 186 files with 10 commits.","odilitime":"odilitime: Focused on improvements and type fixes, opening PR elizaos-plugins/plugin-solana#16, while also making substantial code changes across 21 files (+2159/-413 lines) with a primary focus on other work and bug fixes.","standujar":"standujar: Focused on significant refactoring and feature development, notably merging a large refactor in elizaos/eliza (#6069) that moved character builder logic to core, and also opened a new feature PR to auto-inject bootstrap and SQL plugins. Their work today spanned feature development, bug fixes, refactoring, and tests, primarily impacting code and test files."}},"summaryContent":"$b","className":"self-end sm:self-start"}]]}],"$Lc","$Ld","$Le"]}]}],["$Lf","$L10","$L11"],"$L12"]}],"loading":null,"isPartial":false}
+c:["$","div",null,{"className":"mb-6","children":["$","div",null,{"className":"flex items-center justify-between","children":[[["$","$L13",null,{"href":"/summary/day/2025-10-15","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left mr-2 h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"children":"Previous"}],false],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$L13",null,{"href":"/summary/day/2025-10-15","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Previous"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]],["$","div",null,{"className":"flex flex-col items-center","children":[["$","div",null,{"className":"text-sm font-medium text-gray-500","children":["Daily"," Summary"]}],["$","time",null,{"dateTime":"2025-10-16","className":"text-md font-bold","children":"Oct 16, 2025"}]]}],[["$","$L13",null,{"href":"/summary/day/2025-10-17","children":[false,["$","span",null,{"children":"Next"}],["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right ml-2 h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}]],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$L13",null,{"href":"/summary/day/2025-10-17","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Next"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]]]}]}]
+15:T8ee,<!-- CURSOR_SUMMARY -->
+> [!NOTE]
+> Refactors plugin config/init and Solana service, adds Token-2022 metadata parsing and batch utilities, updates docs/env and dependencies.
+> 
+> - **Core/Service**:
+>   - Add Token-2022 metadata support (inline and pointer) with batch symbol/supply/decimals retrieval and improved caching.
+>   - New utilities: `verifySignature`, `isValidAddress`, batch helpers (`getAddressesTypes`, `getCirculatingSupplies`, `getDecimals`, `getTokenAccountsByKeypairs`).
+>   - Refactor Jupiter integration (async service load), account subscriptions, and `unsubscribeFromAccount` (now removes listener).
+>   - Enhance `parseTokenAccounts` output (symbol, supply, tokenProgram, isMutable), safer math, and logging.
+> - **Plugin Init**:
+>   - Require `SOLANA_RPC_URL`; optional action registration via `SOLANA_NO_ACTIONS`.
+>   - Register provider/actions dynamically; register chain on `INTEL_CHAIN`.
+> - **Config/Env**:
+>   - Replace `WALLET_*` with `SOLANA_*` keys in schema; relax some required fields; validation now reads from runtime settings.
+>   - Add `env.example` and ignore local env/db files.
+> - **Docs/Deps/Build**:
+>   - Rename package usage to `@elizaos/plugin-solana` in README.
+>   - Bump deps and add `@solana/spl-token-metadata`; update TypeScript/tsup; add declarationDir and test excludes.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit e93026c3b2ab695b2ca2dbef679e7bff9ca7c8e8. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->
+
+
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+## Summary by CodeRabbit
+
+* **New Features**
+  * Batch token utilities (decimals, circulating supply, token accounts, address-type detection), improved token metadata parsing, and a modernized signature verification API; safer startup behavior and optional action registration.
+
+* **Documentation**
+  * Plugin name corrected and an env.example added with Solana configuration guidance and example values.
+
+* **Chores**
+  * Dependency updates, TypeScript build config refinement, and updated .gitignore to exclude local env/database files.
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->16:T93f,<!-- CURSOR_SUMMARY -->
+> [!NOTE]
+> Adds Token-2022-aware token parsing (symbols, mutability, supply), batch symbol backfill, combined SPL+Token-2022 account discovery, and live wallet data updates via account subscriptions.
+> 
+> - **Tokens / Metadata**:
+>   - Parse Token-2022 TLV metadata via `unpackMint`/extensions; derive `symbol`, `isMutable`, `supply`, and update `decimalsCache`.
+>   - Fallback to Metaplex PDA parsing for symbols and mutability when TLV absent.
+>   - New `getTokensSymbols(mints[])` for batched symbol lookup; `parseTokenAccounts` now accepts options and returns `symbol`, `supply`, `tokenProgram`, `isMutable`, `balanceUi` with background caching.
+> - **Wallet Data**:
+>   - Initialize wallet data immediately after public key load and subscribe to account changes to refresh on updates.
+>   - Birdeye results now backfill missing symbols via `getTokensSymbols`.
+>   - `getTokenAccountsByKeypair` now merges SPL and Token-2022 accounts, supports freshness via `notOlderThan`, and filters zero balances.
+> - **Swaps**:
+>   - Safer logging and amount formatting; improved post-balance diffing (including SOL sells) and decimals updates.
+> - **Subscriptions / Lifecycle**:
+>   - Account change subscription added; periodic updater removed from `start()`; `unsubscribeFromAccount` adjusted (RPC WS path commented out).
+> - **Misc**:
+>   - Minor constants/log tweaks; numeric literal cleanup; expanded SPL imports.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit cbd9a3f24f6dce80b56e9577716e74d0cee01227. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+## Summary by CodeRabbit
+
+- New Features
+  - Token-2022 TLV metadata parsing with robust token symbol extraction.
+  - Public APIs to fetch token symbols for single or multiple mints.
+
+- Improvements
+  - Immediate wallet data initialization and live updates on account changes.
+  - More accurate token balance parsing for classic SPL and Token-2022 with cached decimals/symbols.
+  - Bulk symbol backfill when external sources lack symbols and improved caching/freshness.
+  - Enhanced logging for cache/parsing flows.
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->17:Tee1,## 🎯 Phase: CLI Cleanup
+
+**Status**: 🟡 Draft
+**Priority**: MEDIUM - Proper architecture  
+**Breaking**: No  
+
+---
+
+## 📋 Summary
+
+This PR removes massive duplication from the CLI by deleting the custom module-loader and using published packages (`@elizaos/server`, `@elizaos/core`) directly.
+
+### Impact
+- 📉 **237 lines deleted** (module-loader.ts + tests)
+- 🎯 **Zero duplication**: CLI uses published packages only
+- ✅ **Proper separation**: CLI = command parsing + file loading
+- ✅ **All builds pass**: 14/14 packages build successfully
+
+---
+
+## 🔧 Changes
+
+### 1. Delete Module Loader ❌ (237 lines removed!)
+- Deleted `packages/cli/src/utils/module-loader.ts` (236 lines)
+- Deleted `packages/cli/src/utils/module-loader.test.ts`
+- Updated `packages/cli/src/utils/index.ts` (removed export)
+
+**Why?** The module loader was a hack to dynamically require plugins. We moved all config/plugin logic to Core, so we don't need it anymore.
+
+### 2. Simplify CLI Commands ✅
+
+**commands/start/index.ts**
+```diff
+- import { getModuleLoader } from '@/src/utils/module-loader';
++ import { AgentServer, loadCharacterTryPath } from '@elizaos/server';
+
+- const moduleLoader = getModuleLoader();
+- const { AgentServer } = await moduleLoader.load('@elizaos/server');
+- const { loadCharacterTryPath } = serverModule;
++ // Direct imports - no dynamic loading needed!
+```
+
+**commands/scenario/src/runtime-factory.ts**
+```diff
+- import { setDefaultSecretsFromEnv } from '@elizaos/core';
+- await setDefaultSecretsFromEnv(character);
++ // ElizaOS.addAgents() now handles secrets automatically
+```
+
+**commands/scenario/src/plugin-parser.ts**
+```diff
+- const moduleLoader = getModuleLoader();
+- const { PluginLoader } = await moduleLoader.load('@elizaos/server');
+- const loader = new PluginLoader();
+- const loadedPlugin = await loader.loadAndPreparePlugin(plugin.name);
++ // Plugin loading delegated to ElizaOS/AgentServer
++ // Just validate the plugin reference here
+```
+
+---
+
+## 🏗️ Architecture Now
+
+```
+CLI Layer (thin)
+  ├─ Command parsing (Commander.js)
+  ├─ File loading (characters, .env)
+  └─ Delegation to @elizaos/server
+      └─ AgentServer
+          └─ ElizaOS (from @elizaos/core)
+              └─ Config + Plugin + Secrets Management
+```
+
+**Clean Separation**:
+- **CLI**: Parse commands → Load files → Call Server
+- **Server**: HTTP + WebSocket + Agent orchestration
+- **Core**: ElizaOS + Config + Plugins + Secrets
+
+---
+
+## ✅ Testing
+
+### Builds
+```bash
+bun run build
+# ✅ 14/14 packages build successfully
+```
+
+### Manual Testing
+- ✅ CLI imports are direct (no module-loader)
+- ✅ start command works
+- ✅ project-starter templates unaffected
+
+### Automated Tests
+- 🟡 CLI tests running (some timeout, investigating)
+- ✅ Core tests: 541 passing
+- ✅ Server tests: 38 passing
+
+---
+
+## 📋 Tasks Status
+
+- [x] **Task 1**: Remove Embedded Server ✅
+- [x] **Task 2**: Delete Module Loader ✅
+- [ ] **Task 3**: Use Core Configuration 🟡 In Progress
+- [ ] **Task 4**: Improve Server API 🟡 In Progress
+- [ ] **Task 5**: Update Tests 🟡 In Progress
+
+---
+
+## 🔗 Related
+
+- **Depends on**: Config & Plugin in Core ✅ Merged
+
+---
+
+## 📝 Notes for Reviewers
+
+### Key Points
+1. **No breaking changes** - CLI commands work identically
+2. **237 lines deleted** - Massive code reduction
+3. **Proper architecture** - CLI is now a thin layer
+4. **Dependencies verified** - `@elizaos/server` already in package.json
+
+### Areas to Review
+- [ ] CLI start command still works as expected
+- [ ] Direct imports from @elizaos/server are correct
+- [ ] No regression in character loading
+- [ ] project-starter templates still work18:T451,<!-- CURSOR_SUMMARY -->
+> [!NOTE]
+> Evaluators now run asynchronously with robust error handling/logging, and the bootstrap message flow triggers evaluator execution non-blockingly with streamlined logging.
+> 
+> - **Core (`packages/core/src/runtime.ts`)**:
+>   - **Evaluator execution hardening**: Wrap `evaluate` in try/catch; add per-evaluator try/catch for `validate` and `handler`, logging errors with `evaluator.name`; safely return `[]` on failures; compose state once before handler execution.
+> - **Bootstrap (`packages/plugin-bootstrap/src/index.ts`)**:
+>   - **Background evaluators**: Invoke `runtime.evaluate(...)` without awaiting; attach `.catch` to log errors, keeping message handling non-blocking.
+>   - **Logging/cleanup**: More concise debug logs and minor formatting; no behavioral changes beyond async evaluator run.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit e8028b9e3c9de09173707edb7f26a666ff55fc06. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->19:T73e,<!-- CURSOR_SUMMARY -->
+> [!NOTE]
+> Convert channelId to agent-unique roomId in room memories endpoint and add/use entityId in memory types/mapping to correctly distinguish user vs agent messages.
+> 
+> - **Backend**:
+>   - **Room Memories Endpoint**: `GET /api/memory/:agentId/rooms/:roomId/memories` now treats `roomId` as `channelId`, converts via `createUniqueUuid(runtime, channelId)`, and updates validation/logging.
+> - **Client/Types**:
+>   - **Memory Type**: Add `entityId?: UUID` to `packages/api-client/src/types/memory.ts`.
+>   - **Type Mapper**: `mapApiMemoryToClient` now reads `apiMemory.entityId` (with metadata fallbacks) to set `entityId`.
+> - **Tests**:
+>   - Update `MemoryService` tests to use full memory/room shapes (UUIDs, timestamps, `entityId`, `metadata`) and new room params.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit 419049736da4385e656cfb13f814c363d42cc2c6. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->
+
+
+
+Fixed two filtering issues in the agent memory viewer:
+
+1. Current Chat Filter: Backend endpoint now converts channelId to agent-specific roomId
+   - Updated /api/memory/:agentId/rooms/:roomId/memories endpoint to use createUniqueUuid()
+   - Memories are stored with agent-unique roomIds, not global channelIds
+
+2. User Messages Filter: Fixed entityId mapping to distinguish user vs agent messages
+   - Added entityId field to API Memory type definition
+   - Updated mapApiMemoryToClient to use apiMemory.entityId directly
+   - Removed incorrect fallback to agentId that was causing all messages to appear as agent messages
+
+Changes:
+- packages/server/src/api/memory/agents.ts
+- packages/api-client/src/types/memory.ts
+- packages/client/src/lib/api-type-mappers.ts1a:T4dc,- Changed error.errors to error.issues to match ZodError API
+- Fixed error handling in plugin-starter and project-starter
+- Added proper error handling for non-ZodError cases
+- Ensures consistency with plugin-quick-starter implementation
+
+<!-- CURSOR_SUMMARY -->
+---
+
+> [!NOTE]
+> Switches validation to ZodError.issues with fallback and unified non-ZodError messages; adds tests to verify error handling.
+> 
+> - **Validation/Error Handling**:
+>   - Update `init` in `packages/plugin-quick-starter/src/plugin.ts`, `packages/plugin-starter/src/plugin.ts`, and `packages/project-starter/src/plugin.ts` to use `z.ZodError.issues` (with fallback) and wrap non-ZodError exceptions as `Invalid plugin configuration: ...`.
+>   - Minor import cleanup in `plugin-quick-starter` plugin file.
+> - **Tests**:
+>   - Add tests in `packages/plugin-quick-starter/src/__tests__/plugin.test.ts` covering ZodError `issues` messages, fallback when `issues` is undefined, and non-ZodError cases.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit b863d1ac0967e494b9d9a1667b3757abbd07edd7. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->1b:Tb4d,# Risks
+
+**Low**
+
+- Bootstrap and SQL plugins are now automatically injected by the server
+- Character files no longer need to specify these plugins manually
+- Backward compatible: if a character file still includes bootstrap/SQL, they will be handled by `resolvePlugins()`
+- Opt-out available via `IGNORE_BOOTSTRAP=true` environment variable
+
+# Background
+
+## What does this PR do?
+
+This PR implements automatic injection of server-required plugins (bootstrap and SQL) in the AgentServer, eliminating the need for users to manually specify them in character files.
+
+**Changes:**
+- Bootstrap plugin is now automatically prepended to all agents started via `AgentServer.startAgents()`
+- SQL plugin continues to be automatically appended (already existing behavior)
+- Updated default character to remove redundant plugin declarations
+- Added documentation explaining the auto-injection behavior
+
+**Benefits:**
+- Cleaner character files (no need to remember bootstrap/SQL)
+- Reduced boilerplate
+- Consistent plugin loading (server ensures required plugins are present)
+- Better separation of concerns (server-required vs user-specified plugins)
+
+## What kind of change is this?
+
+- Improvements (misc. changes to existing features)
+- Features (non-breaking change which adds functionality)
+
+# Documentation changes needed?
+
+# Testing
+
+## Where should a reviewer start?
+
+1. Review `packages/server/src/index.ts` (lines 199-203) - the auto-injection logic
+2. Review `packages/server/src/characters/default.ts` (lines 8-10) - cleaned character file
+3. Verify server builds successfully
+4. Run server tests to confirm agents start correctly with auto-injected plugins
+
+## Detailed testing steps
+
+**As a developer:**
+1. Build the server package: `bun run build --filter=@elizaos/server`
+2. Verify build succeeds ✅
+3. Run server tests: `cd packages/server && bun test`
+4. Verify all tests pass (especially agent startup tests)
+5. Create a character file without bootstrap/SQL plugins
+6. Start the server with this character
+7. Verify agent starts successfully and has bootstrap actions available
+
+**Plugin injection order:**
+```typescript
+const allPlugins = [
+  ...(!process.env.IGNORE_BOOTSTRAP ? [bootstrapPlugin] : []),  // 1. Bootstrap (auto)
+  ...(agent.character.plugins || []),                            // 2. Character plugins
+  ...(agent.plugins || []),                                      // 3. Runtime plugins
+  sqlPlugin,                                                     // 4. SQL (auto)
+];
+```
+
+**Opt-out test:**
+- Set `IGNORE_BOOTSTRAP=true`
+- Verify bootstrap is not injected
+- Server should still function (though agent features will be limited)
+
+# Deploy Notes
+
+No special deployment steps required.
+
+**Breaking changes:** None
+
+**Migration:** Optional - users can remove `@elizaos/plugin-bootstrap` and `@elizaos/plugin-sql` from their character files for cleaner configuration.d:["$","div",null,{"className":"mb-8 space-y-6","children":[["$","$L14",null,{"metrics":{"date":"2025-10-16","interval":{"intervalStart":"$D2025-10-16T00:00:00.000Z","intervalEnd":"$D2025-10-17T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":5,"merged":4,"total":9},"issues":{"new":0,"closed":1,"total":1},"activeContributors":6,"codeChanges":{"additions":1458,"deletions":1341,"files":36,"commitCount":35},"topContributors":[{"username":"0xbbjoker","avatarUrl":"https://avatars.githubusercontent.com/u/54844437?u=90fe1762420de6ad493a1c1582f1f70c0d87d8e2&v=4","totalScore":78.75066737402825,"prScore":73.41066737402825,"issueScore":0,"reviewScore":5,"commentScore":0.33999999999999997,"summary":"0xbbjoker: Focused on improving the Eliza application, merging two significant PRs: elizaos/eliza#6067, which fixed current chat and user messages filters in the memory viewer, and elizaos/eliza#6066, which enabled evaluators to run asynchronously in the background. Their work primarily involved bug fixes and other development, with a focus on code and tests, as evidenced by modifying 186 files with 10 commits."},{"username":"standujar","avatarUrl":"https://avatars.githubusercontent.com/u/16385918?u=718bdcd1585be8447bdfffb8c11ce249baa7532d&v=4","totalScore":65.48568054636411,"prScore":65.1456805463641,"issueScore":0,"reviewScore":0,"commentScore":0.33999999999999997,"summary":"standujar: Focused on significant refactoring and feature development, notably merging a large refactor in elizaos/eliza (#6069) that moved character builder logic to core, and also opened a new feature PR to auto-inject bootstrap and SQL plugins. Their work today spanned feature development, bug fixes, refactoring, and tests, primarily impacting code and test files."},{"username":"odilitime","avatarUrl":"https://avatars.githubusercontent.com/u/16395496?u=c9bac48e632aae594a0d85aaf9e9c9c69b674d8b&v=4","totalScore":56.4017738965761,"prScore":56.4017738965761,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"odilitime: Focused on improvements and type fixes, opening PR elizaos-plugins/plugin-solana#16, while also making substantial code changes across 21 files (+2159/-413 lines) with a primary focus on other work and bug fixes."}],"focusAreas":[{"area":"server","count":14},{"area":"cli","count":12},{"area":"src","count":3},{"area":"plugin-quick-starter","count":2},{"area":"plugin-starter","count":1},{"area":"project-starter","count":1},{"area":"core","count":1},{"area":"src/providers","count":1}],"topIssues":[{"id":"I_kwDOMT5cIs7KjCY9","title":"Refactors & Core Alignment","author":"borisudovicic","number":5933,"repository":"elizaos/eliza","body":"* Refactor server code to call ElizaOS global functions instead of custom logic.\n* Decouple bootstrap logic from CLI (bootstrap only in core).\n* Remove CLI “server-start” embedding.\n* Clean up modular loaders and resolution hacks.\n* Strip dead code paths from server startup.","createdAt":"2025-09-09T12:19:15Z","closedAt":"2025-10-16T07:37:11Z","state":"CLOSED","commentCount":0}],"topPullRequests":[{"id":"PR_kwDONkwLhs6uLDf_","title":"improvements, type fixes, items from PR9","author":"odilitime","number":16,"body":"$15","repository":"elizaos-plugins/plugin-solana","createdAt":"2025-10-16T21:04:02Z","mergedAt":"2025-10-21T02:16:34Z","additions":849,"deletions":311},{"id":"PR_kwDONkwLhs6sZ9J8","title":"token 2022 upgrades","author":"odilitime","number":14,"body":"$16","repository":"elizaos-plugins/plugin-solana","createdAt":"2025-10-07T03:12:30Z","mergedAt":"2025-10-16T02:24:01Z","additions":838,"deletions":63},{"id":"PR_kwDOMT5cIs6uKQsE","title":"refactor(tests): Move character builder logic to core","author":"standujar","number":6069,"body":"\n- Move buildCharacterPlugins() to core (business logic)\n\n- Keep Eliza character to cli\n\n- Remove duplicate code from server\n\n- Add 27 tests on core","repository":"elizaos/eliza","createdAt":"2025-10-16T19:42:50Z","mergedAt":"2025-10-17T15:37:44Z","additions":706,"deletions":789},{"id":"PR_kwDOMT5cIs6tQqot","title":"feat(cli): Simplify CLI to use server / core","author":"standujar","number":6060,"body":"$17","repository":"elizaos/eliza","createdAt":"2025-10-11T16:51:07Z","mergedAt":"2025-10-16T06:09:54Z","additions":337,"deletions":1073},{"id":"PR_kwDONkwLhs6tEXAN","title":"fix: resolve TypeScript errors and improve logging","author":"standujar","number":15,"body":"\n\n<!-- This is an auto-generated comment: release notes by coderabbit.ai -->\n## Summary by CodeRabbit\n\n* New Features\n  * App now continues in standalone mode if trading services are unavailable.\n  * Added startup retry with clearer progress logs for initialization.\n\n* Bug Fixes\n  * More reliable swap execution with consistent error handling.\n  * Wallet initialization is more resilient; portfolio shows $0 instead of blank when data is missing.\n  * Safer token/account parsing to prevent crashes on unexpected data.\n\n* Refactor\n  * Standardized logging and improved robustness across network, encoding, and parsing paths.\n\n* Chores\n  * Bumped version to 1.2.0.\n<!-- end of auto-generated comment: release notes by coderabbit.ai -->","repository":"elizaos-plugins/plugin-solana","createdAt":"2025-10-10T11:24:22Z","mergedAt":"2025-10-16T02:45:48Z","additions":141,"deletions":104},{"id":"PR_kwDOMT5cIs6uDX_q","title":"feat: make evaluators run asynchronously in background","author":"0xbbjoker","number":6066,"body":"$18","repository":"elizaos/eliza","createdAt":"2025-10-16T10:23:14Z","mergedAt":"2025-10-17T11:58:32Z","additions":116,"deletions":69},{"id":"PR_kwDOMT5cIs6uFDTB","title":"fix: current chat and user messages filters in memory viewer","author":"0xbbjoker","number":6067,"body":"$19","repository":"elizaos/eliza","createdAt":"2025-10-16T12:44:29Z","mergedAt":"2025-10-17T11:58:00Z","additions":88,"deletions":16},{"id":"PR_kwDOMT5cIs6sMNek","title":"fix(plugins): use correct ZodError.issues API instead of .errors","author":"0xbbjoker","number":6035,"body":"$1a","repository":"elizaos/eliza","createdAt":"2025-10-06T05:43:31Z","mergedAt":"2025-10-16T06:35:37Z","additions":72,"deletions":13},{"id":"PR_kwDOMT5cIs6uHd8H","title":"feat(server): auto-inject bootstrap and SQL plugins","author":"standujar","number":6068,"body":"$1b","repository":"elizaos/eliza","createdAt":"2025-10-16T15:43:41Z","mergedAt":null,"additions":7,"deletions":4}],"detailedContributorSummaries":{"0xbbjoker":"0xbbjoker: Focused on improving the Eliza application, merging two significant PRs: elizaos/eliza#6067, which fixed current chat and user messages filters in the memory viewer, and elizaos/eliza#6066, which enabled evaluators to run asynchronously in the background. Their work primarily involved bug fixes and other development, with a focus on code and tests, as evidenced by modifying 186 files with 10 commits.","odilitime":"odilitime: Focused on improvements and type fixes, opening PR elizaos-plugins/plugin-solana#16, while also making substantial code changes across 21 files (+2159/-413 lines) with a primary focus on other work and bug fixes.","standujar":"standujar: Focused on significant refactoring and feature development, notably merging a large refactor in elizaos/eliza (#6069) that moved character builder logic to core, and also opened a new feature PR to auto-inject bootstrap and SQL plugins. Their work today spanned feature development, bug fixes, refactoring, and tests, primarily impacting code and test files."}}}],"$L1c"]}]
+e:["$","div",null,{"className":"prose prose-sm mx-auto mt-8 dark:prose-invert sm:prose lg:prose-lg xl:prose-xl","children":[["$","p","p-0",{"children":["Today, the project saw significant advancements in both core framework architecture and plugin capabilities. The ",["$","code","code-0",{"children":"elizaos/eliza"}]," repository focused on streamlining the CLI by integrating server/core functionalities and refining plugin error handling, while ",["$","code","code-1",{"children":"elizaos-plugins/plugin-solana"}]," made critical progress on Token-2022 support and bug fixes, enhancing wallet data management and application resilience. These efforts collectively improve the framework's stability, modularity, and ability to interact with advanced blockchain features."]}],"\n",["$","h2","h2-0",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"✅ Completed Work","position":{"start":{"line":3,"column":4,"offset":547},"end":{"line":3,"column":20,"offset":563}}}],"position":{"start":{"line":3,"column":1,"offset":544},"end":{"line":3,"column":20,"offset":563}}},"children":"✅ Completed Work"}],"\n",["$","h3","h3-0",{"children":"Core CLI Simplification and Architectural Alignment"}],"\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["The CLI has been significantly simplified by removing redundant module loaders and integrating server/core functionalities directly, reducing duplication and improving overall architecture. ",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/6060","children":"elizaos/eliza#6060"}]]}],"\n",["$","li","li-1",{"children":["Server code was refactored to utilize ElizaOS global functions, and bootstrap logic was decoupled from the CLI, centralizing it within the core for a cleaner architecture. ",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/5933","children":"elizaos/eliza#5933"}]]}],"\n"]}],"\n",["$","h3","h3-1",{"children":"Enhanced Plugin Error Handling"}],"\n",["$","ul","ul-1",{"children":["\n",["$","li","li-0",{"children":["Plugin error handling was improved to correctly use the ",["$","code","code-0",{"children":"ZodError.issues"}]," API, ensuring consistent and proper error reporting across different plugin starters. ",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/6035","children":"elizaos/eliza#6035"}]]}],"\n"]}],"\n",["$","h3","h3-2",{"children":"Solana Plugin Token-2022 Support and Wallet Data"}],"\n",["$","ul","ul-2",{"children":["\n",["$","li","li-0",{"children":["The Solana plugin now includes Token-2022-aware token parsing, supporting symbols, mutability, and supply, along with batch symbol backfill and combined SPL+Token-2022 account discovery. ",["$","a","a-0",{"href":"https://github.com/elizaos-plugins/plugin-solana/pull/14","children":"elizaos-plugins/plugin-solana#14"}]]}],"\n"]}],"\n",["$","h3","h3-3",{"children":"Solana Plugin Bug Fixes and Resilience"}],"\n",["$","ul","ul-3",{"children":["\n",["$","li","li-0",{"children":["Critical TypeScript errors were resolved, logging was improved, and the application now continues in standalone mode if trading services are unavailable, enhancing stability. ",["$","a","a-0",{"href":"https://github.com/elizaos-plugins/plugin-solana/pull/15","children":"elizaos-plugins/plugin-solana#15"}]]}],"\n"]}],"\n",["$","h2","h2-1",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"🏗️ Work in Progress","position":{"start":{"line":18,"column":4,"offset":2036},"end":{"line":18,"column":24,"offset":2056}}}],"position":{"start":{"line":18,"column":1,"offset":2033},"end":{"line":18,"column":24,"offset":2056}}},"children":"🏗️ Work in Progress"}],"\n",["$","h3","h3-4",{"children":"New Pull Requests"}],"\n",["$","ul","ul-4",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"elizaos/eliza"}],"\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/6069","children":"elizaos/eliza#6069"}],": refactor(tests): Move character builder logic to core (Draft)"]}],"\n","$L1d","\n","$L1e","\n","$L1f","\n"]}],"\n"]}],"\n","$L20","\n"]}],"\n","$L21","\n","$L22","\n","$L23"]}]
+f:["$","script","script-0",{"src":"/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","async":true}]
+10:["$","script","script-1",{"src":"/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","async":true}]
+11:["$","script","script-2",{"src":"/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js","async":true}]
+12:["$","$L24",null,{"children":["$","$25",null,{"name":"Next.MetadataOutlet","children":"$@26"}]}]
+1c:["$","div",null,{"className":"rounded-lg border bg-card text-card-foreground shadow-sm","children":[["$","div",null,{"className":"flex flex-col space-y-1.5 p-6 py-4","children":["$","div",null,{"className":"tracking-tight text-sm font-medium","children":["$undefined","Code Changes"]}]}],["$","div",null,{"className":"p-6 pt-0","children":["$","div",null,{"className":"grid grid-cols-2 gap-4 md:grid-cols-4","children":[["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-git-commit-vertical h-5 w-5","aria-hidden":"true","children":[["$","path","1holv5",{"d":"M12 3v6"}],["$","circle","1v7zrd",{"cx":"12","cy":"12","r":"3"}],["$","path","a9ows0",{"d":"M12 15v6"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":35}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Commits"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-file-code h-5 w-5","aria-hidden":"true","children":[["$","path","1oefj6",{"d":"M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"}],["$","path","wfsgrz",{"d":"M14 2v5a1 1 0 0 0 1 1h5"}],["$","path","1tg20x",{"d":"M10 12.5 8 15l2 2.5"}],["$","path","yinavb",{"d":"m14 12.5 2 2.5-2 2.5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":36}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Files Changed"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-green-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-up h-5 w-5 text-green-500","aria-hidden":"true","children":[["$","path","hav0vg",{"d":"m5 12 7-7 7 7"}],["$","path","x0mq9r",{"d":"M12 19V5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-green-500","children":"+1,458"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Added"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-red-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-down h-5 w-5 text-red-500","aria-hidden":"true","children":[["$","path","s699le",{"d":"M12 5v14"}],["$","path","1idqje",{"d":"m19 12-7 7-7-7"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-red-500","children":"-1,341"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Deleted"}]]}]]}]]}]}]]}]
+1d:["$","li","li-1",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/6068","children":"elizaos/eliza#6068"}],": feat(server): auto-inject bootstrap and SQL plugins (Draft)"]}]
+1e:["$","li","li-2",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/6067","children":"elizaos/eliza#6067"}],": fix: current chat and user messages filters in memory viewer (Draft)"]}]
+1f:["$","li","li-3",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/6066","children":"elizaos/eliza#6066"}],": feat: make evaluators run asynchronously in background (Draft)"]}]
+20:["$","li","li-1",{"children":[["$","strong","strong-0",{"children":"elizaos-plugins/plugin-solana"}],"\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos-plugins/plugin-solana/pull/16","children":"elizaos-plugins/plugin-solana#16"}],": This pull request introduces further improvements, type fixes, and incorporates items from a previous PR9, indicating ongoing refinement and integration efforts."]}],"\n"]}],"\n"]}]
+21:["$","h2","h2-2",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"🐞 Issue Triage","position":{"start":{"line":29,"column":4,"offset":2944},"end":{"line":29,"column":19,"offset":2959}}}],"position":{"start":{"line":29,"column":1,"offset":2941},"end":{"line":29,"column":19,"offset":2959}}},"children":"🐞 Issue Triage"}]
+22:["$","h3","h3-5",{"children":"Closed Issues"}]
+23:["$","ul","ul-5",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"elizaos/eliza"}],"\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/5933","children":"elizaos/eliza#5933"}],": Core Refactoring and CLI Decoupling - This issue was closed following a significant refactoring effort to align server code with ElizaOS global functions and decouple bootstrap logic from the CLI."]}],"\n"]}],"\n"]}],"\n"]}]
+26:null

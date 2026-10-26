@@ -1,0 +1,1615 @@
+1:"$Sreact.fragment"
+2:I[4817319,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"IntervalSelector"]
+3:I[6998365,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"LlmCopyButton"]
+16:I[3642796,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],""]
+17:I[3238488,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"StatCardsDisplay"]
+2f:I[4261541,["/eliza-leaderboard/_next/static/chunks/b33bcbdcb3f88354.js","/eliza-leaderboard/_next/static/chunks/8ba59154b6704904.js"],"OutletBoundary"]
+30:"$Sreact.suspense"
+4:T17a7,## Relates to
+
+- Data isolation / multi-entity support
+- External JWT provider integration (Privy, Auth0, Clerk, Supabase, Google, Embbeded)
+
+## Risks
+
+**Low**
+
+- Requires `ENABLE_DATA_ISOLATION=true` to activate JWT auth mode
+
+## Background
+
+### What does this PR do?
+
+Implements a complete JWT authentication system for ElizaOS with support for multiple verification strategies:
+
+1. **JWT Verifier Factory** - Priority-based verifier selection:
+   - Ed25519 (highest priority) - For self-signed JWTs with Ed25519 keys
+   - JWKS (medium priority) - For external providers (Auth0, Clerk, Privy, Supabase, Google)
+   - Secret (lowest priority) - For simple HS256 symmetric key verification
+
+2. **Entity ID derivation from JWT `sub` claim**:
+   - `entityId = stringToUuid(payload.sub)`
+   - Compatible with ANY JWT provider since `sub` is a standard claim
+   - No custom claims needed in external JWTs
+
+3. **Dual authentication modes**:
+   - `ENABLE_DATA_ISOLATION=true` → JWT authentication required
+   - `ENABLE_DATA_ISOLATION=false` → X-Entity-Id header (legacy mode)
+
+4. **Internal service bypass** - Process-local UUID secret for service-to-service calls
+
+5. **Credentials-based auth endpoints** (`/api/auth/*`) - only in custom - JWT-SECRET mode:
+   - `POST /register` - User registration with bcrypt password hashing
+   - `POST /login` - User login with JWT generation
+   - `POST /refresh` - Token refresh
+   - `GET /me` - Current user info
+
+6. **Client UI default implementation using self mode (Secret)
+
+### What kind of change is this?
+
+**Features** (non-breaking change which adds functionality)
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    JWT Verification Flow                         │
+├─────────────────────────────────────────────────────────────────┤
+│  Request with Bearer token                                       │
+│       ↓                                                          │
+│  JWTVerifierFactory.create()                                     │
+│       ↓                                                          │
+│  Priority: Ed25519 > JWKS > Secret > Disabled                   │
+│       ↓                                                          │
+│  verifier.verify(token)                                          │
+│       ↓                                                          │
+│  Extract payload.sub                                             │
+│       ↓                                                          │
+│  entityId = stringToUuid(sub)  ← Derived, NOT stored in JWT     │
+│       ↓                                                          │
+│  req.entityId = entityId                                         │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+## Environment Variables
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `ENABLE_DATA_ISOLATION` | Enable JWT auth mode | `true` |
+| `JWT_SECRET` (optional) | HS256 symmetric secret | `your-secret-key` |
+| `JWT_PUBLIC_KEY_ED25519` (optional) | Ed25519 public key (base64) | `MCowBQYDK2Vw...` |
+| `JWT_JWKS_URI` (optional) | JWKS endpoint URL | `https://auth0.com/.well-known/jwks.json` |
+| `JWT_ISSUER_WHITELIST` (optional) | Allowed issuers (comma-separated) | `https://auth0.com/,https://clerk.dev` |
+
+## Documentation changes needed?
+
+Yes - Documentation should be added for:
+- Environment variable configuration
+- External provider setup (Auth0, Clerk, Privy examples)
+
+## Testing
+
+### Where should a reviewer start?
+
+1. `packages/server/src/services/jwt-verifiers/factory.ts` - Core factory logic
+2. `packages/server/src/middleware/jwtMiddleware.ts` - HTTP middleware
+3. `packages/server/src/socketio/index.ts` - SocketIO authentication
+
+### Detailed testing steps
+
+**Unit Tests:**
+```bash
+cd packages/server
+bun run test:unit
+```
+
+**Integration Tests:**
+```bash
+cd packages/server
+bun run test:integration
+```
+
+**Results:** 489 unit tests pass, 6 integration test files pass
+
+### Manual Testing
+
+1. **Test with JWT_SECRET (HS256):**
+```bash
+ENABLE_DATA_ISOLATION=true JWT_SECRET=test-secret bun run dev
+```
+
+2. **Register a user:**
+```bash
+curl -X POST http://localhost:3000/api/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"email":"test@example.com","username":"testuser","password":"password123"}'
+```
+
+3. **Use returned token:**
+```bash
+curl http://localhost:3000/api/agents \
+  -H "Authorization: Bearer <token>"
+```
+
+## External Provider Compatibility
+
+Tested JWT formats:
+- **Auth0**: `sub: "auth0|1234567890"`
+- **Clerk**: `sub: "user_2abcdefgh123456"`
+- **Google**: `sub: "1234567890"` with `email`, `email_verified`
+- **Supabase**: `sub: "uuid"` with `role: "authenticated"`
+- **Privy**: `sub: "did:privy:..."`
+
+All providers work because we only require the standard `sub` claim.
+
+## Next Idea Steps: Access Control Layer (ACL)
+
+The next phase will add access control on agents and rooms: 
+
+Agents:
+- Each user can create their own agents (ownerId = entityId)
+- Visibility: public or private
+- Private = only the owner can chat with it
+- Public = everyone can chat, but only the owner can modify/delete
+
+Rooms:
+- Each room has an owner
+Only the owner can:
+- Delete the room (DELETE /rooms/:id)
+- Clear message history (DELETE /rooms/:id/messages)
+- Change visibility
+
+This will enable true multi-tenant mode where each user manages their resources in isolation.5:Tf8a,## Summary
+
+This PR implements parallel action execution within the `processActions()` method to improve performance for multi-action responses.
+
+## Changes
+
+### Core Runtime (`packages/core/src/runtime.ts`)
+- Execute actions within a single response batch **in parallel** using `Promise.allSettled()`
+- All actions in a batch receive the **same initial state snapshot**
+- State accumulates **sequentially between response batches**
+- Merge all `ActionResult.values` after parallel batch completes
+- Preserve fault tolerance: if one action fails, others still complete
+
+### Prompts (`packages/core/src/prompts.ts`)
+- Updated `messageHandlerTemplate` to reflect parallel execution model
+- Changed "IMPORTANT ACTION ORDERING RULES" to "IMPORTANT ACTION EXECUTION RULES"
+- Clarified that actions listed in a single response execute in parallel
+- Added guidance to use multi-step workflow for sequential dependencies
+
+### Action State Provider (`packages/plugin-bootstrap/src/providers/actionState.ts`)
+- Updated JSDoc and description to clarify "previous results" refers to prior response batches, not sibling parallel actions
+
+### Tests
+- Updated `runtime.test.ts` to match new state initialization behavior
+- Updated `prompts.test.ts` to match new prompt text
+
+## Key Data Flow
+
+```
+Response 1: [action1, action2, action3]
+  ├─> Execute ALL in parallel with initialState
+  ├─> Wait for all to complete
+  └─> Merge results → accumulatedState
+
+Response 2: [action4, action5]
+  ├─> Execute ALL in parallel with accumulatedState from Response 1
+  ├─> Wait for all to complete
+  └─> Merge results → new accumulatedState
+```
+
+## Testing
+
+- All existing runtime tests pass
+- All prompt tests pass
+- All multi-step workflow tests pass
+- Action chaining tests pass
+
+## Breaking Changes
+
+None - backward compatible. Actions that previously assumed sequential execution within a batch will now run in parallel, but since they all receive the same state snapshot, behavior should be equivalent for independent actions.
+
+<!-- CURSOR_SUMMARY -->
+---
+
+> [!NOTE]
+> Execute actions in a response batch in parallel with a shared state snapshot, accumulate results across batches, and introduce AsyncLocalStorage-based prompt tracking with prompt/provider/test updates.
+> 
+> - **Core (runtime.ts)**:
+>   - Parallelize `processActions` per response using `Promise.allSettled()`; each batch shares a composed state snapshot; accumulate `ActionResult.values` and plan state between batches.
+>   - Add robust action resolution (exact/fuzzy/similes), error paths for missing action/handler, and consistent action memory/logging.
+>   - Preserve legacy returns (void/boolean) as completed; treat `{ success:false }` (including minimal/error-only) as failed.
+>   - Merge working memory with size cap; cache `action_results`; update action plan immutably per step.
+>   - Introduce AsyncLocalStorage context: `ActionContextStore`, `getCurrentActionContext`, and browser fallback `createBrowserFallback` for prompt collection; include action context in `useModel` logs; skip collecting `TEXT_EMBEDDING` prompts.
+> - **Prompts (prompts.ts)**:
+>   - Update `messageHandlerTemplate` for parallel execution model and guidance on multi-step dependencies.
+> - **Provider (plugin-bootstrap/actionState.ts)**:
+>   - Clarify description/docs: "previous results" are from prior response batches; parallel actions share the same snapshot.
+> - **Tests**:
+>   - Expand `runtime.test.ts`: parallel execution behavior, action result status semantics, prompt collection/isolation via AsyncLocalStorage, browser fallback behavior, exact vs fuzzy action matching.
+>   - Update `prompts.test.ts` for new execution rules and wording.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit 55765fc289c965232d5d690c363f73c7ea1b81f6. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->6:Taa0,# Risks
+
+**Low to Medium**
+
+- Socket.IO configuration changes may affect existing client connections (tested with multiple browsers)
+- Code reorganization changes import paths - all imports have been updated and verified
+
+# Background
+
+## What does this PR do?
+
+This PR addresses server performance issues (request timeouts ~30s with multiple users connections) and improves code organization following clean architecture principles.
+
+### Performance Optimizations
+
+1. **Socket.IO Configuration**
+   - Configured `pingInterval` (25s) and `pingTimeout` (20s)
+   - Set `connectTimeout` (10s)
+   - Enforced transport order: `['websocket', 'polling']`
+
+2. **HTTP Server Timeouts**
+   - Added `timeout`, `keepAliveTimeout`, `headersTimeout`, `requestTimeout`
+   - Prevents hanging connections
+
+3. **Socket Disconnection Guards**
+   - Added checks before emitting to sockets
+   - Graceful handling of disconnected clients
+
+4. **Parallel Database Operations**
+   - Used `Promise.all` for independent DB queries
+   - Reduces latency for multi-query endpoints
+
+### Code Reorganization
+
+Restructured root-level files into proper directories:
+
+| Before | After |
+|--------|-------|
+| `src/bus.ts` | `src/services/message-bus.ts` |
+| `src/loader.ts` | `src/services/loader.ts` |
+| `src/upload.ts` | `src/utils/upload.ts` |
+| `src/types.ts` | `src/types/server.ts` |
+| *(new)* | `src/utils/config.ts` |
+| *(new)* | `src/services/index.ts` |
+
+- Added `ServerMiddleware` and `ServerConfig` types to `types/server.ts`
+- Created barrel exports in `services/index.ts` and updated `utils/index.ts`
+- Maintained backward compatibility via re-exports in `src/index.ts`
+
+### Test Fixes
+
+- Fixed invalid UUID usage in integration tests (replaced string casts with `stringToUuid()`)
+- Updated import paths for relocated modules
+
+## What kind of change is this?
+
+- Improvements (performance optimizations)
+- Refactoring (code reorganization)
+- Bug fixes (test UUID issues)
+
+# Documentation changes needed?
+
+No
+
+# Testing
+
+## Where should a reviewer start?
+
+1. [src/index.ts](packages/server/src/index.ts) - Main entry point with Socket.IO and HTTP timeout configs
+2. [src/services/](packages/server/src/services/) - Reorganized service files
+
+## Detailed testing steps
+
+1. Run unit tests and integrations tests:
+   ```bash
+   cd packages/server && bun run test:unit && bun run test:integration
+   ```
+
+2. Run build:
+   ```bash
+   cd packages/server && bun run build
+   ```
+
+3. Manual testing:
+   - Start server with PostgreSQL
+   - Connect multiple browser tabs simultaneously
+   - Verify no timeout errors after 30s
+   - Test Socket.IO reconnection behavior7:T64f,## Add ElizaOS Cloud as Default AI Provider in CLI
+
+### Summary
+- Add **ElizaOS Cloud** as the first/recommended option in `elizaos create` AI model selection
+- Integrate browser-based login flow for seamless API key setup
+- Fix env variable naming to match plugin (`ELIZAOS_CLOUD_API_KEY`)
+
+### Changes
+
+**`packages/cli/src/commands/create/utils/selection.ts`**
+- Add ElizaOS Cloud as top option with "(Recommended)" label
+- Set `elizacloud` as default `initialValue`
+- Add `elizacloud` to `hasEmbeddingSupport()` list
+
+**`packages/cli/src/utils/get-config.ts`**
+- Add `storeElizaCloudKey()` and `promptAndStoreElizaCloudKey()` 
+- Support 3 auth flows: browser login, manual key entry, skip
+
+**`packages/cli/src/commands/create/actions/setup.ts`**
+- Add `elizacloud` case in `setupAIModelConfig()`
+- Map `elizacloud` → `@elizaos/plugin-elizacloud` in `resolveModelToPlugin()`
+- Skip Ollama fallback when using ElizaOS Cloud
+
+**`packages/cli/src/commands/login/actions/login.ts`**
+- Rename `ELIZA_CLOUD_API_KEY` → `ELIZAOS_CLOUD_API_KEY`
+
+### User Flow
+```
+◆  Which AI model would you like to use?
+│  ● ElizaOS Cloud (Recommended)
+│  ○ Local AI (Ollama)
+│  ○ OpenAI
+│  ...
+
+◆  How would you like to authenticate?
+│  ● Login with browser (recommended)
+│  ○ Enter API key manually
+│  ○ Skip for now
+```
+
+### Test Plan
+- [ ] Run `elizaos create test-project` and select ElizaOS Cloud
+- [ ] Verify browser login flow saves key correctly
+- [ ] Verify manual key entry works
+- [ ] Verify plugin installs as `@elizaos/plugin-elizacloud`
+- [ ] Verify skip option adds placeholder to `.env`8:Te33,## Summary
+
+This PR modernizes the standalone example files and improves the SQL plugin's directory handling by:
+1. Migrating examples from the deprecated `MESSAGE_RECEIVED` event system to the new `messageService.handleMessage()` API
+2. Adding automatic PGLite data directory creation in the SQL plugin with comprehensive tests
+
+## Changes
+
+### Examples ( & )
+- ✅ Replace deprecated `MESSAGE_RECEIVED` event with `messageService.handleMessage()` API
+- ✅ Set `LOG_LEVEL` to `'silent'` for cleaner console output
+- ✅ Remove manual file system directory creation (now handled by SQL plugin)
+- ✅ Remove unused `EventType` and `fs` imports
+- ✅ Fix `messageServerId` to be properly converted to UUID in `standalone-cli-chat.ts`
+- ✅ Improve response handling with fallback to `result.responseContent.text`
+- ✅ Update inline documentation and comments
+
+### SQL Plugin
+- ✅ Add automatic directory creation in `createDatabaseAdapter()` (both `index.ts` and `index.node.ts`)
+  - Creates directories for file paths only (not for `memory://`, `idb://`, or other special URIs)
+  - Skips directory creation when using PostgreSQL
+  - Uses `mkdirSync(dataDir, { recursive: true })` to ensure parent directories are created
+- ✅ Add comprehensive unit tests in `__tests__/unit/directory-creation.test.ts`:
+  - Tests directory creation for new file paths
+  - Tests that existing directories don't cause errors
+  - Tests that special URIs (`memory://`, `idb://`) don't trigger directory creation
+  - Tests that PostgreSQL usage doesn't trigger directory creation
+
+## Testing
+
+- [x] All existing tests pass
+- [x] New unit tests added for directory creation logic
+- [ ] Manual testing of `standalone.ts` example
+- [ ] Manual testing of `standalone-cli-chat.ts` example
+
+## Type of Change
+
+- [x] Bug fix (non-breaking change which fixes deprecation warnings)
+- [x] Improvement (better directory handling and error prevention)
+- [x] Test coverage improvement
+
+## Related Issues
+
+- Fixes deprecation warnings in example files
+- Improves developer experience by auto-creating required directories
+- Prevents runtime errors from missing PGLite data directories
+
+## Migration Guide
+
+Users of the examples will now benefit from:
+- Cleaner, non-deprecated API usage
+- Automatic directory creation (no manual setup needed)
+- Better error messages and response handling
+
+No breaking changes - fully backward compatible.
+
+<!-- CURSOR_SUMMARY -->
+---
+
+> [!NOTE]
+> Updates examples to use messageService.handleMessage and adds automatic PGLite directory creation in the SQL plugin with tests.
+> 
+> - **Examples**:
+>   - Replace deprecated `EventType.MESSAGE_RECEIVED` with `runtime.messageService.handleMessage()` in `examples/standalone.ts` and `examples/standalone-cli-chat.ts`.
+>   - Set `process.env.LOG_LEVEL = 'silent'`; remove manual FS dir creation and unused imports.
+>   - Ensure `messageServerId` uses UUID in `standalone-cli-chat.ts`; improve response fallback handling.
+> - **SQL Plugin**:
+>   - In `packages/plugin-sql/src/index.ts` and `index.node.ts`, auto-create PGLite data directory via `mkdirSync(dataDir, { recursive: true })` when `dataDir` is a filesystem path.
+>   - Skip directory creation for `memory://`, `idb://`, and when `postgresUrl` is provided.
+>   - Add unit tests `__tests__/unit/directory-creation.test.ts` covering new directory-creation behavior.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit 3048a2784c05991f85f6a7cfab8a892b7fbd1043. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->9:T540,This PR includes two fixes for markdown content spacing in the client:
+
+1. Add missing heading and separator spacing to markdown-content
+2. Reduce blockquote vertical spacing for more compact display
+
+These changes improve the visual consistency and readability of markdown content rendered in the client.
+
+<!-- CURSOR_SUMMARY -->
+---
+
+> [!NOTE]
+> Adds consistent styles and spacing for markdown headings, separators, blockquotes, and code (blocks/inline) in `packages/client/src/index.css`.
+> 
+> - **Client CSS (`packages/client/src/index.css`)**:
+>   - **Markdown headings (`h1–h6`)**: add consistent sizes, weights, line-heights, margins, and first-child top-margin removal.
+>   - **Separators**: style `hr` with uniform spacing and subtle border.
+>   - **Blockquotes**: add compact margins, padding, left border, color, italic text, and tighter paragraph spacing.
+>   - **Code styling**:
+>     - `pre`: add margins, padding, rounded corners, overflow handling, and background.
+>     - `code`: set monospace font and size; add inline code background, padding, and radius.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit a70e5b8f0be7a0b3b8be503df0b23b0566cbb05d. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->a:T11b1,# Relates to
+
+Fixes excessive vertical spacing in AI-generated markdown responses in the ElizaOS client UI.
+
+# Risks
+
+**Low Risk**
+
+- Only CSS changes affecting markdown content rendering
+- Uses well-supported CSS features (Chrome 58+, Firefox 37+, Safari 11.1+, Edge 79+)
+- No breaking changes to functionality
+- Fully backward compatible
+- Simple rollback (revert commit)
+
+**Affected areas:**
+- Client UI markdown rendering (packages/client)
+- AI response display formatting
+
+# Background
+
+## What does this PR do?
+
+Fixes excessive vertical spacing in AI-generated markdown responses caused by Streamdown's wrapper `<div>` elements. Uses CSS `display: contents` to collapse wrapper spacing while preserving all content and functionality.
+
+**Key improvements:**
+- Bullet gaps: 24.5px → 2px (-91%)
+- List item gaps: 30.5px → 8px (-73%)
+- Header-to-bullets: 28.5px → 4px (-83%)
+- List-to-paragraph: 145.5px → 16px (-89%)
+- **Total spacing error eliminated: 178.5px → 0px**
+
+## What kind of change is this?
+
+- ✅ Bug fixes (non-breaking change which fixes an issue)
+- ✅ Improvements (misc. changes to existing features)
+
+# Documentation changes needed?
+
+- ✅ My changes do not require a change to the project documentation.
+
+The changes are internal CSS improvements with no API or configuration changes.
+
+# Testing
+
+## Where should a reviewer start?
+
+1. Review the CSS changes in `packages/client/src/index.css` (lines 184-278)
+2. Review the component update in `packages/client/src/components/ai-elements/response.tsx` (line 12)
+3. Test the visual improvements in the running client
+
+## Detailed testing steps
+
+### Automated Testing
+- ✅ Playwright browser automation with pixel-perfect measurements
+- ✅ Computed style verification
+- ✅ DOM structure inspection
+- ✅ All spacing measurements achieved targets with 0.0px error
+
+### Manual Testing Instructions
+
+1. Checkout this branch:
+   ```bash
+   git checkout fix/markdown-spacing-compact
+   ```
+
+2. Install dependencies and start client:
+   ```bash
+   bun install
+   cd packages/client && bun run dev
+   ```
+
+3. Open browser to client UI (http://localhost:5173)
+
+4. Start a chat with any agent
+
+5. Ask a question that generates nested lists, for example:
+   - "Explain the key features of this system"
+   - "Create a list view with example data showing nested workflow progress"
+
+6. Verify:
+   - ✅ Compact, readable spacing between list items
+   - ✅ Tight spacing (4px) between headers and their following lists
+   - ✅ No overlapping text
+   - ✅ Proper visual hierarchy maintained
+   - ✅ No console errors
+   - ✅ Smooth scrolling works correctly
+
+### Tested Scenarios
+- ✅ Complex nested lists (numbered and bulleted)
+- ✅ Mixed content (paragraphs, lists, headings)
+- ✅ Scrolling and overflow behavior
+- ✅ Accessibility (screen reader, keyboard navigation)
+- ✅ No layout breakage in any scenario
+
+## Screenshots
+
+### Before
+<img width="3840" height="2080" alt="before" src="https://github.com/user-attachments/assets/459f89bf-c623-4ad4-aa36-ce4a0f997033" />
+*Excessive spacing between elements, particularly noticeable in nested lists*
+
+### After
+<img width="3840" height="2080" alt="after" src="https://github.com/user-attachments/assets/f4addcb5-5dab-45fb-8e0f-e5dda4885d11" />
+*Compact, readable spacing matching design targets and Claude web interface*
+
+# Technical Details
+
+## Files Changed
+- `packages/client/src/index.css` (+109 lines)
+- `packages/client/src/components/ai-elements/response.tsx` (1 line modified)
+
+## Key Technical Approach
+
+Uses CSS `display: contents` to make Streamdown's wrapper divs "transparent" to layout:
+
+```css
+.markdown-content > div {
+  display: contents !important;
+}
+```
+
+This removes wrapper divs from the box tree while preserving DOM structure and semantics, eliminating the spacing contribution from Tailwind's `space-y-4` class.
+
+## Browser Compatibility
+
+| Browser | Version | Status |
+|---------|---------|--------|
+| Chrome | 58+ (May 2017) | ✅ Supported |
+| Firefox | 37+ (March 2015) | ✅ Supported |
+| Safari | 11.1+ (March 2018) | ✅ Supported |
+| Edge | 79+ (January 2020) | ✅ Supported |
+
+Covers >95% of modern browser users.
+
+---
+
+**PR Title:**
+```
+fix(client): Fix excessive spacing in markdown rendered content
+```
+
+**Branch details:**
+- Base branch: `develop`
+- Compare branch: `fix/markdown-spacing-compact` (from gaiaaiagent/GAIA)b:T853,- Add optional mcpText field to McpProvider values for formatted MCP configuration
+- Update buildMcpProviderData to include mcpText in provider values
+- Change handleToolResponse to return Memory object instead of void
+- Enhance callToolAction return to include reasoned response text and tool output
+- Initialize mcpProvider with mcpText field in McpService constructor
+
+This improves the data available to consumers and enables better tracking
+of tool execution responses throughout the action lifecycle.
+
+<!-- CURSOR_SUMMARY -->
+---
+
+> [!NOTE]
+> Adds `mcpText` to `McpProvider.values` and updates tool handling to return a `Memory` with the reasoned response, surfacing it and tool output in action results.
+> 
+> - **MCP Provider data**
+>   - Add optional `values.mcpText` to `McpProvider` (`types.ts`).
+>   - Initialize `mcpProvider` with `mcpText` in `McpService` (`service.ts`).
+>   - `buildMcpProviderData` now populates `values.mcp`, `values.mcpText`, and `text` (`utils/mcp.ts`).
+> - **Tool handling**
+>   - Change `handleToolResponse` to return `Promise<Memory>` and return the created reply memory (`utils/processing.ts`).
+>   - `callToolAction` captures the returned memory and includes the reasoned response text in the action `text`; also adds `output` to `values`/`data` (`actions/callToolAction.ts`).
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit 902eb38a4779ae148345c5925f415af82a17ba90. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+* **New Features**
+  * Tool responses now display detailed reasoning in success messages.
+  * System now captures and stores full MCP configuration text for reference.
+
+* **Bug Fixes**
+  * Improved tool response handling to properly include output details in return values.
+
+<sub>✏️ Tip: You can customize this high-level summary in your review settings.</sub>
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->c:T502,# Rollback plugin-sql build configuration
+
+Reverts build configuration changes from commits 08d5141 and 726b1d7 in plugin-sql package.
+
+## Changes
+
+- Restore types path to `./types/index.d.ts` in package.json exports
+- Add `types` directory back to files array
+- Fix index.d.ts aliases in build.ts
+- Remove redundant noEmit option from tsconfig files
+
+<!-- CURSOR_SUMMARY -->
+---
+
+> [!NOTE]
+> Restore `types` export to `./types/index.d.ts`, fix Node `index.d.ts` alias path, and remove redundant `noEmit` from build tsconfigs.
+> 
+> - **Build script (`packages/plugin-sql/build.ts`)**:
+>   - Fix Node `index.d.ts` alias to point to `./index.node` instead of `./src/index.node`.
+> - **Package config (`packages/plugin-sql/package.json`)**:
+>   - Change export types for `"."` to `"./types/index.d.ts"`.
+>   - Add `"types"` directory to published `files`.
+> - **TypeScript configs**:
+>   - Remove redundant `noEmit` (keep `emitDeclarationOnly: true`) in `tsconfig.build.json` and `tsconfig.build.node.json`.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit edecb27ac188295e2c5840cfd0cabac6cdc8a49d. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->d:T18fb,Bumps the npm_and_yarn group with 1 update in the /packages/core directory: [glob](https://github.com/isaacs/node-glob).
+
+Updates `glob` from 11.0.3 to 11.1.0
+<details>
+<summary>Changelog</summary>
+<p><em>Sourced from <a href="https://github.com/isaacs/node-glob/blob/main/changelog.md">glob's changelog</a>.</em></p>
+<blockquote>
+<h1>changeglob</h1>
+<h2>12</h2>
+<ul>
+<li>Remove the unsafe <code>--shell</code> option. The <code>--shell</code> option is now
+ONLY supported on known shells where the behavior can be
+implemented safely.</li>
+</ul>
+<h2>11.1</h2>
+<p><a href="https://github.com/isaacs/node-glob/security/advisories/GHSA-5j98-mcp5-4vw2">GHSA-5j98-mcp5-4vw2</a></p>
+<ul>
+<li>Add the <code>--shell</code> option for the command line, with a warning
+that this is unsafe. (It will be removed in v12.)</li>
+<li>Add the <code>--cmd-arg</code>/<code>-g</code> as a way to <em>safely</em> add positional
+arguments to the command provided to the CLI tool.</li>
+<li>Detect commands with space or quote characters on known shells,
+and pass positional arguments to them safely, avoiding
+<code>shell:true</code> execution.</li>
+</ul>
+<h2>11.0</h2>
+<ul>
+<li>Drop support for node before v20</li>
+</ul>
+<h2>10.4</h2>
+<ul>
+<li>Add <code>includeChildMatches: false</code> option</li>
+<li>Export the <code>Ignore</code> class</li>
+</ul>
+<h2>10.3</h2>
+<ul>
+<li>Add <code>--default -p</code> flag to provide a default pattern</li>
+<li>exclude symbolic links to directories when <code>follow</code> and <code>nodir</code>
+are both set</li>
+</ul>
+<h2>10.2</h2>
+<ul>
+<li>Add glob cli</li>
+</ul>
+<h2>10.1</h2>
+<ul>
+<li>Return <code>'.'</code> instead of the empty string <code>''</code> when the current
+working directory is returned as a match.</li>
+<li>Add <code>posix: true</code> option to return <code>/</code> delimited paths, even on
+Windows.</li>
+</ul>
+<h2>10.0.0</h2>
+<ul>
+<li>No default exports, only named exports</li>
+</ul>
+<!-- raw HTML omitted -->
+</blockquote>
+<p>... (truncated)</p>
+</details>
+<details>
+<summary>Commits</summary>
+<ul>
+<li><a href="https://github.com/isaacs/node-glob/commit/2551fb51440d402fa2120457bf460e546ee9964d"><code>2551fb5</code></a> 11.1.0</li>
+<li><a href="https://github.com/isaacs/node-glob/commit/47473c046b91c67269df7a66eab782a6c2716146"><code>47473c0</code></a> bin: Do not expose filenames to shell expansion</li>
+<li><a href="https://github.com/isaacs/node-glob/commit/bc33fe1c6a47abd497703d79ad96036e7891ff62"><code>bc33fe1</code></a> skip tilde test on systems that lack tilde expansion</li>
+<li><a href="https://github.com/isaacs/node-glob/commit/59bf9ca211bda5636c4fe9e32d41530c90a4f30d"><code>59bf9ca</code></a> fix notes</li>
+<li><a href="https://github.com/isaacs/node-glob/commit/dde4fa66c87e24b37bb5be28ed10c6e12019edac"><code>dde4fa6</code></a> docs(README): add #anchor and improve <code>note</code>s</li>
+<li><a href="https://github.com/isaacs/node-glob/commit/0559b0ed13c0f8147cd2ac9d48bb49684caaf20e"><code>0559b0e</code></a> docs: add better links to path-scurry docs</li>
+<li><a href="https://github.com/isaacs/node-glob/commit/c9773c249b4b9ed6b2447222c226f9d20c6ce916"><code>c9773c2</code></a> fix: correct typos in <code>README.md</code></li>
+<li><a href="https://github.com/isaacs/node-glob/commit/13e68eadbc4f0aacd9d6ffbcb4b28a34d5d8512c"><code>13e68ea</code></a> Fix punctuation in traversal function documentation</li>
+<li><a href="https://github.com/isaacs/node-glob/commit/1527e2b8107e95122ab6e9b6f6312f121693d53d"><code>1527e2b</code></a> fix repo url</li>
+<li><a href="https://github.com/isaacs/node-glob/commit/7e190e8776a7fa66fba40827de5f9effd1c52f9d"><code>7e190e8</code></a> fix typo <code>maths</code> → <code>paths</code></li>
+<li>Additional commits viewable in <a href="https://github.com/isaacs/node-glob/compare/v11.0.3...v11.1.0">compare view</a></li>
+</ul>
+</details>
+<br />
+
+
+[![Dependabot compatibility score](https://dependabot-badges.githubapp.com/badges/compatibility_score?dependency-name=glob&package-manager=npm_and_yarn&previous-version=11.0.3&new-version=11.1.0)](https://docs.github.com/en/github/managing-security-vulnerabilities/about-dependabot-security-updates#about-compatibility-scores)
+
+Dependabot will resolve any conflicts with this PR as long as you don't alter it yourself. You can also trigger a rebase manually by commenting `@dependabot rebase`.
+
+[//]: # (dependabot-automerge-start)
+[//]: # (dependabot-automerge-end)
+
+---
+
+<details>
+<summary>Dependabot commands and options</summary>
+<br />
+
+You can trigger Dependabot actions by commenting on this PR:
+- `@dependabot rebase` will rebase this PR
+- `@dependabot recreate` will recreate this PR, overwriting any edits that have been made to it
+- `@dependabot merge` will merge this PR after your CI passes on it
+- `@dependabot squash and merge` will squash and merge this PR after your CI passes on it
+- `@dependabot cancel merge` will cancel a previously requested merge and block automerging
+- `@dependabot reopen` will reopen this PR if it is closed
+- `@dependabot close` will close this PR and stop Dependabot recreating it. You can achieve the same result by closing it manually
+- `@dependabot show <dependency name> ignore conditions` will show all of the ignore conditions of the specified dependency
+- `@dependabot ignore <dependency name> major version` will close this group update PR and stop Dependabot creating any more for the specific dependency's major version (unless you unignore this specific dependency's major version or upgrade to it yourself)
+- `@dependabot ignore <dependency name> minor version` will close this group update PR and stop Dependabot creating any more for the specific dependency's minor version (unless you unignore this specific dependency's minor version or upgrade to it yourself)
+- `@dependabot ignore <dependency name>` will close this group update PR and stop Dependabot creating any more for the specific dependency (unless you unignore this specific dependency or upgrade to it yourself)
+- `@dependabot unignore <dependency name>` will remove all of the ignore conditions of the specified dependency
+- `@dependabot unignore <dependency name> <ignore condition>` will remove the ignore condition of the specified dependency and ignore conditions
+You can disable automated security fix PRs for this repo from the [Security Alerts page](https://github.com/elizaOS/eliza/network/alerts).
+
+</details>e:T1633,# Overall Project Weekly Summary (Nov 30 - 6, 2025)
+
+## Executive Summary
+This week was marked by a dual focus on strengthening our current platform and laying the groundwork for future expansion. We made a significant push to improve stability and polish the user experience by resolving numerous bugs and refactoring core components. Simultaneously, we initiated development on foundational services for a more scalable and secure server architecture, setting the stage for our next phase of growth.
+
+### Key Strategic Initiatives & Outcomes
+
+**Enhancing Platform Stability and User Experience**
+This initiative is crucial for building user trust and providing a reliable foundation for agent development.
+-   The core server architecture was significantly reorganized and optimized for better performance and maintainability in [elizaos/eliza](https://github.com/elizaos/eliza).
+-   Logging was standardized across the platform, making it easier for developers to diagnose and solve issues in [elizaos/eliza](https://github.com/elizaos/eliza).
+-   A large batch of user interface bugs was fixed, resulting in a cleaner, more consistent experience when interacting with AI agents in [elizaos/eliza](https://github.com/elizaos/eliza).
+
+**Building the Foundation for Next-Generation Features**
+To support our vision of more autonomous and capable AI agents, we are evolving our core architecture.
+-   Work began on a new unified serverless API and a comprehensive user authentication system, preparing the platform for greater scalability and security in [elizaos/eliza](https://github.com/elizaos/eliza).
+-   The MCP plugin was enhanced to allow for more flexible and descriptive agent configurations, improving how agents process and respond to tasks in [elizaos-plugins/plugin-mcp](https://github.com/elizaos-plugins/plugin-mcp).
+
+**Improving Developer and User Onboarding**
+A smooth onboarding process is essential for growing our community of users and contributors.
+-   We clarified the new, centralized location for project documentation, ensuring everyone can find up-to-date information in [elizaos/eliza](https://github.com/elizaos/eliza) and [elizaos-plugins/plugin-mysql](https://github.com/elizaos-plugins/plugin-mysql).
+-   Helpful setup guidance was provided for the MySQL plugin, resolving a common issue for new users and streamlining their initial experience in [elizaos-plugins/plugin-mysql](https://github.com/elizaos-plugins/plugin-mysql).
+
+### Cross-Repository Coordination
+
+**Centralizing Project Documentation**
+To create a single source of truth and reduce confusion, we continued our effort to consolidate all documentation into a dedicated repository. This week, issues were addressed in both the main [elizaos/eliza](https://github.com/elizaos/eliza) repository and the [elizaos-plugins/plugin-mysql](https://github.com/elizaos-plugins/plugin-mysql) plugin to ensure users are correctly directed to the new documentation hub, demonstrating a coordinated effort to improve the user experience across the entire project.
+
+## Repository Spotlights
+
+### elizaos/eliza
+The core repository saw a major push toward stabilization and began work on critical new infrastructure.
+-   **Stabilization & Refactoring:**
+    -   Completed a major refactor to standardize logging across Core, CLI, and Server components ([#6169](https://github.com/elizaos/eliza/pull/6169)).
+    -   The server underwent a significant optimization and reorganization to improve its structure and performance ([#6199](https://github.com/elizaos/eliza/pull/6199)).
+-   **New Foundational Features:**
+    -   Work began on a unified serverless API to streamline backend services ([#6201](https://github.com/elizaos/eliza/pull/6201)).
+    -   A new pull request was opened to implement a comprehensive JWT authentication and user management system ([#6200](https://github.com/elizaos/eliza/pull/6200)).
+-   **UI & Bug Fixes:**
+    -   Resolved multiple UI issues, including cleaning up the sidebar ([#6174](https://github.com/elizaos/eliza/issues/6174), [#6176](https://github.com/elizaos/eliza/issues/6176), [#6179](https://github.com/elizaos/eliza/issues/6179)) and fixing markdown rendering for AI responses ([#6159](https://github.com/elizaos/eliza/pull/6159), [#6197](https://github.com/elizaos/eliza/pull/6197)).
+    -   Addressed a server connection timeout bug to improve reliability ([#6198](https://github.com/elizaos/eliza/issues/6198)).
+-   **Community & Vision:**
+    -   New discussions were opened around future capabilities like native Voice Support ([#6196](https://github.com/elizaos/eliza/issues/6196)) and a dedicated Mobile App ([#6195](https://github.com/elizaos/eliza/issues/6195)).
+
+### elizaos-plugins/plugin-mcp
+This plugin received updates to enhance its core functionality and flexibility.
+-   Enhanced the MCP provider by adding an optional formatted text field (`mcpText`) for more descriptive configurations ([#19](https://github.com/elizaos-plugins/plugin-mcp/pull/19)).
+-   Improved the system's internal data flow by refining how tool responses are handled and processed by the agent ([#19](https://github.com/elizaos-plugins/plugin-mcp/pull/19)).
+
+### elizaos-plugins/plugin-mysql
+Activity focused on maintenance and improving the user experience through support and clarification.
+-   Closed an issue by providing a helpful tip to resolve table creation problems during setup ([#1](https://github.com/elizaos-plugins/plugin-mysql/issues/1)).
+-   Clarified for users that project documentation has been migrated to a central `elizaos/docs` repository, closing a key informational issue ([#6122](https://github.com/elizaos-plugins/plugin-mysql/issues/6122)).0:{"buildId":"US8XLB_zHXYj_PVAECGcd","rsc":["$","$1","c",{"children":[["$","div",null,{"className":"container mx-auto px-6 py-8 md:px-8","children":["$","div",null,{"className":"mx-auto max-w-4xl","children":[["$","div",null,{"className":"mb-4 flex flex-col justify-between sm:flex-row","children":[["$","$L2",null,{"currentInterval":"week","currentDate":"2025-11-30"}],["$","$L3",null,{"metrics":{"date":"2025-11-30","interval":{"intervalStart":"$D2025-11-30T00:00:00.000Z","intervalEnd":"$D2025-12-07T00:00:00.000Z","intervalType":"week"},"pullRequests":{"new":11,"merged":10,"total":14},"issues":{"new":5,"closed":15,"total":19},"activeContributors":11,"codeChanges":{"additions":3442,"deletions":2449,"files":163,"commitCount":90},"topContributors":[{"username":"standujar","avatarUrl":"https://avatars.githubusercontent.com/u/16385918?u=718bdcd1585be8447bdfffb8c11ce249baa7532d&v=4","totalScore":196.47277878372282,"prScore":191.5347787837228,"issueScore":0,"reviewScore":4.5,"commentScore":0.43799999999999994,"summary":null},{"username":"wtfsayo","avatarUrl":"https://avatars.githubusercontent.com/u/82053242?u=98209a1f10456f42d4d2fa71db4d5bf4a672cbc3&v=4","totalScore":106.43812183926335,"prScore":106.03812183926334,"issueScore":0,"reviewScore":0,"commentScore":0.4,"summary":null},{"username":"ChristopherTrimboli","avatarUrl":"https://avatars.githubusercontent.com/u/27584221?u=de148a498b5af814e037c2975112fadd09df743f&v=4","totalScore":61.364794811906556,"prScore":56.364794811906556,"issueScore":0,"reviewScore":5,"commentScore":0,"summary":null},{"username":"0xbbjoker","avatarUrl":"https://avatars.githubusercontent.com/u/54844437?u=90fe1762420de6ad493a1c1582f1f70c0d87d8e2&v=4","totalScore":38.31247180559945,"prScore":33.31247180559945,"issueScore":0,"reviewScore":5,"commentScore":0,"summary":null},{"username":"borisudovicic","avatarUrl":"https://avatars.githubusercontent.com/u/31806472?u=c0478c34097551ba98aaa71edb33af0885a72d69&v=4","totalScore":8.34,"prScore":0,"issueScore":8,"reviewScore":0,"commentScore":0.33999999999999997,"summary":null},{"username":"github-advanced-security","avatarUrl":"https://avatars.githubusercontent.com/in/57789?v=4","totalScore":4.5,"prScore":0,"issueScore":0,"reviewScore":4.5,"commentScore":0,"summary":null},{"username":"linear","avatarUrl":"https://avatars.githubusercontent.com/in/20150?v=4","totalScore":4,"prScore":0,"issueScore":4,"reviewScore":0,"commentScore":0,"summary":null},{"username":"lalalune","avatarUrl":"https://avatars.githubusercontent.com/u/18633264?u=e2e906c3712c2506ebfa98df01c2cfdc50050b30&v=4","totalScore":4,"prScore":0,"issueScore":4,"reviewScore":0,"commentScore":0,"summary":null}],"focusAreas":[{"area":"cli","count":53},{"area":"server","count":33},{"area":"plugin-bootstrap","count":25},{"area":"plugin-sql","count":20},{"area":"core","count":15},{"area":"client","count":4},{"area":"examples","count":3},{"area":"src","count":2},{"area":"src/utils","count":2},{"area":"api-client","count":1}],"topIssues":[{"id":"I_kwDOMT5cIs7V2Buf","title":"Where did packages/docs/ go?","author":"LinuxIsCool","number":6122,"repository":"elizaos/eliza","body":"There was always packages/docs/ where did it get moved to?","createdAt":"2025-11-04T18:08:54Z","closedAt":"2025-12-01T14:35:46Z","state":"CLOSED","commentCount":2},{"id":"I_kwDOMT5cIs7aSEq_","title":"Add OpenAI-compatible API","author":"joglomedia","number":6168,"repository":"elizaos/eliza","body":"Hi,\n\nIt would be great if we have an option to use LLM API from OpenAI-compatible API, not only open router. So, we can set the API host & API Key","createdAt":"2025-11-25T09:19:35Z","closedAt":"2025-11-30T18:41:08Z","state":"CLOSED","commentCount":1},{"id":"I_kwDOMT5cIs7cPNBC","title":".eliza needed or plugin-sql crashes, should autocreate","author":"lalalune","number":6204,"repository":"elizaos/eliza","body":"You can see here, I am building an Eliza agent from scratch\n\n```\nimport { AgentRuntime, type Character, type Plugin } from \"@elizaos/core\";\nimport { plugin } from \"@elizaos/plugin-sql\"\nimport { openaiPlugin } from \"@elizaos/plugin-openai\"\nimport fs from \"fs\";\n\n// if .eliza directory does not exist, create it\nif (!fs.existsSync(\".eliza\")) {\n    fs.mkdirSync(\".eliza\");\n}\n\nconst character: Character = {\n    name: \"Eliza\",\n    bio: \"You are a helpful assistant\",\n};\n\nconst plugins: Plugin[] = [\n    plugin,\n    openaiPlugin,\n];\n\nconst agent = new AgentRuntime({\n    character, // need a character to start the agent\n    plugins // bare minimum is db plugin and inference plugin\n});\n\nagent.initialize().then(() => {\n    console.log(\"Agent initialized\");\n\n\n});\n```\n\nIn order to get it to work I have to add\n```\nimport fs from \"fs\";\n\n// if .eliza directory does not exist, create it\nif (!fs.existsSync(\".eliza\")) {\n    fs.mkdirSync(\".eliza\");\n}\n```\n\nBut this should happen automatically","createdAt":"2025-12-04T14:37:44Z","closedAt":"2025-12-08T13:17:08Z","state":"CLOSED","commentCount":1},{"id":"I_kwDOMT5cIs7KjCKg","title":"Technical Debt & CLI/Server Cleanup","author":"borisudovicic","number":5932,"repository":"elizaos/eliza","body":"Eliminate redundant logic and hacks, align CLI/server with ElizaOS.","createdAt":"2025-09-09T12:18:56Z","closedAt":"2025-11-30T15:38:09Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7SPBL-","title":"Standardize Logging Across Core, CLI, and Server","author":"borisudovicic","number":6073,"repository":"elizaos/eliza","body":"**Summary**\n\nThe config and environment refactors are complete; remaining task is to unify and finalize the logging system across all packages to ensure consistent developer experience and observability.\n\n**Objectives**\n\n* Migrate all packages (CLI, server, and core) to use a single, standardized Logger implementation from @elizaos/core.\n* Ensure log formatting, levels, transports, and contextual metadata (package, runtime mode, timestamps) are consistent.\n* Provide structured logs compatible with both console and future Cloud ingestion (JSON mode).","createdAt":"2025-10-17T18:41:45Z","closedAt":"2025-11-30T15:37:51Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7aq1FH","title":"Fix \"Dashboard\" Button Pointer Event","author":"borisudovicic","number":6188,"repository":"elizaos/eliza","body":"","createdAt":"2025-11-26T18:43:21Z","closedAt":"2025-12-02T16:15:51Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7aq01s","title":"Fix Container Deployment Bug","author":"borisudovicic","number":6187,"repository":"elizaos/eliza","body":"Debug issue where certain container types on specific architectures are failing to deploy.","createdAt":"2025-11-26T18:42:55Z","closedAt":"2025-12-02T16:15:51Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7aqzzu","title":"Populate \"Community Agents\" or Remove Section","author":"borisudovicic","number":6182,"repository":"elizaos/eliza","body":"","createdAt":"2025-11-26T18:41:13Z","closedAt":"2025-12-02T16:15:51Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7aqzv4","title":"Persist Landing Page Prompt to Builder","author":"borisudovicic","number":6181,"repository":"elizaos/eliza","body":"When a new user types a prompt on the landing page (e.g., \"Create a Boris agent\"), that text must be carried over to the Agent Builder chat context so they don't have to type it again.","createdAt":"2025-11-26T18:41:06Z","closedAt":"2025-12-05T16:35:02Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7aqzeg","title":"Remove \"Quick Presets\" from Generation Studio","author":"borisudovicic","number":6179,"repository":"elizaos/eliza","body":"Remove the \"Quick Presets\" section from the Image and Video generation tabs to simplify the UI.","createdAt":"2025-11-26T18:40:35Z","closedAt":"2025-12-02T16:15:51Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7aqzEc","title":"Add \"$\" symbol to Credit Balances","author":"borisudovicic","number":6177,"repository":"elizaos/eliza","body":"","createdAt":"2025-11-26T18:39:53Z","closedAt":"2025-12-02T16:15:51Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7aqzAr","title":"Implement distinct visual theme for \"Build Mode\"","author":"borisudovicic","number":6176,"repository":"elizaos/eliza","body":"(In Figma) When a user toggles into \"Build Mode,\" change the background color to clearly differentiate it from \"Chat Mode.\"","createdAt":"2025-11-26T18:39:47Z","closedAt":"2025-12-02T16:15:51Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7aqysc","title":"Move Billing/Credits to Top-Level Navigation","author":"borisudovicic","number":6175,"repository":"elizaos/eliza","body":"\"Buy Credits\" is currently buried too deep (Settings -> Billing). (We should probably just add this below the credit balance on bottom left. Add a small clickable chip next to the balance display in the sidebar/header that takes the user immediately to the payment flow.","createdAt":"2025-11-26T18:39:15Z","closedAt":"2025-12-02T16:15:51Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7aqyPR","title":"Clean up Sidebar User Info Redundancy","author":"borisudovicic","number":6174,"repository":"elizaos/eliza","body":"The username and wallet address are repeated in the sidebar, header, and profile page. Remove the username/wallet display from the bottom of the sidebar to reduce clutter. Keep it only in the profile header.","createdAt":"2025-11-26T18:38:32Z","closedAt":"2025-12-02T16:15:51Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7bQW0b","title":"Voice Support","author":"borisudovicic","number":6196,"repository":"elizaos/eliza","body":"","createdAt":"2025-11-30T22:11:41Z","closedAt":"2026-04-12T18:54:05Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7bQWwF","title":"Mobile App","author":"borisudovicic","number":6195,"repository":"elizaos/eliza","body":"","createdAt":"2025-11-30T22:11:22Z","closedAt":"2026-04-12T18:54:07Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOO4-REc67D24q","title":"Helpful hint?","author":"odilitime","number":1,"repository":"elizaos-plugins/plugin-mysql","body":"I noticed to get the tables created, it best to disable all other plugins first. And after the tables are made, then add it more plugins","createdAt":"2025-06-11T23:29:37Z","closedAt":"2025-12-01T04:15:30Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7bZZY9","title":"[Server] Concurrent connection timeouts & add reliability patterns","author":"linear","number":6198,"repository":"elizaos/eliza","body":"* **Configure Socket.IO properly** - Add ping/pong intervals, timeouts, transport settings to prevent stale connections\n* **Add HTTP server timeouts** - Configure explicit timeouts (30s request, 5s keepalive, 10s headers)\n* **Add socket disconnection guards** - Check socket state before/after async DB operations\n* **Parallelize DB operations** - Use `Promise.all()` for independent queries\n* **Add circuit breaker pattern** - Fail fast when DB is degraded, prevent cascade failures","createdAt":"2025-12-01T12:49:44Z","closedAt":"2025-12-02T16:15:51Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7chQTh","title":"Streaming Support","author":"borisudovicic","number":6206,"repository":"elizaos/eliza","body":"","createdAt":"2025-12-05T17:07:00Z","closedAt":"2025-12-17T16:53:32Z","state":"CLOSED","commentCount":0}],"topPullRequests":[{"id":"PR_kwDOMT5cIs620Si3","title":"feat(auth): implement JWT authentication and user management","author":"standujar","number":6200,"body":"$4","repository":"elizaos/eliza","createdAt":"2025-12-03T11:55:47Z","mergedAt":"2026-02-08T18:18:09Z","additions":6079,"deletions":347},{"id":"PR_kwDOMT5cIs61dVQL","title":"refactor: Standardize Logging Across Core, CLI, and Server","author":"standujar","number":6169,"body":"","repository":"elizaos/eliza","createdAt":"2025-11-25T16:49:15Z","mergedAt":"2025-11-30T08:49:13Z","additions":2264,"deletions":2974},{"id":"PR_kwDOMT5cIs63dqrL","title":"[DRAFT] feat(core): Implement parallel action execution in processActions","author":"wtfsayo","number":6209,"body":"$5","repository":"elizaos/eliza","createdAt":"2025-12-06T19:03:17Z","mergedAt":null,"additions":1467,"deletions":292},{"id":"PR_kwDOMT5cIs62WwSP","title":"refactor(server): optimization and reorganization","author":"standujar","number":6199,"body":"$6","repository":"elizaos/eliza","createdAt":"2025-12-01T14:03:31Z","mergedAt":"2025-12-01T15:58:32Z","additions":608,"deletions":439},{"id":"PR_kwDOMT5cIs63ddxK","title":"feat: Add ElizaOS Cloud as Default AI Provider in CLI","author":"ChristopherTrimboli","number":6208,"body":"$7","repository":"elizaos/eliza","createdAt":"2025-12-06T18:21:51Z","mergedAt":"2025-12-06T19:51:44Z","additions":491,"deletions":66},{"id":"PR_kwDOMT5cIs623me3","title":"feat: Unified API - serverless - nodejs","author":"standujar","number":6201,"body":"","repository":"elizaos/eliza","createdAt":"2025-12-03T16:15:31Z","mergedAt":"2025-12-04T13:22:56Z","additions":324,"deletions":88},{"id":"PR_kwDOMT5cIs63BWDH","title":"fix(plugin-sql): migrate to messageService API and auto-create PGLite directories","author":"wtfsayo","number":6202,"body":"$8","repository":"elizaos/eliza","createdAt":"2025-12-04T09:58:20Z","mergedAt":"2025-12-04T11:02:34Z","additions":160,"deletions":49},{"id":"PR_kwDOMT5cIs62TLRj","title":"fix(client): improve markdown content spacing","author":"wtfsayo","number":6197,"body":"$9","repository":"elizaos/eliza","createdAt":"2025-12-01T09:38:29Z","mergedAt":"2025-12-01T09:39:44Z","additions":114,"deletions":0},{"id":"PR_kwDOMT5cIs60Z-75","title":"fix: markdown spacing compact","author":"LinuxIsCool","number":6159,"body":"$a","repository":"elizaos/eliza","createdAt":"2025-11-19T17:17:48Z","mergedAt":"2025-12-01T09:35:13Z","additions":106,"deletions":1},{"id":"PR_kwDOOqp3ps62ytDT","title":"feat: enhance MCP provider with mcpText field and improve tool response handling","author":"0xbbjoker","number":19,"body":"$b","repository":"elizaos-plugins/plugin-mcp","createdAt":"2025-12-03T10:05:19Z","mergedAt":"2025-12-03T10:09:18Z","additions":9,"deletions":6},{"id":"PR_kwDOMT5cIs62JQ8Y","title":"rollback(plugin-sql): revert build configuration changes from 08d5141…","author":"0xbbjoker","number":6194,"body":"$c","repository":"elizaos/eliza","createdAt":"2025-11-29T21:09:45Z","mergedAt":"2025-11-30T07:10:13Z","additions":7,"deletions":8},{"id":"PR_kwDOMT5cIs63c65D","title":"fix(cli): correct startAgents API signature in e2e-tests","author":"standujar","number":6207,"body":"## Summary\r\n\r\n- Fixed `startAgents` API signature mismatch in CLI's e2e-tests.ts\r\n- Fixed unit test mock function name (`getElizaCharacter` → `getDefaultCharacter`)\r\n\r\n## Problem\r\n\r\nThe CLI's `elizaos test` command was failing with:\r\n```\r\nundefined is not an object (evaluating 'agent.character.id')\r\n```\r\n\r\nThis was caused by the e2e-tests calling `server.startAgents` with incorrect arguments:\r\n- **Before**: `startAgents([character], [plugins], options)` (3 separate args)\r\n- **After**: `startAgents([{ character, plugins }], options)` (proper format)\r\n\r\n## Test Plan\r\n\r\n- [x] Unit tests pass: `bun test packages/cli/tests/unit/commands/test/e2e-tests.test.ts`\r\n- [x] CLI builds successfully: `bun run build` in packages/cli\r\n- [x] `elizaos test` runs plugin tests correctly\r\n","repository":"elizaos/eliza","createdAt":"2025-12-06T16:03:56Z","mergedAt":"2025-12-15T13:27:41Z","additions":7,"deletions":2},{"id":"PR_kwDOMT5cIs63G23O","title":"fix(service): enhance simple response detection logic","author":"standujar","number":6205,"body":"","repository":"elizaos/eliza","createdAt":"2025-12-04T16:25:14Z","mergedAt":null,"additions":6,"deletions":1},{"id":"PR_kwDOMT5cIs6z6-8G","title":"chore(deps): bump glob from 11.0.3 to 11.1.0 in /packages/core in the npm_and_yarn group across 1 directory","author":"dependabot","number":6157,"body":"$d","repository":"elizaos/eliza","createdAt":"2025-11-17T18:38:08Z","mergedAt":null,"additions":1,"deletions":1},{"id":"PR_kwDOMT5cIs63EVvw","title":"fix(examples): respect user LOG_LEVEL in standalone-cli-chat","author":"standujar","number":6203,"body":"","repository":"elizaos/eliza","createdAt":"2025-12-04T13:21:31Z","mergedAt":"2025-12-04T13:22:23Z","additions":1,"deletions":1},{"id":"PR_kwDOMT5cIs6xETJ-","title":"feat: implement entity-level row level security","author":"standujar","number":6107,"body":"","repository":"elizaos/eliza","createdAt":"2025-11-02T16:12:48Z","mergedAt":null,"additions":0,"deletions":0}],"detailedContributorSummaries":{}},"summaryContent":"$e","className":"self-end sm:self-start"}]]}],"$Lf","$L10","$L11"]}]}],["$L12","$L13","$L14"],"$L15"]}],"loading":null,"isPartial":false}
+f:["$","div",null,{"className":"mb-6","children":["$","div",null,{"className":"flex items-center justify-between","children":[[["$","$L16",null,{"href":"/summary/week/2025-11-23","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left mr-2 h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"children":"Previous"}],false],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$L16",null,{"href":"/summary/week/2025-11-23","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Previous"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]],["$","div",null,{"className":"flex flex-col items-center","children":[["$","div",null,{"className":"text-sm font-medium text-gray-500","children":["Weekly"," Summary"]}],["$","time",null,{"dateTime":"2025-11-30","className":"text-md font-bold","children":"Nov 30 - 6, 2025"}]]}],[["$","$L16",null,{"href":"/summary/week/2025-12-07","children":[false,["$","span",null,{"children":"Next"}],["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right ml-2 h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}]],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$L16",null,{"href":"/summary/week/2025-12-07","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Next"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]]]}]}]
+18:T17a7,## Relates to
+
+- Data isolation / multi-entity support
+- External JWT provider integration (Privy, Auth0, Clerk, Supabase, Google, Embbeded)
+
+## Risks
+
+**Low**
+
+- Requires `ENABLE_DATA_ISOLATION=true` to activate JWT auth mode
+
+## Background
+
+### What does this PR do?
+
+Implements a complete JWT authentication system for ElizaOS with support for multiple verification strategies:
+
+1. **JWT Verifier Factory** - Priority-based verifier selection:
+   - Ed25519 (highest priority) - For self-signed JWTs with Ed25519 keys
+   - JWKS (medium priority) - For external providers (Auth0, Clerk, Privy, Supabase, Google)
+   - Secret (lowest priority) - For simple HS256 symmetric key verification
+
+2. **Entity ID derivation from JWT `sub` claim**:
+   - `entityId = stringToUuid(payload.sub)`
+   - Compatible with ANY JWT provider since `sub` is a standard claim
+   - No custom claims needed in external JWTs
+
+3. **Dual authentication modes**:
+   - `ENABLE_DATA_ISOLATION=true` → JWT authentication required
+   - `ENABLE_DATA_ISOLATION=false` → X-Entity-Id header (legacy mode)
+
+4. **Internal service bypass** - Process-local UUID secret for service-to-service calls
+
+5. **Credentials-based auth endpoints** (`/api/auth/*`) - only in custom - JWT-SECRET mode:
+   - `POST /register` - User registration with bcrypt password hashing
+   - `POST /login` - User login with JWT generation
+   - `POST /refresh` - Token refresh
+   - `GET /me` - Current user info
+
+6. **Client UI default implementation using self mode (Secret)
+
+### What kind of change is this?
+
+**Features** (non-breaking change which adds functionality)
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    JWT Verification Flow                         │
+├─────────────────────────────────────────────────────────────────┤
+│  Request with Bearer token                                       │
+│       ↓                                                          │
+│  JWTVerifierFactory.create()                                     │
+│       ↓                                                          │
+│  Priority: Ed25519 > JWKS > Secret > Disabled                   │
+│       ↓                                                          │
+│  verifier.verify(token)                                          │
+│       ↓                                                          │
+│  Extract payload.sub                                             │
+│       ↓                                                          │
+│  entityId = stringToUuid(sub)  ← Derived, NOT stored in JWT     │
+│       ↓                                                          │
+│  req.entityId = entityId                                         │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+## Environment Variables
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `ENABLE_DATA_ISOLATION` | Enable JWT auth mode | `true` |
+| `JWT_SECRET` (optional) | HS256 symmetric secret | `your-secret-key` |
+| `JWT_PUBLIC_KEY_ED25519` (optional) | Ed25519 public key (base64) | `MCowBQYDK2Vw...` |
+| `JWT_JWKS_URI` (optional) | JWKS endpoint URL | `https://auth0.com/.well-known/jwks.json` |
+| `JWT_ISSUER_WHITELIST` (optional) | Allowed issuers (comma-separated) | `https://auth0.com/,https://clerk.dev` |
+
+## Documentation changes needed?
+
+Yes - Documentation should be added for:
+- Environment variable configuration
+- External provider setup (Auth0, Clerk, Privy examples)
+
+## Testing
+
+### Where should a reviewer start?
+
+1. `packages/server/src/services/jwt-verifiers/factory.ts` - Core factory logic
+2. `packages/server/src/middleware/jwtMiddleware.ts` - HTTP middleware
+3. `packages/server/src/socketio/index.ts` - SocketIO authentication
+
+### Detailed testing steps
+
+**Unit Tests:**
+```bash
+cd packages/server
+bun run test:unit
+```
+
+**Integration Tests:**
+```bash
+cd packages/server
+bun run test:integration
+```
+
+**Results:** 489 unit tests pass, 6 integration test files pass
+
+### Manual Testing
+
+1. **Test with JWT_SECRET (HS256):**
+```bash
+ENABLE_DATA_ISOLATION=true JWT_SECRET=test-secret bun run dev
+```
+
+2. **Register a user:**
+```bash
+curl -X POST http://localhost:3000/api/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"email":"test@example.com","username":"testuser","password":"password123"}'
+```
+
+3. **Use returned token:**
+```bash
+curl http://localhost:3000/api/agents \
+  -H "Authorization: Bearer <token>"
+```
+
+## External Provider Compatibility
+
+Tested JWT formats:
+- **Auth0**: `sub: "auth0|1234567890"`
+- **Clerk**: `sub: "user_2abcdefgh123456"`
+- **Google**: `sub: "1234567890"` with `email`, `email_verified`
+- **Supabase**: `sub: "uuid"` with `role: "authenticated"`
+- **Privy**: `sub: "did:privy:..."`
+
+All providers work because we only require the standard `sub` claim.
+
+## Next Idea Steps: Access Control Layer (ACL)
+
+The next phase will add access control on agents and rooms: 
+
+Agents:
+- Each user can create their own agents (ownerId = entityId)
+- Visibility: public or private
+- Private = only the owner can chat with it
+- Public = everyone can chat, but only the owner can modify/delete
+
+Rooms:
+- Each room has an owner
+Only the owner can:
+- Delete the room (DELETE /rooms/:id)
+- Clear message history (DELETE /rooms/:id/messages)
+- Change visibility
+
+This will enable true multi-tenant mode where each user manages their resources in isolation.19:Tf8a,## Summary
+
+This PR implements parallel action execution within the `processActions()` method to improve performance for multi-action responses.
+
+## Changes
+
+### Core Runtime (`packages/core/src/runtime.ts`)
+- Execute actions within a single response batch **in parallel** using `Promise.allSettled()`
+- All actions in a batch receive the **same initial state snapshot**
+- State accumulates **sequentially between response batches**
+- Merge all `ActionResult.values` after parallel batch completes
+- Preserve fault tolerance: if one action fails, others still complete
+
+### Prompts (`packages/core/src/prompts.ts`)
+- Updated `messageHandlerTemplate` to reflect parallel execution model
+- Changed "IMPORTANT ACTION ORDERING RULES" to "IMPORTANT ACTION EXECUTION RULES"
+- Clarified that actions listed in a single response execute in parallel
+- Added guidance to use multi-step workflow for sequential dependencies
+
+### Action State Provider (`packages/plugin-bootstrap/src/providers/actionState.ts`)
+- Updated JSDoc and description to clarify "previous results" refers to prior response batches, not sibling parallel actions
+
+### Tests
+- Updated `runtime.test.ts` to match new state initialization behavior
+- Updated `prompts.test.ts` to match new prompt text
+
+## Key Data Flow
+
+```
+Response 1: [action1, action2, action3]
+  ├─> Execute ALL in parallel with initialState
+  ├─> Wait for all to complete
+  └─> Merge results → accumulatedState
+
+Response 2: [action4, action5]
+  ├─> Execute ALL in parallel with accumulatedState from Response 1
+  ├─> Wait for all to complete
+  └─> Merge results → new accumulatedState
+```
+
+## Testing
+
+- All existing runtime tests pass
+- All prompt tests pass
+- All multi-step workflow tests pass
+- Action chaining tests pass
+
+## Breaking Changes
+
+None - backward compatible. Actions that previously assumed sequential execution within a batch will now run in parallel, but since they all receive the same state snapshot, behavior should be equivalent for independent actions.
+
+<!-- CURSOR_SUMMARY -->
+---
+
+> [!NOTE]
+> Execute actions in a response batch in parallel with a shared state snapshot, accumulate results across batches, and introduce AsyncLocalStorage-based prompt tracking with prompt/provider/test updates.
+> 
+> - **Core (runtime.ts)**:
+>   - Parallelize `processActions` per response using `Promise.allSettled()`; each batch shares a composed state snapshot; accumulate `ActionResult.values` and plan state between batches.
+>   - Add robust action resolution (exact/fuzzy/similes), error paths for missing action/handler, and consistent action memory/logging.
+>   - Preserve legacy returns (void/boolean) as completed; treat `{ success:false }` (including minimal/error-only) as failed.
+>   - Merge working memory with size cap; cache `action_results`; update action plan immutably per step.
+>   - Introduce AsyncLocalStorage context: `ActionContextStore`, `getCurrentActionContext`, and browser fallback `createBrowserFallback` for prompt collection; include action context in `useModel` logs; skip collecting `TEXT_EMBEDDING` prompts.
+> - **Prompts (prompts.ts)**:
+>   - Update `messageHandlerTemplate` for parallel execution model and guidance on multi-step dependencies.
+> - **Provider (plugin-bootstrap/actionState.ts)**:
+>   - Clarify description/docs: "previous results" are from prior response batches; parallel actions share the same snapshot.
+> - **Tests**:
+>   - Expand `runtime.test.ts`: parallel execution behavior, action result status semantics, prompt collection/isolation via AsyncLocalStorage, browser fallback behavior, exact vs fuzzy action matching.
+>   - Update `prompts.test.ts` for new execution rules and wording.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit 55765fc289c965232d5d690c363f73c7ea1b81f6. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->1a:Taa0,# Risks
+
+**Low to Medium**
+
+- Socket.IO configuration changes may affect existing client connections (tested with multiple browsers)
+- Code reorganization changes import paths - all imports have been updated and verified
+
+# Background
+
+## What does this PR do?
+
+This PR addresses server performance issues (request timeouts ~30s with multiple users connections) and improves code organization following clean architecture principles.
+
+### Performance Optimizations
+
+1. **Socket.IO Configuration**
+   - Configured `pingInterval` (25s) and `pingTimeout` (20s)
+   - Set `connectTimeout` (10s)
+   - Enforced transport order: `['websocket', 'polling']`
+
+2. **HTTP Server Timeouts**
+   - Added `timeout`, `keepAliveTimeout`, `headersTimeout`, `requestTimeout`
+   - Prevents hanging connections
+
+3. **Socket Disconnection Guards**
+   - Added checks before emitting to sockets
+   - Graceful handling of disconnected clients
+
+4. **Parallel Database Operations**
+   - Used `Promise.all` for independent DB queries
+   - Reduces latency for multi-query endpoints
+
+### Code Reorganization
+
+Restructured root-level files into proper directories:
+
+| Before | After |
+|--------|-------|
+| `src/bus.ts` | `src/services/message-bus.ts` |
+| `src/loader.ts` | `src/services/loader.ts` |
+| `src/upload.ts` | `src/utils/upload.ts` |
+| `src/types.ts` | `src/types/server.ts` |
+| *(new)* | `src/utils/config.ts` |
+| *(new)* | `src/services/index.ts` |
+
+- Added `ServerMiddleware` and `ServerConfig` types to `types/server.ts`
+- Created barrel exports in `services/index.ts` and updated `utils/index.ts`
+- Maintained backward compatibility via re-exports in `src/index.ts`
+
+### Test Fixes
+
+- Fixed invalid UUID usage in integration tests (replaced string casts with `stringToUuid()`)
+- Updated import paths for relocated modules
+
+## What kind of change is this?
+
+- Improvements (performance optimizations)
+- Refactoring (code reorganization)
+- Bug fixes (test UUID issues)
+
+# Documentation changes needed?
+
+No
+
+# Testing
+
+## Where should a reviewer start?
+
+1. [src/index.ts](packages/server/src/index.ts) - Main entry point with Socket.IO and HTTP timeout configs
+2. [src/services/](packages/server/src/services/) - Reorganized service files
+
+## Detailed testing steps
+
+1. Run unit tests and integrations tests:
+   ```bash
+   cd packages/server && bun run test:unit && bun run test:integration
+   ```
+
+2. Run build:
+   ```bash
+   cd packages/server && bun run build
+   ```
+
+3. Manual testing:
+   - Start server with PostgreSQL
+   - Connect multiple browser tabs simultaneously
+   - Verify no timeout errors after 30s
+   - Test Socket.IO reconnection behavior1b:T64f,## Add ElizaOS Cloud as Default AI Provider in CLI
+
+### Summary
+- Add **ElizaOS Cloud** as the first/recommended option in `elizaos create` AI model selection
+- Integrate browser-based login flow for seamless API key setup
+- Fix env variable naming to match plugin (`ELIZAOS_CLOUD_API_KEY`)
+
+### Changes
+
+**`packages/cli/src/commands/create/utils/selection.ts`**
+- Add ElizaOS Cloud as top option with "(Recommended)" label
+- Set `elizacloud` as default `initialValue`
+- Add `elizacloud` to `hasEmbeddingSupport()` list
+
+**`packages/cli/src/utils/get-config.ts`**
+- Add `storeElizaCloudKey()` and `promptAndStoreElizaCloudKey()` 
+- Support 3 auth flows: browser login, manual key entry, skip
+
+**`packages/cli/src/commands/create/actions/setup.ts`**
+- Add `elizacloud` case in `setupAIModelConfig()`
+- Map `elizacloud` → `@elizaos/plugin-elizacloud` in `resolveModelToPlugin()`
+- Skip Ollama fallback when using ElizaOS Cloud
+
+**`packages/cli/src/commands/login/actions/login.ts`**
+- Rename `ELIZA_CLOUD_API_KEY` → `ELIZAOS_CLOUD_API_KEY`
+
+### User Flow
+```
+◆  Which AI model would you like to use?
+│  ● ElizaOS Cloud (Recommended)
+│  ○ Local AI (Ollama)
+│  ○ OpenAI
+│  ...
+
+◆  How would you like to authenticate?
+│  ● Login with browser (recommended)
+│  ○ Enter API key manually
+│  ○ Skip for now
+```
+
+### Test Plan
+- [ ] Run `elizaos create test-project` and select ElizaOS Cloud
+- [ ] Verify browser login flow saves key correctly
+- [ ] Verify manual key entry works
+- [ ] Verify plugin installs as `@elizaos/plugin-elizacloud`
+- [ ] Verify skip option adds placeholder to `.env`1c:Te33,## Summary
+
+This PR modernizes the standalone example files and improves the SQL plugin's directory handling by:
+1. Migrating examples from the deprecated `MESSAGE_RECEIVED` event system to the new `messageService.handleMessage()` API
+2. Adding automatic PGLite data directory creation in the SQL plugin with comprehensive tests
+
+## Changes
+
+### Examples ( & )
+- ✅ Replace deprecated `MESSAGE_RECEIVED` event with `messageService.handleMessage()` API
+- ✅ Set `LOG_LEVEL` to `'silent'` for cleaner console output
+- ✅ Remove manual file system directory creation (now handled by SQL plugin)
+- ✅ Remove unused `EventType` and `fs` imports
+- ✅ Fix `messageServerId` to be properly converted to UUID in `standalone-cli-chat.ts`
+- ✅ Improve response handling with fallback to `result.responseContent.text`
+- ✅ Update inline documentation and comments
+
+### SQL Plugin
+- ✅ Add automatic directory creation in `createDatabaseAdapter()` (both `index.ts` and `index.node.ts`)
+  - Creates directories for file paths only (not for `memory://`, `idb://`, or other special URIs)
+  - Skips directory creation when using PostgreSQL
+  - Uses `mkdirSync(dataDir, { recursive: true })` to ensure parent directories are created
+- ✅ Add comprehensive unit tests in `__tests__/unit/directory-creation.test.ts`:
+  - Tests directory creation for new file paths
+  - Tests that existing directories don't cause errors
+  - Tests that special URIs (`memory://`, `idb://`) don't trigger directory creation
+  - Tests that PostgreSQL usage doesn't trigger directory creation
+
+## Testing
+
+- [x] All existing tests pass
+- [x] New unit tests added for directory creation logic
+- [ ] Manual testing of `standalone.ts` example
+- [ ] Manual testing of `standalone-cli-chat.ts` example
+
+## Type of Change
+
+- [x] Bug fix (non-breaking change which fixes deprecation warnings)
+- [x] Improvement (better directory handling and error prevention)
+- [x] Test coverage improvement
+
+## Related Issues
+
+- Fixes deprecation warnings in example files
+- Improves developer experience by auto-creating required directories
+- Prevents runtime errors from missing PGLite data directories
+
+## Migration Guide
+
+Users of the examples will now benefit from:
+- Cleaner, non-deprecated API usage
+- Automatic directory creation (no manual setup needed)
+- Better error messages and response handling
+
+No breaking changes - fully backward compatible.
+
+<!-- CURSOR_SUMMARY -->
+---
+
+> [!NOTE]
+> Updates examples to use messageService.handleMessage and adds automatic PGLite directory creation in the SQL plugin with tests.
+> 
+> - **Examples**:
+>   - Replace deprecated `EventType.MESSAGE_RECEIVED` with `runtime.messageService.handleMessage()` in `examples/standalone.ts` and `examples/standalone-cli-chat.ts`.
+>   - Set `process.env.LOG_LEVEL = 'silent'`; remove manual FS dir creation and unused imports.
+>   - Ensure `messageServerId` uses UUID in `standalone-cli-chat.ts`; improve response fallback handling.
+> - **SQL Plugin**:
+>   - In `packages/plugin-sql/src/index.ts` and `index.node.ts`, auto-create PGLite data directory via `mkdirSync(dataDir, { recursive: true })` when `dataDir` is a filesystem path.
+>   - Skip directory creation for `memory://`, `idb://`, and when `postgresUrl` is provided.
+>   - Add unit tests `__tests__/unit/directory-creation.test.ts` covering new directory-creation behavior.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit 3048a2784c05991f85f6a7cfab8a892b7fbd1043. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->1d:T540,This PR includes two fixes for markdown content spacing in the client:
+
+1. Add missing heading and separator spacing to markdown-content
+2. Reduce blockquote vertical spacing for more compact display
+
+These changes improve the visual consistency and readability of markdown content rendered in the client.
+
+<!-- CURSOR_SUMMARY -->
+---
+
+> [!NOTE]
+> Adds consistent styles and spacing for markdown headings, separators, blockquotes, and code (blocks/inline) in `packages/client/src/index.css`.
+> 
+> - **Client CSS (`packages/client/src/index.css`)**:
+>   - **Markdown headings (`h1–h6`)**: add consistent sizes, weights, line-heights, margins, and first-child top-margin removal.
+>   - **Separators**: style `hr` with uniform spacing and subtle border.
+>   - **Blockquotes**: add compact margins, padding, left border, color, italic text, and tighter paragraph spacing.
+>   - **Code styling**:
+>     - `pre`: add margins, padding, rounded corners, overflow handling, and background.
+>     - `code`: set monospace font and size; add inline code background, padding, and radius.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit a70e5b8f0be7a0b3b8be503df0b23b0566cbb05d. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->1e:T11b1,# Relates to
+
+Fixes excessive vertical spacing in AI-generated markdown responses in the ElizaOS client UI.
+
+# Risks
+
+**Low Risk**
+
+- Only CSS changes affecting markdown content rendering
+- Uses well-supported CSS features (Chrome 58+, Firefox 37+, Safari 11.1+, Edge 79+)
+- No breaking changes to functionality
+- Fully backward compatible
+- Simple rollback (revert commit)
+
+**Affected areas:**
+- Client UI markdown rendering (packages/client)
+- AI response display formatting
+
+# Background
+
+## What does this PR do?
+
+Fixes excessive vertical spacing in AI-generated markdown responses caused by Streamdown's wrapper `<div>` elements. Uses CSS `display: contents` to collapse wrapper spacing while preserving all content and functionality.
+
+**Key improvements:**
+- Bullet gaps: 24.5px → 2px (-91%)
+- List item gaps: 30.5px → 8px (-73%)
+- Header-to-bullets: 28.5px → 4px (-83%)
+- List-to-paragraph: 145.5px → 16px (-89%)
+- **Total spacing error eliminated: 178.5px → 0px**
+
+## What kind of change is this?
+
+- ✅ Bug fixes (non-breaking change which fixes an issue)
+- ✅ Improvements (misc. changes to existing features)
+
+# Documentation changes needed?
+
+- ✅ My changes do not require a change to the project documentation.
+
+The changes are internal CSS improvements with no API or configuration changes.
+
+# Testing
+
+## Where should a reviewer start?
+
+1. Review the CSS changes in `packages/client/src/index.css` (lines 184-278)
+2. Review the component update in `packages/client/src/components/ai-elements/response.tsx` (line 12)
+3. Test the visual improvements in the running client
+
+## Detailed testing steps
+
+### Automated Testing
+- ✅ Playwright browser automation with pixel-perfect measurements
+- ✅ Computed style verification
+- ✅ DOM structure inspection
+- ✅ All spacing measurements achieved targets with 0.0px error
+
+### Manual Testing Instructions
+
+1. Checkout this branch:
+   ```bash
+   git checkout fix/markdown-spacing-compact
+   ```
+
+2. Install dependencies and start client:
+   ```bash
+   bun install
+   cd packages/client && bun run dev
+   ```
+
+3. Open browser to client UI (http://localhost:5173)
+
+4. Start a chat with any agent
+
+5. Ask a question that generates nested lists, for example:
+   - "Explain the key features of this system"
+   - "Create a list view with example data showing nested workflow progress"
+
+6. Verify:
+   - ✅ Compact, readable spacing between list items
+   - ✅ Tight spacing (4px) between headers and their following lists
+   - ✅ No overlapping text
+   - ✅ Proper visual hierarchy maintained
+   - ✅ No console errors
+   - ✅ Smooth scrolling works correctly
+
+### Tested Scenarios
+- ✅ Complex nested lists (numbered and bulleted)
+- ✅ Mixed content (paragraphs, lists, headings)
+- ✅ Scrolling and overflow behavior
+- ✅ Accessibility (screen reader, keyboard navigation)
+- ✅ No layout breakage in any scenario
+
+## Screenshots
+
+### Before
+<img width="3840" height="2080" alt="before" src="https://github.com/user-attachments/assets/459f89bf-c623-4ad4-aa36-ce4a0f997033" />
+*Excessive spacing between elements, particularly noticeable in nested lists*
+
+### After
+<img width="3840" height="2080" alt="after" src="https://github.com/user-attachments/assets/f4addcb5-5dab-45fb-8e0f-e5dda4885d11" />
+*Compact, readable spacing matching design targets and Claude web interface*
+
+# Technical Details
+
+## Files Changed
+- `packages/client/src/index.css` (+109 lines)
+- `packages/client/src/components/ai-elements/response.tsx` (1 line modified)
+
+## Key Technical Approach
+
+Uses CSS `display: contents` to make Streamdown's wrapper divs "transparent" to layout:
+
+```css
+.markdown-content > div {
+  display: contents !important;
+}
+```
+
+This removes wrapper divs from the box tree while preserving DOM structure and semantics, eliminating the spacing contribution from Tailwind's `space-y-4` class.
+
+## Browser Compatibility
+
+| Browser | Version | Status |
+|---------|---------|--------|
+| Chrome | 58+ (May 2017) | ✅ Supported |
+| Firefox | 37+ (March 2015) | ✅ Supported |
+| Safari | 11.1+ (March 2018) | ✅ Supported |
+| Edge | 79+ (January 2020) | ✅ Supported |
+
+Covers >95% of modern browser users.
+
+---
+
+**PR Title:**
+```
+fix(client): Fix excessive spacing in markdown rendered content
+```
+
+**Branch details:**
+- Base branch: `develop`
+- Compare branch: `fix/markdown-spacing-compact` (from gaiaaiagent/GAIA)1f:T853,- Add optional mcpText field to McpProvider values for formatted MCP configuration
+- Update buildMcpProviderData to include mcpText in provider values
+- Change handleToolResponse to return Memory object instead of void
+- Enhance callToolAction return to include reasoned response text and tool output
+- Initialize mcpProvider with mcpText field in McpService constructor
+
+This improves the data available to consumers and enables better tracking
+of tool execution responses throughout the action lifecycle.
+
+<!-- CURSOR_SUMMARY -->
+---
+
+> [!NOTE]
+> Adds `mcpText` to `McpProvider.values` and updates tool handling to return a `Memory` with the reasoned response, surfacing it and tool output in action results.
+> 
+> - **MCP Provider data**
+>   - Add optional `values.mcpText` to `McpProvider` (`types.ts`).
+>   - Initialize `mcpProvider` with `mcpText` in `McpService` (`service.ts`).
+>   - `buildMcpProviderData` now populates `values.mcp`, `values.mcpText`, and `text` (`utils/mcp.ts`).
+> - **Tool handling**
+>   - Change `handleToolResponse` to return `Promise<Memory>` and return the created reply memory (`utils/processing.ts`).
+>   - `callToolAction` captures the returned memory and includes the reasoned response text in the action `text`; also adds `output` to `values`/`data` (`actions/callToolAction.ts`).
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit 902eb38a4779ae148345c5925f415af82a17ba90. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+* **New Features**
+  * Tool responses now display detailed reasoning in success messages.
+  * System now captures and stores full MCP configuration text for reference.
+
+* **Bug Fixes**
+  * Improved tool response handling to properly include output details in return values.
+
+<sub>✏️ Tip: You can customize this high-level summary in your review settings.</sub>
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->20:T502,# Rollback plugin-sql build configuration
+
+Reverts build configuration changes from commits 08d5141 and 726b1d7 in plugin-sql package.
+
+## Changes
+
+- Restore types path to `./types/index.d.ts` in package.json exports
+- Add `types` directory back to files array
+- Fix index.d.ts aliases in build.ts
+- Remove redundant noEmit option from tsconfig files
+
+<!-- CURSOR_SUMMARY -->
+---
+
+> [!NOTE]
+> Restore `types` export to `./types/index.d.ts`, fix Node `index.d.ts` alias path, and remove redundant `noEmit` from build tsconfigs.
+> 
+> - **Build script (`packages/plugin-sql/build.ts`)**:
+>   - Fix Node `index.d.ts` alias to point to `./index.node` instead of `./src/index.node`.
+> - **Package config (`packages/plugin-sql/package.json`)**:
+>   - Change export types for `"."` to `"./types/index.d.ts"`.
+>   - Add `"types"` directory to published `files`.
+> - **TypeScript configs**:
+>   - Remove redundant `noEmit` (keep `emitDeclarationOnly: true`) in `tsconfig.build.json` and `tsconfig.build.node.json`.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit edecb27ac188295e2c5840cfd0cabac6cdc8a49d. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->21:T18fb,Bumps the npm_and_yarn group with 1 update in the /packages/core directory: [glob](https://github.com/isaacs/node-glob).
+
+Updates `glob` from 11.0.3 to 11.1.0
+<details>
+<summary>Changelog</summary>
+<p><em>Sourced from <a href="https://github.com/isaacs/node-glob/blob/main/changelog.md">glob's changelog</a>.</em></p>
+<blockquote>
+<h1>changeglob</h1>
+<h2>12</h2>
+<ul>
+<li>Remove the unsafe <code>--shell</code> option. The <code>--shell</code> option is now
+ONLY supported on known shells where the behavior can be
+implemented safely.</li>
+</ul>
+<h2>11.1</h2>
+<p><a href="https://github.com/isaacs/node-glob/security/advisories/GHSA-5j98-mcp5-4vw2">GHSA-5j98-mcp5-4vw2</a></p>
+<ul>
+<li>Add the <code>--shell</code> option for the command line, with a warning
+that this is unsafe. (It will be removed in v12.)</li>
+<li>Add the <code>--cmd-arg</code>/<code>-g</code> as a way to <em>safely</em> add positional
+arguments to the command provided to the CLI tool.</li>
+<li>Detect commands with space or quote characters on known shells,
+and pass positional arguments to them safely, avoiding
+<code>shell:true</code> execution.</li>
+</ul>
+<h2>11.0</h2>
+<ul>
+<li>Drop support for node before v20</li>
+</ul>
+<h2>10.4</h2>
+<ul>
+<li>Add <code>includeChildMatches: false</code> option</li>
+<li>Export the <code>Ignore</code> class</li>
+</ul>
+<h2>10.3</h2>
+<ul>
+<li>Add <code>--default -p</code> flag to provide a default pattern</li>
+<li>exclude symbolic links to directories when <code>follow</code> and <code>nodir</code>
+are both set</li>
+</ul>
+<h2>10.2</h2>
+<ul>
+<li>Add glob cli</li>
+</ul>
+<h2>10.1</h2>
+<ul>
+<li>Return <code>'.'</code> instead of the empty string <code>''</code> when the current
+working directory is returned as a match.</li>
+<li>Add <code>posix: true</code> option to return <code>/</code> delimited paths, even on
+Windows.</li>
+</ul>
+<h2>10.0.0</h2>
+<ul>
+<li>No default exports, only named exports</li>
+</ul>
+<!-- raw HTML omitted -->
+</blockquote>
+<p>... (truncated)</p>
+</details>
+<details>
+<summary>Commits</summary>
+<ul>
+<li><a href="https://github.com/isaacs/node-glob/commit/2551fb51440d402fa2120457bf460e546ee9964d"><code>2551fb5</code></a> 11.1.0</li>
+<li><a href="https://github.com/isaacs/node-glob/commit/47473c046b91c67269df7a66eab782a6c2716146"><code>47473c0</code></a> bin: Do not expose filenames to shell expansion</li>
+<li><a href="https://github.com/isaacs/node-glob/commit/bc33fe1c6a47abd497703d79ad96036e7891ff62"><code>bc33fe1</code></a> skip tilde test on systems that lack tilde expansion</li>
+<li><a href="https://github.com/isaacs/node-glob/commit/59bf9ca211bda5636c4fe9e32d41530c90a4f30d"><code>59bf9ca</code></a> fix notes</li>
+<li><a href="https://github.com/isaacs/node-glob/commit/dde4fa66c87e24b37bb5be28ed10c6e12019edac"><code>dde4fa6</code></a> docs(README): add #anchor and improve <code>note</code>s</li>
+<li><a href="https://github.com/isaacs/node-glob/commit/0559b0ed13c0f8147cd2ac9d48bb49684caaf20e"><code>0559b0e</code></a> docs: add better links to path-scurry docs</li>
+<li><a href="https://github.com/isaacs/node-glob/commit/c9773c249b4b9ed6b2447222c226f9d20c6ce916"><code>c9773c2</code></a> fix: correct typos in <code>README.md</code></li>
+<li><a href="https://github.com/isaacs/node-glob/commit/13e68eadbc4f0aacd9d6ffbcb4b28a34d5d8512c"><code>13e68ea</code></a> Fix punctuation in traversal function documentation</li>
+<li><a href="https://github.com/isaacs/node-glob/commit/1527e2b8107e95122ab6e9b6f6312f121693d53d"><code>1527e2b</code></a> fix repo url</li>
+<li><a href="https://github.com/isaacs/node-glob/commit/7e190e8776a7fa66fba40827de5f9effd1c52f9d"><code>7e190e8</code></a> fix typo <code>maths</code> → <code>paths</code></li>
+<li>Additional commits viewable in <a href="https://github.com/isaacs/node-glob/compare/v11.0.3...v11.1.0">compare view</a></li>
+</ul>
+</details>
+<br />
+
+
+[![Dependabot compatibility score](https://dependabot-badges.githubapp.com/badges/compatibility_score?dependency-name=glob&package-manager=npm_and_yarn&previous-version=11.0.3&new-version=11.1.0)](https://docs.github.com/en/github/managing-security-vulnerabilities/about-dependabot-security-updates#about-compatibility-scores)
+
+Dependabot will resolve any conflicts with this PR as long as you don't alter it yourself. You can also trigger a rebase manually by commenting `@dependabot rebase`.
+
+[//]: # (dependabot-automerge-start)
+[//]: # (dependabot-automerge-end)
+
+---
+
+<details>
+<summary>Dependabot commands and options</summary>
+<br />
+
+You can trigger Dependabot actions by commenting on this PR:
+- `@dependabot rebase` will rebase this PR
+- `@dependabot recreate` will recreate this PR, overwriting any edits that have been made to it
+- `@dependabot merge` will merge this PR after your CI passes on it
+- `@dependabot squash and merge` will squash and merge this PR after your CI passes on it
+- `@dependabot cancel merge` will cancel a previously requested merge and block automerging
+- `@dependabot reopen` will reopen this PR if it is closed
+- `@dependabot close` will close this PR and stop Dependabot recreating it. You can achieve the same result by closing it manually
+- `@dependabot show <dependency name> ignore conditions` will show all of the ignore conditions of the specified dependency
+- `@dependabot ignore <dependency name> major version` will close this group update PR and stop Dependabot creating any more for the specific dependency's major version (unless you unignore this specific dependency's major version or upgrade to it yourself)
+- `@dependabot ignore <dependency name> minor version` will close this group update PR and stop Dependabot creating any more for the specific dependency's minor version (unless you unignore this specific dependency's minor version or upgrade to it yourself)
+- `@dependabot ignore <dependency name>` will close this group update PR and stop Dependabot creating any more for the specific dependency (unless you unignore this specific dependency or upgrade to it yourself)
+- `@dependabot unignore <dependency name>` will remove all of the ignore conditions of the specified dependency
+- `@dependabot unignore <dependency name> <ignore condition>` will remove the ignore condition of the specified dependency and ignore conditions
+You can disable automated security fix PRs for this repo from the [Security Alerts page](https://github.com/elizaOS/eliza/network/alerts).
+
+</details>10:["$","div",null,{"className":"mb-8 space-y-6","children":[["$","$L17",null,{"metrics":{"date":"2025-11-30","interval":{"intervalStart":"$D2025-11-30T00:00:00.000Z","intervalEnd":"$D2025-12-07T00:00:00.000Z","intervalType":"week"},"pullRequests":{"new":11,"merged":10,"total":14},"issues":{"new":5,"closed":15,"total":19},"activeContributors":11,"codeChanges":{"additions":3442,"deletions":2449,"files":163,"commitCount":90},"topContributors":[{"username":"standujar","avatarUrl":"https://avatars.githubusercontent.com/u/16385918?u=718bdcd1585be8447bdfffb8c11ce249baa7532d&v=4","totalScore":196.47277878372282,"prScore":191.5347787837228,"issueScore":0,"reviewScore":4.5,"commentScore":0.43799999999999994,"summary":null},{"username":"wtfsayo","avatarUrl":"https://avatars.githubusercontent.com/u/82053242?u=98209a1f10456f42d4d2fa71db4d5bf4a672cbc3&v=4","totalScore":106.43812183926335,"prScore":106.03812183926334,"issueScore":0,"reviewScore":0,"commentScore":0.4,"summary":null},{"username":"ChristopherTrimboli","avatarUrl":"https://avatars.githubusercontent.com/u/27584221?u=de148a498b5af814e037c2975112fadd09df743f&v=4","totalScore":61.364794811906556,"prScore":56.364794811906556,"issueScore":0,"reviewScore":5,"commentScore":0,"summary":null},{"username":"0xbbjoker","avatarUrl":"https://avatars.githubusercontent.com/u/54844437?u=90fe1762420de6ad493a1c1582f1f70c0d87d8e2&v=4","totalScore":38.31247180559945,"prScore":33.31247180559945,"issueScore":0,"reviewScore":5,"commentScore":0,"summary":null},{"username":"borisudovicic","avatarUrl":"https://avatars.githubusercontent.com/u/31806472?u=c0478c34097551ba98aaa71edb33af0885a72d69&v=4","totalScore":8.34,"prScore":0,"issueScore":8,"reviewScore":0,"commentScore":0.33999999999999997,"summary":null},{"username":"github-advanced-security","avatarUrl":"https://avatars.githubusercontent.com/in/57789?v=4","totalScore":4.5,"prScore":0,"issueScore":0,"reviewScore":4.5,"commentScore":0,"summary":null},{"username":"linear","avatarUrl":"https://avatars.githubusercontent.com/in/20150?v=4","totalScore":4,"prScore":0,"issueScore":4,"reviewScore":0,"commentScore":0,"summary":null},{"username":"lalalune","avatarUrl":"https://avatars.githubusercontent.com/u/18633264?u=e2e906c3712c2506ebfa98df01c2cfdc50050b30&v=4","totalScore":4,"prScore":0,"issueScore":4,"reviewScore":0,"commentScore":0,"summary":null}],"focusAreas":[{"area":"cli","count":53},{"area":"server","count":33},{"area":"plugin-bootstrap","count":25},{"area":"plugin-sql","count":20},{"area":"core","count":15},{"area":"client","count":4},{"area":"examples","count":3},{"area":"src","count":2},{"area":"src/utils","count":2},{"area":"api-client","count":1}],"topIssues":[{"id":"I_kwDOMT5cIs7V2Buf","title":"Where did packages/docs/ go?","author":"LinuxIsCool","number":6122,"repository":"elizaos/eliza","body":"There was always packages/docs/ where did it get moved to?","createdAt":"2025-11-04T18:08:54Z","closedAt":"2025-12-01T14:35:46Z","state":"CLOSED","commentCount":2},{"id":"I_kwDOMT5cIs7aSEq_","title":"Add OpenAI-compatible API","author":"joglomedia","number":6168,"repository":"elizaos/eliza","body":"Hi,\n\nIt would be great if we have an option to use LLM API from OpenAI-compatible API, not only open router. So, we can set the API host & API Key","createdAt":"2025-11-25T09:19:35Z","closedAt":"2025-11-30T18:41:08Z","state":"CLOSED","commentCount":1},{"id":"I_kwDOMT5cIs7cPNBC","title":".eliza needed or plugin-sql crashes, should autocreate","author":"lalalune","number":6204,"repository":"elizaos/eliza","body":"You can see here, I am building an Eliza agent from scratch\n\n```\nimport { AgentRuntime, type Character, type Plugin } from \"@elizaos/core\";\nimport { plugin } from \"@elizaos/plugin-sql\"\nimport { openaiPlugin } from \"@elizaos/plugin-openai\"\nimport fs from \"fs\";\n\n// if .eliza directory does not exist, create it\nif (!fs.existsSync(\".eliza\")) {\n    fs.mkdirSync(\".eliza\");\n}\n\nconst character: Character = {\n    name: \"Eliza\",\n    bio: \"You are a helpful assistant\",\n};\n\nconst plugins: Plugin[] = [\n    plugin,\n    openaiPlugin,\n];\n\nconst agent = new AgentRuntime({\n    character, // need a character to start the agent\n    plugins // bare minimum is db plugin and inference plugin\n});\n\nagent.initialize().then(() => {\n    console.log(\"Agent initialized\");\n\n\n});\n```\n\nIn order to get it to work I have to add\n```\nimport fs from \"fs\";\n\n// if .eliza directory does not exist, create it\nif (!fs.existsSync(\".eliza\")) {\n    fs.mkdirSync(\".eliza\");\n}\n```\n\nBut this should happen automatically","createdAt":"2025-12-04T14:37:44Z","closedAt":"2025-12-08T13:17:08Z","state":"CLOSED","commentCount":1},{"id":"I_kwDOMT5cIs7KjCKg","title":"Technical Debt & CLI/Server Cleanup","author":"borisudovicic","number":5932,"repository":"elizaos/eliza","body":"Eliminate redundant logic and hacks, align CLI/server with ElizaOS.","createdAt":"2025-09-09T12:18:56Z","closedAt":"2025-11-30T15:38:09Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7SPBL-","title":"Standardize Logging Across Core, CLI, and Server","author":"borisudovicic","number":6073,"repository":"elizaos/eliza","body":"**Summary**\n\nThe config and environment refactors are complete; remaining task is to unify and finalize the logging system across all packages to ensure consistent developer experience and observability.\n\n**Objectives**\n\n* Migrate all packages (CLI, server, and core) to use a single, standardized Logger implementation from @elizaos/core.\n* Ensure log formatting, levels, transports, and contextual metadata (package, runtime mode, timestamps) are consistent.\n* Provide structured logs compatible with both console and future Cloud ingestion (JSON mode).","createdAt":"2025-10-17T18:41:45Z","closedAt":"2025-11-30T15:37:51Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7aq1FH","title":"Fix \"Dashboard\" Button Pointer Event","author":"borisudovicic","number":6188,"repository":"elizaos/eliza","body":"","createdAt":"2025-11-26T18:43:21Z","closedAt":"2025-12-02T16:15:51Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7aq01s","title":"Fix Container Deployment Bug","author":"borisudovicic","number":6187,"repository":"elizaos/eliza","body":"Debug issue where certain container types on specific architectures are failing to deploy.","createdAt":"2025-11-26T18:42:55Z","closedAt":"2025-12-02T16:15:51Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7aqzzu","title":"Populate \"Community Agents\" or Remove Section","author":"borisudovicic","number":6182,"repository":"elizaos/eliza","body":"","createdAt":"2025-11-26T18:41:13Z","closedAt":"2025-12-02T16:15:51Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7aqzv4","title":"Persist Landing Page Prompt to Builder","author":"borisudovicic","number":6181,"repository":"elizaos/eliza","body":"When a new user types a prompt on the landing page (e.g., \"Create a Boris agent\"), that text must be carried over to the Agent Builder chat context so they don't have to type it again.","createdAt":"2025-11-26T18:41:06Z","closedAt":"2025-12-05T16:35:02Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7aqzeg","title":"Remove \"Quick Presets\" from Generation Studio","author":"borisudovicic","number":6179,"repository":"elizaos/eliza","body":"Remove the \"Quick Presets\" section from the Image and Video generation tabs to simplify the UI.","createdAt":"2025-11-26T18:40:35Z","closedAt":"2025-12-02T16:15:51Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7aqzEc","title":"Add \"$\" symbol to Credit Balances","author":"borisudovicic","number":6177,"repository":"elizaos/eliza","body":"","createdAt":"2025-11-26T18:39:53Z","closedAt":"2025-12-02T16:15:51Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7aqzAr","title":"Implement distinct visual theme for \"Build Mode\"","author":"borisudovicic","number":6176,"repository":"elizaos/eliza","body":"(In Figma) When a user toggles into \"Build Mode,\" change the background color to clearly differentiate it from \"Chat Mode.\"","createdAt":"2025-11-26T18:39:47Z","closedAt":"2025-12-02T16:15:51Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7aqysc","title":"Move Billing/Credits to Top-Level Navigation","author":"borisudovicic","number":6175,"repository":"elizaos/eliza","body":"\"Buy Credits\" is currently buried too deep (Settings -> Billing). (We should probably just add this below the credit balance on bottom left. Add a small clickable chip next to the balance display in the sidebar/header that takes the user immediately to the payment flow.","createdAt":"2025-11-26T18:39:15Z","closedAt":"2025-12-02T16:15:51Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7aqyPR","title":"Clean up Sidebar User Info Redundancy","author":"borisudovicic","number":6174,"repository":"elizaos/eliza","body":"The username and wallet address are repeated in the sidebar, header, and profile page. Remove the username/wallet display from the bottom of the sidebar to reduce clutter. Keep it only in the profile header.","createdAt":"2025-11-26T18:38:32Z","closedAt":"2025-12-02T16:15:51Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7bQW0b","title":"Voice Support","author":"borisudovicic","number":6196,"repository":"elizaos/eliza","body":"","createdAt":"2025-11-30T22:11:41Z","closedAt":"2026-04-12T18:54:05Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7bQWwF","title":"Mobile App","author":"borisudovicic","number":6195,"repository":"elizaos/eliza","body":"","createdAt":"2025-11-30T22:11:22Z","closedAt":"2026-04-12T18:54:07Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOO4-REc67D24q","title":"Helpful hint?","author":"odilitime","number":1,"repository":"elizaos-plugins/plugin-mysql","body":"I noticed to get the tables created, it best to disable all other plugins first. And after the tables are made, then add it more plugins","createdAt":"2025-06-11T23:29:37Z","closedAt":"2025-12-01T04:15:30Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7bZZY9","title":"[Server] Concurrent connection timeouts & add reliability patterns","author":"linear","number":6198,"repository":"elizaos/eliza","body":"* **Configure Socket.IO properly** - Add ping/pong intervals, timeouts, transport settings to prevent stale connections\n* **Add HTTP server timeouts** - Configure explicit timeouts (30s request, 5s keepalive, 10s headers)\n* **Add socket disconnection guards** - Check socket state before/after async DB operations\n* **Parallelize DB operations** - Use `Promise.all()` for independent queries\n* **Add circuit breaker pattern** - Fail fast when DB is degraded, prevent cascade failures","createdAt":"2025-12-01T12:49:44Z","closedAt":"2025-12-02T16:15:51Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7chQTh","title":"Streaming Support","author":"borisudovicic","number":6206,"repository":"elizaos/eliza","body":"","createdAt":"2025-12-05T17:07:00Z","closedAt":"2025-12-17T16:53:32Z","state":"CLOSED","commentCount":0}],"topPullRequests":[{"id":"PR_kwDOMT5cIs620Si3","title":"feat(auth): implement JWT authentication and user management","author":"standujar","number":6200,"body":"$18","repository":"elizaos/eliza","createdAt":"2025-12-03T11:55:47Z","mergedAt":"2026-02-08T18:18:09Z","additions":6079,"deletions":347},{"id":"PR_kwDOMT5cIs61dVQL","title":"refactor: Standardize Logging Across Core, CLI, and Server","author":"standujar","number":6169,"body":"","repository":"elizaos/eliza","createdAt":"2025-11-25T16:49:15Z","mergedAt":"2025-11-30T08:49:13Z","additions":2264,"deletions":2974},{"id":"PR_kwDOMT5cIs63dqrL","title":"[DRAFT] feat(core): Implement parallel action execution in processActions","author":"wtfsayo","number":6209,"body":"$19","repository":"elizaos/eliza","createdAt":"2025-12-06T19:03:17Z","mergedAt":null,"additions":1467,"deletions":292},{"id":"PR_kwDOMT5cIs62WwSP","title":"refactor(server): optimization and reorganization","author":"standujar","number":6199,"body":"$1a","repository":"elizaos/eliza","createdAt":"2025-12-01T14:03:31Z","mergedAt":"2025-12-01T15:58:32Z","additions":608,"deletions":439},{"id":"PR_kwDOMT5cIs63ddxK","title":"feat: Add ElizaOS Cloud as Default AI Provider in CLI","author":"ChristopherTrimboli","number":6208,"body":"$1b","repository":"elizaos/eliza","createdAt":"2025-12-06T18:21:51Z","mergedAt":"2025-12-06T19:51:44Z","additions":491,"deletions":66},{"id":"PR_kwDOMT5cIs623me3","title":"feat: Unified API - serverless - nodejs","author":"standujar","number":6201,"body":"","repository":"elizaos/eliza","createdAt":"2025-12-03T16:15:31Z","mergedAt":"2025-12-04T13:22:56Z","additions":324,"deletions":88},{"id":"PR_kwDOMT5cIs63BWDH","title":"fix(plugin-sql): migrate to messageService API and auto-create PGLite directories","author":"wtfsayo","number":6202,"body":"$1c","repository":"elizaos/eliza","createdAt":"2025-12-04T09:58:20Z","mergedAt":"2025-12-04T11:02:34Z","additions":160,"deletions":49},{"id":"PR_kwDOMT5cIs62TLRj","title":"fix(client): improve markdown content spacing","author":"wtfsayo","number":6197,"body":"$1d","repository":"elizaos/eliza","createdAt":"2025-12-01T09:38:29Z","mergedAt":"2025-12-01T09:39:44Z","additions":114,"deletions":0},{"id":"PR_kwDOMT5cIs60Z-75","title":"fix: markdown spacing compact","author":"LinuxIsCool","number":6159,"body":"$1e","repository":"elizaos/eliza","createdAt":"2025-11-19T17:17:48Z","mergedAt":"2025-12-01T09:35:13Z","additions":106,"deletions":1},{"id":"PR_kwDOOqp3ps62ytDT","title":"feat: enhance MCP provider with mcpText field and improve tool response handling","author":"0xbbjoker","number":19,"body":"$1f","repository":"elizaos-plugins/plugin-mcp","createdAt":"2025-12-03T10:05:19Z","mergedAt":"2025-12-03T10:09:18Z","additions":9,"deletions":6},{"id":"PR_kwDOMT5cIs62JQ8Y","title":"rollback(plugin-sql): revert build configuration changes from 08d5141…","author":"0xbbjoker","number":6194,"body":"$20","repository":"elizaos/eliza","createdAt":"2025-11-29T21:09:45Z","mergedAt":"2025-11-30T07:10:13Z","additions":7,"deletions":8},{"id":"PR_kwDOMT5cIs63c65D","title":"fix(cli): correct startAgents API signature in e2e-tests","author":"standujar","number":6207,"body":"## Summary\r\n\r\n- Fixed `startAgents` API signature mismatch in CLI's e2e-tests.ts\r\n- Fixed unit test mock function name (`getElizaCharacter` → `getDefaultCharacter`)\r\n\r\n## Problem\r\n\r\nThe CLI's `elizaos test` command was failing with:\r\n```\r\nundefined is not an object (evaluating 'agent.character.id')\r\n```\r\n\r\nThis was caused by the e2e-tests calling `server.startAgents` with incorrect arguments:\r\n- **Before**: `startAgents([character], [plugins], options)` (3 separate args)\r\n- **After**: `startAgents([{ character, plugins }], options)` (proper format)\r\n\r\n## Test Plan\r\n\r\n- [x] Unit tests pass: `bun test packages/cli/tests/unit/commands/test/e2e-tests.test.ts`\r\n- [x] CLI builds successfully: `bun run build` in packages/cli\r\n- [x] `elizaos test` runs plugin tests correctly\r\n","repository":"elizaos/eliza","createdAt":"2025-12-06T16:03:56Z","mergedAt":"2025-12-15T13:27:41Z","additions":7,"deletions":2},{"id":"PR_kwDOMT5cIs63G23O","title":"fix(service): enhance simple response detection logic","author":"standujar","number":6205,"body":"","repository":"elizaos/eliza","createdAt":"2025-12-04T16:25:14Z","mergedAt":null,"additions":6,"deletions":1},{"id":"PR_kwDOMT5cIs6z6-8G","title":"chore(deps): bump glob from 11.0.3 to 11.1.0 in /packages/core in the npm_and_yarn group across 1 directory","author":"dependabot","number":6157,"body":"$21","repository":"elizaos/eliza","createdAt":"2025-11-17T18:38:08Z","mergedAt":null,"additions":1,"deletions":1},{"id":"PR_kwDOMT5cIs63EVvw","title":"fix(examples): respect user LOG_LEVEL in standalone-cli-chat","author":"standujar","number":6203,"body":"","repository":"elizaos/eliza","createdAt":"2025-12-04T13:21:31Z","mergedAt":"2025-12-04T13:22:23Z","additions":1,"deletions":1},{"id":"PR_kwDOMT5cIs6xETJ-","title":"feat: implement entity-level row level security","author":"standujar","number":6107,"body":"","repository":"elizaos/eliza","createdAt":"2025-11-02T16:12:48Z","mergedAt":null,"additions":0,"deletions":0}],"detailedContributorSummaries":{}}}],"$L22"]}]
+11:["$","div",null,{"className":"prose prose-sm mx-auto mt-8 dark:prose-invert sm:prose lg:prose-lg xl:prose-xl","children":[["$","h2","h2-0",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"Executive Summary","position":{"start":{"line":3,"column":4,"offset":56},"end":{"line":3,"column":21,"offset":73}}}],"position":{"start":{"line":3,"column":1,"offset":53},"end":{"line":3,"column":21,"offset":73}}},"children":"Executive Summary"}],"\n",["$","p","p-0",{"children":"This week was marked by a dual focus on strengthening our current platform and laying the groundwork for future expansion. We made a significant push to improve stability and polish the user experience by resolving numerous bugs and refactoring core components. Simultaneously, we initiated development on foundational services for a more scalable and secure server architecture, setting the stage for our next phase of growth."}],"\n",["$","h3","h3-0",{"children":"Key Strategic Initiatives & Outcomes"}],"\n",["$","p","p-1",{"children":[["$","strong","strong-0",{"children":"Enhancing Platform Stability and User Experience"}],"\nThis initiative is crucial for building user trust and providing a reliable foundation for agent development."]}],"\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["The core server architecture was significantly reorganized and optimized for better performance and maintainability in ",["$","a","a-0",{"href":"https://github.com/elizaos/eliza","children":"elizaos/eliza"}],"."]}],"\n",["$","li","li-1",{"children":["Logging was standardized across the platform, making it easier for developers to diagnose and solve issues in ",["$","a","a-0",{"href":"https://github.com/elizaos/eliza","children":"elizaos/eliza"}],"."]}],"\n",["$","li","li-2",{"children":["A large batch of user interface bugs was fixed, resulting in a cleaner, more consistent experience when interacting with AI agents in ",["$","a","a-0",{"href":"https://github.com/elizaos/eliza","children":"elizaos/eliza"}],"."]}],"\n"]}],"\n",["$","p","p-2",{"children":[["$","strong","strong-0",{"children":"Building the Foundation for Next-Generation Features"}],"\nTo support our vision of more autonomous and capable AI agents, we are evolving our core architecture."]}],"\n",["$","ul","ul-1",{"children":["\n",["$","li","li-0",{"children":["Work began on a new unified serverless API and a comprehensive user authentication system, preparing the platform for greater scalability and security in ",["$","a","a-0",{"href":"https://github.com/elizaos/eliza","children":"elizaos/eliza"}],"."]}],"\n",["$","li","li-1",{"children":["The MCP plugin was enhanced to allow for more flexible and descriptive agent configurations, improving how agents process and respond to tasks in ",["$","a","a-0",{"href":"https://github.com/elizaos-plugins/plugin-mcp","children":"elizaos-plugins/plugin-mcp"}],"."]}],"\n"]}],"\n",["$","p","p-3",{"children":[["$","strong","strong-0",{"children":"Improving Developer and User Onboarding"}],"\nA smooth onboarding process is essential for growing our community of users and contributors."]}],"\n",["$","ul","ul-2",{"children":["\n",["$","li","li-0",{"children":["We clarified the new, centralized location for project documentation, ensuring everyone can find up-to-date information in ",["$","a","a-0",{"href":"https://github.com/elizaos/eliza","children":"elizaos/eliza"}]," and ",["$","a","a-1",{"href":"https://github.com/elizaos-plugins/plugin-mysql","children":"elizaos-plugins/plugin-mysql"}],"."]}],"\n",["$","li","li-1",{"children":["Helpful setup guidance was provided for the MySQL plugin, resolving a common issue for new users and streamlining their initial experience in ",["$","a","a-0",{"href":"https://github.com/elizaos-plugins/plugin-mysql","children":"elizaos-plugins/plugin-mysql"}],"."]}],"\n"]}],"\n","$L23","\n","$L24","\n","$L25","\n","$L26","\n","$L27","\n","$L28","\n","$L29","\n","$L2a","\n","$L2b","\n","$L2c","\n","$L2d","\n","$L2e"]}]
+12:["$","script","script-0",{"src":"/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","async":true}]
+13:["$","script","script-1",{"src":"/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","async":true}]
+14:["$","script","script-2",{"src":"/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js","async":true}]
+15:["$","$L2f",null,{"children":["$","$30",null,{"name":"Next.MetadataOutlet","children":"$@31"}]}]
+22:["$","div",null,{"className":"rounded-lg border bg-card text-card-foreground shadow-sm","children":[["$","div",null,{"className":"flex flex-col space-y-1.5 p-6 py-4","children":["$","div",null,{"className":"tracking-tight text-sm font-medium","children":["$undefined","Code Changes"]}]}],["$","div",null,{"className":"p-6 pt-0","children":["$","div",null,{"className":"grid grid-cols-2 gap-4 md:grid-cols-4","children":[["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-git-commit-vertical h-5 w-5","aria-hidden":"true","children":[["$","path","1holv5",{"d":"M12 3v6"}],["$","circle","1v7zrd",{"cx":"12","cy":"12","r":"3"}],["$","path","a9ows0",{"d":"M12 15v6"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":90}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Commits"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-file-code h-5 w-5","aria-hidden":"true","children":[["$","path","1oefj6",{"d":"M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"}],["$","path","wfsgrz",{"d":"M14 2v5a1 1 0 0 0 1 1h5"}],["$","path","1tg20x",{"d":"M10 12.5 8 15l2 2.5"}],["$","path","yinavb",{"d":"m14 12.5 2 2.5-2 2.5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":163}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Files Changed"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-green-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-up h-5 w-5 text-green-500","aria-hidden":"true","children":[["$","path","hav0vg",{"d":"m5 12 7-7 7 7"}],["$","path","x0mq9r",{"d":"M12 19V5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-green-500","children":"+3,442"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Added"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-red-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-down h-5 w-5 text-red-500","aria-hidden":"true","children":[["$","path","s699le",{"d":"M12 5v14"}],["$","path","1idqje",{"d":"m19 12-7 7-7-7"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-red-500","children":"-2,449"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Deleted"}]]}]]}]]}]}]]}]
+23:["$","h3","h3-1",{"children":"Cross-Repository Coordination"}]
+24:["$","p","p-4",{"children":[["$","strong","strong-0",{"children":"Centralizing Project Documentation"}],"\nTo create a single source of truth and reduce confusion, we continued our effort to consolidate all documentation into a dedicated repository. This week, issues were addressed in both the main ",["$","a","a-0",{"href":"https://github.com/elizaos/eliza","children":"elizaos/eliza"}]," repository and the ",["$","a","a-1",{"href":"https://github.com/elizaos-plugins/plugin-mysql","children":"elizaos-plugins/plugin-mysql"}]," plugin to ensure users are correctly directed to the new documentation hub, demonstrating a coordinated effort to improve the user experience across the entire project."]}]
+25:["$","h2","h2-1",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"Repository Spotlights","position":{"start":{"line":29,"column":4,"offset":3051},"end":{"line":29,"column":25,"offset":3072}}}],"position":{"start":{"line":29,"column":1,"offset":3048},"end":{"line":29,"column":25,"offset":3072}}},"children":"Repository Spotlights"}]
+26:["$","h3","h3-2",{"children":"elizaos/eliza"}]
+27:["$","p","p-5",{"children":"The core repository saw a major push toward stabilization and began work on critical new infrastructure."}]
+28:["$","ul","ul-3",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"Stabilization & Refactoring:"}],"\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["Completed a major refactor to standardize logging across Core, CLI, and Server components (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/6169","children":"#6169"}],")."]}],"\n",["$","li","li-1",{"children":["The server underwent a significant optimization and reorganization to improve its structure and performance (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/6199","children":"#6199"}],")."]}],"\n"]}],"\n"]}],"\n",["$","li","li-1",{"children":[["$","strong","strong-0",{"children":"New Foundational Features:"}],"\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["Work began on a unified serverless API to streamline backend services (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/6201","children":"#6201"}],")."]}],"\n",["$","li","li-1",{"children":["A new pull request was opened to implement a comprehensive JWT authentication and user management system (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/6200","children":"#6200"}],")."]}],"\n"]}],"\n"]}],"\n",["$","li","li-2",{"children":[["$","strong","strong-0",{"children":"UI & Bug Fixes:"}],"\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["Resolved multiple UI issues, including cleaning up the sidebar (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/6174","children":"#6174"}],", ",["$","a","a-1",{"href":"https://github.com/elizaos/eliza/issues/6176","children":"#6176"}],", ",["$","a","a-2",{"href":"https://github.com/elizaos/eliza/issues/6179","children":"#6179"}],") and fixing markdown rendering for AI responses (",["$","a","a-3",{"href":"https://github.com/elizaos/eliza/pull/6159","children":"#6159"}],", ",["$","a","a-4",{"href":"https://github.com/elizaos/eliza/pull/6197","children":"#6197"}],")."]}],"\n",["$","li","li-1",{"children":["Addressed a server connection timeout bug to improve reliability (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/6198","children":"#6198"}],")."]}],"\n"]}],"\n"]}],"\n",["$","li","li-3",{"children":[["$","strong","strong-0",{"children":"Community & Vision:"}],"\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["New discussions were opened around future capabilities like native Voice Support (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/6196","children":"#6196"}],") and a dedicated Mobile App (",["$","a","a-1",{"href":"https://github.com/elizaos/eliza/issues/6195","children":"#6195"}],")."]}],"\n"]}],"\n"]}],"\n"]}]
+29:["$","h3","h3-3",{"children":"elizaos-plugins/plugin-mcp"}]
+2a:["$","p","p-6",{"children":"This plugin received updates to enhance its core functionality and flexibility."}]
+2b:["$","ul","ul-4",{"children":["\n",["$","li","li-0",{"children":["Enhanced the MCP provider by adding an optional formatted text field (",["$","code","code-0",{"children":"mcpText"}],") for more descriptive configurations (",["$","a","a-0",{"href":"https://github.com/elizaos-plugins/plugin-mcp/pull/19","children":"#19"}],")."]}],"\n",["$","li","li-1",{"children":["Improved the system's internal data flow by refining how tool responses are handled and processed by the agent (",["$","a","a-0",{"href":"https://github.com/elizaos-plugins/plugin-mcp/pull/19","children":"#19"}],")."]}],"\n"]}]
+2c:["$","h3","h3-4",{"children":"elizaos-plugins/plugin-mysql"}]
+2d:["$","p","p-7",{"children":"Activity focused on maintenance and improving the user experience through support and clarification."}]
+2e:["$","ul","ul-5",{"children":["\n",["$","li","li-0",{"children":["Closed an issue by providing a helpful tip to resolve table creation problems during setup (",["$","a","a-0",{"href":"https://github.com/elizaos-plugins/plugin-mysql/issues/1","children":"#1"}],")."]}],"\n",["$","li","li-1",{"children":["Clarified for users that project documentation has been migrated to a central ",["$","code","code-0",{"children":"elizaos/docs"}]," repository, closing a key informational issue (",["$","a","a-0",{"href":"https://github.com/elizaos-plugins/plugin-mysql/issues/6122","children":"#6122"}],")."]}],"\n"]}]
+31:null

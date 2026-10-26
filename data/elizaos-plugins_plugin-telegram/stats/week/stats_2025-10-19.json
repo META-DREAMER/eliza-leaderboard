@@ -1,0 +1,279 @@
+{
+  "interval": {
+    "intervalStart": "2025-10-19T00:00:00.000Z",
+    "intervalEnd": "2025-10-26T00:00:00.000Z",
+    "intervalType": "week"
+  },
+  "repository": "elizaos-plugins/plugin-telegram",
+  "overview": "From 2025-10-19 to 2025-10-26, elizaos-plugins/plugin-telegram had 2 new PRs (2 merged), 0 new issues, and 6 active contributors.",
+  "topIssues": [],
+  "topPRs": [
+    {
+      "id": "PR_kwDOOtl_Us6usBES",
+      "title": "Fix: GIF animations not playing in Telegram",
+      "author": "0xRabbidfly",
+      "number": 20,
+      "body": "# Fix: GIF animations not playing in Telegram\r\n\r\n## Problem\r\nGIF attachments are being sent as static images instead of animations in Telegram messages.\r\n\r\n## Root Cause\r\nThe `sendMessageInChunks` method uses a `typeMap` with prefix matching that can match GIFs to the generic `'image'` prefix before checking the specific `'image/gif'` prefix, depending on JavaScript object iteration order. This causes GIFs to be sent via `sendMedia()` with `MediaType.PHOTO` instead of `MediaType.ANIMATION`.\r\n\r\n```typescript\r\n// Original buggy code\r\nconst typeMap = {\r\n  'image/gif': MediaType.ANIMATION,\r\n  image: MediaType.PHOTO,  // ← Matches 'image/gif'.startsWith('image')\r\n  ...\r\n};\r\n```\r\n\r\n## Solution\r\n- Add explicit GIF detection before generic image handling\r\n- Use `ctx.replyWithAnimation()` directly for GIFs to preserve animation\r\n- Exclude `.gif` from the `isImage` regex pattern\r\n- Improve media routing with explicit type checks and proper fallbacks\r\n- Fix async anti-pattern: replace `.map(async)` with `for await` loop\r\n\r\n## Changes\r\n- ✅ Separate `isGif` check before `isImage` \r\n- ✅ Use Telegram's `replyWithAnimation()` for GIFs\r\n- ✅ Add fallback handling for failed GIF/video sends\r\n- ✅ Modernize attachment handling with direct Telegram API methods\r\n- ✅ Remove unreliable prefix-based type mapping for images/videos\r\n\r\n## Testing\r\n- Tested with live Telegram bot sending GIF cards\r\n- Verified GIFs now animate correctly instead of showing as static images\r\n- Build passes successfully\r\n- TypeScript compilation successful\r\n\r\n## Risk Assessment\r\n**LOW RISK** - This is a targeted fix that:\r\n- Only affects attachment handling flow\r\n- Adds explicit checks without removing existing fallbacks\r\n- Improves code reliability with defensive programming\r\n- Doesn't change API surface or break existing functionality\r\n\r\n## Related\r\nFixes the issue where content with `contentType: 'image/gif'` attachments are displayed as static images in Telegram clients.\r\n\r\n\n\n<!-- This is an auto-generated comment: release notes by coderabbit.ai -->\n\n## Summary by CodeRabbit\n\n* **Bug Fixes**\n  * Enhanced attachment handling with improved fallback logic for media types (videos, GIFs, and images)\n  * Improved robustness in message processing and chat handling\n  * Better error logging and messaging consistency\n\n* **Style**\n  * Code formatting standardization\n\n<!-- end of auto-generated comment: release notes by coderabbit.ai -->",
+      "repository": "elizaos-plugins/plugin-telegram",
+      "createdAt": "2025-10-20T18:34:02Z",
+      "mergedAt": null,
+      "additions": 769,
+      "deletions": 415
+    },
+    {
+      "id": "PR_kwDOOtl_Us6ukfbE",
+      "title": "fix: resolve button handling crash and logging errors",
+      "author": "0xbbjoker",
+      "number": 19,
+      "body": "<!-- CURSOR_SUMMARY -->\n> [!NOTE]\n> Safely converts Telegram buttons with validation and fallbacks, improves structured logging, expands test coverage, and updates package/core versions.\n> \n> - **Utils**:\n>   - `convertToTelegramButtons`: validate inputs, skip invalid buttons, default unknown `kind` to `url`, and log warnings.\n>   - `cleanText`: remove NULLs via split/join to avoid regex control-char issues.\n> - **Message Handling**:\n>   - Use structured `logger.error({ error }, ...)` in document processing paths.\n> - **Tests (migrated to bun:test)**:\n>   - Add comprehensive tests for button conversion (unknown/invalid cases), message splitting/empty text, media sending (photo/video/document, local files), error handling, and exports.\n> - **Chore**:\n>   - Bump version to `1.6.2` and upgrade `@elizaos/core` to `^1.6.2`.\n> \n> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit 1b280124b57b40279b61b2da63639f6506b08fea. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>\n<!-- /CURSOR_SUMMARY -->\n\n<!-- This is an auto-generated comment: release notes by coderabbit.ai -->\n## Summary by CodeRabbit\n\n* **Tests**\n  * Expanded and reorganized test suite with broader coverage for message splitting, text conversion, button handling, media sending, and error scenarios; migrated mocks for more reliable isolation.\n\n* **Chores**\n  * Bumped package version and updated core dependency.\n\n* **Bug Fixes**\n  * Improved input validation and error logging so invalid buttons and message/media edge cases are handled and reported more robustly.\n<!-- end of auto-generated comment: release notes by coderabbit.ai -->",
+      "repository": "elizaos-plugins/plugin-telegram",
+      "createdAt": "2025-10-20T06:53:30Z",
+      "mergedAt": "2025-10-20T13:50:49Z",
+      "additions": 719,
+      "deletions": 316
+    },
+    {
+      "id": "PR_kwDOOtl_Us6sz0Rj",
+      "title": "feat: migrate to runtime.handleMessage()",
+      "author": "0xbbjoker",
+      "number": 17,
+      "body": "Migrates Telegram plugin from event-based message handling to direct\r\nMessageService calls, making message flow easier to trace and debug.\r\n\r\nChanges:\r\n- Replace runtime.emitEvent(MESSAGE_RECEIVED) with runtime.handleMessage()\r\n- Remove unused event imports (EventType, TelegramEventTypes, TelegramMessageReceivedPayload)\r\n- Update @elizaos/core dependency to workspace:* for local development\r\n- Fix Zod error typing in environment.ts validation\r\n\r\nBenefits:\r\n- Clear call stack: Telegram → runtime.handleMessage() → MessageService\r\n- Easier debugging: can step through entire flow without event routing\r\n- Better developer experience: no hidden event dispatching\r\n\r\nBefore:\r\n  this.runtime.emitEvent(EventType.MESSAGE_RECEIVED, {\r\n    runtime: this.runtime, message: memory, callback, source: 'telegram'\r\n  });\r\n  this.runtime.emitEvent(TelegramEventTypes.MESSAGE_RECEIVED, {...});\r\n\r\nAfter:\r\n  await this.runtime.handleMessage(memory, callback);\r\n\r\nRequires: feat/core-message-service-interface\n\n<!-- CURSOR_SUMMARY -->\n---\n\n> [!NOTE]\n> Replaces event-based Telegram message handling with direct MessageService.handleMessage calls, and cleans up Zod validation and document-processing logs/formatting.\n> \n> - **Telegram message handling**:\n>   - Replace `runtime.emitEvent(...MESSAGE_RECEIVED...)` with direct `runtime.messageService.handleMessage(runtime, memory, callback)` and add missing-service guard.\n>   - Minor refactors in `processMessage`/document handlers: consistent quotes, multiline conditions, improved error logging, and attachment cleanup mapping style.\n> - **Config validation (`src/environment.ts`)**:\n>   - Use `ZodError.issues` over `errors` when building error messages.\n>   - Minor signature/formatting adjustments.\n> \n> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit 0c887c50cf6a0db585a330647d592721b6a416d2. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>\n<!-- /CURSOR_SUMMARY -->\n\n<!-- This is an auto-generated comment: release notes by coderabbit.ai -->\n## Summary by CodeRabbit\n\n* **Refactor**\n  * Streamlined message handling to call the message service directly for faster, more reliable incoming message processing.\n  * Preserved document processing behavior and configuration validation while improving internal robustness and guards.\n\n* **Style**\n  * Applied consistent formatting and string-style updates; no user-visible behavior changes.\n\n* **Chores**\n  * Removed an unused internal type from the public import surface.\n  * Improved error logging for clearer diagnostic messages.\n<!-- end of auto-generated comment: release notes by coderabbit.ai -->",
+      "repository": "elizaos-plugins/plugin-telegram",
+      "createdAt": "2025-10-09T03:24:49Z",
+      "mergedAt": "2025-10-20T12:35:21Z",
+      "additions": 76,
+      "deletions": 61
+    }
+  ],
+  "codeChanges": {
+    "additions": 795,
+    "deletions": 377,
+    "files": 9,
+    "commitCount": 10
+  },
+  "completedItems": [
+    {
+      "title": "feat: migrate to runtime.handleMessage()",
+      "prNumber": 17,
+      "type": "feature",
+      "body": "Migrates Telegram plugin from event-based message handling to direct\r\nMessageService calls, making message flow easier to trace and debug.\r\n\r\nChanges:\r\n- Replace runtime.emitEvent(MESSAGE_RECEIVED) with runtime.handleMessage()\r\n- Remove unu",
+      "files": [
+        "src/environment.ts",
+        "src/messageManager.ts"
+      ]
+    },
+    {
+      "title": "fix: resolve button handling crash and logging errors",
+      "prNumber": 19,
+      "type": "bugfix",
+      "body": "<!-- CURSOR_SUMMARY -->\n> [!NOTE]\n> Safely converts Telegram buttons with validation and fallbacks, improves structured logging, expands test coverage, and updates package/core versions.\n> \n> - **Utils**:\n>   - `convertToTelegramButtons`: v",
+      "files": [
+        "__tests__/button-conversion.test.ts",
+        "__tests__/messageManager.test.ts",
+        "__tests__/telegramClient.test.ts",
+        "__tests__/utils.test.ts",
+        "bun.lock",
+        "package.json",
+        "src/messageManager.ts",
+        "src/utils.ts"
+      ]
+    }
+  ],
+  "topContributors": [
+    {
+      "username": "wtfsayo",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/82053242?u=98209a1f10456f42d4d2fa71db4d5bf4a672cbc3&v=4",
+      "totalScore": 323.19981503527026,
+      "prScore": 322.7618150352703,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0.43799999999999994,
+      "summary": "wtfsayo: Drove significant feature development and maintenance across the Eliza ecosystem, merging 6 PRs. They landed a major feature integrating Streamdown and cross-platform crypto in `elizaos/eliza#6082` (+1962/-774 lines), fixed a key packaging issue in the CLI via `elizaos/eliza#6080`, and opened a PR for a new headless React hooks package (`elizaos/eliza#6093`). Their 51 commits demonstrate a balanced focus on new feature work, bug fixes, and code refactoring."
+    },
+    {
+      "username": "standujar",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/16385918?u=718bdcd1585be8447bdfffb8c11ce249baa7532d&v=4",
+      "totalScore": 304.9517953974373,
+      "prScore": 290.9517953974373,
+      "issueScore": 0,
+      "reviewScore": 14,
+      "commentScore": 0,
+      "summary": "standujar: Delivered several new features and fixes across multiple repositories, merging five pull requests this week. Their most impactful contribution was implementing the 'get action results' feature in `elizaos/eliza#6081` (+1950/-670 lines), while also attempting a significant environment validation fix in `elizaos/elizaos.github.io#165` that was later reverted via `#166`. Their effort was distributed across feature work, bug fixes, and other tasks, with changes primarily touching code and configuration files."
+    },
+    {
+      "username": "madjin",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/32600939?u=cdcf89f44c7a50906c7a80d889efa85023af2049&v=4",
+      "totalScore": 159.6388399668295,
+      "prScore": 157.20083996682948,
+      "issueScore": 2,
+      "reviewScore": 0,
+      "commentScore": 0.43799999999999994,
+      "summary": "madjin: Focused on shipping significant new features for `elizaos/elizaos.github.io`, merging three pull requests this week. The most impactful contribution was the implementation of an MVP Badge System for contributor achievements in a substantial PR (#161, +3978/-77 lines), complemented by the addition of adaptive rate limiting (#160) and badge progress indicators (#162). This activity shows a clear concentration on feature work, with changes primarily affecting code files."
+    },
+    {
+      "username": "0xbbjoker",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/54844437?u=90fe1762420de6ad493a1c1582f1f70c0d87d8e2&v=4",
+      "totalScore": 132.12919778226703,
+      "prScore": 122.12919778226703,
+      "issueScore": 0,
+      "reviewScore": 10,
+      "commentScore": 0,
+      "summary": "0xbbjoker: This week, 0xbbjoker enhanced functionality and stability across the Eliza ecosystem by merging three pull requests. They resolved a significant crash in the Telegram plugin (elizaos-plugins/plugin-telegram#19) and introduced new features for flexible deployment modes (elizaos-plugins/plugin-knowledge#44) and an optional embedding service (elizaos/eliza#6075). Their work showed a strong emphasis on quality, with half of all file modifications dedicated to tests, supporting a mix of bug fixes and new feature development."
+    },
+    {
+      "username": "yungalgo",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/113615973?u=92e0f29f7e2fbb8ce46ed13c51f692ca803de02d&v=4",
+      "totalScore": 87.19214968785415,
+      "prScore": 86.85214968785415,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0.33999999999999997,
+      "summary": "yungalgo: Focused on improving project documentation this week, merging two pull requests in elizaos/docs. They added a new launch resources page (#76), which involved a significant content refactor, and improved clarity by renaming the API reference (#75). This work reflects a primary focus on documentation, which constituted 94% of the files modified."
+    },
+    {
+      "username": "ChristopherTrimboli",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/27584221?u=0d816ce1dcdea8f925aba18bb710153d4a87a719&v=4",
+      "totalScore": 59.7437738965761,
+      "prScore": 59.5437738965761,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0.2,
+      "summary": "ChristopherTrimboli: Focused on a significant refactor within the `elizaos/eliza` repository, merging a pull request (#6087) to remove the Claude integration and upgrade dependencies. This single PR represented a major cleanup, removing over 5,400 lines of code from the project. Their work was primarily categorized as refactoring and bug fixes."
+    },
+    {
+      "username": "lalalune",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/18633264?u=e2e906c3712c2506ebfa98df01c2cfdc50050b30&v=4",
+      "totalScore": 55.5437738965761,
+      "prScore": 49.5437738965761,
+      "issueScore": 6,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "lalalune: Made a foundational contribution to the `jeju` repository, merging a massive pull request that introduced new applications (elizaos/jeju#1, +71k/-25k lines). In addition to this core delivery, they planned future development by opening issues for new agents and load testing (jeju#2, jeju#3, jeju#4) and identified a build issue in the `eliza` repository (elizaos/eliza#5673). Their code changes indicate this effort involved a significant mix of refactoring and testing work."
+    },
+    {
+      "username": "tcm390",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/60634884?u=c6c41679b8322eaa0c81f72e0b4ed95e80f0ac16&v=4",
+      "totalScore": 50.3591022550876,
+      "prScore": 45.3591022550876,
+      "issueScore": 0,
+      "reviewScore": 5,
+      "commentScore": 0,
+      "summary": "tcm390: Focused on bug fixes within the `elizaos/eliza` repository, merging two PRs to address issues with action thoughts (#6083, #6084). They also provided one review approval, with their contributions primarily consisting of bugfix and other work on code files."
+    },
+    {
+      "username": "MonteCrypto999",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/58423789?u=7db7196121472df50395eadf84f9d5963d886d69&v=4",
+      "totalScore": 43.5437738965761,
+      "prScore": 43.5437738965761,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "MonteCrypto999: Focused on adding new functionality to the Jupiter plugin, opening a pull request to add referral fee support (elizaos-plugins/plugin-jupiter#3). This in-progress feature work involved substantial changes across 31 files (+5965/-431 lines). Their effort touched a mix of configuration, code, and test files, indicating a focus on feature development."
+    },
+    {
+      "username": "alex-nax",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/82507604?u=b3af75d82f80ed83007a77c351a64bdd9e5d67de&v=4",
+      "totalScore": 42.35087518789015,
+      "prScore": 42.15087518789015,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0.2,
+      "summary": "alex-nax: Focused on a significant feature enhancement, opening a large-scale pull request in elizaos/eliza (#6094) to enable a custom storage service, which involved over 35,000 new lines of code. The underlying commits show a balanced effort across bugfixes and adding tests to support this new functionality."
+    },
+    {
+      "username": "0xRabbidfly",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/93952856?v=4",
+      "totalScore": 33.90101911726088,
+      "prScore": 33.90101911726088,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "0xRabbidfly: Focused on bug fixing within the Telegram plugin, opening a pull request to address an issue where GIF animations would not play (elizaos-plugins/plugin-telegram#20). The proposed fix represents a substantial effort, with +720/-402 lines of changes across 8 files, including tests. This work was entirely concentrated on improving functionality for the Telegram plugin."
+    },
+    {
+      "username": "amlord",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/7287225?u=c9efedf5ceccac420c39b5bcd5b44e0f0692c4d5&v=4",
+      "totalScore": 28.422573590279974,
+      "prScore": 28.422573590279974,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "amlord: Focused on expanding the plugin ecosystem by adding the new 'nuggets' plugin to the registry via PR elizaos-plugins/registry#236. This feature work consisted of minor configuration changes to enable the new plugin."
+    },
+    {
+      "username": "linear",
+      "avatarUrl": "https://avatars.githubusercontent.com/in/20150?v=4",
+      "totalScore": 10,
+      "prScore": 0,
+      "issueScore": 10,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "linear: Focused on identifying and defining work within the elizaos/eliza repository, creating 8 new issues. These included tracking a frontend bug fix for markdown rendering (#5688) and planning for new documentation like an API/SDK section (#6090). This activity shows a focus on product quality and planning."
+    },
+    {
+      "username": "icecoins",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/92659856?u=015d38990c9348e60ff7c4dfc86a68cc2d4cece1&v=4",
+      "totalScore": 8.087768721952859,
+      "prScore": 8.087768721952859,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "icecoins: This week, icecoins focused on enhancing the Twitter plugin by opening a pull request (elizaos-plugins/plugin-twitter#45). This work introduces the ability to upload media data using the Twitter API v2."
+    },
+    {
+      "username": "github-advanced-security",
+      "avatarUrl": "https://avatars.githubusercontent.com/in/57789?v=4",
+      "totalScore": 4.5,
+      "prScore": 0,
+      "issueScore": 0,
+      "reviewScore": 4.5,
+      "commentScore": 0,
+      "summary": "github-advanced-security: No activity this week."
+    },
+    {
+      "username": "schmidsi",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/103280?u=77faaad95c5f0f1af815e2e46438c0ceb3945031&v=4",
+      "totalScore": 4.4,
+      "prScore": 0,
+      "issueScore": 4.2,
+      "reviewScore": 0,
+      "commentScore": 0.2,
+      "summary": "schmidsi: This week, schmidsi contributed to project health by identifying, reporting, and helping resolve an installation issue in the `elizaos/eliza` repository (#6088). Their activity was focused on troubleshooting within the main application."
+    },
+    {
+      "username": "borisudovicic",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/31806472?u=8935f4d43fd7e4eb9bf5ff92d54d4d2f8ac8a786&v=4",
+      "totalScore": 2,
+      "prScore": 0,
+      "issueScore": 2,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "borisudovicic: Focused on project planning and organization within the elizaos/eliza repository this week. They created six issues to outline improvements, including \"Documentation & Release Process\" (#5936), \"Release Automation\" (#5937), and \"Core Documentation Expansion\" (#5938). This activity indicates a focus on structuring future work around documentation and release procedures."
+    },
+    {
+      "username": "odilitime",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/16395496?u=c9bac48e632aae594a0d85aaf9e9c9c69b674d8b&v=4",
+      "totalScore": 0.8799999999999999,
+      "prScore": 0,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0.8799999999999999,
+      "summary": "odilitime: Made significant code changes this week across 16 commits, totaling +1745/-953 lines. While no pull requests were merged, they contributed to ongoing development by leaving 5 comments on pull requests. This work was primarily a mix of bug fixes and other general tasks."
+    },
+    {
+      "username": "letmehateu",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/133153661?u=2217cec1ebd7bf22a8e4e3ace28b3183720dd444&v=4",
+      "totalScore": 0.2,
+      "prScore": 0,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0.2,
+      "summary": null
+    }
+  ],
+  "newPRs": 2,
+  "mergedPRs": 2,
+  "newIssues": 0,
+  "closedIssues": 0,
+  "activeContributors": 6
+}

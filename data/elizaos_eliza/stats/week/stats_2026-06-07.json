@@ -1,0 +1,1680 @@
+{
+  "interval": {
+    "intervalStart": "2026-06-07T00:00:00.000Z",
+    "intervalEnd": "2026-06-14T00:00:00.000Z",
+    "intervalType": "week"
+  },
+  "repository": "elizaos/eliza",
+  "overview": "From 2026-06-07 to 2026-06-14, elizaos/eliza had 116 new PRs (107 merged), 4 new issues, and 19 active contributors.",
+  "topIssues": [
+    {
+      "id": "I_kwDOMT5cIs8AAAABErit7w",
+      "title": "Eliza Cloud Apps: scaling + ingress gaps before go-live (audit, evidenced)",
+      "author": "NubsCarson",
+      "number": 8321,
+      "repository": "elizaos/eliza",
+      "body": "## Eliza Cloud Apps (Product 2) — scaling + ingress gaps to close before go-live\n\nA code-level audit of the apps data plane (per-tenant DB + isolated container deploys). **The core design is sound and standard** — per-tenant `DATABASE`+`ROLE` with `REVOKE CONNECT` (real cross-tenant isolation), per-app `--internal` network + DB ambassador, `ClusterPool` sharding. This is *not* jank. But the current code's realistic ceiling is **~dozens of concurrently-running apps, not ~1000**, and the front-door router isn't installed yet. Filing the prioritized gaps (all evidenced) so they're tracked before flipping `APPS_DEPLOY_ENABLED` in prod.\n\nContext: terraform apply is also currently blocked on the staging Hetzner **server limit** (see #8318). Apply bugs (SSH-key 409, retired `cpx41`) are fixed in #8318.\n\n### 🔴 P0 — pre-launch blockers (serve ~0 reachable / isolation maybe inactive)\n1. **Ingress not installed.** `cloud-init/app-node.yaml.tftpl:62-63` leaves Caddy as a `STAN:` TODO — only squid is installed. No per-app `<id>.apps.elizacloud.ai` hostname routes to any container (nothing terminates TLS / reverse-proxies 80/443 → the random high host port). **Serves 0 reachable users until added.** (config)\n2. **Postgres connection ceiling.** `cloud-init/tenant-db.yaml.tftpl:12` leaves `max_connections` at the default 100, and there's **no pgbouncer** anywhere; each app's plugin-sql pool is `max:20 / min:2` (`plugins/plugin-sql/src/pg/manager.ts:16-17`). Exhausted at ~5 apps under load / ~50 idle — `ClusterPool` shards DB *count* (2000 cap), not connections. (config + a pooler)\n3. **Env-var contract unverified.** Orchestrator injects `DATABASE_URL` (`app-deploy-orchestrator.ts:82`) but plugin-sql's primary path reads `POSTGRES_URL`. The cloud eliza loaders *do* map `DATABASE_URL→POSTGRES_URL` (agent.ts:10, settings.ts:100, …), so it's satisfiable — but must be confirmed for the actual app image, else the isolated DB is provisioned and never used (silent PGlite fallback) → per-tenant isolation isn't even active. (code/verify)\n\n### 🟠 P1 — required before real scale (multi-node)\n4. **App placement is single-node.** `container-executor-deps.ts:42-52` always picks `seed.split(',')[0]` — every container piles on node 1; extra terraform app nodes get no placements. No `node_id`/`incrementAllocated` for app containers (`app-container-store.ts`). (code)\n5. **Docker network exhaustion.** One `--internal` bridge per app exhausts the default 172.x address pool at ~31 networks/node; `daemon.json` `default-address-pools` not set in cloud-init. Caps a node at a few dozen tenants regardless of CPU/RAM. (config)\n6. **Multi-node ingress LB.** Wildcard DNS hard-codes `app_node[\"1\"]` (`main.tf:184,190`); no `hcloud_load_balancer`. The moment `app_node_count>1`, apps on node 2+ are dark. (config)\n7. **Tenant-DB slot leak.** `tenant_db_clusters.database_count` only increments (`tenant-db-clusters.ts:44`); no `releaseSlot`/decrement, and `tenant-db-provisioner.deprovision()` (DROP DATABASE/ROLE) has **zero non-test callers** — `UserDatabaseService.cleanupDatabase` only deletes Neon. Under churn, slots ratchet up + orphan DBs accumulate. (code)\n8. **Host-port collisions.** `allocateHostPort()` is a blind random pick in 20000-39999 with no in-use check (`container-executor-deps.ts:86-90`), unlike the agent path's `getUsedDockerHostPorts`. Flakes docker-create at a few hundred containers/node. (code)\n9. **App-plane autoscaler.** `node-autoscaler.ts` is agent-image/platform hardcoded (lines 133,233,435); no autoscaler cron; app provisioning never registers allocation → app demand triggers nothing. Adding app capacity is manual. (code)\n10. **Billing cron at scale + idempotency.** `cron/container-billing/route.ts:391-440` is one serial Worker pass with an N+1 per-org prefetch + inline emails (presses Worker wall-time in the low thousands; can't resume a cut-off pass), and `recordSuccessfulDailyBilling` (`container-billing.ts:153-212`) has **no unique constraint on (container_id, billing_period)** → a duplicate cron fire / manual re-run double-bills. *(2AM-owned billing surface.)*\n11. **Defense-in-depth written but unused.** `buildAppNodeNftablesRules` (drops 169.254.169.254 metadata + RFC1918 pivots), per-app `buildSquidAllowlistConf`, `buildHetznerAppFirewallRules` have **zero non-test callers** — egress is one shared squid + static global allowlist, the metadata/lateral block is code-only, and `-p` binds `0.0.0.0` so app ports are world-exposed until the firewall's applied. (NB: reconcile the nftables RFC1918 drop with the ambassador's legit 10.30.x DB path.) (both)\n\n### 🟡 P2 — later / hardening\n12. Single Postgres superuser per cluster = shared fate (rotation + a non-superuser provisioning role); tighten `operator_ingress_cidrs` (SSH `0.0.0.0/0`); real tenant-DB TLS cert (hostssl vs the `sslmode=disable` fallback).\n13. Kernel sandboxing decision (gVisor/Kata/userns + seccomp) + per-app `--cpus` (only `--memory`/`--pids-limit` set today). Right-size `max_databases` (2000 is misleading until pooling exists). Tenant-DB-node scaling runbook.\n\n**Honest bottom line:** isolation + sharding are real and correct; the work to reach 1000 is *known* (the code is full of accurate `STAN TODO`s) but **not built**. Recommend **not** going live until at least P0 (and ideally #4/#6) are closed. Happy to take the additive, testable items (e.g. #3 set both env vars, #7 slot release, #8 collision-safe ports) as PRs — flag which you want vs. own.\n\ncc @standujar (data-plane) — billing items (#10) are 2AM's surface.\n",
+      "createdAt": "2026-06-07T23:25:37Z",
+      "closedAt": null,
+      "state": "OPEN",
+      "commentCount": 17
+    },
+    {
+      "id": "I_kwDOMT5cIs8AAAABExJ5kw",
+      "title": "Apps (Product 2) billing: pre-go-live leak + correctness fixes (profitable on happy path, 4 leaks)",
+      "author": "NubsCarson",
+      "number": 8342,
+      "repository": "elizaos/eliza",
+      "body": "Evidence-based audit of the Apps (Product 2) hosting + per-tenant-DB billing. **Bottom line: profitable on the happy path, but 4 leaks must be fixed before go-live.** Nothing is bleeding *today* (the apps lane isn't armed/deployed yet) — these are pre-launch fixes.\n\n## ✅ Profitable on the happy path\n- **Hosting:** a default app bills ~**$1.17/day** ($0.67 base × 1.75 CPU multiplier from the schema default `cpu=1792`) vs **~$0.29–0.58/day** real Hetzner cost → **~2–4× gross margin**, break-even ~1 container/node. Apps **are** enrolled in billing (our deploy sets `billing_status='active'` by schema default → 2AM's `container-billing` cron picks them up like agents). Not hosting for free.\n- **Inference:** end user pays (`cost = provider_cost × 1.20`); platform never subsidizes; creator/affiliate markups stack **on top** of the user's bill. Always net-positive.\n\n## ⚠️ Leaks / correctness bugs (owner-tagged)\n\n### CRITICAL\n- [ ] **[ours] Suspended containers are never `docker stop`ped.** `suspendContainer()` only flips DB flags (`container-billing.ts:117-126`); the node container runs `--restart unless-stopped` (`client.ts:249`) and no reconciler stops `billing_status='suspended'` rows. After suspend the row drops out of `listBillableContainers` forever → a deadbeat's app **runs indefinitely on Hetzner, billed never** (~$210/yr, unbounded). *Fix:* on the shutdown branch, SSH `docker stop` (via our provider) + decrement node allocation, and add a reconciler. (Cross-ref: `suspendContainer` is 2AM's; the stop is ours.)\n- [ ] **[ours] Deleted isolated-DB apps never drop their Postgres + never release the cluster slot.** `SqlTenantDbProvisioner.deprovision` exists (`tenant-db-provisioner.ts:166`) but has **zero live callers**; there is no `releaseSlot` (only `tryClaimSlot` increments). `app-cleanup` drops domains/repo/secrets but not the DB; `cleanupDatabase` handles only the Neon path. → every deleted isolated app **strands a live DB we pay for + burns 1/2000 cluster slots permanently**. *Fix (focused lifecycle PR):* enqueue a deprovision **job** on app delete (DROP DATABASE/ROLE needs `pg` → daemon) + add `releaseSlot` (`database_count = GREATEST(0, database_count-1)`) + extend `cleanupDatabase` for the `direct_pg`/isolated path. **This is the missing half of #8338 (opt-in per-tenant DB).**\n- [ ] **[2AM] `container-billing` cron has no idempotency gate.** It writes `last_billed_at`/`next_billing_at` but never reads them (`container-billing.ts:57-81`); a Cloudflare retry or duplicate POST **re-debits every running container a full extra day** → over-charge → chargebacks. *Fix:* port the agent-billing rebill guard + a unique partial index on `(container_id, billing_period)`.\n\n### HIGH\n- [ ] **[design — nubs] Per-tenant DB / storage / bandwidth bill $0.** The ccx33 tenant-DB node (~$2.05/day incl. 200GB vol) has **no billing line**; an `isolated` app and a `none` app are billed identically. At low density the apps lane runs **negative** (break-even ~3 paying containers; 1 container = −$1.67/day). *Decision:* (a) add a per-isolated-DB daily line (amortized floor ~$0.035/DB, realistically $1–3/mo) gated on `databaseMode='isolated'`, **or** (b) fold DB cost into the container fee + set a minimum density before provisioning the dedicated ccx33.\n- [ ] **[design — nubs] Deploy takes no upfront charge / no balance precheck** (and bypasses the quota check). Grace-window hosting is free; repeatable spin-up/tear-down costs us. *Fix:* charge `DEPLOYMENT` ($0.50) at create, or require `credit_balance ≥ 1–2 days` before provisioning.\n\n### MEDIUM / LOW\n- [ ] **[2AM] `organizations.credit_balance` DEFAULTS to `$100`** (`organizations.ts:33-35`) — any future org-create that omits the field grants ~$100 free hosting. *Fix:* default `'0.00'`; grant starter credits explicitly.\n- [ ] **[2AM] Daily debit is a non-atomic JS read-modify-write** (absolute balance) → lost-update vs concurrent inference debits/top-ups. *Fix:* route through `creditsService.deductCredits` (relative decrement with a guard).\n- [ ] **[ours] No `--cpus` limit** — we bill a CPU tier (1792→1.75×) but enforce only `--memory`; and our app containers actually provision at `cpu:1/512MB` (`APP_CONTAINER_DEFAULTS`) while billing assumes 1792/1792. *Fix:* reconcile the provision defaults with the billed dimensions + add `--cpus`.\n- [ ] **[design] Copy says $0.67/day; real default is $1.17/day**; cost-basis constants are AWS references, not Hetzner. Reconcile copy / cost basis.\n\n## Numbers\n- Revenue: $0.67/day base ×1.75 (cpu=1792) = **$1.17/day**. Real Hetzner: ccx23 ~$0.79/day (app node), ccx33 ~$1.74/day + 200GB ~$0.31/day (tenant DB). Container margin ~2–4×; full-lane break-even ~3 containers.\n- Inference: `cost_to_user = provider_cost × 1.20`, always positive.\n\nAudit method: 6-agent read-only sweep of pricing constants, the container-billing cron + repo, the tenant-db provisioning/cluster code, the apps deploy path, and the inference billing path.",
+      "createdAt": "2026-06-08T17:05:25Z",
+      "closedAt": null,
+      "state": "OPEN",
+      "commentCount": 1
+    },
+    {
+      "id": "I_kwDOMT5cIs8AAAABFE93VQ",
+      "title": "android: clean-tree builds ship web-less APKs — cap sync and gradle operate on different projects (since 7ac0e1fb96)",
+      "author": "NubsCarson",
+      "number": 8387,
+      "repository": "elizaos/eliza",
+      "body": "## Symptom\n`bun run --cwd packages/app build:android` from a clean tree produces an APK with `assets/agent` but **zero `assets/public`, no `capacitor.config.json`** → on device the WebView shows `https://localhost/ net::ERR_CONNECTION_REFUSED` forever (no Capacitor `errorPath` is configured, so there's no retry). Verified on a Solana Seeker tonight.\n\n## Root cause\n`7ac0e1fb96` (fix(rv64-pipeline), May 20) moved `androidDir` in `packages/app-core/scripts/run-mobile-build.mjs:89` from `packages/app/android` → `packages/app-core/platforms/android` (gradle, native patches, agent staging) — but `runCapacitor([\"sync\",\"android\"])` still runs with cwd `packages/app` and `capacitor.config.ts` has **no `android.path`**, so the Capacitor CLI keeps delivering the web layer to `packages/app/android`. Nothing bridges the two trees: `capacitor-platform-templates.mjs:27-43` explicitly skips `assets/public`, `assets/agent`, and the generated capacitor JSONs when materializing templates.\n\nEvidence it used to be one project: the tracked `packages/app-core/platforms/android/capacitor.settings.gradle` projectDirs (`../../../app/node_modules/…`) are only producible with the platform dir at `app-core/platforms/android` — i.e. an `android.path` override existed and was lost. A pre-May-20 develop worktree (`bb69a3642e`) has all five asset trees together under `packages/app/android`. Same asymmetry: `iosDir` lives in the host app (`packages/app/ios/App`), android was left behind.\n\n## Why CI doesn't catch it\n- `build-android.yml` / `mobile-build-smoke.yml` only assert the APK **file exists** (smoke: lines 255-262); the artifact audits (`auditAndroidCloudArtifact`) check banned entries only, never that `assets/public/index.html` is present.\n- No workflow boots the app; `mobile-local-chat-smoke.mjs` isn't wired into any workflow.\n- Builds on machines with stale untracked `assets/public` leftovers in the platforms tree appear to work — clean checkouts never do.\n\n## Verified workaround (tonight, on-device confirmed)\nAfter `build:android`: copy `packages/app/android/app/src/main/assets/{public,capacitor.config.json,capacitor.plugins.json}` + `res/xml/config.xml` into `packages/app-core/platforms/android/app/src/main/...`, re-run `./gradlew :app:assembleDebug` there → complete APK (282→336MB), app boots to onboarding on a real device. Caveat: the tracked canonical `capacitor.settings.gradle` lags the synced one (missing background-runner, barcode-scanner, browser, device, haptics, network plugin projects → runtime \"plugin not implemented\" degradation).\n\n## Proposed fix (either)\n1. Restore the lost wiring: `android: { path: \"../app-core/platforms/android\" }` in `packages/app/capacitor.config.ts` (and teach `ensure-capacitor-platform.mjs`/`isCapacitorPlatformReady` to probe that dir), so sync/copy/update land directly in the gradle tree; or\n2. Add a `stageAndroidWebAssets()` step after every `runCapacitor([\"sync\",\"android\"])` call (4 android targets) copying the web payload + regenerated capacitor gradle files (with path rewrite) into `androidDir`.\n\nPlus, regardless: a **positive APK audit** for sideload targets (assert `assets/public/index.html` + `assets/capacitor.config.json` + `assets/agent/` via `jar tf`) and the same one-liner in CI after assembleDebug, so a web-less APK can never ship silently again.\n\nFound while device-testing the PR #8340 APK; happy to PR whichever shape you prefer — flagging first since the mobile pipeline is active WIP.",
+      "createdAt": "2026-06-10T23:10:25Z",
+      "closedAt": null,
+      "state": "OPEN",
+      "commentCount": 1
+    },
+    {
+      "id": "I_kwDOMT5cIs8AAAABDcK65w",
+      "title": "@elizaos/cli@1.7.2 crashes at boot under Bun via engine.io + debug interop",
+      "author": "ayushgupta0610",
+      "number": 8001,
+      "repository": "elizaos/eliza",
+      "body": "## Summary\n\nAfter working around #8000 by installing `@elizaos/cli` directly (`bun add -g @elizaos/cli`), the CLI still crashes at boot because `engine.io` (transitive) calls `(0, debug_1.default)(\"engine:transport\")` and `debug_1.default` is `undefined` under Bun's CJS resolver. The boot path eagerly loads `engine.io` even for commands that do not need a server (`create`, `--version`, etc).\n\n## Repro\n\n```bash\nbun add -g @elizaos/cli      # installs @elizaos/cli@1.7.2 (npm latest)\nelizaos create my-app --template project\n```\n\n```\n3 | exports.Transport = void 0;\n4 | const events_1 = require(\"events\");\n5 | const parser_v4 = require(\"engine.io-parser\");\n6 | const parser_v3 = require(\"./parser-v3/index\");\n7 | const debug_1 = require(\"debug\");\n8 | const debug = (0, debug_1.default)(\"engine:transport\");\n                       ^\nTypeError: (0, debug_1.default) is not a function. (In '(0, debug_1.default)(\"engine:transport\")',\n'(0, debug_1.default)' is undefined)\n      at /Users/<u>/.bun/install/global/node_modules/engine.io/build/transport.js:8:27\n      at /Users/<u>/.bun/install/global/node_modules/engine.io/build/transports/polling.js:3:1\n      at /Users/<u>/.bun/install/global/node_modules/engine.io/build/transports/index.js:2:1\n      at /Users/<u>/.bun/install/global/node_modules/engine.io/build/server.js:431:5\n      at /Users/<u>/.bun/install/global/node_modules/engine.io/build/engine.io.js:6:1\n\nBun v1.3.10 (macOS arm64)\n```\n\n## Root cause\n\n`engine.io`'s compiled `transport.js` emits:\n\n```js\nconst debug_1 = require(\"debug\");\nconst debug = (0, debug_1.default)(\"engine:transport\");\n```\n\nIt assumes a `.default` property on the `debug` CJS module. `debug@4.x` exports the factory directly (`module.exports = createDebug`); there is no `.default` property in the CJS shape. Node's CJS-from-ESM interop synthesizes a `default` property automatically; Bun's resolver does not produce the same shape for this dual-package module under the global-bin code path. This is a known engine.io + Bun interop class, not an elizaOS source-level bug.\n\n## Why this is elizaOS's problem in practice\n\n`@elizaos/cli@1.7.2` eagerly loads `engine.io` / Socket.IO at module-init time of *any* command — even `--help` and `create` walk through `engine.io/build/engine.io.js` → `server.js` → `transports/index.js` → `transport.js` before the command's own logic runs. Commands that don't need a websocket server should not be loading the websocket server stack at parse time.\n\n## Environment\n\n- @elizaos/cli@1.7.2 (`npm view @elizaos/cli dist-tags.latest`)\n- Node v24.13.0\n- Bun v1.3.10\n- macOS arm64\n\n## Suggested mitigations (any one would unblock)\n\n1. **Lazy-load `engine.io` / Socket.IO off the boot path.** Move the server imports behind the commands that actually serve (`start`, `dev`). `create`, `info`, `upgrade`, `--version`, `--help` should not transitively touch `engine.io`. This is also a startup-latency win independent of the Bun bug.\n2. **Pin / patch the transitive dep.** Either pin `engine.io` to a build whose compiled output uses `__importDefault`, or pin `debug` to a version that exports a named `default` property.\n3. **Document Bun support explicitly.** If Bun is a supported runtime for the global CLI, gate publish on a `bun`-runtime smoke (see #8000). If not, the install instructions should say so.\n\n## Status on develop\n\nVerified: develop's `packages/elizaos@2.0.3` scaffolds a project end-to-end via Node (`node packages/elizaos/dist/cli.js create … --template project --yes` succeeds against a fresh `bun install` of the workspace). Either the boot was trimmed or the dep tree was restructured — would be useful for maintainers to surface what changed, since that change is the basis for closing this on the next stable release.\n\n## Workaround\n\nSame as #8000 — use the develop CLI directly until a release supersedes 1.7.2 on `latest`.",
+      "createdAt": "2026-05-26T16:35:15Z",
+      "closedAt": "2026-06-11T22:17:01Z",
+      "state": "CLOSED",
+      "commentCount": 0
+    },
+    {
+      "id": "I_kwDOMT5cIs8AAAABDcKxOQ",
+      "title": "elizaos@1.7.2 global install crashes with ERR_PACKAGE_PATH_NOT_EXPORTED",
+      "author": "ayushgupta0610",
+      "number": 8000,
+      "repository": "elizaos/eliza",
+      "body": "## Summary\n\nThe current `npm dist-tag latest` for both `elizaos` and `@elizaos/cli` is `1.7.2`. A clean global install fails on the very first command because the `elizaos` alias package's bin shim imports a subpath that `@elizaos/cli@1.7.2`'s `exports` map does not whitelist.\n\n## Repro\n\n```bash\nbun add -g elizaos        # or: npm i -g elizaos\nelizaos --version         # any subcommand reproduces\n```\n\n```\nError [ERR_PACKAGE_PATH_NOT_EXPORTED]: Package subpath './dist/index.js' is not defined by \"exports\" in\n/Users/<u>/.bun/install/global/node_modules/@elizaos/cli/package.json\nimported from /Users/<u>/.bun/install/global/node_modules/elizaos/bin/elizaos.js\n    at exportsNotFound (node:internal/modules/esm/resolve:313:10)\n    at packageExportsResolve (node:internal/modules/esm/resolve:661:9)\n    ...\n  code: 'ERR_PACKAGE_PATH_NOT_EXPORTED'\n```\n\n## Root cause (verified from npm registry)\n\n`elizaos@1.7.2` ships `bin/elizaos.js`:\n\n```js\nimport '@elizaos/cli/dist/index.js';\n```\n\n`@elizaos/cli@1.7.2` declares:\n\n```json\n\"exports\": {\n  \".\": \"./dist/index.js\",\n  \"./package.json\": \"./package.json\"\n}\n```\n\nNode's ESM resolver enforces `exports` strictly — `./dist/index.js` as a subpath is blocked even though the file exists. The shim should import the package root (`'@elizaos/cli'`), not a subpath.\n\n## Environment\n\n- elizaos@1.7.2 (`latest` tag)\n- @elizaos/cli@1.7.2 (`latest` tag)\n- Node v24.13.0\n- Bun v1.3.10\n- macOS arm64\n\nConfirmed from npm registry:\n\n```\n$ npm view elizaos dist-tags\n{ latest: '1.7.2', next: '2.0.0-alpha.32', alpha: '2.0.0-alpha.535', beta: '2.0.0-beta.5' }\n\n$ npm view @elizaos/cli dist-tags\n{ beta: '1.7.2-beta.0', latest: '1.7.2', alpha: '1.7.3-alpha.4' }\n```\n\n## Status on develop\n\nDevelop has already restructured: `packages/elizaos` is the CLI itself at v2.0.3; no alias shim, no inter-package subpath import. `@elizaos/cli@1.7.3-alpha.4` also no longer has a separate shim — its `bin` points directly to `dist/index.js`. The structural fix is in; the gap is that no release has superseded the broken `latest` tag.\n\n## What would prevent regression\n\nA pre-publish global-install smoke test:\n\n1. `npm pack` → tarball\n2. `npm i -g <tarball>` into a sandboxed prefix\n3. Run `<prefix>/bin/elizaos --version` under **both** Node and Bun\n4. Assert exit code 0\n\nThe existing `packages/elizaos/scripts/packaged-smoke.mjs` does a local install but not a global one — global install resolves bin via a different path that is stricter on `exports`. Happy to send a PR.\n\nOptional bonus: a static linter that walks `packages/*/package.json`, finds any `bin`-listed file doing `import 'foo/sub/path.js'`, and verifies `foo`'s `exports` map permits that subpath. Would catch this entire class of bug pre-publish.\n\n## Workaround for users hitting this today\n\n```bash\n# Use the develop branch CLI directly — confirmed working:\ngit clone https://github.com/elizaos/eliza.git && cd eliza\nbun install\nbun run --cwd packages/elizaos build\nnode packages/elizaos/dist/cli.js create my-app --template project --yes\n\n# Or pin a pre-release tag:\nnpm i -g elizaos@beta\n```",
+      "createdAt": "2026-05-26T16:34:49Z",
+      "closedAt": "2026-06-11T22:17:01Z",
+      "state": "CLOSED",
+      "commentCount": 0
+    }
+  ],
+  "topPRs": [
+    {
+      "id": "PR_kwDOMT5cIs7kAL2a",
+      "title": "feat(cloud-frontend): implement interactive canvas Voice UX & default dashboard layout preference",
+      "author": "Dexploarer",
+      "number": 8339,
+      "body": "# Walkthrough — Voice UX & Default UI Preference Layout\n\nI have successfully implemented both the voice control system for the Interactive Canvas and the default dashboard interface toggle preference in the Eliza Cloud platform.\n\n---\n\n## 1. Default UI Interface & Layout Preference\n\n### Core Implementation\n- **State & Persistence:** Added `defaultUiMode` (`'canvas' | 'classic'`) state and the action `setDefaultUiMode(mode)` in the Zustand store [canvas-store.ts](file:///Users/home/Documents/eliza/packages/cloud-frontend/src/lib/stores/canvas-store.ts). This preference is persisted in the local storage config.\n- **Settings tab:** Added the **Default interface** configuration card inside the general settings page [general-tab.tsx](file:///Users/home/Documents/eliza/packages/cloud-frontend/src/dashboard/settings/_components/tabs/general-tab.tsx). Users can choose their startup layout using a drop-down selector.\n- **Layout switcher:** Integrated the conditional layout render inside the layout router [App.tsx](file:///Users/home/Documents/eliza/packages/cloud-frontend/src/App.tsx).\n  - If `canvasOpen` is true, `<CanvasLayout />` renders.\n  - If `canvasOpen` is false, `<DashboardLayout />` renders instead, unmounting the canvas to prevent page navigation from triggering unintended canvas events.\n  - While in `<DashboardLayout />`, the floating assistant pill [cloud-assistant-pill.tsx](file:///Users/home/Documents/eliza/packages/cloud-frontend/src/components/canvas/cloud-assistant-pill.tsx) remains overlayed in the bottom-center of the viewport, so pressing `cmd + k` or clicking the orb seamlessly slides back into the Interactive Canvas.\n\n---\n\n## 2. Voice-Driven Canvas Interaction UX\n\n### Core Features\n- **Unified Voice Hooks:** Integrated `useVoiceChat` and `useContinuousChat` from `@elizaos/ui/hooks` with a stabilized React Ref (`handleSendRef`) to avoid stale closure state during voice/speech callbacks.\n- **Dual-Mode UX State Flow:**\n  - **Text Mode:** Canvas is open with the text input bar expanded. A microphone button is available next to the close button to switch to voice mode.\n  - **Voice Mode:** Input bar collapses into a floating circular orb (56x56 px). centring states like recording (`Mic`), thinking (`Loader2`), or speaking (`Volume2` bounce animation). Real-time preview transcript is shown in a small card overlay.\n- **TTS Responses:** Automatically speaks out assistant responses on query execution success, along with helpful voice-guided prompts.\n\n---\n\n## Verification & Build Quality\n\n### 1. Build Verification\n- Verified compiling and typechecking of `packages/ui` package with zero TS errors:\n  ```bash\n  bunx tsc --noEmit -p tsconfig.json\n  ```\n- Verified the build pipeline in `packages/cloud-frontend` builds and finishes with zero warnings or errors:\n  ```bash\n  bun run verify\n  ```\n\n### 2. Biome Formatting\n- Checked and formatted modified files to align with the Biome rules:\n  ```bash\n  bunx @biomejs/biome check --write --unsafe\n  ```\n",
+      "repository": "elizaos/eliza",
+      "createdAt": "2026-06-08T16:50:36Z",
+      "mergedAt": null,
+      "additions": 20510,
+      "deletions": 10
+    },
+    {
+      "id": "PR_kwDOMT5cIs7kAXDt",
+      "title": "Feat/canvas voice preference",
+      "author": "Dexploarer",
+      "number": 8341,
+      "body": "<!-- Use this template by filling in information and copying and pasting relevant items out of the HTML comments. -->\r\n\r\n# Relates to\r\n\r\n<!-- LINK TO ISSUE OR TICKET -->\r\n\r\n<!-- This risks section must be filled out before the final review and merge. -->\r\n\r\n# Risks\r\n\r\n<!--\r\nLow, medium, large. List what kind of risks and what could be affected.\r\n-->\r\n\r\n# Background\r\n\r\n## What does this PR do?\r\n\r\n## What kind of change is this?\r\n\r\n<!--\r\nBug fixes (non-breaking change which fixes an issue)\r\nImprovements (misc. changes to existing features)\r\nFeatures (non-breaking change which adds functionality)\r\nUpdates (new versions of included code)\r\n-->\r\n\r\n<!-- This \"Why\" section is most relevant if there are no linked issues explaining why. If there is a related issue, it might make sense to skip this why section. -->\r\n<!--\r\n## Why are we doing this? Any context or related work?\r\n-->\r\n\r\n# Documentation changes needed?\r\n\r\n<!--\r\nMy changes do not require a change to the project documentation.\r\nMy changes require a change to the project documentation.\r\nIf documentation change is needed: I have updated the documentation accordingly.\r\n-->\r\n\r\n<!-- Please show how you tested the PR. This will really help if the PR needs to be retested and probably help the PR get merged quicker. -->\r\n\r\n# Testing\r\n\r\n## Where should a reviewer start?\r\n\r\n## Detailed testing steps\r\n\r\n<!--\r\nNone: Automated tests are acceptable.\r\n-->\r\n\r\n<!--\r\n- As [anon/admin], go to [link]\r\n  - [do action]\r\n  - verify [result]\r\n-->\r\n\r\n<!-- If there is a UI change, please include before and after screenshots or videos. This will speed up PRs being merged. It is extra nice to annotate screenshots with arrows or boxes pointing out the differences. -->\r\n<!--\r\n## Screenshots\r\n### Before\r\n### After\r\n-->\r\n\r\n<!-- If there is anything about the deployment, please make a note. -->\r\n<!--\r\n# Deploy Notes\r\n-->\r\n\r\n<!--  Copy and paste command line output. -->\r\n<!--\r\n## Database changes\r\n-->\r\n\r\n<!--  Please specify deploy instructions if there is something more than the automated steps. -->\r\n<!--\r\n## Deployment instructions\r\n-->\r\n\r\n<!-- If you are on Discord, please join https://discord.gg/ai16z and state your Discord username here for the contributor role and join us in #development-feed -->\r\n<!--\r\n## Discord username\r\n\r\n-->\r\n\n\n<!-- This is an auto-generated comment: release notes by coderabbit.ai -->\n\n## Summary by CodeRabbit\n\n## Release Notes\n\n* **New Features**\n  * iOS app now proactively requests user permissions during onboarding (notifications, calendar, camera, microphone, speech, photos, health, location).\n  * Added canvas interface mode with AI assistant chat pill supporting slash commands and voice input.\n  * Dashboard now personalizes greetings with user names.\n  * Streaming GenUI spec generation with workspace management.\n\n* **Bug Fixes**\n  * Improved Docker image registry handling; now uses ghcr.io for reliable image pulls.\n  * Fixed registry login to gracefully handle missing credentials.\n\n* **Tests**\n  * Added provisioning agent default image validation tests.\n  * Added registry client tests.\n  * Added iOS permissions onboarding tests.\n\n<!-- end of auto-generated comment: release notes by coderabbit.ai -->",
+      "repository": "elizaos/eliza",
+      "createdAt": "2026-06-08T16:57:33Z",
+      "mergedAt": null,
+      "additions": 19348,
+      "deletions": 126
+    },
+    {
+      "id": "PR_kwDOMT5cIs7kAUyP",
+      "title": "fix: route dynamic view commands through VIEWS",
+      "author": "NubsCarson",
+      "number": 8340,
+      "body": "## Summary\n\nRoutes shell-level dynamic view commands through the registered `VIEWS` action more reliably, then cleans up workspace verification fallout so the monorepo verify path is green on latest `develop`.\n\n## What changed\n\n- Route generic view shell requests such as split, tile, pin, and new-window commands to `VIEWS` without stealing unrelated browser/plugin-doc requests.\n- Extract the actual `<user_request>` before view target parsing so contextual documents and planner hints cannot pollute split/tile targets.\n- Resolve existing registered views such as orchestrator, views manager, chat, and settings for layout/window/pin requests, independent of the simple notes/calendar test views.\n- Add regression coverage for existing view split/tile/window/pin routing, planner-pollution repair, and negative routing cases.\n- Keep trajectory timing/status normalization formatted and verified with the current workspace rules.\n- Add/normalize tsconfig path aliases required by current workspace typecheck, including health screen-time and task-coordinator imports.\n- Apply Biome formatting fixes produced by the full root verify run.\n\n## Validation\n\n- `bun run verify` passed locally: 479/479 tasks successful.\n- `bun run --cwd packages/core test src/__tests__/message-runtime-stage1.test.ts` passed: 67 tests.\n- `bun run --cwd plugins/plugin-app-control test src/actions/views-management.test.ts` passed: 32 tests.\n- `bun run --cwd plugins/plugin-app-control typecheck` passed.\n- `bun run --cwd plugins/plugin-app-control build` passed.\n- `bun run --cwd plugins/plugin-simple-views check` passed.\n- `bun run --cwd plugins/plugin-simple-views build` passed.\n- `git diff --check` passed.\n- Diff secret scan found no raw provider keys.\n\n## Live smoke\n\nVerified live prompts routed through `VIEWS` and wrote the expected trajectories/results:\n\n- `split orchestrator and views manager side by side`\n- `tile chat settings orchestrator and views manager`\n- `split notes and calendar side by side`\n- create sticky note\n- create calendar event\n",
+      "repository": "elizaos/eliza",
+      "createdAt": "2026-06-08T16:56:05Z",
+      "mergedAt": null,
+      "additions": 14811,
+      "deletions": 2277
+    },
+    {
+      "id": "PR_kwDOMT5cIs7jl2oZ",
+      "title": "feat(cloud): Eliza Cloud Apps (Product 2) — per-tenant-isolated container hosting",
+      "author": "NubsCarson",
+      "number": 8293,
+      "body": "## Eliza Cloud Apps (Product 2) — per-tenant-isolated container hosting\n\nLets users deploy arbitrary container apps with a **per-tenant database, sign-in, a per-app URL, and metered hosting billing**, isolated from the shared Eliza **agent** system. Layered onto 2AM's `/api/v1/containers` surface — never rebuilt.\n\n**Draft for review (nubs + Shaw). Not requesting merge yet.** All changes are additive and the agent plane is byte-for-byte untouched; the apps path is feature-gated off until its env/infra is configured.\n\n### What's here (all in `packages/cloud-shared`, additive)\n- **Per-tenant DB isolation** — `tenant_db_clusters` pool (race-safe `tryClaimSlot`), `SqlTenantDbProvisioner` + `DirectPgExecutor`, composer `makeTenantDbProvisioning`. Strategy: DATABASE+ROLE-per-tenant with `REVOKE CONNECT … FROM PUBLIC` (a hard auth-layer boundary), pluggable provider. Migration `0140` (journal-registered).\n- **Per-tenant network isolation** — `--internal` network + `--cap-drop=ALL`/`no-new-privileges`/`pids-limit`, default-deny egress proxy. Never `NET_ADMIN`/tun (those stay agent-only).\n- **Repo→image build pipeline** — pure ref/build-cmd builders + `AppImageBuilder` (over an injected SSH/exec seam).\n- **Deploy orchestration + adapters** — `AppDeployRunner` (ensure tenant DB → create container row carrying the per-tenant DSN → enqueue `CONTAINER_PROVISION` → link via `apps.metadata.containerId`), `AppContainerStore` (maps host placement into `containers.metadata`), `ContainerJobsWriter`.\n- **Per-app URL** — reuses the shared `derivePublicHostname` (ingress source of truth) to stamp `public_hostname`/`load_balancer_url` + `apps.production_url`.\n- **`APP_DEPLOY` trigger** — the Worker enqueues `APP_DEPLOY` (pg-free); the daemon claims it and runs the node runner, so `pg`/SSH never touch the workerd request path.\n\n### Verified for real (not mocks)\n- **Real Postgres 16:** cross-tenant connection rejected — `permission denied for database` (`REVOKE CONNECT`).\n- **Real Docker:** `scripts/verify-e2e-deploy.sh` 5/5 — build user image → provision per-tenant DB → run `--internal` isolated container with its DSN → reaches its own DB + serves its URL → rejected from other tenants' DBs → no egress.\n- **Real drizzle schema (PGlite):** `scripts/verify-deploy-db-writes.sh` 10/10 — adapter inserts, the per-tenant-DSN-in-`environment_vars` invariant, URL stamping.\n- **236 unit tests green, typecheck + biome clean.** Migration `0140` applies in the full real chain.\n\n### Remaining rollout (NOT in this PR — needs infra + review)\n1. Two boot one-liners during apps-infra rollout: cloud-api `configureAppsDeployTrigger()` + daemon `configureAppsDeployBackend({ registry, buildExec })`.\n2. Apps **data-plane infra** via terraform+CI: app docker node(s), the tenant Postgres cluster, image registry, egress proxy.\n3. VPS scratch kernel-validation (read-only / non-destructive).\n\n### Non-collision\nRebased-clean on `develop` (new files + appended enum keys / switch cases). Does not touch the agent path or 2AM's hot files (`v1/containers/route.ts`, `[id]/route.ts`, `cron/container-billing/route.ts`, `db/schemas/containers.ts`, `hetzner-client/client.ts`). Billing-field init (`next_billing_at`) is a coordination item with 2AM's #8273.\n",
+      "repository": "elizaos/eliza",
+      "createdAt": "2026-06-07T08:23:45Z",
+      "mergedAt": "2026-06-07T17:20:33Z",
+      "additions": 5090,
+      "deletions": 11
+    },
+    {
+      "id": "PR_kwDOMT5cIs7j-4qe",
+      "title": "feat(plugin-sql): Electric Cloud sync integration with write-back service",
+      "author": "Dexploarer",
+      "number": 8336,
+      "body": "## Summary\n\nAdds Electric Sync (PGlite ↔ Electric Cloud) and a write-back service for bidirectional data synchronization.\n\n### What changed\n\n- **Electric Sync** — `PGliteClientManager` now registers `electricSync()` extension when `ELIZA_ELECTRIC_SYNC_URL` is set. Per-agent WHERE filtering (`agent_id = ${agentId}`) with literal SQL values (required by Electric Cloud v1.6.x). UUID validation prevents SQL injection.\n- **Write-Back Service** — New `WriteBackService` forwards local PGlite writes to the cloud API. `PgliteDatabaseAdapter` notifies the service after inserts/upserts/deletes on synced tables.\n- **Caddy Reverse Proxy** — `plugins/plugin-sql/caddy/electric-proxy.Caddyfile` forwards all requests to `api.electric-sql.cloud` with auth query params injected from env vars.\n- **Tests** — e2e write-back test against Electric Cloud (env-var gated, skips gracefully). Deferred sync startup tests. Live query tests. 14 write-back unit tests.\n- **Docs** — README updated with Electric Sync section and expanded env var table. `.env.example` created documenting all Electric Cloud and sync env vars.\n- **Config** — `.gitignore` tracks `.env.example`. Docker Compose for local Electric+Postgres test stack.\n\n### How to test\n\n```bash\n# Start Caddy proxy (one-time)\nexport ELECTRIC_CLOUD_SOURCE_ID=...\nexport ELECTRIC_CLOUD_SECRET=...\ncaddy run --config plugins/plugin-sql/caddy/electric-proxy.Caddyfile &\n\n# Run e2e test\ncd plugins/plugin-sql/src\nELECTRIC_CLOUD_SOURCE_ID=... ELECTRIC_CLOUD_SECRET=... npx vitest run __tests__/integration/electric-write-back.test.ts\n```\n\n### Checks\n- ✅ Typecheck clean\n- ✅ 47/47 tests pass (8 test files)\n- ✅ E2e test exits code 0 against Electric Cloud\n\n<!-- This is an auto-generated comment: release notes by coderabbit.ai -->\n\n## Summary by CodeRabbit\n\n## Release Notes\n\n* **New Features**\n  * Added Electric Sync integration for real-time data synchronization between local PGlite and Electric Cloud\n  * Added live query support for reactive, real-time data updates\n  * Added write-back functionality to sync local changes to cloud endpoints\n  * Added agent-level data isolation with per-agent row filtering\n\n* **Documentation**\n  * Updated documentation with Electric Sync configuration and local development setup instructions\n\n* **Tests**\n  * Added comprehensive integration and unit tests for Electric Sync, live queries, and write-back functionality\n\n<!-- end of auto-generated comment: release notes by coderabbit.ai -->",
+      "repository": "elizaos/eliza",
+      "createdAt": "2026-06-08T16:00:17Z",
+      "mergedAt": null,
+      "additions": 3591,
+      "deletions": 19
+    }
+  ],
+  "codeChanges": {
+    "additions": 16854,
+    "deletions": 4181,
+    "files": 334,
+    "commitCount": 390
+  },
+  "completedItems": [
+    {
+      "title": "Keep local first-run selection local",
+      "prNumber": 8263,
+      "type": "other",
+      "body": "## Summary\n- reset stale `cloud-inference` first-run state when the Local runtime card is selected\n- add a regression test covering the Local card state reset\n- suppress duplicate `Entity connected` debug log spam by logging only when room ",
+      "files": [
+        "packages/agent/src/api/server.ts",
+        "packages/app-core/src/runtime/eliza.ts",
+        "packages/core/src/connection.ts",
+        "packages/core/src/runtime.ts",
+        "packages/ui/src/components/shell/FirstRunShell.tsx",
+        "packages/ui/src/components/shell/__tests__/FirstRunShell.test.tsx",
+        "plugins/plugin-wallet/src/routes/wallet-market-overview-route.ts",
+        ".github/workflows/scenario-pr.yml",
+        ".github/workflows/windows-desktop-preload-smoke.yml",
+        "bun.lock",
+        "packages/agent/src/__tests__/plugin-tui-view-coverage.test.ts",
+        "packages/app/src/main.tsx",
+        "packages/app/src/plugin-loader.ts",
+        "packages/app/test/fixtures/plugin-view-visual-review.md",
+        "packages/app/test/route-coverage.test.ts",
+        "packages/app/test/ui-smoke/all-pages-clicksafe.spec.ts",
+        "packages/app/test/ui-smoke/apps-comms-device-interactions.spec.ts",
+        "packages/app/test/ui-smoke/apps-model-training-interactions.spec.ts",
+        "packages/app/test/ui-smoke/apps-personal-assistant-feed-interactions.spec.ts",
+        "packages/app/test/ui-smoke/apps-session-route-cases.ts",
+        "packages/app/test/ui-smoke/apps-utility-interactions.spec.ts",
+        "packages/app/test/ui-smoke/game-operator-gui-interactions.spec.ts",
+        "packages/app/test/ui-smoke/helpers.ts",
+        "packages/app/test/ui-smoke/plugin-view-cases.ts",
+        "packages/app/test/ui-smoke/plugin-views-lifecycle.spec.ts",
+        "packages/app/test/ui-smoke/plugin-views-visual.spec.ts",
+        "packages/app/test/view-interaction-coverage.test.ts",
+        "packages/app/vite.config.ts",
+        "packages/examples/cloud/clone-ur-crush/tsconfig.json",
+        "plugins/plugin-app-control/src/services/__tests__/app-verification.integration.test.ts",
+        "plugins/plugin-google/src/client-factory.ts",
+        "plugins/plugin-personal-assistant/src/components/AppBlockerSettingsCard.tsx",
+        "plugins/plugin-personal-assistant/src/components/WebsiteBlockerSettingsCard.tsx",
+        "plugins/plugin-personal-assistant/src/ui.ts",
+        "plugins/plugin-shell/__tests__/shell.real.test.ts",
+        "plugins/plugin-sql/src/base.ts",
+        ".github/workflows/cloud-tests.yml",
+        ".github/workflows/windows-ci.yml",
+        "package.json",
+        "packages/agent/src/__tests__/plugin-view-llm-mock-coverage.test.ts",
+        "packages/agent/src/__tests__/view-agent-surface-coverage.test.ts",
+        "packages/agent/src/__tests__/view-user-journeys.ts",
+        "packages/app-core/src/runtime/app-route-plugin-skip.test.ts",
+        "packages/app-core/vitest.config.ts",
+        "packages/app/test/hmr-coverage.test.ts",
+        "packages/app/test/hmr/hmr-dependency-levels.spec.ts",
+        "packages/app/test/ui-smoke-coverage.test.ts",
+        "packages/cloud-api/__tests__/steward-sign.test.ts",
+        "packages/cloud-api/auth/steward-nonce-exchange/route.ts",
+        "packages/cloud-api/auth/steward-refresh/route.ts",
+        "packages/cloud-shared/package.json",
+        "packages/cloud-shared/src/lib/config/deployment-environment.test.ts",
+        "packages/cloud-shared/src/lib/services/agent-gateway-router.test.ts",
+        "packages/cloud-shared/src/lib/services/ai-pricing-variant-indexing.test.ts",
+        "packages/cloud-shared/src/lib/services/ai-pricing/providers/bitrouter.ts",
+        "packages/cloud-shared/src/lib/services/cloudflare-registrar.test.ts",
+        "packages/cloud-shared/src/lib/services/docker-sandbox-provider.ts",
+        "packages/cloud-shared/src/lib/services/eliza-sandbox-shared-billing.test.ts",
+        "packages/cloud-shared/src/lib/services/eliza-sandbox.test.ts",
+        "packages/cloud-shared/src/lib/steward/sign.ts",
+        "packages/core/src/generated/action-docs.ts",
+        "packages/scripts/cloud/admin/dev/pglite-server.ts",
+        "packages/shared/src/contracts/personal-assistant.test.ts",
+        "packages/ui/src/voice/useVoiceConfig.ts",
+        "packages/app/test/ui-smoke/sensitive-request-in-chat.spec.ts",
+        "packages/app/test/ui-smoke/task-widget-in-chat.spec.ts",
+        "packages/app/test/ui-smoke/tts-stt-e2e.spec.ts",
+        "packages/cloud-shared/src/lib/constants/agent-flavors.ts",
+        "packages/app/test/ui-smoke/automations.spec.ts",
+        "packages/app/test/ui-smoke/cloud-provisioning-startup.spec.ts",
+        "packages/app/test/ui-smoke/computer-use.spec.ts",
+        "packages/app/test/ui-smoke/connectors.spec.ts",
+        "packages/app/test/ui-smoke/first-run-startup.spec.ts",
+        "packages/app/test/ui-smoke/game-apps.spec.ts",
+        "packages/app/test/ui-smoke/runtime-configurability.spec.ts",
+        "packages/app/test/ui-smoke/ui-smoke.spec.ts"
+      ]
+    },
+    {
+      "title": "fix(orchestrator): honor the configured session timeout for the ACP initialize handshake",
+      "prNumber": 8286,
+      "type": "bugfix",
+      "body": "## Problem\n`NativeAcpClient.connect()` issues the `initialize` JSON-RPC request without a timeout argument, so it always falls back to the hardcoded `DEFAULT_TIMEOUT_MS` (300s) — even though every session already carries a `timeoutMs` (from",
+      "files": [
+        "plugins/plugin-agent-orchestrator/__tests__/unit/acp-native-transport.test.ts",
+        "plugins/plugin-agent-orchestrator/src/services/acp-native-transport.ts"
+      ]
+    },
+    {
+      "title": "fix(orchestrator): forward Windows env (Path casing) to ACP sub-agents",
+      "prNumber": 8285,
+      "type": "bugfix",
+      "body": "## What\n\n`shouldForwardEnv` (the allowlist `buildEnv` uses to decide which host env vars a\nspawned ACP coding sub-agent inherits) matched the OS search path as\n`key === \"PATH\"` — case-sensitively.\n\nThe repo runtime is Bun, and **Bun on Wind",
+      "files": [
+        "plugins/plugin-agent-orchestrator/__tests__/unit/should-forward-env.test.ts",
+        "plugins/plugin-agent-orchestrator/src/services/acp-service.ts"
+      ]
+    },
+    {
+      "title": "chore(deps): bump aiohttp from 3.13.5 to 3.14.0 in /packages/benchmarks/lifeops-bench in the uv group across 1 directory",
+      "prNumber": 8284,
+      "type": "other",
+      "body": "\n\n[![Dependabot compatibility score](https://dependabot-badges.githubapp.com/badges/compatibility_score?dependency-name=aiohttp&package-manager=uv&previous-version=3.13.5&new-version=3.14.0)](https://docs.github.com/en/github/managing-secur",
+      "files": [
+        "packages/benchmarks/lifeops-bench/uv.lock"
+      ]
+    },
+    {
+      "title": "Improve views/apps screen",
+      "prNumber": 8276,
+      "type": "other",
+      "body": "views page improvements because felt it needed a brush up, feel free to toss",
+      "files": [
+        "packages/ui/src/components/pages/ViewCatalog.test.tsx",
+        "packages/ui/src/components/pages/ViewCatalog.tsx",
+        "packages/ui/src/components/views/ViewIcon.tsx"
+      ]
+    },
+    {
+      "title": "feat(orchestrator): wire the child→parent USE_SKILL parent-agent broker dispatcher",
+      "prNumber": 8275,
+      "type": "feature",
+      "body": "## What\n\nCloses the production gap that left the capped self-spend autonomy mechanism (merged in #8250) unreachable by a live agent. A `/economics` sub-agent can now autonomously drive the monetized-app loop through the parent-agent Cloud c",
+      "files": [
+        "plugins/plugin-agent-orchestrator/__tests__/unit/sub-agent-router.test.ts",
+        "plugins/plugin-agent-orchestrator/docs/economics-goal-runbook.md",
+        "plugins/plugin-agent-orchestrator/src/__tests__/parent-agent-dispatch.test.ts",
+        "plugins/plugin-agent-orchestrator/src/services/orchestrator-task-service.ts",
+        "plugins/plugin-agent-orchestrator/src/services/parent-agent-broker.ts",
+        "plugins/plugin-agent-orchestrator/src/services/parent-agent-dispatch.ts",
+        "plugins/plugin-agent-orchestrator/src/services/sub-agent-router.ts"
+      ]
+    },
+    {
+      "title": "feat(cloud-api): add container lifecycle verbs (PATCH/DELETE/scale)",
+      "prNumber": 8270,
+      "type": "feature",
+      "body": "Follow-up to #8258 (the `/api/v1/containers` deploy + read route). Adds the per-container mutation surface the survival loop needs — the only lifecycle exit today is the billing cron's auto-shutdown.\n\n`v1/containers/[id]/route.ts`:\n- **PATC",
+      "files": [
+        "packages/cloud-api/src/_router.generated.ts",
+        "packages/cloud-api/v1/containers/[id]/route.ts"
+      ]
+    },
+    {
+      "title": "fix(cloud-api): bill containers when earnings conversion fails",
+      "prNumber": 8269,
+      "type": "bugfix",
+      "body": "## Problem\n\nIn the container-billing cron, `redeemableEarningsService.convertToCredits` **throws** on insufficient/contended earnings for a positive amount — it never returns `{ success: false }` (see `redeemable-earnings.ts` lines 769/774/",
+      "files": [
+        "packages/cloud-api/cron/container-billing/route.ts"
+      ]
+    },
+    {
+      "title": "fix(cloud-e2e): boot cloud-api via the wrangler dev launcher",
+      "prNumber": 8268,
+      "type": "bugfix",
+      "body": "## Problem\n\nThe cloud-e2e stack fixture cannot boot cloud-api. Since #8112 it launches `cloud-api-e2e-server.mjs`, which `import()`s the cloud-api worker straight from TypeScript source (`packages/cloud-api/src/index.ts`). Neither runtime c",
+      "files": [
+        "packages/test/cloud-e2e/.gitignore",
+        "packages/test/cloud-e2e/src/fixtures/stack.ts"
+      ]
+    },
+    {
+      "title": "feat(cloud-sdk): add ElizaCloudClient.transcribeAudio() for voice/stt",
+      "prNumber": 8266,
+      "type": "feature",
+      "body": "## What\nAdds `ElizaCloudClient.transcribeAudio(request, options)` — a high-level helper for `POST /api/v1/voice/stt`, mirroring `createEmbeddings` / `generateImage`. Apps currently hand-roll the multipart POST (FormData + manual `Authorizat",
+      "files": [
+        "packages/cloud-sdk/src/client.test.ts",
+        "packages/cloud-sdk/src/client.ts",
+        "packages/cloud-sdk/src/types.ts"
+      ]
+    },
+    {
+      "title": "fix(cloud-api): credit affiliates on embeddings + voice inference",
+      "prNumber": 8264,
+      "type": "bugfix",
+      "body": "## What\nThread `X-Affiliate-Code` into the inference routes that already call `billUsage` / `billFlatUsage` but weren't reading the header — so affiliate revenue-share works on **embeddings** and **voice (STT / TTS / clone)**, not just `/v1",
+      "files": [
+        "packages/cloud-api/v1/embeddings/route.ts",
+        "packages/cloud-api/v1/voice/clone/route.ts",
+        "packages/cloud-api/v1/voice/stt/route.ts",
+        "packages/cloud-api/v1/voice/tts/route.ts"
+      ]
+    },
+    {
+      "title": "fix(cloud-agent): mount missing UI routes + bundle @lifi/sdk",
+      "prNumber": 8320,
+      "type": "bugfix",
+      "body": "SPA was hitting 404/500 on cloud agents — wallet 500 + i18n 404 + 3 mobile-optional 404s — this PR closes them.\n\nTest plan: open Open Web UI on staging, no 404/500 in console",
+      "files": [
+        "packages/agent/src/api/mobile-optional-routes.ts",
+        "packages/app-core/deploy/Dockerfile.cloud",
+        "packages/app-core/src/api/i18n-locale-routes.ts",
+        "packages/app-core/src/api/server.ts",
+        "packages/cloud-api/src/bootstrap-app.ts",
+        "packages/cloud-api/src/middleware/auth.ts",
+        "packages/ui/src/api/i18n-locale-client.ts"
+      ]
+    },
+    {
+      "title": "fix(cloud-api): strip openrouter routing suffix from pricing lookup",
+      "prNumber": 8319,
+      "type": "bugfix",
+      "body": "Live error: [v5-runtime-failed] error=Pricing unavailable for language:input gpt-oss-120b:nitro. PR #8307 added gpt-oss-120b at priority -1 but lookup missed it because canonicalModelId treated : as forced-provider delimiter. Dashes-in-pref",
+      "files": [
+        "packages/cloud-shared/src/lib/services/ai-pricing-variant-indexing.test.ts",
+        "packages/cloud-shared/src/lib/services/ai-pricing/dimensions.ts"
+      ]
+    },
+    {
+      "title": "fix(infra): make apps data-plane terraform apply cleanly on fsn1",
+      "prNumber": 8318,
+      "type": "bugfix",
+      "body": "## What\nTwo fixes so the apps data-plane terraform (`terraform-apps-data-plane.yml`, staging) actually **applies** — the plan was green but apply hit two real errors:\n\n1. **`hcloud_ssh_key` 409 `uniqueness_error`** — the operator key alread",
+      "files": [
+        "packages/cloud-infra/cloud/terraform/hetzner/apps-data-plane/main.tf",
+        "packages/cloud-infra/cloud/terraform/hetzner/apps-data-plane/variables.tf"
+      ]
+    },
+    {
+      "title": "fix(ci): accept APPS_CLOUDFLARE_ZONE_ID as a secret OR a var (terraform apps)",
+      "prNumber": 8317,
+      "type": "bugfix",
+      "body": "Staging plan run failed preflight: `TF_VAR_cloudflare_zone_id` resolved empty because `APPS_CLOUDFLARE_ZONE_ID` was set as an **environment secret**, but the workflow read `vars.APPS_CLOUDFLARE_ZONE_ID`. Everything else (HCLOUD_TOKEN, R2 st",
+      "files": [
+        ".github/workflows/terraform-apps-data-plane.yml",
+        "packages/cloud-shared/scripts/verify-tenant-db-isolation.ts"
+      ]
+    },
+    {
+      "title": "chore(lifeops): sweep up post-decomposition leftovers",
+      "prNumber": 8316,
+      "type": "other",
+      "body": "## Background\n\nFollow-up to #8314 — that PR removed the runtime crash (`registerLifeOpsApp is not a function` white-screen) by dropping the calls and the two stale ambient `.d.ts` shims in `packages/app`. Verify agent then flagged a long ta",
+      "files": [
+        "packages/agent/src/__tests__/plugin-tui-view-coverage.test.ts",
+        "packages/agent/src/__tests__/view-agent-surface-coverage.test.ts",
+        "packages/agent/src/__tests__/view-bundle-lifecycle.test.ts",
+        "packages/agent/src/runtime/eliza.ts",
+        "packages/app/AGENTS.md",
+        "packages/app/CLAUDE.md",
+        "packages/app/README.md",
+        "packages/app/src/main.tsx",
+        "packages/app/src/plugin-loader.ts",
+        "packages/app/test/brand-surface.test.ts",
+        "packages/app/test/hmr/hmr-dependency-levels.spec.ts",
+        "packages/elizaos/templates/project/apps/app/src/optional-eliza-app-stub.tsx",
+        "packages/elizaos/templates/project/apps/app/src/type-stubs/eliza-apps/lifeops-ui.d.ts",
+        "packages/scripts/lib/sync-eliza-env-aliases.mjs",
+        "packages/ui/src/components/apps/AppsSidebar.stories.tsx",
+        "plugins/plugin-personal-assistant/AGENTS.md",
+        "plugins/plugin-personal-assistant/CLAUDE.md",
+        "plugins/plugin-personal-assistant/src/ui.ts",
+        "plugins/plugin-xr/src/__tests__/xr-bundle-coverage.test.ts",
+        "plugins/plugin-xr/src/__tests__/xr-feature-parity.test.ts",
+        "plugins/plugin-xr/src/__tests__/xr-functional-parity.test.ts"
+      ]
+    },
+    {
+      "title": "fix(cloud-shared): correct src import path in tenant-db isolation e2e",
+      "prNumber": 8315,
+      "type": "bugfix",
+      "body": "## What\n`scripts/verify-tenant-db-isolation.ts` imported `./src/lib/services/tenant-db/...`. Since the script lives in `scripts/`, `./src/...` resolves to the nonexistent `scripts/src/...`, so the script crashed with `Cannot find module ...",
+      "files": [
+        "packages/cloud-shared/scripts/verify-tenant-db-isolation.ts"
+      ]
+    },
+    {
+      "title": "fix(plugin-lifeops): drop calls to removed registerLifeOpsApp + LifeOps view exports",
+      "prNumber": 8314,
+      "type": "bugfix",
+      "body": "## Bug\nSPA boot crashed with `t.registerLifeOpsApp is not a function` — white-screen on every load.\n\nThe lifeops decomposition (`eef57bf53e`) renamed `@elizaos/plugin-lifeops` to `@elizaos/plugin-personal-assistant` and killed the `/lifeops",
+      "files": [
+        "packages/app/src/main.tsx",
+        "packages/app/src/plugin-loader.ts",
+        "packages/app/src/types/app-plugin-module-exports.d.ts",
+        "packages/app/src/types/app-plugin-modules.d.ts"
+      ]
+    },
+    {
+      "title": "fix(apps): per-app URL uses the apps domain, never the agent/milady domain",
+      "prNumber": 8313,
+      "type": "bugfix",
+      "body": "## Why\nFound while verifying a deploy on staging: the per-app URL came out as\n`<id>.milady.ai` — the **agent sandbox** domain — instead of an apps domain.\n\n`deriveAppPublicUrl` reused the shared `containersEnv.publicBaseDomain()`, which is\n",
+      "files": [
+        "packages/cloud-shared/src/lib/config/containers-env.ts",
+        "packages/cloud-shared/src/lib/services/__tests__/app-url.test.ts",
+        "packages/cloud-shared/src/lib/services/app-url.ts"
+      ]
+    },
+    {
+      "title": "fix(cloud-frontend): VITE_ENVIRONMENT passthrough for env-gated agent flavors",
+      "prNumber": 8312,
+      "type": "bugfix",
+      "body": "## Why\n\nPrevious attempt (rejected by workflow adversarial verify) had AGENT_FLAVORS filter that always returned 'unknown' because Vite wipes process.env in the SPA bundle. The env-gated filter never fired and the prod dropdown still showed",
+      "files": [
+        ".github/workflows/cloud-cf-deploy.yml",
+        "packages/cloud-frontend/src/dashboard/agents/_components/create-eliza-agent-dialog.tsx",
+        "packages/cloud-frontend/vite.config.ts",
+        "packages/cloud-frontend/wrangler.toml",
+        "packages/cloud-shared/src/lib/constants/agent-flavors.ts"
+      ]
+    },
+    {
+      "title": "fix(cloud): mount /accept-invitation alias for Steward invite emails",
+      "prNumber": 8311,
+      "type": "bugfix",
+      "body": "## Bug\nSteward invite emails link to `/accept-invitation?token=...`, but the cloud SPA only registered `/invite/accept`. Every invited user landed on a 404.\n\n## Fix\nMount the existing `InviteAcceptLayout` + `InviteAcceptPage` on `/accept-in",
+      "files": [
+        "packages/cloud-frontend/src/App.tsx"
+      ]
+    },
+    {
+      "title": "fix(cloud): raise pair relay timeout to 15s",
+      "prNumber": 8310,
+      "type": "bugfix",
+      "body": "## Bug\n\nOn staging, the Web UI sign-in link occasionally surfaces \"Sign-in link expired\" even though the token is fresh. Root cause: Worker latency on `POST /api/auth/pair` sometimes exceeds the 5s `AbortController` deadline in the relay. T",
+      "files": [
+        "packages/app-core/src/api/cloud-pair-route.ts"
+      ]
+    },
+    {
+      "title": "fix(cloud): accept ?token= on SSE GETs for EventSource auth",
+      "prNumber": 8309,
+      "type": "bugfix",
+      "body": "## Bug\n\nEventSource (the browser SSE client) cannot set request headers, so it has no way to send `Authorization: Bearer <ELIZA_API_TOKEN>`. The global auth gate in `server.ts` only inspects headers via `extractAuthToken(req)`, so every SSE",
+      "files": [
+        "packages/agent/src/api/server-helpers-auth.ts",
+        "packages/agent/test/api/server-helpers-auth.test.ts"
+      ]
+    },
+    {
+      "title": "fix(cloud): pass WS auth token via query param for staging handshake",
+      "prNumber": 8308,
+      "type": "bugfix",
+      "body": "## Bug\n\nThe SPA in `packages/ui/src/api/client-base.ts` opens `new WebSocket(ws://<host>/ws?clientId=...)` with no auth in the URL. Browsers can't set the `Authorization` header on `new WebSocket(url)`, so the only handshake-time channel is",
+      "files": [
+        "packages/agent/src/api/server-auth.ts",
+        "packages/agent/src/api/server-helpers-auth.ts",
+        "packages/ui/src/api/client-base.ts"
+      ]
+    },
+    {
+      "title": "fix(cloud): force-price openai/gpt-oss-120b in BitRouter catalog",
+      "prNumber": 8307,
+      "type": "bugfix",
+      "body": "## Bug\n\nThe cloud's default TEXT_SMALL model is hard-coded to `openai/gpt-oss-120b:nitro` (see `packages/core/src/contracts/service-routing.ts`, `packages/cloud-shared/src/lib/models/catalog.ts`), but BitRouter's catalog API is not returnin",
+      "files": [
+        "packages/cloud-shared/src/lib/services/ai-pricing-variant-indexing.test.ts",
+        "packages/cloud-shared/src/lib/services/ai-pricing/providers/bitrouter.ts"
+      ]
+    },
+    {
+      "title": "fix(cloud): drop hardcoded prod fallback in eliza.json provisioning",
+      "prNumber": 8306,
+      "type": "bugfix",
+      "body": "## Why\n`docker-sandbox-provider` wrote `eliza.json` with a hardcoded `https://www.elizacloud.ai/api/v1` baseUrl when `ELIZAOS_CLOUD_BASE_URL` was unset, silently routing staging containers to the prod cloud API.\n\n## What\nReplace the `||` fa",
+      "files": [
+        "packages/cloud-shared/src/lib/services/docker-sandbox-provider.ts"
+      ]
+    },
+    {
+      "title": "fix(cloud): point staging R2 BLOB binding at eliza-cloud-blob-staging",
+      "prNumber": 8305,
+      "type": "bugfix",
+      "body": "## Why\nThe `[[env.staging.r2_buckets]]` BLOB binding was pointing at the prod bucket `eliza-cloud-blob`, so staging Worker uploads/reads were hitting prod data. Staging must be isolated from prod.\n\n## What\nSwitch staging BLOB binding to `el",
+      "files": [
+        "packages/cloud-api/wrangler.toml"
+      ]
+    },
+    {
+      "title": "fix(apps): DB ambassador so isolated app containers can reach their tenant DB",
+      "prNumber": 8304,
+      "type": "bugfix",
+      "body": "## The gap (found by testing the full deploy on staging)\nApp containers run on a per-app `--internal` Docker network with **zero egress**\n(proven — a container on it can't even reach `8.8.8.8`). But that *also* blocks the\napp's **own tenant",
+      "files": [
+        "packages/cloud-shared/src/lib/services/__tests__/app-container-provider.test.ts",
+        "packages/cloud-shared/src/lib/services/__tests__/app-db-ambassador.test.ts",
+        "packages/cloud-shared/src/lib/services/app-container-provider.ts",
+        "packages/cloud-shared/src/lib/services/app-db-ambassador.ts",
+        "packages/cloud-shared/src/lib/services/container-executor-deps.ts"
+      ]
+    },
+    {
+      "title": "fix(cloud): cap Steward agent-token expiresIn at 7d",
+      "prNumber": 8303,
+      "type": "bugfix",
+      "body": "## Why\n\nAfter #8301 (migration to Steward platform-key path), the daemon now hits `POST /platform/tenants/:id/agents/:id/token` which validates expiresIn against a 7d ceiling:\n\n```\n{\"ok\":false,\"error\":\"expiresIn must be a duration up to 7d ",
+      "files": [
+        "packages/cloud-shared/src/lib/services/docker-sandbox-provider.ts"
+      ]
+    },
+    {
+      "title": "fix(cloud): provision agents via Steward platform-key path",
+      "prNumber": 8301,
+      "type": "bugfix",
+      "body": "## Why\n\nThe provisioning daemon was hitting `POST /agents` (tenant-scoped) which Steward gates behind `requireTenantAdminSession`:\n\n```ts\nfunction requireTenantAdminSession(c) {\n  return c.get(\"authType\") === \"session-jwt\" && (role === \"own",
+      "files": [
+        "packages/cloud-shared/src/lib/services/docker-sandbox-provider.ts"
+      ]
+    },
+    {
+      "title": "fix(bitrouter): wire OpenRouter as a real BYOK upstream (stop using BitRouter Cloud)",
+      "prNumber": 8300,
+      "type": "bugfix",
+      "body": "## The bug (shaw)\n> \"we have a bitrouter bug — it's trying to use their cloud not our local keys\" (≈1000x cost)\n\n## Root cause\nOur self-hosted BitRouter (`bitrouter-production.up.railway.app`) routes OSS models\n(`gpt-oss-120b`) to its **`op",
+      "files": [
+        "packages/cloud-infra/cloud/bitrouter/bitrouter.yaml"
+      ]
+    },
+    {
+      "title": "feat(cloud-shared): env-sourced tenant cluster admin DSN (no SECRETS_MASTER_KEY)",
+      "prNumber": 8299,
+      "type": "feature",
+      "body": "## What\n\nAdds an **encryption-free** path for the Apps (Product 2) deploy backend so the\nprovisioning daemon can provision per-tenant databases **without a `SECRETS_MASTER_KEY`**.\n\nThe daemon runs `ELIZA_KMS_BACKEND=memory` with **no** `SEC",
+      "files": [
+        "packages/cloud-api/src/bootstrap-app.ts",
+        "packages/cloud-shared/src/lib/services/app-deploy-runner.ts",
+        "packages/cloud-shared/src/lib/services/apps-deploy-backend.ts",
+        "packages/scripts/cloud/admin/daemons/provisioning-worker.ts"
+      ]
+    },
+    {
+      "title": "fix(example): drop inert Privy + stop leaking the affiliate key in clone-ur-crush",
+      "prNumber": 8298,
+      "type": "bugfix",
+      "body": "Two fixes to the `clone-ur-crush` Cloud example (`packages/examples/cloud/clone-ur-crush`).\n\n## 1. Drop the inert Privy provider — unblocks the production build\n\nThe app mounted `@privy-io/react-auth`'s `PrivyProvider` at the root layout bu",
+      "files": [
+        "packages/examples/cloud/clone-ur-crush/README.md",
+        "packages/examples/cloud/clone-ur-crush/app/api/affiliate/create-character/route.ts",
+        "packages/examples/cloud/clone-ur-crush/app/cloning/page.tsx",
+        "packages/examples/cloud/clone-ur-crush/app/layout.tsx",
+        "packages/examples/cloud/clone-ur-crush/lib/constants.ts",
+        "packages/examples/cloud/clone-ur-crush/next.config.ts",
+        "packages/examples/cloud/clone-ur-crush/package.json",
+        "packages/examples/cloud/clone-ur-crush/providers/PrivyProvider.tsx"
+      ]
+    },
+    {
+      "title": "ci(terraform): plan/apply workflow for apps data-plane (staging via develop)",
+      "prNumber": 8297,
+      "type": "other",
+      "body": "## What\n\nCI to plan/apply the **Apps (Product 2) data-plane** terraform module\n(`packages/cloud-infra/cloud/terraform/hetzner/apps-data-plane`, merged in #8296).\n\n- **`pull_request`** touching the module → `terraform fmt -check` + `validate",
+      "files": [
+        ".github/workflows/terraform-apps-data-plane.yml",
+        "packages/cloud-infra/cloud/terraform/hetzner/apps-data-plane/backend-production.hcl",
+        "packages/cloud-infra/cloud/terraform/hetzner/apps-data-plane/backend-staging.hcl"
+      ]
+    },
+    {
+      "title": "infra(hetzner): apps data-plane terraform (Product 2) [DRAFT — Stan review]",
+      "prNumber": 8296,
+      "type": "other",
+      "body": "## Apps data-plane terraform (Product 2) — **REVIEW DRAFT for Stan**\n\nThe IaC half of \"Eliza Cloud Apps\" — stands up the **isolated apps data plane** the verified code in **#8293** targets. Sibling to `hetzner/control-plane`, same conventio",
+      "files": [
+        "packages/cloud-infra/cloud/terraform/hetzner/apps-data-plane/README.md",
+        "packages/cloud-infra/cloud/terraform/hetzner/apps-data-plane/cloud-init/app-node.yaml.tftpl",
+        "packages/cloud-infra/cloud/terraform/hetzner/apps-data-plane/cloud-init/tenant-db.yaml.tftpl",
+        "packages/cloud-infra/cloud/terraform/hetzner/apps-data-plane/main.tf",
+        "packages/cloud-infra/cloud/terraform/hetzner/apps-data-plane/outputs.tf",
+        "packages/cloud-infra/cloud/terraform/hetzner/apps-data-plane/providers.tf",
+        "packages/cloud-infra/cloud/terraform/hetzner/apps-data-plane/tfvars/production.tfvars.example",
+        "packages/cloud-infra/cloud/terraform/hetzner/apps-data-plane/tfvars/staging.tfvars.example",
+        "packages/cloud-infra/cloud/terraform/hetzner/apps-data-plane/variables.tf",
+        "packages/cloud-infra/cloud/terraform/hetzner/apps-data-plane/versions.tf"
+      ]
+    },
+    {
+      "title": "fix(cloud): align Steward agent register/cleanup signing with shared helper",
+      "prNumber": 8295,
+      "type": "bugfix",
+      "body": "## Why\n\nToday we hit `\"Agent creation requires owner or admin session\"` (403) when the provisioning daemon tried to register a new Dedicated agent with Steward. Same shape as the 502 we just fixed on `/api/auth/steward-refresh` — Steward's ",
+      "files": [
+        "packages/cloud-api/__tests__/steward-sign.test.ts",
+        "packages/cloud-api/auth/steward-nonce-exchange/route.ts",
+        "packages/cloud-api/auth/steward-refresh/route.ts",
+        "packages/cloud-shared/src/lib/services/docker-sandbox-provider.ts",
+        "packages/cloud-shared/src/lib/steward/sign.ts"
+      ]
+    },
+    {
+      "title": "registry: add @usenami/plugin-signer (third-party)",
+      "prNumber": 8294,
+      "type": "other",
+      "body": "Adds a third-party community registry entry for **`@usenami/plugin-signer`** — an ElizaOS plugin that signs CEX/DEX perpetual orders through an **AWS Nitro Enclave**, so the venue API key never enters the agent process (HMAC/EIP-712 signing",
+      "files": [
+        "packages/registry/entries/third-party/usenami__plugin-signer.json",
+        "packages/registry/generated-registry.json"
+      ]
+    },
+    {
+      "title": "feat(cloud): Eliza Cloud Apps (Product 2) — per-tenant-isolated container hosting",
+      "prNumber": 8293,
+      "type": "feature",
+      "body": "## Eliza Cloud Apps (Product 2) — per-tenant-isolated container hosting\n\nLets users deploy arbitrary container apps with a **per-tenant database, sign-in, a per-app URL, and metered hosting billing**, isolated from the shared Eliza **agent*",
+      "files": [
+        "packages/cloud-shared/scripts/_e2e-build.ts",
+        "packages/cloud-shared/scripts/_e2e-provision.ts",
+        "packages/cloud-shared/scripts/e2e-sample-app/Dockerfile",
+        "packages/cloud-shared/scripts/e2e-sample-app/server.sh",
+        "packages/cloud-shared/scripts/verify-deploy-db-writes.sh",
+        "packages/cloud-shared/scripts/verify-deploy-db-writes.ts",
+        "packages/cloud-shared/scripts/verify-e2e-container-db.sh",
+        "packages/cloud-shared/scripts/verify-e2e-deploy.sh",
+        "packages/cloud-shared/scripts/verify-tenant-db-isolation.ts",
+        "packages/cloud-shared/src/db/migrations/0140_tenant_db_clusters.sql",
+        "packages/cloud-shared/src/db/migrations/meta/_journal.json",
+        "packages/cloud-shared/src/db/repositories/tenant-db-clusters.ts",
+        "packages/cloud-shared/src/db/schemas/index.ts",
+        "packages/cloud-shared/src/db/schemas/tenant-db-clusters.ts",
+        "packages/cloud-shared/src/lib/services/__tests__/app-build-cmd.test.ts",
+        "packages/cloud-shared/src/lib/services/__tests__/app-container-provider.test.ts",
+        "packages/cloud-shared/src/lib/services/__tests__/app-container-store.test.ts",
+        "packages/cloud-shared/src/lib/services/__tests__/app-deploy-job-service.test.ts",
+        "packages/cloud-shared/src/lib/services/__tests__/app-deploy-orchestrator.test.ts",
+        "packages/cloud-shared/src/lib/services/__tests__/app-docker-cmd.test.ts",
+        "packages/cloud-shared/src/lib/services/__tests__/app-firewall-utils.test.ts",
+        "packages/cloud-shared/src/lib/services/__tests__/app-image-builder.test.ts",
+        "packages/cloud-shared/src/lib/services/__tests__/app-image-ref.test.ts",
+        "packages/cloud-shared/src/lib/services/__tests__/app-image-resolver.test.ts",
+        "packages/cloud-shared/src/lib/services/__tests__/app-network-utils.test.ts",
+        "packages/cloud-shared/src/lib/services/__tests__/app-url.test.ts",
+        "packages/cloud-shared/src/lib/services/__tests__/container-job-executors.test.ts",
+        "packages/cloud-shared/src/lib/services/__tests__/container-job-service.test.ts",
+        "packages/cloud-shared/src/lib/services/__tests__/container-job-types.test.ts",
+        "packages/cloud-shared/src/lib/services/__tests__/container-jobs-data.test.ts",
+        "packages/cloud-shared/src/lib/services/__tests__/container-provider-input.test.ts",
+        "packages/cloud-shared/src/lib/services/__tests__/provisioning-job-types.test.ts",
+        "packages/cloud-shared/src/lib/services/app-build-cmd.ts",
+        "packages/cloud-shared/src/lib/services/app-container-provider.ts",
+        "packages/cloud-shared/src/lib/services/app-container-store.ts",
+        "packages/cloud-shared/src/lib/services/app-deploy-job-service.ts",
+        "packages/cloud-shared/src/lib/services/app-deploy-orchestrator.ts",
+        "packages/cloud-shared/src/lib/services/app-deploy-runner.ts",
+        "packages/cloud-shared/src/lib/services/app-deployments.ts",
+        "packages/cloud-shared/src/lib/services/app-docker-cmd.ts",
+        "packages/cloud-shared/src/lib/services/app-firewall-utils.ts",
+        "packages/cloud-shared/src/lib/services/app-image-builder.ts",
+        "packages/cloud-shared/src/lib/services/app-image-ref.ts",
+        "packages/cloud-shared/src/lib/services/app-image-resolver.ts",
+        "packages/cloud-shared/src/lib/services/app-network-utils.ts",
+        "packages/cloud-shared/src/lib/services/app-url.ts",
+        "packages/cloud-shared/src/lib/services/apps-deploy-backend.ts",
+        "packages/cloud-shared/src/lib/services/container-executor-deps.ts",
+        "packages/cloud-shared/src/lib/services/container-job-executors.ts",
+        "packages/cloud-shared/src/lib/services/container-job-service.ts"
+      ]
+    },
+    {
+      "title": "fix(cloud): block the Cloudflare registrar dev stub in production",
+      "prNumber": 8291,
+      "type": "bugfix",
+      "body": "## Problem\n\n`domains/buy` charged a user's credits for a domain that was **never registered**. On a live run the buy returned `success: true` and debited **$14.95**, but no domain was registered: the returned zone was `stub-zone-<domain>`, ",
+      "files": [
+        "packages/cloud-shared/src/lib/config/deployment-environment.test.ts",
+        "packages/cloud-shared/src/lib/config/deployment-environment.ts",
+        "packages/cloud-shared/src/lib/services/cloudflare-dns.ts",
+        "packages/cloud-shared/src/lib/services/cloudflare-registrar.test.ts",
+        "packages/cloud-shared/src/lib/services/cloudflare-registrar.ts"
+      ]
+    },
+    {
+      "title": "feat(infra): make the dedicated tenant-DB node optional (default off)",
+      "prNumber": 8344,
+      "type": "feature",
+      "body": "## Why\nA dedicated ccx33 tenant-DB node (~$53/mo) is **pure unrecovered fixed cost at low density** — the apps lane runs *negative* below ~3 paying containers (#8342). For beta we want **app-node-only** and co-locate the first few tenant DB",
+      "files": [
+        "packages/cloud-infra/cloud/terraform/hetzner/apps-data-plane/main.tf",
+        "packages/cloud-infra/cloud/terraform/hetzner/apps-data-plane/outputs.tf",
+        "packages/cloud-infra/cloud/terraform/hetzner/apps-data-plane/tfvars/production.tfvars.example",
+        "packages/cloud-infra/cloud/terraform/hetzner/apps-data-plane/tfvars/staging.tfvars.example",
+        "packages/cloud-infra/cloud/terraform/hetzner/apps-data-plane/variables.tf"
+      ]
+    },
+    {
+      "title": "feat(apps): tenant-DB teardown — deprovision + release slot on cleanup",
+      "prNumber": 8343,
+      "type": "feature",
+      "body": "Closes the **isolated-DB leak** half of #8342.\n\n## Problem\nDeleting an app with its own per-tenant Postgres **never DROPped** the DATABASE/ROLE and **never released** the cluster slot — `SqlTenantDbProvisioner.deprovision` had zero callers,",
+      "files": [
+        "packages/cloud-shared/src/db/repositories/tenant-db-clusters.ts",
+        "packages/cloud-shared/src/lib/services/tenant-db/__tests__/tenant-db-deprovision.test.ts",
+        "packages/cloud-shared/src/lib/services/tenant-db/__tests__/tenant-db-provisioning.test.ts",
+        "packages/cloud-shared/src/lib/services/tenant-db/make-tenant-db-provisioning.ts",
+        "packages/cloud-shared/src/lib/services/tenant-db/tenant-db-deprovision.ts",
+        "packages/cloud-shared/src/lib/services/tenant-db/tenant-db-provisioning.ts",
+        "packages/cloud-shared/src/lib/services/user-database.ts"
+      ]
+    },
+    {
+      "title": "feat(apps): make the per-tenant database opt-in (mode none|isolated)",
+      "prNumber": 8338,
+      "type": "feature",
+      "body": "## What\nThe deploy orchestrator provisioned an isolated per-tenant Postgres for **every** app and injected `DATABASE_URL`/`POSTGRES_URL` unconditionally. That forces a database (and a tenant-DB cluster) on apps that don't need one — e.g. a ",
+      "files": [
+        "packages/cloud-api/src/_router.generated.ts",
+        "packages/cloud-api/v1/apps/[id]/database/route.ts",
+        "packages/cloud-shared/src/lib/services/__tests__/app-database-mode.test.ts",
+        "packages/cloud-shared/src/lib/services/__tests__/app-deploy-orchestrator.test.ts",
+        "packages/cloud-shared/src/lib/services/app-database-mode.ts",
+        "packages/cloud-shared/src/lib/services/app-deploy-orchestrator.ts",
+        "packages/cloud-shared/src/lib/services/app-deploy-runner.ts"
+      ]
+    },
+    {
+      "title": "fix(infra): retire cpx41 in apps data-plane tfvars examples",
+      "prNumber": 8337,
+      "type": "bugfix",
+      "body": "The `app_node_server_type` default was already fixed cpx41→ccx23 (839bb81799 — cpx41 is retired/unorderable in fsn1), but the staging + production `tfvars.example` files still showed `cpx41`. Copying them would reproduce the \"Server Type cp",
+      "files": [
+        "packages/cloud-infra/cloud/terraform/hetzner/apps-data-plane/tfvars/production.tfvars.example",
+        "packages/cloud-infra/cloud/terraform/hetzner/apps-data-plane/tfvars/staging.tfvars.example"
+      ]
+    },
+    {
+      "title": "feat(apps): serve verified custom domains through the apps ingress",
+      "prNumber": 8335,
+      "type": "feature",
+      "body": "## What\n\nBridges the **already-existing** custom-domain stack into the Product-2 Caddy apps ingress (#8325), so a user's own verified domain (e.g. `elocute.fun`) actually **serves their app** — not just CORS + a DNS target.\n\n### Why this is",
+      "files": [
+        "packages/cloud-api/v1/apps-ingress/ask/route.ts",
+        "packages/cloud-shared/src/lib/services/__tests__/apps-ingress-routes.test.ts",
+        "packages/cloud-shared/src/lib/services/__tests__/container-job-executors.test.ts",
+        "packages/cloud-shared/src/lib/services/apps-ingress-routes.ts",
+        "packages/cloud-shared/src/lib/services/container-executor-deps.ts",
+        "packages/cloud-shared/src/lib/services/container-job-executors.ts"
+      ]
+    },
+    {
+      "title": "fix(cloud-sdk): repair route-coverage audit tool (wrong path + stale regex)",
+      "prNumber": 8334,
+      "type": "bugfix",
+      "body": "## What\n\n`packages/cloud-sdk/scripts/audit-api-routes.mjs` — the tool that verifies every public Cloud API route has a generated SDK wrapper — was **double-broken and silently non-functional**:\n\n1. **Wrong package path.** It read the genera",
+      "files": [
+        "packages/cloud-sdk/scripts/audit-api-routes.mjs"
+      ]
+    },
+    {
+      "title": "fix(ci/docker): hoist plugin-wallet transitive deps for runtime image",
+      "prNumber": 8333,
+      "type": "bugfix",
+      "body": "Followup to #8331. The previous fix added plugin-wallet to the per-plugin bun install loop but its @lifi/sdk transitive still does not resolve in the runtime image because the dep is not hoisted at the workspace-root level. plugin-elizaclou",
+      "files": [
+        "packages/app-core/scripts/collect-docker-runtime-deps.mjs",
+        "packages/app-core/scripts/link-docker-local-app-packages.mjs"
+      ]
+    },
+    {
+      "title": "fix(cloud-api): force pricing for OpenAI text-embedding models",
+      "prNumber": 8332,
+      "type": "bugfix",
+      "body": "Embedding requests 5xx-ed because FORCED_BITROUTER_PRICING had zero embedding rows. Live-confirmed prereqs: bitrouter has no /v1/embeddings route (404 with valid token), and OPENAI_API_KEY is bound on staging Worker, so getTextEmbeddingMode",
+      "files": [
+        "packages/cloud-shared/src/lib/services/ai-pricing-variant-indexing.test.ts",
+        "packages/cloud-shared/src/lib/services/ai-pricing/providers/bitrouter.ts"
+      ]
+    },
+    {
+      "title": "fix(ci): bundle plugin-wallet in agent image + drop dead Dockerfile.cloud",
+      "prNumber": 8331,
+      "type": "bugfix",
+      "body": "## Root cause\n`build-agent-image.yml` per-plugin install loop missed `plugin-wallet` → bun never fetched its transitives (`@lifi/sdk`, `viem`, `ethers` etc.) → container 500s on `/api/wallet/addresses` with `Cannot find package '@lifi/sdk'`",
+      "files": [
+        ".github/workflows/build-agent-image.yml",
+        "packages/app-core/deploy/Dockerfile.cloud",
+        "packages/app-core/deploy/Dockerfile.cloud.dockerignore",
+        "packages/app-core/deploy/README.md"
+      ]
+    },
+    {
+      "title": "fix(wrangler): revert prod BITROUTER_BASE_URL (hotfix #8329)",
+      "prNumber": 8330,
+      "type": "bugfix",
+      "body": "Hotfix for #8329: my sed grabbed all 3 BITROUTER_BASE_URL lines instead of just the staging one. Production must stay on bitrouter-production. Staging stays on bitrouter-staging (the new isolated env).",
+      "files": [
+        "packages/cloud-api/wrangler.toml"
+      ]
+    },
+    {
+      "title": "fix(staging): isolate Worker staging -> bitrouter staging env",
+      "prNumber": 8329,
+      "type": "bugfix",
+      "body": "Followup to #8327. Created a staging env on the bitrouter Railway service (duplicated from production, same provider keys). Public URL: `https://bitrouter-staging.up.railway.app` (health 200, direct curl 200 via openrouter BYOK). This PR po",
+      "files": [
+        "packages/cloud-api/wrangler.toml"
+      ]
+    },
+    {
+      "title": "fix(apps): collision-safe host-port allocation (#8321 item 8)",
+      "prNumber": 8328,
+      "type": "bugfix",
+      "body": "Closes **#8321 item #8**. `allocateHostPort` was a blind random pick with no in-use check, so at a few hundred containers/node a `docker create` could collide on a host port. `provision()` now probes the node with `docker ps` (best-effort) ",
+      "files": [
+        "packages/cloud-api/src/_router.generated.ts",
+        "packages/cloud-api/src/middleware/auth.ts",
+        "packages/cloud-api/v1/apps-ingress/ask/route.ts",
+        "packages/cloud-shared/scripts/verify-apps-ingress-routing.sh",
+        "packages/cloud-shared/src/lib/config/containers-env.ts",
+        "packages/cloud-shared/src/lib/services/__tests__/app-container-provider.test.ts",
+        "packages/cloud-shared/src/lib/services/__tests__/apps-ingress-provisioner.test.ts",
+        "packages/cloud-shared/src/lib/services/__tests__/apps-ingress-routes.test.ts",
+        "packages/cloud-shared/src/lib/services/__tests__/container-job-executors.test.ts",
+        "packages/cloud-shared/src/lib/services/app-container-provider.ts",
+        "packages/cloud-shared/src/lib/services/app-container-store.ts",
+        "packages/cloud-shared/src/lib/services/apps-ingress-provisioner.ts",
+        "packages/cloud-shared/src/lib/services/apps-ingress-routes.ts",
+        "packages/cloud-shared/src/lib/services/container-executor-deps.ts",
+        "packages/cloud-shared/src/lib/services/container-job-executors.ts"
+      ]
+    },
+    {
+      "title": "fix(wrangler): set BITROUTER_BASE_URL in [env.staging.vars]",
+      "prNumber": 8327,
+      "type": "bugfix",
+      "body": "Background: staging Worker was missing BITROUTER_BASE_URL under [env.staging.vars] because the top-level [vars] entry does not inherit into env-specific deploys per wrangler. That made all LLM gateway calls fall back to api.bitrouter.ai/v1 ",
+      "files": [
+        "packages/cloud-api/wrangler.toml"
+      ]
+    },
+    {
+      "title": "fix(bitrouter): clean rewrite of yaml per canonical schema",
+      "prNumber": 8326,
+      "type": "bugfix",
+      "body": "Followup to #8323 #8324 — those experimented with config knobs and left the yaml tangled. Reverting to minimal canonical form: openrouter as built-in (empty body), cerebras custom, virtual model aliases for the 5 model ids the agent actuall",
+      "files": [
+        "packages/cloud-infra/cloud/bitrouter/Dockerfile",
+        "packages/cloud-infra/cloud/bitrouter/bitrouter.yaml"
+      ]
+    },
+    {
+      "title": "feat(apps): ingress — per-app Caddy routing client + deploy-flow wiring (#8321 P0 #1)",
+      "prNumber": 8325,
+      "type": "feature",
+      "body": "The **apps front door** — #8321 item **#1** (the P0 \"apps are unreachable\" blocker): makes\n`<shortid>.apps.elizacloud.ai` reverse-proxy to that app's container. Stock Caddy on the app node;\nper-app routes managed **live via Caddy's admin AP",
+      "files": [
+        "packages/cloud-api/src/_router.generated.ts",
+        "packages/cloud-api/src/middleware/auth.ts",
+        "packages/cloud-api/v1/apps-ingress/ask/route.ts",
+        "packages/cloud-shared/scripts/verify-apps-ingress-routing.sh",
+        "packages/cloud-shared/src/lib/config/containers-env.ts",
+        "packages/cloud-shared/src/lib/services/__tests__/apps-ingress-provisioner.test.ts",
+        "packages/cloud-shared/src/lib/services/__tests__/apps-ingress-routes.test.ts",
+        "packages/cloud-shared/src/lib/services/__tests__/container-job-executors.test.ts",
+        "packages/cloud-shared/src/lib/services/app-container-provider.ts",
+        "packages/cloud-shared/src/lib/services/app-container-store.ts",
+        "packages/cloud-shared/src/lib/services/apps-ingress-provisioner.ts",
+        "packages/cloud-shared/src/lib/services/apps-ingress-routes.ts",
+        "packages/cloud-shared/src/lib/services/container-executor-deps.ts",
+        "packages/cloud-shared/src/lib/services/container-job-executors.ts"
+      ]
+    },
+    {
+      "title": "fix(bitrouter): inherit_defaults: false (BYOK only, no cloud re-injection)",
+      "prNumber": 8324,
+      "type": "bugfix",
+      "body": "Followup to #8323. Removed bitrouter cloud provider but inherit_defaults:true re-injected it via built-in catalog merge, so 402 persisted. Flipping to false. Test: bare openai/gpt-oss-120b should now route via openrouter BYOK.",
+      "files": [
+        "packages/cloud-infra/cloud/bitrouter/bitrouter.yaml"
+      ]
+    },
+    {
+      "title": "fix(bitrouter): switch to api-key mode (BYOK)",
+      "prNumber": 8323,
+      "type": "bugfix",
+      "body": "## Summary\n\nBitRouter Cloud (`api.bitrouter.ai/v1`) was rejecting all chat completion calls with HTTP 402 (no payment method on the cloud account). Switch the bitrouter config to api-key-only mode so requests for `openai/gpt-oss-120b` pass ",
+      "files": [
+        "packages/cloud-infra/cloud/bitrouter/bitrouter.yaml"
+      ]
+    },
+    {
+      "title": "fix(apps): inject tenant DSN under both DATABASE_URL and POSTGRES_URL (#8321 P0)",
+      "prNumber": 8322,
+      "type": "bugfix",
+      "body": "Closes the **P0 isolation-contract gap** from the apps scaling audit (**#8321**, item 3).\n\n## Why\nThe deploy injected the per-tenant DSN under **only `DATABASE_URL`**. Eliza-based images map\n`DATABASE_URL → POSTGRES_URL`, so they're fine — ",
+      "files": [
+        "packages/cloud-shared/src/lib/services/__tests__/app-container-provider.test.ts",
+        "packages/cloud-shared/src/lib/services/__tests__/app-deploy-orchestrator.test.ts",
+        "packages/cloud-shared/src/lib/services/app-container-provider.ts",
+        "packages/cloud-shared/src/lib/services/app-deploy-orchestrator.ts"
+      ]
+    },
+    {
+      "title": "fix(infra): control-plane default server type cpx21 -> cpx32 (cpx21 retired in fsn1)",
+      "prNumber": 8360,
+      "type": "bugfix",
+      "body": "## Why\n\nYesterday's apply of \\`terraform-control-plane.yml\\` on the new \\`eliza-staging\\` Hetzner project failed:\n\n\\`\\`\\`\nError: Server Type \"cpx21\" is unavailable in \"fsn1\" and can no longer be ordered\n  with hcloud_server.control_plane[\"1",
+      "files": [
+        "packages/cloud-infra/cloud/terraform/hetzner/ARCHITECTURE.md",
+        "packages/cloud-infra/cloud/terraform/hetzner/control-plane/README.md",
+        "packages/cloud-infra/cloud/terraform/hetzner/control-plane/cloud-init/bootstrap.yaml.tftpl",
+        "packages/cloud-infra/cloud/terraform/hetzner/control-plane/main.tf",
+        "packages/cloud-infra/cloud/terraform/hetzner/control-plane/tfvars/production.tfvars.example",
+        "packages/cloud-infra/cloud/terraform/hetzner/control-plane/tfvars/staging.tfvars.example",
+        "packages/cloud-infra/cloud/terraform/hetzner/control-plane/variables.tf"
+      ]
+    },
+    {
+      "title": "chore(infra): TF pre-apply hardening (variables fail-closed + CP firewall + state lock)",
+      "prNumber": 8359,
+      "type": "other",
+      "body": "Bundles the **2 remaining BLOCKERS** the pre-apply audit (workflow \\`wuo1ecea7\\`) confirmed. Apply on the new per-env Hetzner projects (\\`eliza-staging\\`, \\`eliza-prod\\`) is blocked on this PR.\n\nOriginally bundled 3 blockers. Per Stan: \"on ",
+      "files": [
+        ".github/workflows/terraform-apps-data-plane.yml",
+        ".github/workflows/terraform-control-plane.yml",
+        "packages/cloud-infra/cloud/terraform/hetzner/apps-data-plane/.gitignore",
+        "packages/cloud-infra/cloud/terraform/hetzner/apps-data-plane/.terraform.lock.hcl",
+        "packages/cloud-infra/cloud/terraform/hetzner/apps-data-plane/backend-production.hcl",
+        "packages/cloud-infra/cloud/terraform/hetzner/apps-data-plane/backend-staging.hcl",
+        "packages/cloud-infra/cloud/terraform/hetzner/apps-data-plane/tfvars/staging.tfvars.example",
+        "packages/cloud-infra/cloud/terraform/hetzner/apps-data-plane/variables.tf",
+        "packages/cloud-infra/cloud/terraform/hetzner/apps-data-plane/versions.tf",
+        "packages/cloud-infra/cloud/terraform/hetzner/control-plane/.gitignore",
+        "packages/cloud-infra/cloud/terraform/hetzner/control-plane/.terraform.lock.hcl",
+        "packages/cloud-infra/cloud/terraform/hetzner/control-plane/backend-production.hcl",
+        "packages/cloud-infra/cloud/terraform/hetzner/control-plane/backend-staging.hcl",
+        "packages/cloud-infra/cloud/terraform/hetzner/control-plane/main.tf",
+        "packages/cloud-infra/cloud/terraform/hetzner/control-plane/tfvars/production.tfvars.example",
+        "packages/cloud-infra/cloud/terraform/hetzner/control-plane/tfvars/staging.tfvars.example",
+        "packages/cloud-infra/cloud/terraform/hetzner/control-plane/variables.tf",
+        "packages/cloud-infra/cloud/terraform/hetzner/control-plane/versions.tf"
+      ]
+    },
+    {
+      "title": "ci: terraform-control-plane.yml workflow (plan/apply control-plane per env)",
+      "prNumber": 8358,
+      "type": "other",
+      "body": "## Why\n\nThe Hetzner control-plane TF module (`packages/cloud-infra/cloud/terraform/hetzner/control-plane/`) had no GHA workflow. That left the prod + staging control-plane VMs (\\`eliza-1\\`, \\`eliza-staging-1\\`) outside TF state — they were ",
+      "files": [
+        ".github/workflows/terraform-control-plane.yml"
+      ]
+    },
+    {
+      "title": "chore(cloud): autoscale minFreeSlotsBuffer default 4 -> 2 (iso prod/staging)",
+      "prNumber": 8357,
+      "type": "other",
+      "body": "## Why\n\nAfter #8353 made `CONTAINERS_AUTOSCALE_MIN_FREE_SLOTS_BUFFER` env-configurable, staging was overridden to `2` to collapse to 1 node when idle, but prod kept the code default `4`. Same daemon code, different scaling shape — silent en",
+      "files": [
+        "packages/cloud-shared/src/lib/config/containers-env.ts"
+      ]
+    },
+    {
+      "title": "feat(infra): multi-project Hetzner pattern (per-env project token + docs)",
+      "prNumber": 8354,
+      "type": "feature",
+      "body": "## Why\nCurrently both staging and prod live in the SAME Hetzner Cloud Project, sharing a 5-server quota. Hitting the cap blocks any new apply (e.g. apps-data-plane staging needs server #6 → 422 limit_exceeded).\n\n## What\n- Add explicit `hclo",
+      "files": [
+        "packages/cloud-infra/cloud/terraform/hetzner/ARCHITECTURE.md",
+        "packages/cloud-infra/cloud/terraform/hetzner/apps-data-plane/providers.tf",
+        "packages/cloud-infra/cloud/terraform/hetzner/apps-data-plane/variables.tf",
+        "packages/cloud-infra/cloud/terraform/hetzner/control-plane/providers.tf",
+        "packages/cloud-infra/cloud/terraform/hetzner/control-plane/variables.tf"
+      ]
+    },
+    {
+      "title": "fix(autoscaler): env-overridable minFreeSlotsBuffer + minHotAvailableSlots",
+      "prNumber": 8353,
+      "type": "bugfix",
+      "body": "Hardcoded buffer=4 forces 2 nodes minimum when any agent is allocated on a 4-capacity node. Right for prod, wasteful for staging.\n\n## Change\nAdds env vars + helpers (containers-env.ts), wires into DEFAULT_AUTOSCALE_POLICY:\n- `CONTAINERS_AUT",
+      "files": [
+        "packages/cloud-shared/src/lib/config/containers-env.ts",
+        "packages/cloud-shared/src/lib/services/containers/node-autoscaler.ts"
+      ]
+    },
+    {
+      "title": "fix(elizaos): gate npm publish on global-install smoke (#8000)",
+      "prNumber": 8352,
+      "type": "bugfix",
+      "body": "## Summary\r\n- **#8000 root cause was already fixed on develop** (removed `@elizaos/cli` alias shim; `elizaos` bin points at `./dist/cli.js`).\r\n- **#8001 is also fixed on develop** — the 2.x CLI has no `engine.io` / Socket.IO on the boot pat",
+      "files": [
+        ".github/workflows/quality-fork.yml",
+        ".github/workflows/release.yaml",
+        "README.md",
+        "packages/docs/cli/overview.mdx",
+        "packages/docs/cloud/agents.mdx",
+        "packages/docs/cloud/installation.mdx",
+        "packages/docs/cloud/quickstart.mdx",
+        "packages/docs/installation.mdx",
+        "packages/docs/plugins/create-a-plugin.md",
+        "packages/elizaos/build.ts",
+        "packages/elizaos/package.json",
+        "packages/ui/src/cloud-ui/components/dashboard/cloud-dashboard-components.tsx",
+        "packages/ui/src/cloud-ui/components/docs/mdx-components.stories.tsx"
+      ]
+    },
+    {
+      "title": "fix(infra): add name to ignore_changes for apps-data-plane VMs",
+      "prNumber": 8349,
+      "type": "bugfix",
+      "body": "Drift guard, matches control-plane convention. Lets operator rename via Hetzner Console without next TF plan wanting to revert.",
+      "files": [
+        "packages/cloud-infra/cloud/terraform/hetzner/apps-data-plane/main.tf"
+      ]
+    },
+    {
+      "title": "fix(autoscaler): emit environment + tier labels on provision",
+      "prNumber": 8348,
+      "type": "bugfix",
+      "body": "## Summary\n\nHetzner servers provisioned by the node autoscaler only carried `managed-by` + `node-id`, so every API-discovered node looked identical across environments. A staging node ended up tagged `environment=production` from a hand-fix",
+      "files": [
+        "packages/cloud-shared/src/lib/config/containers-env.ts",
+        "packages/cloud-shared/src/lib/services/containers/node-autoscaler.test.ts",
+        "packages/cloud-shared/src/lib/services/containers/node-autoscaler.ts"
+      ]
+    },
+    {
+      "title": "feat (registry): register elizaos-plugin-neynar-search as third-party plugin",
+      "prNumber": 8346,
+      "type": "feature",
+      "body": "Registers elizaos-plugin-neynar-search in the third-party plugins registry.\r\n\r\n- Package: elizaos-plugin-neynar-search\r\n- Repository: github:xavier-arosemena/elizaos-plugin-neynar-search\r\n- Kind: plugin\r\n- Version: 0.1.0\r\n",
+      "files": [
+        "packages/registry/entries/third-party/elizaos-plugin-neynar-search.json",
+        "packages/registry/generated-registry.json"
+      ]
+    },
+    {
+      "title": "feat(infra): manage data-plane private network via TF on control-plane module",
+      "prNumber": 8392,
+      "type": "feature",
+      "body": "## Why\n\nThe autoscaler attaches every data-plane worker VM to a private Hetzner network. Those networks (currently `eliza-production-private` id 12305703 and `eliza-staging-private` id 12305704) were created out-of-band in the Hetzner conso",
+      "files": [
+        "packages/cloud-infra/cloud/terraform/hetzner/control-plane/main.tf",
+        "packages/cloud-infra/cloud/terraform/hetzner/control-plane/outputs.tf",
+        "packages/cloud-infra/cloud/terraform/hetzner/control-plane/variables.tf"
+      ]
+    },
+    {
+      "title": "fix(infra): thread replace input via env var (GHA quote-escaping)",
+      "prNumber": 8391,
+      "type": "bugfix",
+      "body": "Fixes the residual bug in #8389 / #8390: GitHub Actions splices `${{ inputs.replace }}` at YAML-parse time as raw literal text inside the bash double-quoted string. So an input like `hcloud_server.control_plane[\"1\"]` gets rendered as bash s",
+      "files": [
+        ".github/workflows/terraform-apps-data-plane.yml",
+        ".github/workflows/terraform-apps-shared.yml",
+        ".github/workflows/terraform-control-plane.yml"
+      ]
+    },
+    {
+      "title": "fix(infra): replace-input trim must not use xargs (strips for_each quotes)",
+      "prNumber": 8390,
+      "type": "bugfix",
+      "body": "## Why\n\nThe \\`replace\\` input bash loop added in #8385 / #8389 used \\`xargs\\` to trim whitespace. \\`xargs\\` also strips literal quotes, so an input like \\`hcloud_server.control_plane[\\\"1\\\"]\\` reached terraform apply as \\`-replace=hcloud_ser",
+      "files": [
+        ".github/workflows/terraform-apps-data-plane.yml",
+        ".github/workflows/terraform-apps-shared.yml",
+        ".github/workflows/terraform-control-plane.yml"
+      ]
+    },
+    {
+      "title": "fix(infra): control-plane cloud-init bun integrity check + workflow replace input",
+      "prNumber": 8389,
+      "type": "bugfix",
+      "body": "## Why\n\nPhase 4 prod CP migration uncovered two latent bugs in the control-plane module the moment we provisioned a fresh box on the eliza-prod project.\n\n### Bug 1: bun install silently fails sha256 integrity check\n\\`bootstrap.yaml.tftpl\\` ",
+      "files": [
+        ".github/workflows/terraform-control-plane.yml",
+        "packages/cloud-infra/cloud/terraform/hetzner/control-plane/cloud-init/bootstrap.yaml.tftpl"
+      ]
+    },
+    {
+      "title": "refactor(infra): decouple control-plane DNS from VM creation",
+      "prNumber": 8388,
+      "type": "refactor",
+      "body": "## Why\n\nPhase 4 prod migration plan revealed that `cloudflare_dns_record.control_plane` would atomically flip its A record `content` to the new `eliza-production-1` IP in the same `terraform apply` that creates the VM — before cloud-init / ",
+      "files": [
+        "packages/cloud-infra/cloud/terraform/hetzner/control-plane/README.md",
+        "packages/cloud-infra/cloud/terraform/hetzner/control-plane/main.tf"
+      ]
+    },
+    {
+      "title": "refactor(infra): split apps-data-plane → apps-shared + per-env workers",
+      "prNumber": 8386,
+      "type": "refactor",
+      "body": "## Why\n\nThe tenant Postgres + private network are physically a single shared piece of\ninfra across staging + production app workers, but they were being modelled\nper-env inside `apps-data-plane/`. That meant a staging vs prod apply could in",
+      "files": [
+        ".github/workflows/terraform-apps-data-plane.yml",
+        ".github/workflows/terraform-apps-shared.yml",
+        "packages/cloud-infra/cloud/terraform/hetzner/ARCHITECTURE.md",
+        "packages/cloud-infra/cloud/terraform/hetzner/apps-data-plane/.terraform.lock.hcl",
+        "packages/cloud-infra/cloud/terraform/hetzner/apps-data-plane/README.md",
+        "packages/cloud-infra/cloud/terraform/hetzner/apps-data-plane/main.tf",
+        "packages/cloud-infra/cloud/terraform/hetzner/apps-data-plane/outputs.tf",
+        "packages/cloud-infra/cloud/terraform/hetzner/apps-data-plane/tfvars/production.tfvars.example",
+        "packages/cloud-infra/cloud/terraform/hetzner/apps-data-plane/tfvars/staging.tfvars.example",
+        "packages/cloud-infra/cloud/terraform/hetzner/apps-data-plane/variables.tf",
+        "packages/cloud-infra/cloud/terraform/hetzner/apps-data-plane/versions.tf",
+        "packages/cloud-infra/cloud/terraform/hetzner/apps-shared/.gitignore",
+        "packages/cloud-infra/cloud/terraform/hetzner/apps-shared/.terraform.lock.hcl",
+        "packages/cloud-infra/cloud/terraform/hetzner/apps-shared/README.md",
+        "packages/cloud-infra/cloud/terraform/hetzner/apps-shared/backend.hcl",
+        "packages/cloud-infra/cloud/terraform/hetzner/apps-shared/cloud-init/tenant-db.yaml.tftpl",
+        "packages/cloud-infra/cloud/terraform/hetzner/apps-shared/main.tf",
+        "packages/cloud-infra/cloud/terraform/hetzner/apps-shared/outputs.tf",
+        "packages/cloud-infra/cloud/terraform/hetzner/apps-shared/providers.tf",
+        "packages/cloud-infra/cloud/terraform/hetzner/apps-shared/tfvars/shared.tfvars.example",
+        "packages/cloud-infra/cloud/terraform/hetzner/apps-shared/variables.tf",
+        "packages/cloud-infra/cloud/terraform/hetzner/apps-shared/versions.tf"
+      ]
+    },
+    {
+      "title": "fix(infra): tenant-db cloud-init resilience (apt + sudo + ordering)",
+      "prNumber": 8385,
+      "type": "bugfix",
+      "body": "## Summary\n\nThree latent failures the previous tenant-db cloud-init template hits the moment a fresh server boots — all caught the hard way during the staging apply this evening. PR #8384 baked the systemd-oneshot approach; this PR makes th",
+      "files": [
+        "packages/cloud-infra/cloud/terraform/hetzner/apps-data-plane/cloud-init/tenant-db.yaml.tftpl"
+      ]
+    },
+    {
+      "title": "fix(infra): tenant-db cloud-init -> systemd oneshot (idempotent, survives rescale)",
+      "prNumber": 8384,
+      "type": "bugfix",
+      "body": "## Summary\n\nWraps the tenant-DB cluster setup in a systemd oneshot service installed via\n`write_files`. The service runs on **every boot** (not just the first one),\nevery step is grep- or path-guarded so it's a no-op when there's nothing to",
+      "files": [
+        ".github/workflows/terraform-apps-data-plane.yml",
+        "packages/cloud-infra/cloud/terraform/hetzner/apps-data-plane/cloud-init/tenant-db.yaml.tftpl"
+      ]
+    },
+    {
+      "title": "fix(cloud): Atlas edit models take images[] + size WIDTHxHEIGHT",
+      "prNumber": 8383,
+      "type": "bugfix",
+      "body": "Follow-up to #8380. Per the Atlas image API reference:\n- edit / image-to-image models take a source `images: [...]` array (not a singular `image`)\n- `size` uses `WIDTH*HEIGHT` form (e.g. `2048*2048`)\n\nNormalise a `WxH` size to that, send so",
+      "files": [
+        "packages/cloud-shared/src/lib/providers/image/atlascloud-image-generation.ts"
+      ]
+    },
+    {
+      "title": "feat(registry): register elizaos-plugin-coinrailz as third-party plugin",
+      "prNumber": 8382,
+      "type": "feature",
+      "body": "Registers `elizaos-plugin-coinrailz` as a third-party plugin.\r\n\r\n- npm: https://www.npmjs.com/package/elizaos-plugin-coinrailz  \r\n- Repo: https://github.com/tdnupe3/elizaos-plugin-coinrailz  \r\n- Version: 2.1.0 | License: MIT\r\n\r\nCapabilities",
+      "files": [
+        "packages/registry/entries/third-party/elizaos-plugin-coinrailz.json"
+      ]
+    },
+    {
+      "title": "feat(cloud): add Atlas Cloud image provider (drop-in, OpenAI-compatible)",
+      "prNumber": 8380,
+      "type": "feature",
+      "body": "## Why\nThe deployed cloud worker routes image models (gpt-image-2, gemini-image) through **BitRouter**, but BitRouter serves **no image models** — its `/v1/models` catalog is 100% text-output. So `generate-image` 500s. **Atlas Cloud** does ",
+      "files": [
+        "packages/cloud-api/v1/apps/[id]/generate-image/route.ts",
+        "packages/cloud-api/v1/generate-image/route.ts",
+        "packages/cloud-shared/src/lib/providers/image/atlascloud-image-generation.ts",
+        "packages/cloud-shared/src/lib/providers/image/registry.ts",
+        "packages/cloud-shared/src/lib/services/ai-pricing-definitions.ts",
+        "packages/cloud-shared/src/lib/services/ai-pricing/providers/atlascloud.ts",
+        "packages/cloud-shared/src/lib/services/ai-pricing/providers/gateway.ts",
+        "packages/cloud-shared/src/types/cloud-worker-env.ts"
+      ]
+    },
+    {
+      "title": "refactor(infra): default tenant_db to cpx41 (shared CPU, no dedicated quota)",
+      "prNumber": 8379,
+      "type": "refactor",
+      "body": "## Summary\n\nDefault `tenant_db_server_type` in the `apps-data-plane` Hetzner module flips from `ccx33` (dedicated 8 vCPU / 32 GB) to `cpx41` (shared 8 vCPU / 16 GB).\n\nWhy:\n- ccx33 burns 8 dedicated cores from a Hetzner account-wide quota th",
+      "files": [
+        "packages/cloud-infra/cloud/terraform/hetzner/apps-data-plane/tfvars/production.tfvars.example",
+        "packages/cloud-infra/cloud/terraform/hetzner/apps-data-plane/tfvars/staging.tfvars.example",
+        "packages/cloud-infra/cloud/terraform/hetzner/apps-data-plane/variables.tf"
+      ]
+    },
+    {
+      "title": "refactor(infra): drop provision_tenant_db toggle, always provision the node",
+      "prNumber": 8378,
+      "type": "refactor",
+      "body": "## Summary\n\nReverts the bool toggle from #8377. Apps data-plane always provisions the\ntenant_db ccx33 — no flag, no off mode.\n\n- Dropped `var.provision_tenant_db` + the 3 `count = … ? 1 : 0` gates on\n  `hcloud_server.tenant_db` / `hcloud_se",
+      "files": [
+        ".github/workflows/terraform-apps-data-plane.yml",
+        "packages/cloud-infra/cloud/terraform/hetzner/apps-data-plane/main.tf",
+        "packages/cloud-infra/cloud/terraform/hetzner/apps-data-plane/outputs.tf",
+        "packages/cloud-infra/cloud/terraform/hetzner/apps-data-plane/tfvars/production.tfvars.example",
+        "packages/cloud-infra/cloud/terraform/hetzner/apps-data-plane/tfvars/staging.tfvars.example",
+        "packages/cloud-infra/cloud/terraform/hetzner/apps-data-plane/variables.tf"
+      ]
+    },
+    {
+      "title": "feat(infra): wire TF_VAR_provision_tenant_db in apps-data-plane workflow",
+      "prNumber": 8377,
+      "type": "feature",
+      "body": "## Why\n\napps-data-plane TF has a \\`provision_tenant_db\\` bool variable that gates the dedicated ccx33 tenant Postgres node. Default \\`false\\` (Apps Product 2 is alpha — unrecovered cost at low density). The workflow never threaded the varia",
+      "files": [
+        ".github/workflows/terraform-apps-data-plane.yml"
+      ]
+    },
+    {
+      "title": "feat(infra): apps-data-plane uses HCLOUD_APPS_TOKEN (shared Hetzner project)",
+      "prNumber": 8376,
+      "type": "feature",
+      "body": "## Why\n\nApps Product 2 now lives in a **dedicated Hetzner project** \\`apps\\`, separate from the per-env agent control-plane projects (\\`eliza-staging\\`, \\`eliza-prod\\`). One shared project hosts both staging + production Apps resources — Ap",
+      "files": [
+        ".github/workflows/terraform-apps-data-plane.yml",
+        "packages/cloud-infra/cloud/terraform/hetzner/ARCHITECTURE.md",
+        "packages/cloud-infra/cloud/terraform/hetzner/apps-data-plane/README.md",
+        "packages/cloud-infra/cloud/terraform/hetzner/apps-data-plane/main.tf",
+        "packages/cloud-infra/cloud/terraform/hetzner/apps-data-plane/providers.tf",
+        "packages/cloud-infra/cloud/terraform/hetzner/apps-data-plane/variables.tf"
+      ]
+    },
+    {
+      "title": "chore(cloud-shared): consolidate Hetzner token env to HCLOUD_TOKEN only",
+      "prNumber": 8375,
+      "type": "other",
+      "body": "## Why\n\nDuring the staging multi-project Hetzner migration we hit a 30-minute debug session because the daemon's \\`.env.local\\` had BOTH \\`HCLOUD_TOKEN\\` AND \\`HETZNER_CLOUD_API_KEY\\` set (paranoia copies of the same value from an older boo",
+      "files": [
+        "packages/cloud-api/wrangler.toml",
+        "packages/cloud-infra/cloud/terraform/hetzner/ARCHITECTURE.md",
+        "packages/cloud-services/container-control-plane/README.md",
+        "packages/cloud-shared/src/lib/config/containers-env.ts",
+        "packages/cloud-shared/src/lib/services/containers/compute-provider-characterization.test.ts",
+        "packages/cloud-shared/src/lib/services/containers/hetzner-cloud-api.ts",
+        "packages/cloud-shared/src/types/cloud-worker-env.ts",
+        "packages/scripts/cloud/admin/bootstrap-provisioning-worker-host.mjs"
+      ]
+    },
+    {
+      "title": "feat(infra): cloud-init bakes nginx vhost + self-signed cert + CF proxied=true",
+      "prNumber": 8374,
+      "type": "feature",
+      "body": "## Why\n\nStaging migration today landed a TF-spawned control-plane VM that was unroutable for agent traffic:\n\n- nginx ran the default Ubuntu vhost on :80 (no proxy_pass to agent-router on \\`127.0.0.1:3458\\`)\n- :443 had no listener at all\n- C",
+      "files": [
+        "packages/cloud-infra/cloud/terraform/hetzner/control-plane/README.md",
+        "packages/cloud-infra/cloud/terraform/hetzner/control-plane/cloud-init/bootstrap.yaml.tftpl",
+        "packages/cloud-infra/cloud/terraform/hetzner/control-plane/main.tf"
+      ]
+    },
+    {
+      "title": "chore(deps): bump @discordjs/collection from 1.5.3 to 2.1.1",
+      "prNumber": 8373,
+      "type": "other",
+      "body": "Bumps [@discordjs/collection](https://github.com/discordjs/discord.js/tree/HEAD/packages/collection) from 1.5.3 to 2.1.1.\n<details>\n<summary>Release notes</summary>\n<p><em>Sourced from <a href=\"https://github.com/discordjs/discord.js/releas",
+      "files": [
+        "plugins/plugin-discord/package.json"
+      ]
+    },
+    {
+      "title": "chore(deps): bump esbuild from 0.25.10 to 0.28.0",
+      "prNumber": 8372,
+      "type": "other",
+      "body": "Bumps [esbuild](https://github.com/evanw/esbuild) from 0.25.10 to 0.28.0.\n<details>\n<summary>Release notes</summary>\n<p><em>Sourced from <a href=\"https://github.com/evanw/esbuild/releases\">esbuild's releases</a>.</em></p>\n<blockquote>\n<h2>v",
+      "files": [
+        "packages/cloud-services/operator/package.json"
+      ]
+    },
+    {
+      "title": "chore(deps): bump @linear/sdk from 83.0.0 to 86.0.0",
+      "prNumber": 8371,
+      "type": "other",
+      "body": "Bumps [@linear/sdk](https://github.com/linear/linear) from 83.0.0 to 86.0.0.\n<details>\n<summary>Release notes</summary>\n<p><em>Sourced from <a href=\"https://github.com/linear/linear/releases\">@​linear/sdk's releases</a>.</em></p>\n<blockquot",
+      "files": [
+        "plugins/plugin-linear/package.json"
+      ]
+    },
+    {
+      "title": "chore(deps): bump hono from 4.12.21 to 4.12.25",
+      "prNumber": 8370,
+      "type": "other",
+      "body": "Bumps [hono](https://github.com/honojs/hono) from 4.12.21 to 4.12.25.\n<details>\n<summary>Release notes</summary>\n<p><em>Sourced from <a href=\"https://github.com/honojs/hono/releases\">hono's releases</a>.</em></p>\n<blockquote>\n<h2>v4.12.25</",
+      "files": [
+        "packages/cloud-api/package.json",
+        "packages/cloud-services/_smoke-mcp/package.json",
+        "packages/cloud-services/container-control-plane/package.json",
+        "packages/cloud-services/gateway-discord/package.json",
+        "packages/cloud-services/gateway-webhook/package.json",
+        "packages/cloud-shared/package.json",
+        "packages/feed/packages/engine/package.json",
+        "packages/test/cloud-mocks/package.json"
+      ]
+    },
+    {
+      "title": "chore(deps): bump ruby/setup-ruby from 1.310.0 to 1.312.0",
+      "prNumber": 8368,
+      "type": "other",
+      "body": "Bumps [ruby/setup-ruby](https://github.com/ruby/setup-ruby) from 1.310.0 to 1.312.0.\n<details>\n<summary>Release notes</summary>\n<p><em>Sourced from <a href=\"https://github.com/ruby/setup-ruby/releases\">ruby/setup-ruby's releases</a>.</em></",
+      "files": [
+        ".github/workflows/android-release.yml",
+        ".github/workflows/apple-store-release.yml"
+      ]
+    },
+    {
+      "title": "chore(deps): bump actions/setup-node from 4.4.0 to 6.4.0",
+      "prNumber": 8367,
+      "type": "other",
+      "body": "Bumps [actions/setup-node](https://github.com/actions/setup-node) from 4.4.0 to 6.4.0.\n<details>\n<summary>Release notes</summary>\n<p><em>Sourced from <a href=\"https://github.com/actions/setup-node/releases\">actions/setup-node's releases</a>",
+      "files": [
+        ".github/workflows/benchmark-weekly.yml"
+      ]
+    },
+    {
+      "title": "chore(deps): bump github/codeql-action from 4.36.1 to 4.36.2",
+      "prNumber": 8366,
+      "type": "other",
+      "body": "Bumps [github/codeql-action](https://github.com/github/codeql-action) from 4.36.1 to 4.36.2.\n<details>\n<summary>Release notes</summary>\n<p><em>Sourced from <a href=\"https://github.com/github/codeql-action/releases\">github/codeql-action's re",
+      "files": [
+        ".github/workflows/codeql.yml"
+      ]
+    },
+    {
+      "title": "chore(deps): bump hashicorp/setup-terraform from 3 to 4",
+      "prNumber": 8365,
+      "type": "other",
+      "body": "Bumps [hashicorp/setup-terraform](https://github.com/hashicorp/setup-terraform) from 3 to 4.\n<details>\n<summary>Release notes</summary>\n<p><em>Sourced from <a href=\"https://github.com/hashicorp/setup-terraform/releases\">hashicorp/setup-terr",
+      "files": [
+        ".github/workflows/terraform-apps-data-plane.yml",
+        ".github/workflows/terraform-apps-shared.yml",
+        ".github/workflows/terraform-control-plane.yml"
+      ]
+    },
+    {
+      "title": "chore(deps): bump anthropics/claude-code-action from 1.0.133 to 1.0.142",
+      "prNumber": 8364,
+      "type": "other",
+      "body": "Bumps [anthropics/claude-code-action](https://github.com/anthropics/claude-code-action) from 1.0.133 to 1.0.142.\n<details>\n<summary>Release notes</summary>\n<p><em>Sourced from <a href=\"https://github.com/anthropics/claude-code-action/releas",
+      "files": [
+        ".github/workflows/claude-code-review.yml",
+        ".github/workflows/claude.yml",
+        ".github/workflows/docs-ci.yml",
+        ".github/workflows/skill-review.yml",
+        ".github/workflows/weekly-maintenance.yml"
+      ]
+    },
+    {
+      "title": "chore(deps): update tqdm requirement from ~=4.67.3 to ~=4.68.2 in /packages/benchmarks/OSWorld",
+      "prNumber": 8363,
+      "type": "other",
+      "body": "Updates the requirements on [tqdm](https://github.com/tqdm/tqdm) to permit the latest version.\n<details>\n<summary>Release notes</summary>\n<p><em>Sourced from <a href=\"https://github.com/tqdm/tqdm/releases\">tqdm's releases</a>.</em></p>\n<blo",
+      "files": [
+        "packages/benchmarks/OSWorld/pyproject.toml",
+        "packages/benchmarks/OSWorld/requirements.txt",
+        "packages/benchmarks/OSWorld/setup.py"
+      ]
+    },
+    {
+      "title": "chore(deps): update ag2 requirement from ~=0.13.0 to ~=0.13.3 in /packages/benchmarks/OSWorld",
+      "prNumber": 8362,
+      "type": "other",
+      "body": "Updates the requirements on [ag2](https://github.com/ag2ai/ag2) to permit the latest version.\n<details>\n<summary>Release notes</summary>\n<p><em>Sourced from <a href=\"https://github.com/ag2ai/ag2/releases\">ag2's releases</a>.</em></p>\n<block",
+      "files": [
+        "packages/benchmarks/OSWorld/requirements.txt"
+      ]
+    },
+    {
+      "title": "fix(cloud-api): set AGENT_ROUTER_ORIGIN_HOST for staging (was hitting prod CP silently)",
+      "prNumber": 8361,
+      "type": "bugfix",
+      "body": "## Why\n\nAfter the control-plane TF apply migrated the staging CP to \\`167.233.105.184\\` (new eliza-staging Hetzner project), the e2e validation workflow (\\`w4va6b87i\\`) flagged that the staging Worker was still routing agent traffic to the ",
+      "files": [
+        "packages/cloud-api/wrangler.toml"
+      ]
+    },
+    {
+      "title": "ci(infra): one-shot workflow to remove an orphaned apps-data-plane state entry",
+      "prNumber": 8400,
+      "type": "other",
+      "body": "## Why\nThe #8386 split moved `random_password.tenant_db_admin` from `apps-data-plane` → `apps-shared`, but the **per-env state still lists it**, so every `terraform init -lockfile=readonly` (plan/apply) fails with *\"provider dependency chan",
+      "files": [
+        ".github/workflows/terraform-apps-state-rm.yml"
+      ]
+    },
+    {
+      "title": "ci(infra): dispatchable workflow to arm the apps daemon (no operator SSH needed)",
+      "prNumber": 8398,
+      "type": "other",
+      "body": "## Why\nArming the apps (Product 2) deploy backend meant **hand-SSHing the control plane** to set the `APPS_*`/`CONTAINERS_*` env in `cloud/.env.local`. @standujar's directive is \"always think IaC / avoid manual\" — and there's a second benef",
+      "files": [
+        ".github/workflows/arm-apps-daemon.yml"
+      ]
+    },
+    {
+      "title": "chore(scripts): idempotent apps-daemon arming script (IaC, not hand-editing)",
+      "prNumber": 8397,
+      "type": "other",
+      "body": "## Why\nThe provisioning-worker already calls `configureAppsDeployBackend()` on boot, but the apps deploy backend only activates once the `APPS_*`/`CONTAINERS_*` env is present in `/opt/eliza/cloud/.env.local`. That env was being hand-set on",
+      "files": [
+        "packages/scripts/cloud/admin/arm-apps-daemon.mjs"
+      ]
+    },
+    {
+      "title": "feat(infra): install Caddy front door in app-node cloud-init (last apps-lane TODO)",
+      "prNumber": 8394,
+      "type": "feature",
+      "body": "## What\nReplaces the final `STAN:` TODO in the app-node cloud-init with the real ingress front door. Verified live: the staging app node (`167.233.112.155`, behind `*.apps-staging.elizacloud.ai`) currently answers **nothing on :80/:443** — ",
+      "files": [
+        ".github/workflows/terraform-apps-data-plane.yml",
+        "packages/cloud-infra/cloud/terraform/hetzner/apps-data-plane/cloud-init/app-node.yaml.tftpl",
+        "packages/cloud-infra/cloud/terraform/hetzner/apps-data-plane/main.tf",
+        "packages/cloud-infra/cloud/terraform/hetzner/apps-data-plane/tfvars/production.tfvars.example",
+        "packages/cloud-infra/cloud/terraform/hetzner/apps-data-plane/tfvars/staging.tfvars.example",
+        "packages/cloud-infra/cloud/terraform/hetzner/apps-data-plane/variables.tf"
+      ]
+    },
+    {
+      "title": "fix(infra): install headscale in control-plane cloud-init",
+      "prNumber": 8393,
+      "type": "bugfix",
+      "body": "Last cloud-init gap from tonight's prod CP migration. We had to install headscale by hand on the new CP (curl deb + dpkg -i + chown state dir). Now the package install + systemd unit + state dir come from cloud-init's `packages:` list. The ",
+      "files": [
+        "packages/cloud-infra/cloud/terraform/hetzner/control-plane/README.md",
+        "packages/cloud-infra/cloud/terraform/hetzner/control-plane/cloud-init/bootstrap.yaml.tftpl"
+      ]
+    },
+    {
+      "title": "feat(cloud-api): enable APPS_DEPLOY_ENABLED on staging",
+      "prNumber": 8406,
+      "type": "feature",
+      "body": "Turns on the real apps deploy trigger on the staging Worker now that the apps data plane (apps-shared tenant DB + Caddy app node + armed daemon) is live on staging. Staging vars only, gates configureAppsDeployTrigger, no Product-1 impact. c",
+      "files": [
+        "packages/cloud-api/wrangler.toml"
+      ]
+    },
+    {
+      "title": "fix(apps-arm): write .env.local via sudo (root-owned dir)",
+      "prNumber": 8405,
+      "type": "bugfix",
+      "body": "First real arm run hit 'sed: Permission denied' on /opt/eliza/cloud (root-owned). Route the env-file ops through sudo (deploy user has passwordless sudo, same as worker-deploy). set -e meant nothing was written + daemon not restarted, so th",
+      "files": [
+        ".github/workflows/arm-apps-daemon.yml"
+      ]
+    },
+    {
+      "title": "feat(apps-arm): fetch tenant DSN from apps-shared output (keep password out of inputs)",
+      "prNumber": 8404,
+      "type": "feature",
+      "body": "Adds an opt-in `fetch_dsn_from_shared_state` flag to the apps daemon arming workflow so the tenant admin DSN is read from the apps-shared terraform output (sensitive, auto-masked) rather than pasted into a dispatch input that would persist ",
+      "files": [
+        ".github/workflows/arm-apps-daemon.yml"
+      ]
+    },
+    {
+      "title": "test(cloud-agents): characterization tests for the warm-pool decision engine",
+      "prNumber": 8403,
+      "type": "tests",
+      "body": "## What\n\n50 net-new **characterization tests** for the agent **warm-pool decision engine** — the layer that keeps pre-warmed agent containers ready for instant claim. No source changed.\n\n## Why\n\nThe warm pool is what makes launching a cloud",
+      "files": [
+        "packages/cloud-shared/src/lib/services/containers/agent-warm-pool-forecast.test.ts",
+        "packages/cloud-shared/src/lib/services/containers/agent-warm-pool.test.ts",
+        "packages/cloud-shared/src/lib/services/containers/image-rollout-status.test.ts"
+      ]
+    },
+    {
+      "title": "fix(apps-shared): add linux_amd64 provider hashes to the lock (adopt applied)",
+      "prNumber": 8402,
+      "type": "bugfix",
+      "body": "Lands the `apps-shared/.terraform.lock.hcl` fix (was missing the linux_amd64 `h1:` hashes → CI `-lockfile=readonly` failed 'cached package does not match checksums', so apps-shared could never plan/apply). Regenerated for linux+darwin, no v",
+      "files": [
+        "packages/cloud-infra/cloud/terraform/hetzner/apps-shared/.terraform.lock.hcl"
+      ]
+    },
+    {
+      "title": "fix(cloud-apps): tear down isolated tenant DB on app delete (#8342)",
+      "prNumber": 8401,
+      "type": "bugfix",
+      "body": "## What\n\nFixes CRITICAL leak #2 from #8342: **a deleted app with an ISOLATED per-tenant DB never DROPped its Postgres or released its cluster slot** — so we kept paying for a stranded DB and permanently burned 1/`max_databases` of a cluster",
+      "files": [
+        "packages/cloud-api/src/bootstrap-app.ts",
+        "packages/cloud-shared/src/lib/services/__tests__/app-db-deprovision-job-service.test.ts",
+        "packages/cloud-shared/src/lib/services/__tests__/provisioning-job-types.test.ts",
+        "packages/cloud-shared/src/lib/services/__tests__/user-database-deprovision.test.ts",
+        "packages/cloud-shared/src/lib/services/app-db-deprovision-job-service.ts",
+        "packages/cloud-shared/src/lib/services/apps-deploy-backend.ts",
+        "packages/cloud-shared/src/lib/services/apps.ts",
+        "packages/cloud-shared/src/lib/services/provisioning-job-types.ts",
+        "packages/cloud-shared/src/lib/services/provisioning-jobs.ts",
+        "packages/cloud-shared/src/lib/services/user-database.ts"
+      ]
+    }
+  ],
+  "topContributors": [
+    {
+      "username": "standujar",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/16385918?u=718bdcd1585be8447bdfffb8c11ce249baa7532d&v=4",
+      "totalScore": 1400.29325978599,
+      "prScore": 1399.0172597859898,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 1.2759999999999998,
+      "summary": null
+    },
+    {
+      "username": "NubsCarson",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/192162056?u=d2be9082dbee60fcbad21d32bf6e662ab1af3674&v=4",
+      "totalScore": 952.3716413700782,
+      "prScore": 944.2176413700782,
+      "issueScore": 6.1,
+      "reviewScore": 0,
+      "commentScore": 2.054,
+      "summary": null
+    },
+    {
+      "username": "greptile-apps",
+      "avatarUrl": "https://avatars.githubusercontent.com/in/867647?v=4",
+      "totalScore": 760.5,
+      "prScore": 0,
+      "issueScore": 0,
+      "reviewScore": 760.5,
+      "commentScore": 0,
+      "summary": null
+    },
+    {
+      "username": "dutchiono",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/86275975?u=0d8badaa81aa47682651f87dc2d363837876de98&v=4",
+      "totalScore": 169.1128724526423,
+      "prScore": 168.67487245264232,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0.43799999999999994,
+      "summary": null
+    },
+    {
+      "username": "Dexploarer",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/211557447?u=21a243d61cc1f87574328ae07fc64d7d7577b53d&v=4",
+      "totalScore": 163.0470955863044,
+      "prScore": 163.0470955863044,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": null
+    },
+    {
+      "username": "2-A-M",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/96268540?u=39ce724443b5cd500fc28905812cdba16e3181a7&v=4",
+      "totalScore": 80.80382696392536,
+      "prScore": 80.46382696392536,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0.33999999999999997,
+      "summary": null
+    },
+    {
+      "username": "0xSolace",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/257989456?u=e0d4e0c6385403319241eb46ba647b49083d4a05&v=4",
+      "totalScore": 78.76207219233933,
+      "prScore": 78.76207219233933,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": null
+    },
+    {
+      "username": "github-code-quality",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/9919?v=4",
+      "totalScore": 36,
+      "prScore": 0,
+      "issueScore": 0,
+      "reviewScore": 36,
+      "commentScore": 0,
+      "summary": null
+    },
+    {
+      "username": "tdnupe3",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/25161668?u=94680b6bcbcfce954c7a9dd09d667a3919953041&v=4",
+      "totalScore": 29.75829254649702,
+      "prScore": 29.75829254649702,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": null
+    },
+    {
+      "username": "EvoLinkAI",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/253253881?u=2824dc86ac92eb07afc48ac43213a31cba6432e6&v=4",
+      "totalScore": 29.523581822961965,
+      "prScore": 29.523581822961965,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": null
+    },
+    {
+      "username": "odilitime",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/16395496?u=c9bac48e632aae594a0d85aaf9e9c9c69b674d8b&v=4",
+      "totalScore": 25.18938508044441,
+      "prScore": 25.18938508044441,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": null
+    },
+    {
+      "username": "xavier-arosemena",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/212006378?u=51d17beade4934c79b0113de803fc1ef713b0c89&v=4",
+      "totalScore": 17.453535632133548,
+      "prScore": 17.25353563213355,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0.2,
+      "summary": null
+    },
+    {
+      "username": "ColonistOne",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/271974769?u=af6b52db284d4ebb9209e436a1fb003ff9ccf2e4&v=4",
+      "totalScore": 13.284134726391532,
+      "prScore": 13.084134726391532,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0.2,
+      "summary": null
+    },
+    {
+      "username": "namixai",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/265293674?u=3da6fe3862bee24f2d6f53953fba34f5faa3f53a&v=4",
+      "totalScore": 12.48605126783455,
+      "prScore": 12.48605126783455,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": null
+    },
+    {
+      "username": "bluetieroperations-create",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/270213615?v=4",
+      "totalScore": 11.56587386417331,
+      "prScore": 11.365873864173311,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0.2,
+      "summary": null
+    },
+    {
+      "username": "Nexussyn",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/210243486?v=4",
+      "totalScore": 2,
+      "prScore": 0,
+      "issueScore": 2,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": null
+    }
+  ],
+  "newPRs": 116,
+  "mergedPRs": 107,
+  "newIssues": 4,
+  "closedIssues": 2,
+  "activeContributors": 19
+}

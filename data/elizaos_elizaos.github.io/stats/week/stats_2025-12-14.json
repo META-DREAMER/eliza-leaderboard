@@ -1,0 +1,448 @@
+{
+  "interval": {
+    "intervalStart": "2025-12-14T00:00:00.000Z",
+    "intervalEnd": "2025-12-21T00:00:00.000Z",
+    "intervalType": "week"
+  },
+  "repository": "elizaos/elizaos.github.io",
+  "overview": "From 2025-12-14 to 2025-12-21, elizaos/elizaos.github.io had 11 new PRs (11 merged), 6 new issues, and 4 active contributors.",
+  "topIssues": [
+    {
+      "id": "I_kwDONNAI987fSHvX",
+      "title": "feat: Add JSON API endpoints for summaries",
+      "author": "madjin",
+      "number": 185,
+      "repository": "elizaos/elizaos.github.io",
+      "body": "## Summary\n\nExtend the static JSON API to include summary endpoints alongside the existing leaderboard endpoints.\n\n## Current State\n\nWe have leaderboard API endpoints working:\n- `/data/api/leaderboard-monthly.json`\n- `/data/api/leaderboard-weekly.json`\n- `/data/api/leaderboard-lifetime.json`\n\n## Proposed Summary API Endpoints\n\nExport all historical summaries as structured JSON:\n\n```\n/data/api/summaries/overall/{interval}/{date}.json\n/data/api/summaries/repos/{owner}/{repo}/{interval}/{date}.json\n/data/api/summaries/contributors/{username}/{interval}/{date}.json\n```\n\n### Response Structure\n\n```typescript\ninterface SummaryAPIResponse {\n  version: \"1.0\";\n  type: \"overall\" | \"repository\" | \"contributor\";\n  interval: \"day\" | \"week\" | \"month\";\n  date: string;           // YYYY-MM-DD\n  generatedAt: string;    // ISO timestamp\n  content: string;        // Markdown content\n}\n```\n\n## Implementation Plan\n\n### Shared Infrastructure\nCreate `src/lib/pipelines/export/apiHelpers.ts` with:\n- `APIResponseBase` interface (version, generatedAt)\n- `writeAPIResponse()` function\n- `calculateDateRange()` (extract from leaderboard)\n\n### Files to Create/Modify\n1. `src/lib/pipelines/export/apiHelpers.ts` - New shared utilities\n2. `src/lib/pipelines/export/exportLeaderboardAPI.ts` - Simplify (remove pagination, keep totalUsers)\n3. `src/lib/pipelines/export/exportSummaryAPI.ts` - New file\n4. `cli/analyze-pipeline.ts` - Add `export-summaries` command\n5. `.github/workflows/deploy.yml` - Add export step\n6. `README.md` - Document all API endpoints\n\n## Additional Changes\n\n- **Simplify leaderboard API**: Remove pagination object, keep just `totalUsers` (pagination doesn't make sense for static JSON files)\n\n## Questions to Discuss\n\n- Should we include index files listing all available summaries?\n- Any additional metadata to include in the response?\n- Rate of export - all summaries on every deploy, or incremental?\n\n---\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)",
+      "createdAt": "2025-12-19T05:06:15Z",
+      "closedAt": "2025-12-19T07:08:17Z",
+      "state": "CLOSED",
+      "commentCount": 4
+    },
+    {
+      "id": "I_kwDONNAI987ewZ8A",
+      "title": "Next.js upgrade blocked: RSC serialization error in StatCardsDisplay",
+      "author": "madjin",
+      "number": 176,
+      "repository": "elizaos/elizaos.github.io",
+      "body": "## Problem\n\nUpgrading Next.js from 15.2.6 to 15.4.10+ (or 16.x) causes build failures with:\n\n```\nError: Functions cannot be passed directly to Client Components unless you explicitly expose it by marking it with \"use server\". Or maybe you meant to call this function rather than return it.\n  {$$typeof: ..., render: function, displayName: ...}\n```\n\nAffected route: `/summary/[interval]/[[...date]]/page`\n\n## Root Cause\n\n`StatCardsDisplay` is an async server component that passes pre-rendered JSX elements to `StatCard` (client component) via the `modalContent` prop:\n\n```tsx\n// src/app/summary/[interval]/[[...date]]/components/StatCardsDisplay.tsx\n<StatCard\n  modalContent={<ContributorsListModalContent contributors={metrics.topContributors} />}\n>\n```\n\nReact elements contain render functions which aren't serializable across the RSC boundary. This worked in 15.2.6 but stricter versions catch this violation.\n\n## Solutions\n\nFrom [Next.js discussions](https://github.com/vercel/next.js/discussions/49625):\n\n1. **Make StatCardsDisplay a client component** - Add `\"use client\"` directive\n2. **Pass data instead of JSX** - Pass serializable props, render modal content inside client component\n3. **Use composition pattern** - Use `children` prop which has special RSC handling\n\nRecommended approach: Option 2 - refactor `StatCard` to accept a `modalContentType` + `modalData` props instead of pre-rendered JSX.\n\n## Files to Modify\n\n- `src/components/stat-card.tsx` - Already has `\"use client\"`, needs prop refactor\n- `src/app/summary/[interval]/[[...date]]/components/StatCardsDisplay.tsx` - Pass data not JSX\n- Modal content components may need to move inside stat-card or be lazy-imported\n\n## Current Workaround\n\nStay on Next.js 15.2.6 until this refactor is complete.\n\n## References\n\n- [Next.js Discussion #49625](https://github.com/vercel/next.js/discussions/49625)\n- [Next.js Issue #42408](https://github.com/vercel/next.js/issues/42408)\n- [How to Fix Guide](https://www.timsanteford.com/posts/how-to-fix-functions-cannot-be-passed-directly-to-client-components-error-in-next-js/)\n\n## Related PRs\n\n- PR #175 - RSS feed fix (separate issue)",
+      "createdAt": "2025-12-17T03:57:17Z",
+      "closedAt": "2025-12-17T06:49:34Z",
+      "state": "CLOSED",
+      "commentCount": 2
+    },
+    {
+      "id": "I_kwDONNAI987ev59z",
+      "title": "chore: Remove 10 unused dependencies",
+      "author": "madjin",
+      "number": 173,
+      "repository": "elizaos/elizaos.github.io",
+      "body": "## Summary\n\nDuring a dependency audit, 10 packages were identified as unused and can be safely removed to reduce bundle size and maintenance burden.\n\n## Unused Dependencies\n\n| Package | Reason Unused |\n|---------|---------------|\n| `@anthropic-ai/sdk` | AI summaries use OpenRouter API via `fetch()`, not this SDK |\n| `openai` | Same - OpenRouter handles all AI calls, SDK not imported |\n| `boxen` | Not imported anywhere in codebase |\n| `figlet` | Not imported anywhere in codebase |\n| `fuzzysort` | Not imported anywhere in codebase |\n| `gradient-string` | Not imported anywhere in codebase |\n| `gray-matter` | Not imported anywhere in codebase |\n| `unified` | Not imported; `react-markdown` handles remark plugins internally |\n| `remark-frontmatter` | Not imported anywhere in codebase |\n| `remark-parse` | Not imported anywhere in codebase |\n\n## Verification Method\n\nEach package was checked for:\n- Direct imports (`import from 'package'`)\n- Require statements\n- Usage in config files (next.config, tailwind.config, postcss.config, etc.)\n- Peer dependency requirements from other packages\n\n## Notes\n\n- The AI summary system (`src/lib/pipelines/summarize/callAIService.ts`) uses raw `fetch()` to call OpenRouter's API endpoint, making both `openai` and `@anthropic-ai/sdk` unnecessary\n- `task-master-ai` (devDependency) bundles its own dependencies and uses `@ai-sdk/anthropic` (Vercel AI SDK), not `@anthropic-ai/sdk`\n- `boxen`, `figlet`, `gradient-string`, `fuzzysort`, `gray-matter` appear to be remnants from earlier development\n\n## Recommended Action\n\nRemove these from `package.json` dependencies:\n```bash\nbun remove @anthropic-ai/sdk openai boxen figlet fuzzysort gradient-string gray-matter unified remark-frontmatter remark-parse\n```\n\nThis should reduce install size and simplify the dependency tree.",
+      "createdAt": "2025-12-17T02:39:59Z",
+      "closedAt": "2025-12-17T03:17:33Z",
+      "state": "CLOSED",
+      "commentCount": 2
+    },
+    {
+      "id": "I_kwDONNAI987SX1I5",
+      "title": "Enhancement: Adaptive Rate Limiting for 60% Faster Multi-Repo Ingestion",
+      "author": "madjin",
+      "number": 159,
+      "repository": "elizaos/elizaos.github.io",
+      "body": "## Problem: Sequential Processing is Too Slow for Multi-Repo Pipelines\n\n### Current Bottleneck\n\nThe current pipeline uses **static concurrency** which creates a performance vs reliability tradeoff:\n\n- **Low concurrency (current: 5)**: Safe but SLOW\n  - 23 repos × 52 weeks of data = **~10-15 hours** for full ingestion\n  - Single slow repo blocks entire pipeline\n  - Underutilizes available API quota (5,000 requests/hour)\n\n- **High concurrency**: Fast but RISKY\n  - Hits secondary rate limits frequently\n  - Forces pipeline to wait 15+ minutes\n  - Wastes time with retry backoff cycles\n\n### Real-World Impact\n\n**Example from M3-org fork** (14 Optimism repositories):\n- **Static concurrency=5**: 6-8 hours for full historical ingestion\n- **With adaptive concurrency**: 2-3 hours (60% faster)\n- **Rate limit hits**: Reduced from 10-15 to 2-3 per run\n\n**Projected for 23 elizaOS repositories:**\n- **Current static approach**: 10-15 hours\n- **With adaptive concurrency**: ~4-6 hours (60-70% faster)\n\n### Why Static Concurrency Fails\n\n1. **API health varies** - Morning vs evening, weekday vs weekend\n2. **Repository sizes differ** - Small repos finish fast, large repos take hours\n3. **Rate limit recovery** - After hitting limit, pipeline should slow down temporarily\n4. **Unnecessary conservatism** - Static concurrency=5 is safe but wastes quota\n\n---\n\n## Solution: Adaptive Concurrency Management\n\n### Core Concept\n\n**Dynamically adjust concurrent operations (3-8) based on rate limit health:**\n\n- **Start conservative**: 3 concurrent operations\n- **Increase on success**: +1 concurrency every 2 minutes without rate limits\n- **Decrease on rate limit**: Halve concurrency immediately\n- **Track health**: Remember last rate limit for 5 minutes\n\n### Performance Benchmarks\n\n**Test Setup**: M3-org/op-hiscores fork with 14 ethereum-optimism repos\n\n| Metric | Static (5) | Adaptive (3-8) | Improvement |\n|--------|-----------|----------------|-------------|\n| **Total duration** | 6h 45min | 2h 50min | **58% faster** |\n| **Rate limit hits** | 12 | 2 | **83% fewer** |\n| **Avg concurrency** | 5 | 5.8 | +16% |\n| **Recovery time** | 3h 20min | 45min | **77% faster** |\n\n---\n\n## Implementation Components\n\n### 1. Adaptive Concurrency Manager (~110 lines)\n```typescript\nclass AdaptiveConcurrencyManager {\n  currentLevel: 3-8 (starts at 3)\n  reduceOnSecondaryLimit() → currentLevel / 2\n  increaseOnSuccess() → currentLevel + 1 (if no rate limit in 2min)\n  shouldReduceLoad() → true if rate limited in last 5min\n}\n```\n\n### 2. Rate Limit Type Detection (~50 lines)\n- Distinguishes **primary** vs **secondary** rate limits\n- Different strategies for each type\n- Primary: Wait until reset (1hr)\n- Secondary: Reduce load + backoff (15min)\n\n### 3. Adaptive Pipeline Integration (~60 lines)\n```typescript\nmapStep(operation, {\n  adaptiveConcurrency: true,  // Enable dynamic adjustment\n  defaultConcurrency: 5       // Fallback\n})\n```\n\n### 4. API Cost Estimation (~75 lines)\n- Shows estimated duration BEFORE execution\n- `--estimate-only` flag for dry-run\n- Risk assessment (LOW/MEDIUM/HIGH)\n\n### 5. Graceful Shutdown (~30 lines)\n- First Ctrl+C: Complete current operation, preserve adaptive state\n- Second Ctrl+C: Force exit\n- Better for long-running multi-hour ingestions\n\n**Total**: ~348 lines across 4 files\n\n---\n\n## Production Testing\n\n- **Fork**: https://github.com/M3-org/op-hiscores\n- **Deployment**: https://m3-org.github.io/op-hiscores/\n- **Dataset**: 14 repos, 18,000+ PRs, 4,800+ issues\n- **Duration**: 6+ months in production\n- **Commit**: `309c37c` - feat: Enhance pipeline with adaptive rate limiting\n\n---\n\n## Trade-offs\n\n### Pros\n✅ **60-70% faster** for multi-repo ingestion\n✅ **75% fewer rate limit hits**\n✅ **Self-tuning** - No manual configuration needed\n✅ **Production-tested** - 14 repos, 18K+ PRs successfully processed\n✅ **Backward compatible** - Opt-in via `adaptiveConcurrency: true`\n\n### Cons\n⚠️ **Complexity** - 348 lines vs current static approach\n⚠️ **Tuning** - Thresholds (3-8, 2min, 5min) may not be optimal for all workloads\n⚠️ **Debugging** - Dynamic behavior is harder to reason about\n\n---\n\n## Value Proposition\n\nFor projects tracking **10+ repositories** (like this project with 23 repos), the difference between **15 hours and 4-6 hours** for full ingestion is substantial.\n\nThe self-tuning nature means:\n- No manual configuration needed\n- Automatically finds optimal concurrency\n- Scales better as more repos are added\n- Reduces developer waiting time by 6-10 hours per full ingestion\n\n---\n\n## Next Steps\n\nIf this enhancement aligns with the project's goals, I'm happy to:\n1. Submit a PR with the full implementation\n2. Provide additional benchmarks or testing\n3. Adjust parameters based on your specific workload\n4. Start with a subset (e.g., just rate limit type detection) if preferred\n\nThe implementation is production-ready and has been thoroughly tested with larger datasets than currently tracked by this project.\n\n---\n\n**Question for maintainers**: Is the ~60% performance improvement worth the additional complexity? Would you prefer the full enhancement or a smaller subset (e.g., just rate limit parsing)?\n",
+      "createdAt": "2025-10-19T03:21:00Z",
+      "closedAt": "2025-12-17T06:49:51Z",
+      "state": "CLOSED",
+      "commentCount": 1
+    },
+    {
+      "id": "I_kwDONNAI987ev_A0",
+      "title": "feat: Upgrade leaderboard search to fuzzy matching",
+      "author": "madjin",
+      "number": 174,
+      "repository": "elizaos/elizaos.github.io",
+      "body": "## Summary\n\nThe current leaderboard search uses simple string matching (`.toLowerCase().includes()`), which requires exact substring matches. Upgrading to fuzzy search would improve user experience.\n\n## Current Implementation\n\n```typescript\n// src/components/leaderboard.tsx:141\nuser.username.toLowerCase().includes(searchTerm.toLowerCase())\n```\n\nThis requires exact matches - searching \"shwa\" won't find \"shaw\".\n\n## Proposed Enhancement\n\nUse `fuzzysort` (already in package.json but unused) for typo-tolerant matching:\n\n```typescript\nimport fuzzysort from 'fuzzysort';\n\n// Instead of exact matching:\nconst filteredUsers = fuzzysort.go(searchTerm, users, { key: 'username' })\n  .map(result => result.obj);\n```\n\n## Benefits\n\n- **Typo tolerance**: \"shwa\" → finds \"shaw\"\n- **Partial matching**: \"wtfis\" → finds \"wtfisagi0\"  \n- **Ranked results**: Best matches appear first\n- **Fast**: Optimized for real-time filtering\n\n## Context\n\n- `fuzzysort` was added in commit `4fe3c624` (2025-01-21) during SQLite implementation\n- Search UI was added in PR #92 but used simple matching\n- Package is already installed, just needs to be imported and used\n\n## Related\n\n- See #173 for dependency audit (lists `fuzzysort` as currently unused)",
+      "createdAt": "2025-12-17T02:52:29Z",
+      "closedAt": null,
+      "state": "OPEN",
+      "commentCount": 1
+    }
+  ],
+  "topPRs": [
+    {
+      "id": "PR_kwDONNAI9865d1At",
+      "title": "feat: make all fork-specific values configurable via env vars",
+      "author": "madjin",
+      "number": 179,
+      "body": "## Summary\n- Replaces all hardcoded fork-specific values with environment variables\n- Auto-detects BASE_PATH and SITE_URL in GitHub Actions workflow based on repository name\n- Enables smooth fork syncing with upstream without conflicts\n\n## Changes\n- `next.config.js`: Use `BASE_PATH` env var instead of hardcoded `/op-hiscores`\n- `AuthContext.tsx`: Use `NEXT_PUBLIC_BASE_PATH` for OAuth redirects\n- `profile/page.tsx`: Use `NEXT_PUBLIC_SITE_NAME` for profile metadata\n- `callAIService.ts`: Use `SITE_URL` and `SITE_NAME` with generic fallbacks\n- `date-utils.ts`: Generic comment (no fork-specific text)\n- `.github/workflows/deploy.yml`: Auto-detect site URL and base path from repo name\n\n## How it works\nThe deploy workflow automatically detects whether this is:\n- An org/user site (`*.github.io` repo) → no base path needed\n- A project site (any other repo) → base path is `/${repo-name}`\n\nNo secrets need to be configured - values are computed at build time.\n\n## Test plan\n- [ ] Verify GitHub Actions build passes\n- [ ] Verify site deploys correctly to GitHub Pages\n- [ ] Verify OAuth flow works with dynamic base path\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)",
+      "repository": "elizaos/elizaos.github.io",
+      "createdAt": "2025-12-17T22:20:05Z",
+      "mergedAt": null,
+      "additions": 6401,
+      "deletions": 812
+    },
+    {
+      "id": "PR_kwDONNAI9865SBES",
+      "title": "fix: add SITE_URL for RSS feed + RSS nav button",
+      "author": "madjin",
+      "number": 175,
+      "body": "## Summary\n- Add `SITE_URL` environment variable to deploy workflow for RSS feed generation\n- Uses fork-friendly pattern: `secrets.SITE_URL` with fallback to `https://{owner}.github.io`\n- Add RSS icon button to navigation bar (desktop)\n- Update default AI model to gemini-2.5-flash\n\n## Context\nThe RSS feed at `/rss.xml` was returning 404 because `SITE_URL` wasn't set during the build. Since this is a static export (`output: \"export\"`), the route handler needs `SITE_URL` at build time to generate proper feed URLs.\n\nThe fallback pattern ensures forks can also deploy without configuring a secret - it will auto-detect the owner's github.io URL.\n\n## Test plan\n- [ ] Deploy workflow runs successfully\n- [ ] RSS feed accessible at `/rss.xml`\n- [ ] RSS button visible in navbar\n- [ ] Feed URLs point to correct domain\n\nFixes the RSS feed 404 issue from PR #172\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)",
+      "repository": "elizaos/elizaos.github.io",
+      "createdAt": "2025-12-17T03:41:31Z",
+      "mergedAt": "2025-12-17T04:50:28Z",
+      "additions": 914,
+      "deletions": 573
+    },
+    {
+      "id": "PR_kwDONNAI986vPlUQ",
+      "title": "feat: add JSON leaderboard API endpoints",
+      "author": "standujar",
+      "number": 164,
+      "body": "# Add JSON Leaderboard API Endpoints\r\n\r\n## Summary\r\n\r\nThis PR adds static JSON API endpoints for leaderboard data, enabling external applications, mobile apps, and third-party integrations to consume leaderboard information programmatically.\r\n\r\n## Features\r\n\r\n- **Three time periods**: Monthly, weekly, and lifetime leaderboards\r\n- **Comprehensive scoring**: Includes total score plus breakdown by contribution type (PR, issue, review, comment)\r\n- **Wallet addresses**: Includes Solana and Ethereum wallet addresses from GitHub profiles\r\n- **Calendar-based periods**: \r\n  - Weekly: Sunday to today\r\n  - Monthly: 1st of month to today\r\n  - Lifetime: Project start date to today\r\n- **CLI command**: `bun run pipeline export-leaderboard`\r\n- **CI/CD integration**: Automatically generates fresh leaderboard data on every deployment\r\n- **Full test coverage**: 9 comprehensive tests covering all scenarios\r\n\r\n## API Endpoints\r\n\r\nThe following static JSON files will be available via GitHub Pages:\r\n\r\n- `/data/api/leaderboard-monthly.json`\r\n- `/data/api/leaderboard-weekly.json`\r\n- `/data/api/leaderboard-lifetime.json`\r\n\r\n## Response Format\r\n\r\n```json\r\n{\r\n  \"period\": \"monthly\",\r\n  \"startDate\": \"2025-10-01\",\r\n  \"endDate\": \"2025-10-23\",\r\n  \"generatedAt\": \"2025-10-23T11:12:25.933Z\",\r\n  \"totalUsers\": 150,\r\n  \"leaderboard\": [\r\n    {\r\n      \"rank\": 1,\r\n      \"username\": \"contributor1\",\r\n      \"avatarUrl\": \"https://avatars.githubusercontent.com/...\",\r\n      \"score\": 1234.5,\r\n      \"prScore\": 800.0,\r\n      \"issueScore\": 200.0,\r\n      \"reviewScore\": 150.5,\r\n      \"commentScore\": 84.0,\r\n      \"wallets\": {\r\n        \"solana\": \"9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin\",\r\n        \"ethereum\": \"0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb\"\r\n      }\r\n    }\r\n  ]\r\n}\r\n```\r\n\r\n## Use Cases\r\n- Mobile apps: Display leaderboard data in native applications\r\n- Discord bots: Show contributor rankings and stats\r\n- Analytics dashboards: Track contributor engagement over time\r\n- Reward systems: Automate token distributions based on rankings\r\n- Third-party integrations: Enable community-built tools and services\r\n\r\n## Testing\r\nAll tests pass successfully:\r\n- bun test src/lib/pipelines/export/exportLeaderboardAPI.test.ts",
+      "repository": "elizaos/elizaos.github.io",
+      "createdAt": "2025-10-23T11:22:38Z",
+      "mergedAt": null,
+      "additions": 715,
+      "deletions": 11
+    },
+    {
+      "id": "PR_kwDONNAI9865Q1Ls",
+      "title": "feat: add RSS feed endpoint",
+      "author": "madjin",
+      "number": 172,
+      "body": "## Summary\nAdds `/rss.xml` endpoint that serves an RSS 2.0 feed of contributor summaries.\n\n## Features\n- 30 daily summaries\n- 4 weekly summaries  \n- 1 monthly summary\n- Strips markdown for clean descriptions\n- Proper XML escaping\n- Static generation with hourly revalidation\n- Uses `SITE_URL` env var for links (no hardcoded defaults)\n\n## Usage\nSubscribe to `https://your-site.com/rss.xml` in any RSS reader to get notified of new contributor summaries.\n\n## Files Added\n- `src/app/rss.xml/route.ts` - RSS feed route handler\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)",
+      "repository": "elizaos/elizaos.github.io",
+      "createdAt": "2025-12-17T00:46:27Z",
+      "mergedAt": "2025-12-17T01:56:07Z",
+      "additions": 698,
+      "deletions": 855
+    },
+    {
+      "id": "PR_kwDONNAI9865wKeK",
+      "title": "feat: add static JSON API for summaries",
+      "author": "madjin",
+      "number": 186,
+      "body": "## Summary\n\nExtends the static JSON API with summary endpoints using a \"piggyback\" approach - generating JSON alongside markdown during summarization.\n\n### Changes\n\n- **Simplified Leaderboard API**: Removed unnecessary pagination fields (static files don't support URL params)\n- **Extended fsHelpers**: Added `sha256`, path helpers, `writeJSONWithLatest`, `updateSummaryIndex`, and API types\n- **Overall Summaries**: Now export JSON alongside markdown with `latest.json` and `index.json`\n- **Repository Summaries**: Same JSON export for daily/weekly/monthly repo summaries\n- **Contributor Summaries**: Added both markdown (was missing!) and JSON export\n- **New CLI Command**: `export-summaries` for backfilling JSON from existing DB data\n- **Documentation**: Comprehensive API docs in README\n\n### API Structure\n\n```\n/data/api/\n├── leaderboard-monthly.json\n├── leaderboard-weekly.json\n├── leaderboard-lifetime.json\n└── summaries/\n    ├── overall/{interval}/{date}.json, latest.json, index.json\n    ├── repos/{owner}_{repo}/{interval}/{date}.json, latest.json, index.json\n    └── contributors/{username}/{interval}/{date}.json, latest.json, index.json\n```\n\n### Response Features\n\n- `contentHash` (sha256) for cache validation\n- `sourceLastUpdated` for tracking freshness\n- `latest.json` pointers for easy access to most recent summary\n- `index.json` for listing all available summaries per interval\n\n## Test plan\n\n- [ ] Run `bun run check` - passes lint and type checks\n- [ ] Run `bun run pipeline summarize -t overall --days 1` - generates JSON alongside markdown\n- [ ] Run `bun run pipeline export-summaries --dry-run` - shows what would be exported\n- [ ] Verify JSON structure matches documented schema\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\n<!-- This is an auto-generated comment: release notes by coderabbit.ai -->\n\n## Summary by CodeRabbit\n\n* **Documentation**\n  * Added comprehensive API documentation for Leaderboard and Summary endpoints, including request/response schemas and export instructions.\n\n* **New Features**\n  * Added new `export-summaries` CLI command to export summaries in JSON API format with configurable types, intervals, and dry-run mode support.\n  * Summary data now exported in both Markdown and JSON API formats with versioned artifacts and latest-link pointers.\n\n* **Changes**\n  * Leaderboard API responses simplified by removing pagination metadata.\n\n<sub>✏️ Tip: You can customize this high-level summary in your review settings.</sub>\n\n<!-- end of auto-generated comment: release notes by coderabbit.ai -->",
+      "repository": "elizaos/elizaos.github.io",
+      "createdAt": "2025-12-19T05:40:27Z",
+      "mergedAt": "2025-12-19T06:47:54Z",
+      "additions": 616,
+      "deletions": 62
+    }
+  ],
+  "codeChanges": {
+    "additions": 5504,
+    "deletions": 8953,
+    "files": 88,
+    "commitCount": 68
+  },
+  "completedItems": [
+    {
+      "title": "🔧 Chore: Update AI SDKs (openai, anthropic)",
+      "prNumber": 170,
+      "type": "other",
+      "body": "## Summary\nUpdates AI SDK dependencies to latest versions.\n\n## Changes\n| Package | Old | New |\n|---------|-----|-----|\n| openai | 4.86.1 | 6.10.0 |\n| @anthropic-ai/sdk | 0.39.0 | 0.71.2 |\n\n## OpenAI SDK v6 Changes\n- Response types updated\n-",
+      "files": [
+        ".github/workflows/deploy.yml",
+        "CLAUDE.md",
+        "README.md",
+        "auth-worker/wrangler.toml",
+        "bun.lock",
+        "cli/analyze-pipeline.ts",
+        "config/pipeline.config.ts",
+        "next.config.js",
+        "package.json",
+        "scripts/2025-weekly-reingest.sh",
+        "scripts/README.md",
+        "scripts/daily-automation.sh",
+        "scripts/fetch_github.py",
+        "scripts/verify-data.sh",
+        "src/app/globals.css",
+        "src/app/layout.tsx",
+        "src/app/profile/[username]/page.tsx",
+        "src/components/icons/op-red.svg",
+        "src/components/navigation.tsx",
+        "src/contexts/AuthContext.tsx",
+        "src/lib/data/github.ts",
+        "src/lib/date-utils.ts",
+        "src/lib/pipelines/ingest/index.ts",
+        "src/lib/pipelines/summarize/callAIService.ts",
+        "src/lib/pipelines/types.ts"
+      ]
+    },
+    {
+      "title": "fix: add SITE_URL for RSS feed + RSS nav button",
+      "prNumber": 175,
+      "type": "bugfix",
+      "body": "## Summary\n- Add `SITE_URL` environment variable to deploy workflow for RSS feed generation\n- Uses fork-friendly pattern: `secrets.SITE_URL` with fallback to `https://{owner}.github.io`\n- Add RSS icon button to navigation bar (desktop)\n- Up",
+      "files": [
+        ".github/workflows/deploy.yml",
+        "bun.lock",
+        "config/pipeline.config.ts",
+        "package.json",
+        "src/app/summary/[interval]/[[...date]]/components/StatCardsDisplay.tsx",
+        "src/components/navigation.tsx",
+        "src/components/stat-card.tsx"
+      ]
+    },
+    {
+      "title": "feat: add RSS feed endpoint",
+      "prNumber": 172,
+      "type": "feature",
+      "body": "## Summary\nAdds `/rss.xml` endpoint that serves an RSS 2.0 feed of contributor summaries.\n\n## Features\n- 30 daily summaries\n- 4 weekly summaries  \n- 1 monthly summary\n- Strips markdown for clean descriptions\n- Proper XML escaping\n- Static g",
+      "files": [
+        "bun.lock",
+        "src/app/rss.xml/route.ts"
+      ]
+    },
+    {
+      "title": "fix: RSS feed sorting and pipeline ordering",
+      "prNumber": 177,
+      "type": "bugfix",
+      "body": "## Summary\n- Fix RSS feed item sorting to be chronological instead of grouped by type\n- Fix pipeline workflow step ordering so overall summaries run after repository summaries\n\n## Changes\n\n### RSS Feed Sorting\nItems were grouped by type (mo",
+      "files": [
+        ".github/workflows/run-pipelines.yml",
+        "src/app/rss.xml/route.ts"
+      ]
+    },
+    {
+      "title": "feat: make all fork-specific values configurable via env vars",
+      "prNumber": 180,
+      "type": "feature",
+      "body": "## Summary\n- Replaces all hardcoded fork-specific values with environment variables\n- Auto-detects BASE_PATH and SITE_URL in GitHub Actions workflow based on repository name\n- Enables smooth fork syncing without conflicts\n\n## Changes\n- `nex",
+      "files": [
+        ".github/workflows/deploy.yml",
+        "README.md",
+        "cli/analyze-pipeline.ts",
+        "next.config.js",
+        "src/app/profile/[username]/page.tsx",
+        "src/contexts/AuthContext.tsx",
+        "src/lib/date-utils.ts",
+        "src/lib/pipelines/summarize/callAIService.ts"
+      ]
+    },
+    {
+      "title": "feat: RSS feed, workflow fixes, and fork-friendliness improvements",
+      "prNumber": 178,
+      "type": "feature",
+      "body": "## Summary\n\nThis PR combines several improvements:\n\n### RSS Feed\n- Add RSS feed endpoint at `/rss.xml` with daily, weekly, and monthly summaries\n- RSS button in navigation header\n- Items sorted chronologically by date (newest first)\n\n### Pi",
+      "files": [
+        ".github/workflows/deploy.yml",
+        ".github/workflows/pr-checks.yml",
+        ".github/workflows/run-pipelines.yml",
+        "README.md",
+        "config/example.json",
+        "config/pipeline.config.ts",
+        "src/app/layout.tsx",
+        "src/app/rss.xml/route.ts",
+        "src/components/navigation.tsx"
+      ]
+    },
+    {
+      "title": "feat: add profile copy button and rename site to HiScores",
+      "prNumber": 183,
+      "type": "feature",
+      "body": "## Summary\n- Add copy button to contributor profile pages for exporting profile data to LLMs\n- Change default site name from \"Contributor Analytics\" to \"HiScores\"\n\n### Profile Copy Button Features\n- New `ProfileCopyButton` component with sp",
+      "files": [
+        "src/app/layout.tsx",
+        "src/app/profile/[username]/components/UserProfile.tsx",
+        "src/app/profile/[username]/page.tsx",
+        "src/app/rss.xml/route.ts",
+        "src/components/navigation.tsx",
+        "src/components/ui/profile-copy-button.tsx",
+        "src/lib/profile-formatter.ts"
+      ]
+    },
+    {
+      "title": "feat: read SITE_NAME from pipeline config file",
+      "prNumber": 182,
+      "type": "feature",
+      "body": "## Summary\n\nAllows forks to configure `SITE_NAME` via their pipeline config JSON file instead of requiring a GitHub secret.\n\n## Changes\n\nUpdates `deploy.yml` to read `SITE_NAME` from the pipeline config file (e.g., `config/myorg.json`). The",
+      "files": [
+        ".github/workflows/deploy.yml"
+      ]
+    },
+    {
+      "title": "Cleanup dir",
+      "prNumber": 181,
+      "type": "refactor",
+      "body": "",
+      "files": [
+        ".cursor/mcp.json",
+        ".cursor/rules/address-pr-feedback.mdc",
+        ".cursor/rules/bun-tests.mdc",
+        ".cursor/rules/cursor_rules.mdc",
+        ".cursor/rules/database-queries.mdc",
+        ".cursor/rules/frontend.mdc",
+        ".cursor/rules/pipeline-system.mdc",
+        ".cursor/rules/self_improve.mdc",
+        ".cursor/rules/task-agent.mdc",
+        ".cursor/rules/taskmaster/dev_workflow.mdc",
+        ".cursor/rules/taskmaster/taskmaster.mdc",
+        ".cursor/rules/typescript-rules.mdc",
+        ".cursorignore",
+        ".gemini/settings.json",
+        ".gitignore",
+        ".taskmaster/config.json",
+        ".taskmaster/docs/README-task-master.md",
+        ".taskmaster/docs/prd.md",
+        ".taskmaster/reports/task-complexity-report.json",
+        ".taskmaster/state.json",
+        ".taskmaster/tasks/task_001.txt",
+        ".taskmaster/tasks/task_001_multi-repo-frontend.txt",
+        ".taskmaster/tasks/task_002.txt",
+        ".taskmaster/tasks/task_002_multi-repo-frontend.txt",
+        ".taskmaster/tasks/task_003.txt",
+        ".taskmaster/tasks/task_004.txt",
+        ".taskmaster/tasks/task_004_multi-repo-frontend.txt",
+        ".taskmaster/tasks/task_005.txt",
+        ".taskmaster/tasks/task_005_multi-repo-frontend.txt",
+        ".taskmaster/tasks/task_006.txt",
+        ".taskmaster/tasks/task_007.txt",
+        ".taskmaster/tasks/task_008.txt",
+        ".taskmaster/tasks/task_009.txt",
+        ".taskmaster/tasks/task_010.txt",
+        ".taskmaster/tasks/task_011.txt",
+        ".taskmaster/tasks/task_012.txt",
+        ".taskmaster/tasks/task_013.txt",
+        ".taskmaster/tasks/task_014.txt",
+        ".taskmaster/tasks/task_015.txt",
+        ".taskmaster/tasks/task_016.txt",
+        ".taskmaster/tasks/task_017.txt",
+        ".taskmaster/tasks/tasks.json",
+        ".taskmaster/templates/example_prd.txt",
+        ".windsurfrules",
+        "AGENTS.md",
+        "CLAUDE.md",
+        "plan/enhance-scoring-algo.md",
+        "plan/github-auth.md",
+        "plan/llm-copy-button.md",
+        "plan/multi-repo-frontend.md"
+      ]
+    },
+    {
+      "title": "feat: add static JSON API for summaries",
+      "prNumber": 186,
+      "type": "feature",
+      "body": "## Summary\n\nExtends the static JSON API with summary endpoints using a \"piggyback\" approach - generating JSON alongside markdown during summarization.\n\n### Changes\n\n- **Simplified Leaderboard API**: Removed unnecessary pagination fields (st",
+      "files": [
+        "README.md",
+        "cli/analyze-pipeline.ts",
+        "src/lib/fsHelpers.ts",
+        "src/lib/pipelines/export/exportLeaderboardAPI.ts",
+        "src/lib/pipelines/summarize/generateContributorSummary.ts",
+        "src/lib/pipelines/summarize/generateOverallSummary.ts",
+        "src/lib/pipelines/summarize/generateRepoSummary.ts"
+      ]
+    },
+    {
+      "title": "feat: add static JSON leaderboard API endpoints",
+      "prNumber": 184,
+      "type": "feature",
+      "body": "## Summary\n\n- Adds static JSON API endpoints for leaderboard data at `/data/api/leaderboard-{period}.json`\n- Includes API versioning (v1.0) for future compatibility\n- Adds pagination metadata (limit, offset, hasMore)\n- Uses `config.contribu",
+      "files": [
+        ".github/workflows/deploy.yml",
+        "cli/analyze-pipeline.ts",
+        "package.json",
+        "src/lib/pipelines/export/exportLeaderboardAPI.ts"
+      ]
+    }
+  ],
+  "topContributors": [
+    {
+      "username": "madjin",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/32600939?u=cdcf89f44c7a50906c7a80d889efa85023af2049&v=4",
+      "totalScore": 293.8112258087561,
+      "prScore": 276.5352258087561,
+      "issueScore": 16.4,
+      "reviewScore": 0,
+      "commentScore": 0.8759999999999999,
+      "summary": "madjin: Focused on enhancing content delivery for the `elizaos/elizaos.github.io` project by implementing a new RSS feed feature. They merged two significant PRs to add the feed endpoint (#172) and then fix its URL configuration (#175), with code changes primarily split between feature work and bug fixes. Madjin also planned for future work by creating several issues, including a blocker for a Next.js upgrade (#176) and a feature request for fuzzy search (#174)."
+    },
+    {
+      "username": "odilitime",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/16395496?u=c9bac48e632aae594a0d85aaf9e9c9c69b674d8b&v=4",
+      "totalScore": 103.6914338220675,
+      "prScore": 103.49143382206749,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0.2,
+      "summary": "odilitime: No activity this week."
+    },
+    {
+      "username": "borisudovicic",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/31806472?u=8935f4d43fd7e4eb9bf5ff92d54d4d2f8ac8a786&v=4",
+      "totalScore": 82,
+      "prScore": 0,
+      "issueScore": 82,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "borisudovicic: Focused on product definition and planning for the `elizaos/eliza` application, creating 24 issues to scope out a significant user experience overhaul. These issues detail a wide range of improvements, from terminology changes (elizaos/eliza#6240) and component redesigns to a full dashboard overhaul (elizaos/eliza#6222) and new guided onboarding (elizaos/eliza#6221)."
+    },
+    {
+      "username": "standujar",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/16385918?u=718bdcd1585be8447bdfffb8c11ce249baa7532d&v=4",
+      "totalScore": 52.9248999002843,
+      "prScore": 47.18489990028431,
+      "issueScore": 0,
+      "reviewScore": 5,
+      "commentScore": 0.74,
+      "summary": "standujar: Focused on a significant refactoring effort to unify the messaging API, opening pull requests in the Discord (#32) and Telegram (#22) plugins. This in-progress work was substantial, modifying 328 files with over 12k lines of new code. Their contributions this week were primarily centered on refactoring and feature development."
+    },
+    {
+      "username": "AntoineVergne",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/151149734?v=4",
+      "totalScore": 33.983573590279974,
+      "prScore": 29.28357359027997,
+      "issueScore": 0,
+      "reviewScore": 4.5,
+      "commentScore": 0.2,
+      "summary": "AntoineVergne: This week's focus was on expanding the plugin ecosystem by adding the new `plugin-farcaster-local-hub` to the registry in PR elizaos-plugins/registry#243. In addition to this feature work, they also provided one review comment. This activity centered on modifying configuration files to enable new functionality."
+    },
+    {
+      "username": "wtfsayo",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/82053242?u=98209a1f10456f42d4d2fa71db4d5bf4a672cbc3&v=4",
+      "totalScore": 29.54725378073324,
+      "prScore": 29.34725378073324,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0.2,
+      "summary": "wtfsayo: No activity this week."
+    },
+    {
+      "username": "0xbbjoker",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/54844437?u=90fe1762420de6ad493a1c1582f1f70c0d87d8e2&v=4",
+      "totalScore": 22.5,
+      "prScore": 0,
+      "issueScore": 2,
+      "reviewScore": 20.5,
+      "commentScore": 0,
+      "summary": "0xbbjoker: This week, 0xbbjoker focused on extensive bugfix work, committing substantial changes (+3636/-1121 lines) across 57 files. In addition to this work, they supported the team by providing 3 code reviews and proposed a feature improvement for the agent creator in issue elizaos/eliza#6245."
+    },
+    {
+      "username": "nguyennk92",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/30664183?u=d6e579cd25d50bc8e9ec4928d95909d759b841db&v=4",
+      "totalScore": 8.902606672028108,
+      "prScore": 8.902606672028108,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "nguyennk92: Worked on refactoring database connection handling within the `elizaos/eliza` repository. They opened a pull request (#6262) to remove a runtime database reassignment."
+    },
+    {
+      "username": "tdnupe3",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/25161668?u=94680b6bcbcfce954c7a9dd09d667a3919953041&v=4",
+      "totalScore": 2,
+      "prScore": 0,
+      "issueScore": 2,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "tdnupe3 initiated planning for a new payment feature by creating an issue in elizaos/eliza (#6244) that outlines an implementation guide for integrating Circle and Coinbase APIs."
+    }
+  ],
+  "newPRs": 11,
+  "mergedPRs": 11,
+  "newIssues": 6,
+  "closedIssues": 5,
+  "activeContributors": 4
+}

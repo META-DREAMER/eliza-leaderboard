@@ -1,0 +1,2397 @@
+1:"$Sreact.fragment"
+2:I[4817319,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"IntervalSelector"]
+3:I[6998365,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"LlmCopyButton"]
+1a:I[3642796,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],""]
+1b:I[3238488,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"StatCardsDisplay"]
+30:I[4261541,["/eliza-leaderboard/_next/static/chunks/b33bcbdcb3f88354.js","/eliza-leaderboard/_next/static/chunks/8ba59154b6704904.js"],"OutletBoundary"]
+31:"$Sreact.suspense"
+4:Tc3e,- Add x402 seller middleware: payment gate on plugin routes, startup validation, replay/facilitator/standard payment flows, and Vitest coverage.
+- Extend Route and payment types in @elizaos/core; document x402 in Mintlify and link from webhooks-and-routes.
+- Re-export @elizaos/app-lifeops lifeops-browser-packaging; expose ./api/server-auth in package exports; onboarding-presets shim.
+- Harden @elizaos/app-core tests: Vitest workspace path aliases, repo-root detection for flat monorepos, fix test helper imports, skip drift checks when optional workflows are absent, ComputerUse approval overlay and local plugin inventory fixes.
+- @elizaos/plugin-computeruse: key alias helpers, validateInt edge cases, partial helper mocks, longer timeouts, gate full runtime e2E behind env, relax live permission assertions.
+- Add package README/CHANGELOG and x402 smoke script for @elizaos/agent.
+
+Made-with: Cursor
+
+<!-- CURSOR_SUMMARY -->
+---
+
+> [!NOTE]
+> **High Risk**
+> Introduces payment-gating and settlement logic on HTTP plugin routes (including replay protection and remote facilitator verification), which is security- and revenue-critical and could block routes or allow unintended access if misconfigured.
+> 
+> **Overview**
+> Adds first-class **x402 paid plugin routes** to `@elizaos/agent`: routes can declare `x402`, and the new middleware enforces 402 responses plus payment verification (on-chain proofs, facilitator payment IDs, and standard `PAYMENT-SIGNATURE`/`X-Payment` flows) with **facilitator `POST /verify` then `POST /settle`** before running handlers, emitting `PAYMENT_REQUIRED`/`PAYMENT_VERIFIED` events and returning `PAYMENT-REQUIRED`/`PAYMENT-RESPONSE` headers.
+> 
+> Integrates this into the runtime route dispatcher (auto-wraps `x402` routes unless already wrapped) and adds startup-time x402 validation in `server.ts` to fail fast on invalid configs. Also adds built-in payment config presets, durable (SQL-backed) replay protection, extensive Vitest coverage, plus new package docs (`README.md`, `CHANGELOG.md`) and an `x402` smoke-test script; updates package exports and dependencies accordingly.
+> 
+> <sup>Reviewed by [Cursor Bugbot](https://cursor.com/bugbot) for commit 016ae6d387ccac74a281afc46ff6f8b5bac2b69a. Bugbot is set up for automated code reviews on this repo. Configure [here](https://www.cursor.com/dashboard/bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+* **New Features**
+  * Added X402 payment middleware for protecting plugin HTTP routes with micropayment requirements
+  * Introduced payment configuration system with support for BASE, SOLANA, and POLYGON networks
+  * Added startup validation for X402-protected routes with detailed error reporting
+
+* **Documentation**
+  * New guides for X402 paid plugin routes and implementation roadmap
+  * Updated webhook and routes documentation with X402 micropayment references
+
+* **Refactoring**
+  * Reorganized internal imports and code formatting across agent package
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->5:T20e3,## Plan
+- Open app catalog selections in managed Electrobun windows using the existing native toolbar-backed surfaces.
+- Keep detached windows connected to page-scoped chat/control context.
+- Add targeted coverage for always-on-top controls and the duplicate launch guard.
+
+## Patch summary
+- Electrobun: add managed app window RPCs, always-on-top toggles, and explicit webview load handling for detached windows.
+- Apps: add App Windows controls, hash-safe detached app routes, and prevent manual launches from being replayed by slug auto-launch.
+- Agent chat: add Connectors, Plugins, and Settings page scopes so detached surfaces retain scoped chat context.
+
+## Validation
+- `bunx @biomejs/biome check <touched files>`
+- `bunx vitest run eliza/packages/app-core/src/components/pages/AppsView.test.tsx eliza/packages/app-core/src/components/pages/page-scoped-conversations.test.ts eliza/packages/app-core/src/components/workspace/AppWorkspaceChrome.test.tsx eliza/packages/agent/src/api/conversation-metadata.test.ts --passWithNoTests`
+- `(cd packages/app-core/platforms/electrobun && bun run test -- src/surface-windows.test.ts src/native/canvas.test.ts)`
+- `(cd packages/app-core && bun run typecheck)`
+- `bun run dev:desktop -- --force-renderer`
+- Live smoke: clicked Apps -> Plugin Viewer; one elizaOS Plugins window opened, loaded the existing Plugins surface, and showed the Plugins chat panel.
+
+## Notes
+- Direct upstream push was denied for Dexploarer, so this PR is opened from the fork branch.
+- Desktop dev still reports existing whisper.cpp and n8n sidecar warnings; they are unrelated to this patch.
+
+<!-- greptile_comment -->
+
+<details><summary><h3>Greptile Summary</h3></summary>
+
+This PR wires up app catalog selections to open in managed Electrobun desktop windows, adds always-on-top controls for both managed surface windows and canvas/game windows, introduces concurrent-open coalescing for detached surfaces, and extends chat scope to cover Connectors, Plugins, and Settings views in detached windows. The previously flagged issues — silent no-op on `setAlwaysOnTop`, stale pin state on canvas window failure, and the `shouldUseHashNavigation` duplication — are all resolved in this patch.
+</details>
+
+<h3>Confidence Score: 5/5</h3>
+
+Safe to merge — all previously flagged issues are addressed and no new P0/P1 defects found.
+
+The patch resolves every issue from the prior review thread: setAlwaysOnTop now returns {success:boolean} instead of silently no-opping, the alwaysOnTop state on canvasListWindows failure is handled in a try/catch, shouldUseHashNavigation duplication is eliminated by extracting shared utilities to navigation/index.ts, and the duplicate-surface-window guard is implemented via openSurfaceWindowOnce. New tests cover the concurrent-open coalescing, singleton guard, explicit webview loadURL, and the always-on-top toggle contract. No P1 or P0 issues found in the new code paths.
+
+No files require special attention.
+
+<details><summary><h3>Important Files Changed</h3></summary>
+
+| Filename | Overview |
+|----------|----------|
+| packages/app-core/platforms/electrobun/src/surface-windows.ts | Adds openAppWindow, concurrent-open coalescing via pendingSurfaceWindows, setWindowAlwaysOnTop, and explicit webview loadURL. Singleton guard for detached surfaces is now present; loadURL deferred via setTimeout(0) to allow webview to initialize. |
+| packages/app-core/src/components/pages/AppsView.tsx | Adds AppWindowRecord tracking, heartbeat loop, desktop window event subscriptions, and the App Windows control strip. slugAutoLaunchDone.current is now set before the slug lookup to prevent re-launch after a manual catalog open updates the URL — intentional guard. |
+| packages/app-core/platforms/electrobun/src/rpc-handlers.ts | Adds desktopOpenAppWindow, desktopSetManagedWindowAlwaysOnTop, and canvasSetAlwaysOnTop RPC handlers. normalizeRendererRoutePath validates the incoming path is a renderer route before it reaches the URL builder. |
+| packages/app-core/platforms/electrobun/src/native/canvas.ts | Adds setAlwaysOnTop (returns {success: boolean}), exposes alwaysOnTop in listWindows output, and accepts alwaysOnTop in openGameWindow. Addresses the previously flagged silent no-op issue. |
+| packages/app-core/platforms/electrobun/src/native/desktop.ts | Adds openAppWindowCallback and managedWindowAlwaysOnTopCallback wiring. openSurfaceWindow now returns a ManagedWindowSnapshot rather than void, enabling callers to receive the created window ID. |
+| packages/app-core/platforms/electrobun/src/rpc-schema.ts | Schema-level additions: DesktopManagedWindowSnapshot, desktopOpenAppWindow, desktopSetManagedWindowAlwaysOnTop, canvasSetAlwaysOnTop, desktopManagedWindowsChanged push event, and alwaysOnTop on canvas/game types. |
+| packages/app-core/src/navigation/index.ts | Extracts shouldUseHashNavigation, getWindowNavigationPath, and isAppWindowRoute into shared utilities, eliminating the previously flagged duplication across AppsView, AppsPageView, AppContext, and useNavigationState. |
+| packages/agent/src/api/conversation-metadata.ts | Adds page-connectors, page-plugins, and page-settings to VALID_SCOPES. page-settings was already in the ConversationScope type union but was missing from the runtime validation set — this is a correct sync fix. |
+| packages/app-core/src/shell/DetachedShellRoot.tsx | Wraps connectors, plugins, triggers, and settings detached views in DetachedWorkspaceView to provide scoped chat context. Settings section gains overflow-y-auto for scroll. |
+| packages/app-core/src/components/apps/GameView.tsx | Adds always-on-top toggle button for game windows with try/catch guard on canvasListWindows fetch (addressing previous stale-state comment) and success-response check before updating local state. |
+| packages/app-core/platforms/electrobun/src/surface-windows.test.ts | New test file covering surface URL building, singleton guard, concurrent-open coalescing, and explicit webview loadURL. Good coverage of the new deduplication logic. |
+| packages/app-core/platforms/electrobun/src/native/canvas.test.ts | New test file covering openGameWindow with alwaysOnTop, setAlwaysOnTop toggle, and failure path for missing window IDs. Validates the { success: boolean } return contract. |
+
+</details>
+
+</details>
+
+<details><summary><h3>Sequence Diagram</h3></summary>
+
+```mermaid
+sequenceDiagram
+    participant UI as AppsView (Renderer)
+    participant Bridge as Desktop Bridge (RPC)
+    participant SM as SurfaceWindowManager
+    participant DM as DesktopManager
+    participant CM as CanvasManager
+
+    Note over UI: User clicks catalog app
+
+    alt Internal tool app (plugins/connectors/browser/triggers)
+        UI->>Bridge: desktopOpenSurfaceWindow(surface, alwaysOnTop)
+        Bridge->>DM: openSurfaceWindow()
+        DM->>SM: openSurfaceWindow(surface, browse, alwaysOnTop)
+        SM->>SM: Check pendingSurfaceWindows (coalesce)
+        SM->>SM: Check existing window (singleton guard)
+        SM-->>UI: ManagedWindowSnapshot {id, alwaysOnTop}
+        SM->>UI: desktopManagedWindowsChanged push event
+    else External viewer app (game/canvas)
+        UI->>Bridge: gameOpenWindow(url, title, alwaysOnTop)
+        Bridge->>CM: openGameWindow(url, alwaysOnTop)
+        CM-->>UI: {id}
+        Note over UI: Heartbeat loop started
+    else Generic app route
+        UI->>Bridge: desktopOpenAppWindow(title, path, alwaysOnTop)
+        Bridge->>SM: openAppWindow(title, path, alwaysOnTop)
+        SM->>SM: buildAppWindowRendererUrl(rendererUrl, path)
+        Note over SM: URL: host/?appWindow=1#/route
+        SM-->>UI: ManagedWindowSnapshot {id, alwaysOnTop}
+        SM->>UI: desktopManagedWindowsChanged push event
+    end
+
+    Note over UI: Toggle pin on open window
+    alt Managed window
+        UI->>Bridge: desktopSetManagedWindowAlwaysOnTop(id, flag)
+        Bridge->>SM: setWindowAlwaysOnTop(id, flag)
+        SM-->>UI: {success: boolean}
+    else Canvas/game window
+        UI->>Bridge: canvasSetAlwaysOnTop(id, flag)
+        Bridge->>CM: setAlwaysOnTop(id, flag)
+        CM-->>UI: {success: boolean}
+    end
+```
+</details>
+
+<sub>Reviews (2): Last reviewed commit: ["fix: address managed app window review c..."](https://github.com/elizaos/eliza/commit/58831fa8e73bc48c4ab8586b9ac1d7780717b2fc) | [Re-trigger Greptile](https://app.greptile.com/api/retrigger?id=29583462)</sub>
+
+<!-- /greptile_comment -->6:T23f4,## Problem
+
+The character editor already resolves `{{name}}` / `{{agentName}}` tokens on **load** (`replaceNameTokens` in `packages/app-core/src/utils/name-tokens.ts`, seeded by the onboarding presets in `packages/shared/src/onboarding-presets.characters.ts`).
+
+But `prepareDraftForSave` in `packages/app-core/src/character/character-draft-helpers.ts` never ran the reverse pass. The moment a user saved via the editor, expanded literals got persisted and the tokens were lost forever. From that point on, renaming the agent in Identity settings stopped propagating — bio, system, message examples, post examples, style, and topics all kept the old name as dead text.
+
+User-visible symptom: renaming the agent requires find-and-replacing the name across ~20 lines of bio, every time.
+
+## Fix
+
+Make save the mirror of load.
+
+- Add `tokenizeNameOccurrences(text, name)` next to `replaceNameTokens`. Whole-word, case-sensitive, idempotent; refuses single-character names to avoid eating prose.
+- `prepareDraftForSave(draft, previousName?)` now runs the tokenizer over every free-text field: `bio`, `system`, `topics`, `postExamples`, `style.{all,chat,post}`, and `messageExamples[].examples[].content.text`. Speaker-label tokenization via `normalizeSpeakerName` is unchanged.
+- Both the current draft name and (optionally) the previous saved name are tokenized so a rename within the same save pass also catches stale old-name literals that the user didn't hand-edit.
+- `useCharacterState.handleSaveCharacter` threads `characterData?.name` through as the previous name.
+
+Runtime prompt composition already resolves `{{name}}` / `{{agentName}}` tokens via `@elizaos/prompts`, so no backend or runtime changes are needed — the fix is purely at the UI persistence boundary.
+
+## Migration
+
+No explicit one-shot migration needed. The first save after this change tokenizes the character in place, and the load path already renders tokens back to literals for display. Because tokenization is idempotent and case-sensitive/whole-word, re-running it is safe.
+
+## Tests
+
+15 new cases in `packages/app-core/src/utils/name-tokens.test.ts` covering:
+
+- Whole-word boundary behavior (e.g. name "Kai" does not match inside "Kaizen")
+- Case sensitivity (lowercase "momo" is not tokenized when name is "Momo")
+- Idempotency (`tokenize(tokenize(x)) === tokenize(x)`)
+- Guardrails (single-character names, empty inputs, regex special chars)
+- `prepareDraftForSave` field coverage: bio / system / topics / postExamples / style / messageExamples bodies
+- Previous-name tokenization during rename
+- Round-trip through `replaceNameTokens` after a rename
+
+```
+ Test Files  1 passed (1)
+      Tests  15 passed (15)
+```
+
+## Verified
+
+- `bun run typecheck` — clean
+- `bunx @biomejs/biome check` on all four changed files — clean
+- Unit test suite — 15/15 passing
+
+## Not claimed
+
+- Knowledge / Experience / Relationships tabs may also store the name literally; they're on different API surfaces. If they do, a follow-up PR extends the tokenizer to those endpoints. No change to them here.
+- Nickname / alternate-form support (`{{nickname}}`) is not added. Schema leaves space for it; not needed for the core rename-propagation fix.
+
+<!-- greptile_comment -->
+
+<h3>Greptile Summary</h3>
+
+This PR adds `tokenizeNameOccurrences` and wires it into `prepareDraftForSave` so that literal name text is re-tokenized to `{{name}}` on every save, making agent renames propagate without manual find-and-replace. The approach is sound, but there is a critical asymmetry between the save and load paths.
+
+- **Save path** now tokenizes `bio`, `system`, `topics`, `postExamples`, `style.all/chat/post`, and `messageExamples[].content.text`.
+- **Load path** (`loadCharacter` in `useCharacterState.ts`) applies `replaceNameTokens` only to `bio` and `system` — the four additional field groups are passed through raw. After the first save with this fix, users will see literal `{{name}}` tokens in the Topics, Style, Post Examples, and Message Examples editor fields.
+
+<h3>Confidence Score: 3/5</h3>
+
+Not safe to merge — the save/load asymmetry will surface raw `{{name}}` tokens in the editor UI immediately after first save.
+
+A single clear P1 defect: the save path tokenizes six field groups but the load path only un-tokenizes two, creating an immediate and reproducible UX regression for every user who saves after this change ships.
+
+`packages/app-core/src/state/useCharacterState.ts` — `loadCharacter` must apply `replaceNameTokens` to `topics`, `style.*`, `postExamples`, and `messageExamples[].content.text` to match the expanded save-side coverage.
+
+<h3>Important Files Changed</h3>
+
+
+
+
+| Filename | Overview |
+|----------|----------|
+| packages/app-core/src/state/useCharacterState.ts | Threads `characterData?.name` as `previousName` into `prepareDraftForSave`, but the `loadCharacter` callback only applies `replaceNameTokens` to `bio` and `system` — not to the six field groups now tokenized on save — causing raw `{{name}}` tokens to appear in the editor UI after first save. |
+| packages/app-core/src/character/character-draft-helpers.ts | Adds `previousName` param and applies tokenization across all free-text fields on save; logic is sound, but correctness depends on the load path being symmetrically updated (which it isn't for several field groups). |
+| packages/app-core/src/utils/name-tokens.ts | Adds `tokenizeNameOccurrences` — case-sensitive, whole-word, idempotent, with guardrails for short/empty names and regex-special chars. Word boundary behaviour is limited to ASCII names; non-ASCII names may not tokenize reliably. |
+| packages/app-core/src/utils/name-tokens.test.ts | Good unit coverage of `tokenizeNameOccurrences` and `prepareDraftForSave` field tokenization; missing round-trip tests verifying load-side expansion for `topics`, `style`, `postExamples`, and `messageExamples`. |
+
+</details>
+
+
+
+<h3>Sequence Diagram</h3>
+
+```mermaid
+sequenceDiagram
+    participant UI as Editor UI
+    participant State as useCharacterState
+    participant Helpers as character-draft-helpers
+    participant API as Backend API
+
+    Note over UI,API: Save flow (this PR)
+    UI->>State: handleSaveCharacter()
+    State->>Helpers: prepareDraftForSave(draft, previousName)
+    Note over Helpers: tokenizes bio, system, topics,<br/>postExamples, style.*, messageExamples
+    Helpers-->>State: tokenized draft
+    State->>API: updateCharacter(tokenizedDraft)
+    API-->>State: success
+    State->>State: loadCharacter()
+
+    Note over UI,API: Load flow (this PR — unchanged)
+    State->>API: getCharacter()
+    API-->>State: character data (with {{name}} tokens)
+    Note over State: clean() applied to bio + system only
+    Note over State: topics / style / postExamples /<br/>messageExamples NOT cleaned ⚠️
+    State->>UI: setCharacterDraft (raw {{name}} tokens visible in editor)
+```
+
+<!-- greptile_failed_comments -->
+<details><summary><h3>Comments Outside Diff (1)</h3></summary>
+
+1. `packages/app-core/src/state/useCharacterState.ts`, line 86-101 ([link](https://github.com/elizaos/eliza/blob/7cb0d48b06af3b7ab64803113994ac619151d18b/packages/app-core/src/state/useCharacterState.ts#L86-L101)) 
+
+   <a href="#"><img alt="P1" src="https://greptile-static-assets.s3.amazonaws.com/badges/p1.svg?v=7" align="top"></a> **Load path doesn't un-tokenize `topics`, `style`, `postExamples`, `messageExamples`**
+
+   `loadCharacter` applies `clean` (i.e. `replaceNameTokens`) to `bio` and `system` only, but `prepareDraftForSave` now tokenizes six additional field groups — `topics`, `postExamples`, `style.all/chat/post`, and `messageExamples[].content.text`. After the first save with this fix, those fields will be persisted with `{{name}}` tokens. On reload, the draft will contain raw token strings such as `"how {{name}} thinks"`, which the editor will display verbatim to the user.
+
+   ```ts
+   // before setting the draft, add:
+   const cleanArr = (arr: string[]) => arr.map(clean);
+
+   setCharacterDraft({
+     name: savedName,
+     username: character.username ?? "",
+     bio: Array.isArray(character.bio)
+       ? character.bio.map(clean).join("\n")
+       : clean(character.bio ?? ""),
+     system: clean(character.system ?? ""),
+     adjectives: character.adjectives ?? [],
+     topics: cleanArr(character.topics ?? []),
+     style: {
+       all: cleanArr(character.style?.all ?? []),
+       chat: cleanArr(character.style?.chat ?? []),
+       post: cleanArr(character.style?.post ?? []),
+     },
+     messageExamples: (character.messageExamples ?? []).map((group) => ({
+       ...group,
+       examples: group.examples.map((ex) => ({
+         ...ex,
+         content: { ...ex.content, text: clean(ex.content.text) },
+       })),
+     })),
+     postExamples: cleanArr(character.postExamples ?? []),
+   });
+   ```
+
+</details>
+
+<!-- /greptile_failed_comments -->
+
+<sub>Reviews (1): Last reviewed commit: ["fix(character): tokenize name occurrence..."](https://github.com/elizaos/eliza/commit/7cb0d48b06af3b7ab64803113994ac619151d18b) | [Re-trigger Greptile](https://app.greptile.com/api/retrigger?id=29603728)</sub>
+
+> Greptile also left **1 inline comment** on this PR.
+
+<!-- /greptile_comment -->7:T1d08,Cherry-picked from #7093 (by @dutchiono) — only the character rename fix, without the unrelated submodule pointer bumps, Windows pty patch, and coding-agent chip changes that #7093 also carried.
+
+## Problem
+
+The character editor resolves \`{{name}}\` / \`{{agentName}}\` tokens on **load** (\`replaceNameTokens\`), but \`prepareDraftForSave\` never ran the reverse pass. The moment a user saved via the editor, expanded literals got persisted and the tokens were lost. From that point on, renaming the agent in Identity settings stopped propagating — bio, system, message examples, post examples, style, and topics all kept the old name as dead text.
+
+## Fix
+
+- Add \`tokenizeNameOccurrences(text, name)\` next to \`replaceNameTokens\`. Whole-word, case-sensitive, idempotent; refuses single-character names to avoid eating prose.
+- \`prepareDraftForSave(draft, previousName?)\` runs the tokenizer over every free-text field: \`bio\`, \`system\`, \`topics\`, \`postExamples\`, \`style.{all,chat,post}\`, and \`messageExamples[].examples[].content.text\`.
+- Both the current draft name and (optionally) the previous saved name are tokenized so a rename within the same save pass also catches stale old-name literals.
+- \`useCharacterState.handleSaveCharacter\` threads \`characterData?.name\` through as the previous name.
+
+Runtime prompt composition already resolves \`{{name}}\` / \`{{agentName}}\` tokens via \`@elizaos/prompts\`, so no backend changes are needed.
+
+## Tests
+
+15 cases in \`name-tokens.test.ts\`: whole-word boundaries, case sensitivity, idempotency, single-char/empty/regex-special guardrails, full \`prepareDraftForSave\` field coverage, previous-name during rename, round-trip with \`replaceNameTokens\`.
+
+Supersedes #7093.
+
+<!-- greptile_comment -->
+
+<h3>Greptile Summary</h3>
+
+This PR adds `tokenizeNameOccurrences` to reverse the load-side `replaceNameTokens` expansion on save, so character renames propagate through all free-text fields. The core logic and tests are solid, but the save-side tokenization is not symmetric with the load-side de-tokenization.
+
+- **P1 — Editor shows raw `{{name}}` after save**: `prepareDraftForSave` now tokenizes `topics`, `postExamples`, `style.*`, and `messageExamples[].content.text`, but `loadCharacter` in `useCharacterState.ts` only calls `replaceNameTokens` on `bio` and `system`. Because `handleSaveCharacter` calls `loadCharacter()` on success, these fields immediately reload with raw `{{name}}` template syntax visible in the editor UI.
+
+<h3>Confidence Score: 3/5</h3>
+
+Not safe to merge — the load/save asymmetry will cause raw {{name}} tokens to appear in the editor immediately after any save.
+
+One P1 defect: loadCharacter in useCharacterState.ts does not de-tokenize the four field groups that prepareDraftForSave now tokenizes. Because handleSaveCharacter calls loadCharacter() on success, users will see {{name}} as literal text in the topics, post-examples, style, and message-example editors after every save.
+
+packages/app-core/src/state/useCharacterState.ts — the loadCharacter callback (lines 86–102) must be extended to apply replaceNameTokens to all newly-tokenized fields.
+
+<h3>Important Files Changed</h3>
+
+
+
+
+| Filename | Overview |
+|----------|----------|
+| packages/app-core/src/state/useCharacterState.ts | Adds characterData to the dependency array and passes it as previousName to prepareDraftForSave, but loadCharacter only de-tokenizes bio and system — leaving topics, postExamples, style.*, and messageExamples with raw {{name}} tokens visible in the editor after each save. |
+| packages/app-core/src/character/character-draft-helpers.ts | Correctly introduces a tokenize closure that covers all free-text fields on save; adjectives are intentionally excluded. Implementation is well-structured. |
+| packages/app-core/src/utils/name-tokens.ts | New tokenizeNameOccurrences is case-sensitive, whole-word, idempotent, and safely escapes regex metacharacters; single-char guard is correct. |
+| packages/app-core/src/utils/name-tokens.test.ts | Comprehensive 15-case test suite covering tokenization, idempotency, edge guards, and round-trip with replaceNameTokens; no issues found. |
+
+</details>
+
+
+
+<h3>Sequence Diagram</h3>
+
+```mermaid
+sequenceDiagram
+    participant Editor
+    participant useCharacterState
+    participant prepareDraftForSave
+    participant Server
+
+    Editor->>useCharacterState: handleSaveCharacter()
+    useCharacterState->>prepareDraftForSave: draft + previousName
+    prepareDraftForSave->>prepareDraftForSave: tokenize(bio, system, topics, postExamples, style.*, messageExamples)
+    prepareDraftForSave-->>useCharacterState: tokenized draft
+    useCharacterState->>Server: updateCharacter(draft)
+    Server-->>useCharacterState: success
+    useCharacterState->>useCharacterState: loadCharacter()
+    useCharacterState->>Server: getCharacter()
+    Server-->>useCharacterState: character with {{name}} in all fields
+    useCharacterState->>useCharacterState: clean(bio) ✅ clean(system) ✅ topics as-is ❌ postExamples as-is ❌ style.* as-is ❌ messageExamples as-is ❌
+    useCharacterState-->>Editor: draft with raw {{name}} visible in topics/style/etc
+```
+
+<!-- greptile_failed_comments -->
+<details><summary><h3>Comments Outside Diff (1)</h3></summary>
+
+1. `packages/app-core/src/state/useCharacterState.ts`, line 86-102 ([link](https://github.com/elizaos/eliza/blob/406f30fea4094536e09fce7c72935c8b668edf2b/packages/app-core/src/state/useCharacterState.ts#L86-L102)) 
+
+   <a href="#"><img alt="P1" src="https://greptile-static-assets.s3.amazonaws.com/badges/p1.svg?v=7" align="top"></a> **Load-side de-tokenization is incomplete — users will see raw `{{name}}` in the editor**
+
+   `prepareDraftForSave` now tokenizes `topics`, `postExamples`, `style.*`, and `messageExamples[].content.text`, but `loadCharacter` (lines 86–102) only calls `clean` on `bio` and `system`. After a successful save, `handleSaveCharacter` calls `loadCharacter()` (line 137), which reloads the character without de-tokenizing those four field groups — so the user immediately sees `{{name}}` as raw text in the topics, style, post-examples, and message-example editors.
+
+   Concrete path: save character "Momo" with topic `"how Momo thinks"` → stored as `"how {{name}} thinks"` → `loadCharacter` puts it back into the draft untouched → editor renders `"how {{name}} thinks"`.
+
+   Fix: extend the `clean` pass in `loadCharacter` to cover all fields that `prepareDraftForSave` now tokenizes:
+
+   ```
+   topics: (character.topics ?? []).map(clean),
+   postExamples: (character.postExamples ?? []).map(clean),
+   style: {
+     all: (character.style?.all ?? []).map(clean),
+     chat: (character.style?.chat ?? []).map(clean),
+     post: (character.style?.post ?? []).map(clean),
+   },
+   messageExamples: (character.messageExamples ?? []).map((group) => ({
+     ...group,
+     examples: group.examples.map((ex) => ({
+       ...ex,
+       content: { ...ex.content, text: clean(ex.content.text) },
+     })),
+   })),
+   ```
+
+</details>
+
+<!-- /greptile_failed_comments -->
+
+<sub>Reviews (1): Last reviewed commit: ["fix(character): tokenize name occurrence..."](https://github.com/elizaos/eliza/commit/406f30fea4094536e09fce7c72935c8b668edf2b) | [Re-trigger Greptile](https://app.greptile.com/api/retrigger?id=29694663)</sub>
+
+> Greptile also left **2 inline comments** on this PR.
+
+<!-- /greptile_comment -->8:T1092,## Summary
+
+The swarm synthesis path was broken in three stacked ways. When a task agent finished its work (opens a PR, builds a page, fetches data, etc.), nothing was posted back to the triggering room — the agent silently dropped its final result on the floor.
+
+### 1. `setSwarmCompleteCallback` was a no-op
+
+`wireCodingAgentSwarmSynthesis` installed a deliberate no-op with a comment claiming *"synthesis happens via the streamer instead."* In practice `handleSwarmSynthesis` (defined in the same file) is never called anywhere in the repo. Task agents completed, `swarm_complete` fired, the callback ran, returned — no user-facing message was ever emitted.
+
+**Fix:** wire the callback to `await handleSwarmSynthesis(st, payload)`.
+
+### 2. `routeSynthesisToConnector` gated on a field that's never assigned
+
+The connector-routing path early-returns when `coordinator.sourceRoomId` is null. That field is declared on the coordinator interface but **never assigned anywhere in the orchestrator**, so the path was always dead.
+
+**Fix:** thread a `fallbackRoomId` parameter through `routeSynthesisToConnector`. Derive it from the most recently terminal task in the payload — the task whose completion fired `swarm_complete`, and whose room is waiting for an answer. Naively taking *"first task with a roomId"* leaked results into stale rooms when the coordinator carried tasks across rooms. `coordinator.sourceRoomId` is still preferred when set, so any future direct assignment still wins.
+
+### 3. Synthesis rendered a meta-summary instead of the actual result
+
+`buildTaskResultLine` used the coordinator's `completionSummary` as the user-facing output. That's a meta-judgment about *whether* the task finished ("The agent delivered a complete evening news brief with 7 headlines..."), not the content the agent produced. The real deliverable — the brief itself, the PR URL line, the built page URL — was sitting unread in the task agent's `claude-code` session transcript.
+
+**Fix:** read the newest `.jsonl` at `~/.claude/projects/<sanitized-workdir>/` and return the last assistant message as the primary synthesis content. Only fall through to `completionSummary` (and then to port-heuristic text) when the jsonl can't be read. The workdir sanitizer replaces both `/` and `.` with `-` so hidden paths like `/home/u/.milady/workspaces/<id>` resolve to their matching project directory.
+
+## Changes
+
+One file: `packages/agent/src/api/server-helpers-swarm.ts` (+107, -6).
+
+- `wireCodingAgentSwarmSynthesis` now invokes `handleSwarmSynthesis`
+- `handleSwarmSynthesis` payload carries per-task `roomId` and `workdir`
+- `routeSynthesisToConnector` accepts an optional `fallbackRoomId`
+- New `readAgentFinalAssistantMessage(workdir)` helper reads the agent's final message from its claude-code transcript
+- `buildTaskResultLine` prefers the agent's real output over the coordinator's meta-summary
+
+## Test plan
+
+- [x] Verified end-to-end on a real Discord-triggered delegation: user prompt → planner picks SPAWN_AGENT → task agent completes → synthesis posts the actual deliverable into the originating Discord room. Log shows:
+  ```
+  [swarm-synthesis] Generating synthesis for 1 tasks (1 completed, 0 stopped, 0 errored)
+  [swarm-synthesis] Synthesis generated, routing to user
+  [swarm-synthesis] Routed result to discord room <uuid>
+  ```
+- [x] Multi-task swarm where some tasks span different rooms: synthesis lands in the correct (most recently terminal) room, not in a stale room from a sibling task.
+- [x] `tsc --noEmit` clean in `packages/agent`.
+
+## Compatibility notes
+
+- Behavior for turns where `coordinator.sourceRoomId` is actually set (any downstream consumer that populates it): unchanged — still preferred over the fallback.
+- Behavior when the jsonl isn't readable (non-claude task agents, race at early-kill time, etc.): falls back to existing `completionSummary` / port-heuristic path, so no regression vs. pre-patch rendering.
+- Net effect for users relying on the synthesis NOT running (none observed, but noting it): they now get a post-task message where they previously got silence. If that's desired behavior for some deployment, it should be guarded explicitly rather than left to a silent-drop bug.
+9:T12fd,## Problem
+When the Claude Code CLI is installed and authenticated on the user's machine, the Anthropic subscription panel in Settings → AI Models incorrectly reports "Connected to Claude Subscription" with an active Disconnect button — even though the user never ran the in-app OAuth flow. Clicking Disconnect is a no-op: it only clears app-owned credentials (`~/.eliza/auth/anthropic-subscription.json`), never the CLI's (`~/.claude/.credentials.json` or the macOS keychain entry). Status re-fetches, sees the CLI blob, UI stays "Connected". Phantom state the user can't dismiss.
+
+## Fix
+Surface the credential source on `GET /api/subscription/status`:
+
+```ts
+source: "app" | "claude-code-cli" | "setup-token" | "codex-cli" | null
+
+<!-- greptile_comment -->
+
+<h3>Greptile Summary</h3>
+
+This PR fixes a phantom \"Connected\" state for Anthropic subscriptions by surfacing a `source` field (`"app" | "claude-code-cli" | "setup-token" | "codex-cli"`) on the subscription status endpoint and gating the UI's connected/disconnect affordances on that source. The credential-priority logic in `getSubscriptionStatus` is sound and the CLI-detected banner path works correctly.
+
+- **P1 regression**: Users authenticated via `source === \"setup-token\"` now fall through both the `anthAppConnected` and `anthropicCliDetected` branches in `ProviderSwitcher`, causing the panel to render a \"Disconnected\" state with a login button even when the subscription is valid. Previously `configured && valid` was sufficient to show \"Connected\".
+
+<h3>Confidence Score: 3/5</h3>
+
+The fix is correct for the CLI case but introduces a UI regression for setup-token users who will see a misleading disconnected state
+
+One P1 logic regression (setup-token users silently appear disconnected) pulls the score below the P1 ceiling of 4; the rest of the changes are well-reasoned and correctly implemented
+
+packages/app-core/src/components/settings/ProviderSwitcher.tsx — the useEffect that computes anthropicConnected/anthropicCliDetected needs a third branch for source==="setup-token"
+
+<h3>Important Files Changed</h3>
+
+| Filename | Overview |
+|----------|----------|
+| packages/app-core/src/components/settings/ProviderSwitcher.tsx | Introduces anthropicCliDetected state and gates anthropicConnected on source==="app", but setup-token users (source==="setup-token") are now silently treated as disconnected with no UI explanation — a regression from prior behavior |
+| packages/agent/src/auth/credentials.ts | Adds SubscriptionCredentialSource type and populates source field in getSubscriptionStatus(); logic is correct for app/cli/setup-token/codex-cli prioritization, but the type is duplicated rather than imported from the shared contract |
+| packages/app-core/src/components/settings/SubscriptionStatus.tsx | Adds canDisconnect/externalNotice props to SubscriptionProviderPanel and renders a CLI-detected notice; canDisconnect defaults to true correctly (only relevant when connected=true, which requires source==="app") |
+| packages/shared/src/contracts/onboarding.ts | Adds SubscriptionCredentialSource type and source field to SubscriptionProviderStatus; duplicates the type definition that also lives in packages/agent/src/auth/credentials.ts |
+| packages/app-core/src/i18n/locales/en.json | Adds two new i18n keys for the CLI-detected banner; body text hardcodes "Milady" which may be namespace-specific |
+
+</details>
+
+<h3>Flowchart</h3>
+
+```mermaid
+%%{init: {'theme': 'neutral'}}%%
+flowchart TD
+    A["GET /api/subscription/status"] --> B["getSubscriptionStatus()"]
+    B --> C{"stored != null\n(~/.eliza/auth/…)"}
+    C -- "yes" --> D["source = 'app'"]
+    C -- "no" --> E{"claudeBlob?.accessToken"}
+    E -- "yes" --> F["claudeSource = 'claude-code-cli'"]
+    E -- "no" --> G{"readConfiguredAnthropicSetupToken()"}
+    G -- "found" --> H["claudeSource = 'setup-token'"]
+    G -- "not found" --> I["claudeSource = null"]
+    F --> J["source = 'claude-code-cli'"]
+    H --> K["source = 'setup-token'"]
+    I --> L["source = null"]
+    D & J & K & L --> M["ProviderSwitcher useEffect"]
+    M --> N{"source === 'app'"}
+    N -- "yes" --> O["anthropicConnected = true\nanthropicCliDetected = false\n✅ Disconnect shown"]
+    N -- "no" --> P{"source === 'claude-code-cli'"}
+    P -- "yes" --> Q["anthropicConnected = false\nanthropicCliDetected = true\n✅ CLI notice shown"]
+    P -- "no" --> R["anthropicConnected = false\nanthropicCliDetected = false\n⚠️ 'Disconnected' shown\neven for setup-token users"]
+```
+
+<sub>Reviews (1): Last reviewed commit: ["fix(auth): distinguish Claude Code CLI c..."](https://github.com/elizaos/eliza/commit/58cf63a9b03bed4e8b26b638c2d65c12d6e013d0) | [Re-trigger Greptile](https://app.greptile.com/api/retrigger?id=29619682)</sub>
+
+> Greptile also left **3 inline comments** on this PR.
+
+<!-- /greptile_comment -->a:T1497,## Summary
+
+The planner LLM occasionally emits an unclosed `<action>` wrapper around a well-formed `<name>X</name>`, e.g.:
+
+```xml
+<actions><action><name>REPLY</name></actions>
+```
+
+(closing `</action>` is missing). The strict `<action>...</action>` regex in `unwrapPlannerIdentifier` falls through to "return trimmed" and the entire XML chunk becomes the action identifier. That never matches a registered action, the bot logs `Dropping unknown planner action`, and the user sees silence — even though `shouldRespond` already decided to engage.
+
+## Symptom
+
+Production log line, observed live in the milady server (2026-04-25 02:41 UTC) on a real user prompt:
+
+```
+Warn  Dropping unknown planner action (actionName=<action><name>REPLY</name>)
+```
+
+The bot stayed silent for ~2 minutes before a retry path eventually recovered. In a quieter test channel the same prompt produced no reply at all within the test window.
+
+## Fix
+
+`packages/typescript/src/services/message.ts` — one fall-through branch added in `unwrapPlannerIdentifier`. When the input begins with `<action>` and contains a `<name>X</name>` somewhere inside, prefer that name even if the wrapper is unclosed or has trailing content.
+
+The strict patterns still take precedence — this is purely a defensive fallback added before the bare `return trimmed`. No behavior change for canonical inputs.
+
+## Tests
+
+`packages/typescript/src/services/message.test.ts` — new `describe` block with 7 cases through the exported `extractPlannerActionNames`:
+
+- canonical `<action><name>X</name></action>`
+- flat `<action>X</action>`
+- **missing closing `</action>` (the bug)**
+- trailing garbage after the name
+- empty actions field
+- comma-separated literal identifiers
+- multiple well-formed action blocks
+
+All pass; full `vitest` and `tsc --noEmit` clean in `packages/typescript`.
+
+## Live verification
+
+Bot was restaged with this fix applied on top of `develop` + 4 other in-flight fixes (#7090, #7095, #7097, #7098). 10/10 webhook test scenarios passed cleanly, including the two REPLY-type prompts ("tell me a joke", "what year is it") that silently dropped on the immediately previous run without this patch.
+
+<!-- greptile_comment -->
+
+<h3>Greptile Summary</h3>
+
+This PR adds a defensive fallback in `unwrapPlannerIdentifier` so that malformed planner XML like `<action><name>REPLY</name>` (missing closing `</action>`) is recovered by extracting the inner `<name>` content, instead of falling through to return the whole XML chunk as the action identifier. The fix is narrow, well-commented, strictly additive (strict patterns still win), and covered by 7 targeted test cases.
+
+<h3>Confidence Score: 5/5</h3>
+
+Safe to merge — targeted defensive fallback with no behavior change on canonical inputs and full test coverage.
+
+The change is strictly additive: the two existing strict regex branches (bare `<name>` and closed `<action>`) still take precedence. The new branch only fires when both fail but the input still looks like a malformed `<action>` block with an inner `<name>`. Seven test cases exercise all relevant shapes, tsc and vitest both pass, and the production symptom is directly reproduced and fixed by the tests.
+
+No files require special attention.
+
+<h3>Important Files Changed</h3>
+
+| Filename | Overview |
+|----------|----------|
+| packages/typescript/src/services/message.ts | Adds a loose `<action>` + `<name>` fallback branch in `unwrapPlannerIdentifier` before the bare `return trimmed`; all canonical paths are unchanged and still take precedence. |
+| packages/typescript/src/services/message.test.ts | Exports `extractPlannerActionNames` for testing and adds a focused describe block with 7 cases covering canonical, flat, unclosed, trailing-garbage, empty, comma-separated, and multi-action inputs. |
+
+</details>
+
+<h3>Flowchart</h3>
+
+```mermaid
+%%{init: {'theme': 'neutral'}}%%
+flowchart TD
+    A["extractPlannerActionNames(parsedXml)"] --> B{actions is string?}
+    B -- No --> Z["return []"]
+    B -- Yes --> C{contains &lt;action&gt; tag?}
+    C -- No --> G["comma-split → unwrapPlannerIdentifier each"]
+    C -- Yes --> D["matchAll strict &lt;action&gt;...&lt;/action&gt; regex"]
+    D --> E{any matches?}
+    E -- Yes --> F["extract &lt;name&gt; or full match per entry → return names"]
+    E -- No (malformed / unclosed) --> G
+    G --> H["unwrapPlannerIdentifier(value)"]
+    H --> I{starts with &lt;name&gt;...&lt;/name&gt;?}
+    I -- Yes --> J["return inner name ✓"]
+    I -- No --> K{strict &lt;action&gt;...&lt;/action&gt; match?}
+    K -- Yes --> L{has nested &lt;name&gt;?}
+    L -- Yes --> M["return nested name ✓"]
+    L -- No --> N{inner has XML tags?}
+    N -- Yes --> O["return trimmed (original)"]
+    N -- No --> P["return inner text ✓"]
+    K -- No --> Q{"NEW: starts with &lt;action&gt; AND contains &lt;name&gt;X&lt;/name&gt;?"}
+    Q -- Yes --> R["return extracted name ✓ (fixes missing &lt;/action&gt; bug)"]
+    Q -- No --> S["return trimmed (original)"]
+```
+
+<sub>Reviews (1): Last reviewed commit: ["fix(message): tolerate malformed planner..."](https://github.com/elizaos/eliza/commit/542494d5d4105894c2eef717241912840e70789a) | [Re-trigger Greptile](https://app.greptile.com/api/retrigger?id=29689379)</sub>
+
+<!-- /greptile_comment -->b:T1a9a,## Summary
+
+Add Radius Network (chain ID `723487`) and its testnet (chain ID `72344`) to the Rust and Python implementations of `plugin-evm`. The TypeScript implementation already picks up Radius automatically via `viem/chains` (`SupportedChain = keyof typeof viemChains`), so only the README needs updating there.
+
+[Radius Network](https://radiustech.xyz) is an EVM-compatible platform purpose-built for agentic micropayments — sub-penny costs (~$0.0001/tx), sub-second finality (~500ms), and stablecoin-native gas (RUSD). It's a natural fit for plugin-evm's agent payment workflows.
+
+### Chain details
+
+| | Chain ID | RPC | Explorer |
+|-|---|---|---|
+| Mainnet | 723487 | https://rpc.radiustech.xyz | https://network.radiustech.xyz |
+| Testnet | 72344  | https://rpc.testnet.radiustech.xyz | https://testnet.radiustech.xyz |
+
+Native currency: **RUSD** (Radius USD, 18 decimals).
+
+Registered in viem 2.48.0 as `radius` / `radiusTestnet`, and in ethereum-lists/chains ([PR #8168](https://github.com/ethereum-lists/chains/pull/8168), merged).
+
+### Links
+
+- Website: https://radiustech.xyz
+- Docs: https://docs.radiustech.xyz
+
+<!-- greptile_comment -->
+
+<h3>Greptile Summary</h3>
+
+This PR adds Radius Network (chain ID `723487`) and Radius Testnet (chain ID `72344`) to the Rust and Python implementations of `plugin-evm`, and updates the README — the TypeScript layer already picks up the chain automatically via `viem/chains`. All chain metadata (RPC URLs, native symbol `RUSD`, `is_testnet` flag) is correct and consistent across both languages, and the new variants are fully covered by the extended test suites.
+
+<h3>Confidence Score: 5/5</h3>
+
+Safe to merge; all remaining findings are P2 style suggestions about the pre-existing serde/Display naming gap and missing display assertions in tests.
+
+Chain IDs, RPC URLs, native symbol, and testnet flags are all correct and consistent across Rust and Python. Tests are comprehensive. The only noteworthy issue is the pre-existing serde rename_all = 'lowercase' mismatch for multi-word chain names — RadiusTestnet follows the same pattern as BaseSepolia, which already exists in the codebase without observed breakage.
+
+rust/src/types.rs warrants a follow-up to address the serde/Display inconsistency for both RadiusTestnet and BaseSepolia, but this is not blocking.
+
+<h3>Important Files Changed</h3>
+
+
+
+
+| Filename | Overview |
+|----------|----------|
+| rust/src/types.rs | Adds Radius/RadiusTestnet chain variants with correct chain IDs, RPC URLs, native symbol, and testnet flag; serde(rename_all = 'lowercase') creates a latent mismatch between wire format and Display for multi-word names. |
+| python/elizaos_plugin_evm/types.py | Adds RADIUS and RADIUS_TESTNET enum members with correct chain ID, symbol, RPC URL, and is_testnet flag; consistent with the rest of the Python implementation. |
+| rust/tests/integration_tests.rs | Adds chain_id, native_symbol, HTTPS RPC, testnet, and from_str tests for Radius/RadiusTestnet; Display and serde roundtrip tests are not extended to the new chains. |
+| python/tests/test_types.py | Updates testnet set and chain count to 16; thorough coverage of the new chains. |
+| README.md | Adds Radius Network and Radius Testnet rows to the supported chains table with correct chain IDs and RUSD symbol. |
+
+</details>
+
+
+
+<h3>Flowchart</h3>
+
+```mermaid
+%%{init: {'theme': 'neutral'}}%%
+flowchart TD
+    A[SupportedChain input] --> B{FromStr lookup}
+    B -->|radius| C[Radius - chain ID 723487]
+    B -->|radiustestnet or radius-testnet| D[RadiusTestnet - chain ID 72344]
+    C --> E[symbol: RUSD\nrpc: rpc.radiustech.xyz\nis_testnet: false]
+    D --> F[symbol: RUSD\nrpc: rpc.testnet.radiustech.xyz\nis_testnet: true]
+    E --> G[Display → radius\nSerde → radius]
+    F --> H[Display → radiusTestnet\nSerde warning → radiustestnet]
+```
+
+<!-- greptile_failed_comments -->
+<details><summary><h3>Comments Outside Diff (2)</h3></summary>
+
+1. `rust/src/types.rs`, line 11 ([link](https://github.com/elizaos-plugins/plugin-evm/blob/fc3ca1606484d1625dd4d7bd8bb95e8d7cac105b/rust/src/types.rs#L11)) 
+
+   <a href="#"><img alt="P2" src="https://greptile-static-assets.s3.amazonaws.com/badges/p2.svg?v=7" align="top"></a> **Serde serialisation diverges from `Display` for `RadiusTestnet`**
+
+   `#[serde(rename_all = "lowercase")]` serialises `RadiusTestnet` as `"radiustestnet"`, but `Display` returns `"radiusTestnet"` and the Python enum value is `"radiusTestnet"`. This means `serde_json::from_str::<SupportedChain>("\"radiusTestnet\"")` would silently fail while `"radiustestnet"` succeeds — a mismatch between the serde wire format and what `to_string()` produces.
+
+   This pre-existing gap also affects `BaseSepolia` (serde: `"basesepolia"` vs Display: `"baseSepolia"`). Adding a per-variant rename on both would align all representations:
+
+   ```rust
+   #[serde(rename = "radiusTestnet")]
+   RadiusTestnet,
+   ```
+
+   The same fix applied to `BaseSepolia` would close the pre-existing gap too.
+
+
+2. `rust/tests/integration_tests.rs`, line 325-330 ([link](https://github.com/elizaos-plugins/plugin-evm/blob/fc3ca1606484d1625dd4d7bd8bb95e8d7cac105b/rust/tests/integration_tests.rs#L325-L330)) 
+
+   <a href="#"><img alt="P2" src="https://greptile-static-assets.s3.amazonaws.com/badges/p2.svg?v=7" align="top"></a> **`test_chain_display` and serde tests not extended to Radius chains**
+
+   The existing `test_chain_display` test covers `BaseSepolia` and `Zksync` but the new chains are not tested. Similarly, `test_chain_serde_all` only covers single-word variants and deliberately skips multi-word ones (where the serde/Display mismatch would surface). Adding assertions here would catch the `"radiusTestnet"` → `"radiusTestnet"` Display roundtrip and make the serde gap visible:
+
+   ```rust
+   // in test_chain_display
+   assert_eq!(SupportedChain::Radius.to_string(), "radius");
+   assert_eq!(SupportedChain::RadiusTestnet.to_string(), "radiusTestnet");
+   ```
+
+</details>
+
+<!-- /greptile_failed_comments -->
+
+<sub>Reviews (1): Last reviewed commit: ["feat: add Radius Network support (eip155..."](https://github.com/elizaos-plugins/plugin-evm/commit/fc3ca1606484d1625dd4d7bd8bb95e8d7cac105b) | [Re-trigger Greptile](https://app.greptile.com/api/retrigger?id=28813395)</sub>
+
+<!-- /greptile_comment -->
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+## Release Notes
+
+* **New Features**
+  * Added support for Radius Network (mainnet) and Radius Testnet to the EVM plugin, enabling users to interact with these chains alongside existing supported networks.
+
+* **Tests**
+  * Updated test coverage to validate chain properties and network identification for the newly added networks.
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->c:T171e,## Summary
+
+Two stacked issues caused the agent to dump its internal task table into chat whenever the planner picked `MANAGE_TASKS` with `operation=list`. A prompt like *"doomscroll the web for me"* or any vague phrase could produce a Discord reply listing 100+ `EMBEDDING_DRAIN` ticks alongside `PROACTIVE_AGENT`, `LIFEOPS_SCHEDULER`, and `heartbeat` entries.
+
+### 1. `toWorkbenchTask` filter was permissive
+
+`workbench-helpers.ts:109` excluded only trigger configs and todo tasks. The runtime's `utils/batch-queue` util (used for drain / queue tasks like `EMBEDDING_DRAIN`) registers system ticks as elizaOS `Task` records in the same table. Those have no trigger config and are not todos, so they sailed through and appeared in the user-facing workbench list.
+
+The CREATE side of `MANAGE_TASKS` already tags user-created tasks with `WORKBENCH_TASK_TAG`. Make the filter inclusive and require that tag, matching the convention.
+
+### 2. `MANAGE_TASKS` list operation fired without explicit list intent
+
+`manage-tasks.ts` `validate` admits the action when `looksLikeTaskIntent` matches either the current message or any of the last 4 room messages. That lookback handles *"yes, list them"* follow-ups intentionally. Combined with `TEXT_SMALL` extraction occasionally classifying vague prompts as `operation=list`, though, the action could fire on a message that did not ask for a task list at all.
+
+Add a defensive guard at the top of the LIST branch using a tighter `LIST_INTENT_TERMS` subset (`list tasks`, `show tasks`, `my tasks`, `what are my tasks`, `task list`). If the current message does not match list intent, the action returns `success=false` with an error and nothing is sent to chat.
+
+## Changes
+
+- `packages/agent/src/api/workbench-helpers.ts` (+6): `toWorkbenchTask` requires `WORKBENCH_TASK_TAG`
+- `packages/agent/src/actions/manage-tasks.ts` (+25): new `LIST_INTENT_TERMS` + `looksLikeListTaskIntent` helper, guard in LIST branch
+
+Total: 2 files, +31, −0.
+
+## Test plan
+
+- [x] Verified live on the bot: prior to patch, a `"doomscroll the web"` prompt produced a Discord reply listing 100+ EMBEDDING_DRAIN ticks. After patch, the same prompt routes through the planner to `SPAWN_AGENT` (the right action), and no system tasks appear in any user-visible surface.
+- [x] Manual regression: explicit list prompts (`"list my tasks"`, `"show tasks"`) still work and show only user-created tasks tagged with `WORKBENCH_TASK_TAG`.
+- [x] `tsc --noEmit` clean in `packages/agent`.
+
+## Compatibility notes
+
+- The filter tightening is backwards-compatible with the CREATE path, which already tags user tasks. Any task that was intentionally created without `WORKBENCH_TASK_TAG` (e.g. by a plugin that forgot the tag) will stop appearing in the workbench list. That's the same behavior those tasks would have gotten if they had been correctly filed as a todo or trigger.
+- The LIST intent guard only suppresses the `list` branch when the current message doesn't match list intent. The `create`, `complete`, `delete`, `update` branches are unchanged.
+
+<!-- greptile_comment -->
+
+<h3>Greptile Summary</h3>
+
+This PR fixes two stacked issues that caused internal runtime scheduler tasks (`EMBEDDING_DRAIN`, `heartbeat`, etc.) to leak into user-facing chat replies. `toWorkbenchTask` is tightened to require `WORKBENCH_TASK_TAG`, and a `looksLikeListTaskIntent` guard is added to the LIST branch of `MANAGE_TASKS` to block LLM-misclassified vague prompts from triggering a task dump.
+
+<h3>Confidence Score: 4/5</h3>
+
+Safe to merge; the core bug fixes are correct and the only concerns are a narrow intent-term list and a silent failure path that are P2 quality issues.
+
+Both changes address real bugs with correct logic. The tag-guard in toWorkbenchTask is clean and backward-compatible. The LIST intent guard works but has a narrow term set and returns an empty silent failure that could leave users with no response if they phrase their request in an unrecognized way. No P0/P1 issues found.
+
+packages/agent/src/actions/manage-tasks.ts — review LIST_INTENT_TERMS coverage and the silent success=false, text='' return path.
+
+<h3>Important Files Changed</h3>
+
+| Filename | Overview |
+|----------|----------|
+| packages/agent/src/actions/manage-tasks.ts | Adds LIST_INTENT_TERMS constant and looksLikeListTaskIntent helper; inserts a guard in the LIST branch that silently returns success=false when the current message lacks explicit list intent — narrow term set and silent failure are minor UX concerns. |
+| packages/agent/src/api/workbench-helpers.ts | Adds an inclusive WORKBENCH_TASK_TAG check at the top of toWorkbenchTask, correctly blocking system scheduler tasks (EMBEDDING_DRAIN, etc.) from surfacing in the user-facing list; subsequent trigger/todo checks are now redundant but harmless. |
+
+</details>
+
+<h3>Flowchart</h3>
+
+```mermaid
+%%{init: {'theme': 'neutral'}}%%
+flowchart TD
+    A[User message received] --> B{looksLikeTaskIntent?}
+    B -- No --> Z[Action skipped]
+    B -- Yes --> C[MANAGE_TASKS handler]
+    C --> D[Fetch all agent tasks]
+    D --> E{toWorkbenchTask filter}
+    E -- "Missing WORKBENCH_TASK_TAG\n(system/scheduler tasks)" --> F[Excluded from workbenchTasks]
+    E -- "Has WORKBENCH_TASK_TAG\n(user tasks only)" --> G[Included in workbenchTasks]
+    G --> H[LLM extracts operation]
+    H --> I{operation == list?}
+    I -- No --> J[create / complete / delete / update branches]
+    I -- Yes --> K{looksLikeListTaskIntent\ncurrent message?}
+    K -- No --> L["Return success=false, text=''"]
+    K -- Yes --> M[Return task list to user]
+```
+
+<sub>Reviews (1): Last reviewed commit: ["fix(agent): stop workbench task list fro..."](https://github.com/elizaos/eliza/commit/e972fbe74a05d506b47f2d5b55075f52712667ca) | [Re-trigger Greptile](https://app.greptile.com/api/retrigger?id=29670078)</sub>
+
+> Greptile also left **2 inline comments** on this PR.
+
+<!-- /greptile_comment -->d:T191f,## Summary
+
+`buildStructuredFailureReply` previously instructed the recovery model to *"Explain what failed and why using only the diagnostics below"* and fed it raw structured-output diagnostics plus action-result summaries. The resulting replies leaked internal terminology users have no business seeing. Observed live in discord when the planner hit transient Anthropic errors:
+
+> *"planner blew up again. the action_planner call to sonnet-4-6 failed all 4 retries with a generic anthropic 'unexpected error', so no xml plan came back and i couldn't commit to a real action this turn. the doomscroll task is already queued from my earlier ack, it just can't hand off through the planner right now."*
+
+That reply leaks "planner", "action_planner", "sonnet-4-6", "anthropic", "xml plan", "hand off through the planner". The user doesn't know or care what any of those are.
+
+## Fix
+
+Rewrite the prompt so the recovery model:
+- Stays in character (uses the character's voice + tone)
+- Avoids naming internal mechanism words (planner, action_planner, XML, TOON, JSON, schema, model names, retries, runtime, dispatch, hand off)
+- Avoids em/en dashes (easy way for the model to sound like a shipping-log paraphrase instead of the character)
+- Just acknowledges something flaked and suggests a retry
+- Optionally offers to act directly on a clear command if it can
+
+The hard-fallback string used when every model retry also fails is now a voice-neutral default `"Something went wrong on my end. Please try again."` and is overridable per character via `character.templates.transientFailureReply` (following the existing pattern used for `messageHandlerTemplate`, `multiStepDecisionTemplate`, `replyTemplate`, etc.).
+
+## Changes
+
+One file: `packages/typescript/src/services/message.ts` (+24, −36, net −12).
+
+- Prompt rewritten around character voice + mechanism-word ban list
+- Hard-fallback uses `character.templates?.transientFailureReply` with a neutral default
+- Removed now-unused `failure` and `actionResults` locals + dependency on `summarizeStructuredOutputFailure` / `summarizeActionResultsForUser` inside this function (those helpers remain used elsewhere)
+
+## Test plan
+
+- [x] Verified on the bot with a character that has its own voice config: transient-failure replies stay in that voice, don't mention planner/XML/etc.
+- [x] Verified the neutral fallback ("Something went wrong on my end. Please try again.") is what gets used when every model retry also fails (simulated by rejecting all model calls in the replay).
+- [x] `tsc --noEmit` clean in `packages/typescript`.
+
+## Compatibility
+
+- `character.templates.transientFailureReply` is a new optional template key. Characters that don't define it get the neutral default. Backwards-compatible.
+- The diagnostic information that used to flow into the user-facing text is still logged via `runtime.logger` on the failure path. Debuggability is preserved; only the user-facing surface is cleaned up.
+
+<!-- greptile_comment -->
+
+<h3>Greptile Summary</h3>
+
+This PR fixes user-visible information leakage in transient-failure replies by rewriting the `buildStructuredFailureReply` prompt to prohibit internal mechanism words (planner, XML, model names, etc.) and replacing the hard-coded fallback with a voice-neutral default that characters can override via `character.templates.transientFailureReply`. The change is backwards-compatible and diagnostic detail is preserved in logger output.
+
+<h3>Confidence Score: 4/5</h3>
+
+Safe to merge; the fix is well-scoped with only minor P2 style observations.
+
+Only P2 findings: the thought field retains internal-mechanism language, and the prompt preamble still primes the recovery model with 'model error.' Neither causes incorrect behavior, so confidence stays at 4.
+
+packages/typescript/src/services/message.ts — specifically the thought field (line 6530) and prompt preamble (line 6447).
+
+<h3>Important Files Changed</h3>
+
+
+
+
+| Filename | Overview |
+|----------|----------|
+| packages/typescript/src/services/message.ts | Rewrites buildStructuredFailureReply prompt to suppress internal mechanism words in user-facing replies and introduces a character-overridable transientFailureReply template key; two minor P2 style issues around the thought field and prompt preamble |
+
+</details>
+
+
+
+<h3>Flowchart</h3>
+
+```mermaid
+%%{init: {'theme': 'neutral'}}%%
+flowchart TD
+    A[Structured output failure detected] --> B[buildStructuredFailureReply called]
+    B --> C[Build failurePrompt\ncharacter voice + mechanism-word ban list\nrecent conversation context]
+    C --> D{Try recovery models\nin priority order}
+    D -->|TEXT_LARGE| E[useModel]
+    D -->|RESPONSE_HANDLER| E
+    D -->|TEXT_SMALL| E
+    D -->|TEXT_NANO| E
+    E -->|valid string| F[Strip think tags\nparse if structured]
+    F --> G[replyText set — break]
+    E -->|error / empty| D
+    D -->|all models failed| H{character.templates\n.transientFailureReply?}
+    H -->|defined| I[Use character override]
+    H -->|not defined| J[Use neutral default:\nSomething went wrong on my end.\nPlease try again.]
+    G --> K[truncateToCompleteSentence]
+    I --> K
+    J --> K
+    K --> L[Return StrategyResult\nmode: simple]
+```
+
+<!-- greptile_failed_comments -->
+<details><summary><h3>Comments Outside Diff (1)</h3></summary>
+
+1. `packages/typescript/src/services/message.ts`, line 6530 ([link](https://github.com/elizaos/eliza/blob/a7fff9578353e294754fa5eed7fd2df4c9ec803a/packages/typescript/src/services/message.ts#L6530)) 
+
+   <a href="#"><img alt="P2" src="https://greptile-static-assets.s3.amazonaws.com/badges/p2.svg?v=7" align="top"></a> **Stale internal-terminology in `thought` field**
+
+   The `thought` field still embeds raw internal terms ("structured-output failure", the raw `stage` string) that the rest of this PR is deliberately hiding from users. While `thought` is not rendered in chat today, it is persisted in `responseMessages` and may surface in debug UIs, evaluators, or logged memory. A neutral description keeps this consistent with the spirit of the fix.
+
+</details>
+
+<!-- /greptile_failed_comments -->
+
+<sub>Reviews (1): Last reviewed commit: ["fix(message): stop leaking internal mech..."](https://github.com/elizaos/eliza/commit/a7fff9578353e294754fa5eed7fd2df4c9ec803a) | [Re-trigger Greptile](https://app.greptile.com/api/retrigger?id=29670247)</sub>
+
+> Greptile also left **1 inline comment** on this PR.
+
+<!-- /greptile_comment -->e:T149e,## Summary
+
+`stripReplyWhenActionOwnsTurn` previously only suppressed `REPLY` when another action with `suppressPostActionContinuation = true` (e.g. `SPAWN_AGENT`) was selected for the same turn. The planner commonly also picks `MANAGE_TASKS` (operation=create) alongside `SPAWN_AGENT` for delegation prompts ("build me a tip calculator", "send a PR to eliza", etc.). `MANAGE_TASKS` is not suppressed by the current logic, so the user gets a noisy `"Created task <name>."` confirmation followed moments later by the real delegated result from synthesis — two messages for one intent.
+
+## Fix
+
+Generalize the dedup. Define `PASSIVE_TURN_ACTIONS = { REPLY, MANAGE_TASKS }` and drop all members of that set when a turn-owning action (one with `suppressPostActionContinuation = true`) is also picked.
+
+- Same fall-back behavior: returns `["REPLY"]` when everything was passive and the drop would leave the action list empty
+- No-op for turns that don't include a passive action (no behavior change for the common cases)
+- Log message adjusted from "Dropped REPLY" to "Dropped passive actions" to match the broader scope
+
+## Changes
+
+One file: `packages/typescript/src/services/message.ts` (+16, −8).
+
+- New constant `PASSIVE_TURN_ACTIONS` with a comment explaining why MANAGE_TASKS joins REPLY in the set
+- `stripReplyWhenActionOwnsTurn` consults the set instead of the hardcoded `normalizedReply` comparison
+
+## Test plan
+
+- [x] Verified live on a Discord-triggered delegation: `"remilio open a pr on milady-ai/milady that renames X"` previously produced `"Created task X"` followed by the PR URL. After patch, only the real result posts. Log line: `"Dropped passive actions because another selected action already owns the turn (originalActions=['REPLY','MANAGE_TASKS','SPAWN_AGENT'], filteredActions=['SPAWN_AGENT'], suppressedBy=['SPAWN_AGENT'])"`.
+- [x] Normal MANAGE_TASKS-only turns (create/update/delete) continue to work — the dedup only engages when a turn-owning action is present.
+- [x] `tsc --noEmit` clean in `packages/typescript`.
+
+## Compatibility / design notes
+
+- If a deployment intentionally wants both the task confirmation AND the delegated result, this PR changes that behavior. No such deployment is observed upstream; the existing dedup of `REPLY` already chose the "one message per turn" policy. This extends that policy to MANAGE_TASKS' equivalent confirmation.
+- If reviewers prefer the set be opt-in per-action (e.g. a new `Action.isPassiveTurnAction` flag instead of the hardcoded name list), that's a reasonable follow-up. Going with the explicit name list here because it matches the existing `suppressPostActionContinuation` pattern's shape — both are "this action modifies turn dispatch behavior" declared at the usage site.
+
+<!-- greptile_comment -->
+
+<h3>Greptile Summary</h3>
+
+This PR generalizes `stripReplyWhenActionOwnsTurn` to suppress `MANAGE_TASKS` confirmations (in addition to `REPLY`) whenever a turn-owning action like `SPAWN_AGENT` is also selected, preventing a noisy \"Created task X\" message from appearing before the real delegated result. The logic change is minimal and the fall-back behavior (returning `[\"REPLY\"]` on an empty filtered list) is preserved, though that fallback is now unreachable.
+
+<h3>Confidence Score: 4/5</h3>
+
+Safe to merge with minor follow-up; logic is correct but the new MANAGE_TASKS suppression path has no unit test coverage.
+
+Only P2 findings: missing unit tests for the new code path and a now-unreachable fallback. No P0/P1 issues; the core dedup logic correctly short-circuits when no turn-owning action is present and correctly drops passive actions otherwise.
+
+packages/typescript/src/services/message.ts — the PASSIVE_TURN_ACTIONS expansion and the unreachable fallback on line 2401.
+
+<h3>Important Files Changed</h3>
+
+| Filename | Overview |
+|----------|----------|
+| packages/typescript/src/services/message.ts | Widens REPLY-suppression logic to also drop MANAGE_TASKS when a turn-owning action is present; core logic is correct but no unit tests cover the new code path and the REPLY fallback on an empty filtered list is unreachable. |
+
+</details>
+
+<h3>Flowchart</h3>
+
+```mermaid
+%%{init: {'theme': 'neutral'}}%%
+flowchart TD
+    A["stripReplyWhenActionOwnsTurn(actions)"] --> B{actions null\nor length ≤ 1?}
+    B -- Yes --> C[Return actions as-is]
+    B -- No --> D{Any action in\nPASSIVE_TURN_ACTIONS?\nREPLY or MANAGE_TASKS}
+    D -- No --> E[Return all actions unchanged]
+    D -- Yes --> F[Build runtime action lookup]
+    F --> G{Any non-passive action\nhas suppressPostAction\nContinuation = true?}
+    G -- No ownedActions --> H[Return all actions unchanged]
+    G -- ownedActions present --> I[Filter out all\nPASSIVE_TURN_ACTIONS]
+    I --> J[Log: Dropped passive actions]
+    J --> K{filtered list\nnon-empty?}
+    K -- Yes --> L[Return filtered e.g. SPAWN_AGENT only]
+    K -- No unreachable --> M[Return REPLY fallback]
+```
+
+<sub>Reviews (1): Last reviewed commit: ["fix(message): drop passive bookkeeping a..."](https://github.com/elizaos/eliza/commit/a7c3d2a1451510698b62a5ddc511bb1d74a00737) | [Re-trigger Greptile](https://app.greptile.com/api/retrigger?id=29670196)</sub>
+
+> Greptile also left **2 inline comments** on this PR.
+
+<!-- /greptile_comment -->f:T5c9,## What
+
+Removes four PGlite in-memory database directories that were accidentally committed under \`typescript/:memory:<UUID>/\` and prevents them from recurring.
+
+## Why
+
+These paths contain colons, which are valid on macOS/Linux but **illegal as Windows filenames**. Every Windows git checkout of this repo fails with:
+
+\`\`\`
+error: invalid path 'typescript/:memory:83863d27-7fd3-4e4a-ab21-9d8a7c6d4f4c/PG_VERSION'
+fatal: Unable to checkout in submodule path 'plugins/plugin-openrouter'
+\`\`\`
+
+This has been blocking the Milady Electrobun 4-platform release build on Windows CI for 3+ days (milady-ai/milady releases v2.0.0-alpha.133 and alpha.134 both blocked).
+
+## Root cause
+
+PGlite initializes with a \`:memory:<UUID>\` path that resolves relative to CWD when no explicit data directory is configured. On macOS/Linux the files land silently in the working tree and get swept up by \`git add -A\` during a release commit. Windows git then rejects them at checkout.
+
+## Changes
+
+- **Remove** all four \`typescript/:memory:<UUID>/\` subtrees
+- **\`.gitignore\`** — add \`:memory:*/\` and \`typescript/:memory:*/\` to prevent recurrence
+- **\`typescript/vitest.config.ts\`** — set \`PGDATA\` env to \`os.tmpdir()\` so PGlite never writes into the working tree during test runs
+
+## Validation
+
+- \`bun run build\` passes (no source files changed)
+- \`bun run test:ts\` passes (PGDATA redirect is transparent to tests)
+- Windows git checkout succeeds (no colon paths remain)10:T880,Add two new plugins to the registry:
+- @undesirables/plugin-tcg-oracle
+- - plugin-undesirables
+Alphabetically sorted.
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+* **New Features**
+  * Registered new plugin mappings for the TCG Oracle plugin, expanding available functionality and plugin options on the platform.
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->
+
+<!-- greptile_comment -->
+
+<h3>Greptile Summary</h3>
+
+This PR registers two new plugins in `index.json`: `@undesirables/plugin-tcg-oracle` (pointing to `github:sailorpepe/elizaos-tcg-oracle-plugin`) and `plugin-undesirables` (pointing to `github:sailorpepe/plugin-undesirables`). Both entries are now pointing to distinct repositories, resolving a prior concern, though the indentation issues noted in earlier review threads remain unaddressed.
+
+<h3>Confidence Score: 4/5</h3>
+
+Safe to merge once the indentation issues flagged in prior review threads are corrected.
+
+The two entries now correctly point to separate repositories (addressing the earlier same-repo concern), but both still carry the incorrect indentation noted in previous review comments — no new P0/P1 issues were found.
+
+index.json — both new entries use non-standard indentation
+
+<h3>Important Files Changed</h3>
+
+| Filename | Overview |
+|----------|----------|
+| index.json | Adds two plugin entries with inconsistent indentation (4-space and 8-space vs the 2-space used throughout the rest of the file); both now point to distinct GitHub repositories |
+
+</details>
+
+<h3>Flowchart</h3>
+
+```mermaid
+%%{init: {'theme': 'neutral'}}%%
+flowchart TD
+    A[index.json Registry] --> B["@undesirables/plugin-tcg-oracle"]
+    A --> C["plugin-undesirables"]
+    B --> D["github:sailorpepe/elizaos-tcg-oracle-plugin"]
+    C --> E["github:sailorpepe/plugin-undesirables"]
+```
+
+<sub>Reviews (2): Last reviewed commit: ["fix: correct repo URL for plugin-undesir..."](https://github.com/elizaos-plugins/registry/commit/fad9cb68692ddaa4dbf70aa50bb737e7607ec551) | [Re-trigger Greptile](https://app.greptile.com/api/retrigger?id=29723454)</sub>
+
+<!-- /greptile_comment -->11:Tfbd,Adds the official Trade Router ElizaOS plugin to the registry.
+
+## Plugin
+
+- **Package**: `@traderouter/plugin-elizaos`
+- **Source**: <https://github.com/TradeRouter/plugin-elizaos> (MIT)
+
+The plugin spawns the [`@traderouter/trade-router-mcp`](https://github.com/TradeRouter/trade-router-mcp) MCP server as a child process, performs the MCP `initialize` handshake, calls `tools/list` to discover the live tool surface, and registers each Trade Router tool as an ElizaOS Action. ~140-line TypeScript wrapper.
+
+## What ElizaOS agents get
+
+- 21 trading tools (swap, limit, trailing, TWAP, DCA, and 4 combo orders)
+- Multi-DEX routing across Raydium, PumpSwap, Orca, Meteora
+- MEV-protected execution by default via Jito
+- Ed25519-signed `order_filled` callbacks
+- Holdings endpoint (most accurate on Solana)
+- Private key never leaves the agent
+
+## Format check
+
+- [x] `index.json` is the only file modified
+- [x] Single-line addition, alphabetical (between `@tonyflam/plugin-openchat` and `@zane-archer/plugin-aimo-router`)
+- [x] JSON syntactically valid
+- [x] Plugin GitHub repo exists and is public: <https://github.com/TradeRouter/plugin-elizaos>
+- [x] Plugin repo has README, LICENSE (MIT), package.json with `@elizaos/core ^1.0.0` peer dep
+
+## Trust signals (underlying MCP package)
+
+- VirusTotal **0/62** on `@traderouter/trade-router-mcp@1.0.12`
+- CI green on Node 18/20/22 with tarball-leak guard
+- Branch protection on `main`
+- Signed npm publishes
+- Already in the official MCP Registry as `ai.traderouter/trade-router-mcp@1.0.12` (`isLatest: true`)
+- Glama listing (author-verified): <https://glama.ai/mcp/servers/@traderouter/trade-router-mcp>
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+* **New Features**
+  * Added support for a new plugin package, extending the available plugin options for users.
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->
+
+<!-- greptile_comment -->
+
+<h3>Greptile Summary</h3>
+
+This PR adds a single registry entry for `@traderouter/plugin-elizaos` → `github:TradeRouter/plugin-elizaos` to `index.json`. The entry is syntactically valid JSON, uses the correct `github:Owner/repo` format, and is correctly placed in alphabetical order between `@tonyflam/plugin-openchat` and `@zane-archer/plugin-aimo-router`.
+
+<h3>Confidence Score: 5/5</h3>
+
+This PR is safe to merge — it is a minimal, correctly formatted single-line registry entry with no structural issues.
+
+The change is a single-line addition to a JSON registry file. Format, alphabetical ordering, and value pattern all match existing entries. No P0 or P1 issues found.
+
+No files require special attention.
+
+<h3>Important Files Changed</h3>
+
+| Filename | Overview |
+|----------|----------|
+| index.json | Single-line addition of @traderouter/plugin-elizaos pointing to github:TradeRouter/plugin-elizaos; format, JSON validity, and alphabetical ordering all check out |
+
+</details>
+
+<h3>Sequence Diagram</h3>
+
+```mermaid
+sequenceDiagram
+    participant Agent as ElizaOS Agent
+    participant Plugin as @traderouter/plugin-elizaos
+    participant MCP as @traderouter/trade-router-mcp (child process)
+    participant DEX as DEX (Raydium/PumpSwap/Orca/Meteora)
+
+    Agent->>Plugin: load plugin
+    Plugin->>MCP: spawn child process
+    Plugin->>MCP: MCP initialize handshake
+    Plugin->>MCP: tools/list
+    MCP-->>Plugin: 21 tool definitions
+    Plugin-->>Agent: register tools as ElizaOS Actions
+
+    Agent->>Plugin: invoke trade action (e.g. swap)
+    Plugin->>MCP: call tool via MCP protocol
+    MCP->>DEX: route + execute order (Jito MEV-protected)
+    DEX-->>MCP: order_filled (Ed25519-signed callback)
+    MCP-->>Plugin: result
+    Plugin-->>Agent: action result
+```
+
+<sub>Reviews (1): Last reviewed commit: ["Add @traderouter/plugin-elizaos"](https://github.com/elizaos-plugins/registry/commit/5058273c9b7661aa77506911c508880b7fc6c9a6) | [Re-trigger Greptile](https://app.greptile.com/api/retrigger?id=29713349)</sub>
+
+<!-- /greptile_comment -->12:Tb2e,# ElizaOS Daily Summary: April 25, 2026
+
+On April 25, 2026, the ElizaOS ecosystem saw significant advancements in agent monetization, cross-platform stability, and network integration. Key highlights include the implementation of x402 paid plugin architecture, expanded EVM chain support, and critical fixes to runtime polling and file system compatibility.
+
+## ✅ Completed Work
+
+### Agent Monetization & Communication
+*   **x402 Infrastructure**: Implemented seller middleware and payment gating to support paid plugin routes and startup validation ([elizaos/eliza#7100](https://github.com/elizaos/eliza/pull/7100)).
+*   **Message Reliability**: Fixed data leakage issues where agents exposed internal task lists and improved planner robustness against malformed XML ([elizaos/eliza#7098](https://github.com/elizaos/eliza/pull/7098), [elizaos/eliza#7095](https://github.com/elizaos/eliza/pull/7095), [elizaos/eliza#7099](https://github.com/elizaos/eliza/pull/7099), [elizaos/eliza#7090](https://github.com/elizaos/eliza/pull/7090)).
+*   **Action Delegation**: Optimized delegation logic to ensure primary turn ownership is maintained during agent tasks ([elizaos/eliza#7097](https://github.com/elizaos/eliza/pull/7097)).
+
+### Ecosystem & Network Integration
+*   **EVM Expansion**: Integrated Radius Network support (mainnet and testnet) into both Rust and Python implementations of the EVM plugin ([elizaos-plugins/plugin-evm#29](https://github.com/elizaos-plugins/plugin-evm/pull/29)).
+*   **Desktop Enhancements**: Enabled managed Electrobun windows for app catalog selections and improved window management for detached shells ([elizaos/eliza#7092](https://github.com/elizaos/eliza/pull/7092)).
+
+### Stability & Environment Fixes
+*   **Telegram Polling**: Resolved duplicate polling conflicts by implementing active poller tracking and clean service deregistration ([elizaos-plugins/plugin-telegram#27](https://github.com/elizaos-plugins/plugin-telegram/pull/27)).
+*   **Cross-Platform Compatibility**: Resolved Windows git checkout issues by removing incompatible PGlite database artifacts and updating `.gitignore` ([elizaos-plugins/plugin-openrouter#25](https://github.com/elizaos-plugins/plugin-openrouter/pull/25)).
+*   **Authentication & Identity**: Fixed credential conflicts between Claude Code CLI and OAuth, and enabled character name tokenization for persistent renames ([elizaos/eliza#7094](https://github.com/elizaos/eliza/pull/7094), [elizaos/eliza#7101](https://github.com/elizaos/eliza/pull/7101)).
+
+## 🏗️ Work in Progress
+
+### New Pull Requests
+*   **elizaos-plugins/registry**:
+    *   [#351](https://github.com/elizaos-plugins/registry/pull/351): Addition of `@undesirables/plugin-tcg-oracle` and `plugin-undesirables`.
+    *   [#350](https://github.com/elizaos-plugins/registry/pull/350): Addition of `@traderouter/plugin-elizaos`.0:{"buildId":"US8XLB_zHXYj_PVAECGcd","rsc":["$","$1","c",{"children":[["$","div",null,{"className":"container mx-auto px-6 py-8 md:px-8","children":["$","div",null,{"className":"mx-auto max-w-4xl","children":[["$","div",null,{"className":"mb-4 flex flex-col justify-between sm:flex-row","children":[["$","$L2",null,{"currentInterval":"day","currentDate":"2026-04-25"}],["$","$L3",null,{"metrics":{"date":"2026-04-25","interval":{"intervalStart":"$D2026-04-25T00:00:00.000Z","intervalEnd":"$D2026-04-26T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":5,"merged":12,"total":14},"issues":{"new":0,"closed":0,"total":0},"activeContributors":21,"codeChanges":{"additions":9418,"deletions":1169,"files":142,"commitCount":85},"topContributors":[{"username":"lalalune","avatarUrl":"https://avatars.githubusercontent.com/u/18633264?u=e2e906c3712c2506ebfa98df01c2cfdc50050b30&v=4","totalScore":46.35189820629263,"prScore":46.15189820629263,"issueScore":0,"reviewScore":0,"commentScore":0.2,"summary":"lalalune: Focused on improving character data integrity by merging PR #7101 in elizaos/eliza, which implemented tokenization for name occurrences during save operations. Their work today involved extensive codebase modifications across 61 commits, primarily centered on general maintenance and bugfix efforts."},{"username":"odilitime","avatarUrl":"https://avatars.githubusercontent.com/u/16395496?u=c9bac48e632aae594a0d85aaf9e9c9c69b674d8b&v=4","totalScore":42.9457738965761,"prScore":42.9457738965761,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"odilitime: Drove a significant architectural update to the agent framework by merging PR #7100 in elizaos/eliza, which implemented x402 paid plugin routes and hardened the test harness. This extensive contribution involved modifying 11,166 files, reflecting a balanced focus across feature development, bug fixes, testing, and general codebase maintenance."},{"username":"NubsCarson","avatarUrl":"https://avatars.githubusercontent.com/u/192162056?u=d2be9082dbee60fcbad21d32bf6e662ab1af3674&v=4","totalScore":39.63472898822964,"prScore":39.63472898822964,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"NubsCarson: Focused on enhancing system reliability by resolving a critical bug in elizaos/eliza via PR #7099, which ensures the planner correctly handles malformed XML actions. Their work today involved 9 commits across 14 files, with a primary emphasis on bugfix efforts balanced equally between code and test implementation."},{"username":"re-bruce-wayne","avatarUrl":"https://avatars.githubusercontent.com/u/196209605?u=0f106df5aeadfc126ee7ca9d05c34171fe5b6476&v=4","totalScore":14.346573590279972,"prScore":14.346573590279972,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"re-bruce-wayne: Focused on expanding ecosystem integrations by opening PR #350 in elizaos-plugins/registry to add the @traderouter/plugin-elizaos."},{"username":"sailorpepe","avatarUrl":"https://avatars.githubusercontent.com/u/159828807?u=9298c48eb8b41b0a0b0968e987c029e307771855&v=4","totalScore":11.32071895621705,"prScore":11.32071895621705,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"sailorpepe: Focused on expanding the ecosystem by opening PR #351 in elizaos-plugins/registry to integrate new TCG and undesirable plugins. This work involved a balanced effort of feature implementation and bug fixing within configuration files."},{"username":"greptile-apps","avatarUrl":"https://avatars.githubusercontent.com/in/867647?v=4","totalScore":9,"prScore":0,"issueScore":0,"reviewScore":9,"commentScore":0,"summary":"greptile-apps: No activity today."},{"username":"fel123","avatarUrl":"https://avatars.githubusercontent.com/u/33407903?v=4","totalScore":0.2,"prScore":0,"issueScore":0,"reviewScore":0,"commentScore":0.2,"summary":null}],"focusAreas":[{"area":"typescript/:memory:83863d27-7fd3-4e4a-ab21-9d8a7c6d4f4c","count":49},{"area":"agent","count":43},{"area":"app-core","count":36},{"area":"typescript","count":4},{"area":"shared","count":1},{"area":"python/elizaos_plugin_evm","count":1},{"area":"python/tests","count":1},{"area":"rust/src","count":1},{"area":"rust/tests","count":1},{"area":"src","count":1}],"topIssues":[],"topPullRequests":[{"id":"PR_kwDOMT5cIs7VipzR","title":"feat(agent): x402 paid plugin routes and test harness hardening","author":"odilitime","number":7100,"body":"$4","repository":"elizaos/eliza","createdAt":"2026-04-25T04:06:45Z","mergedAt":"2026-04-25T23:39:49Z","additions":7917,"deletions":1256},{"id":"PR_kwDOMT5cIs7VSiXK","title":"feat: open app surfaces in managed desktop windows","author":"Dexploarer","number":7092,"body":"$5","repository":"elizaos/eliza","createdAt":"2026-04-24T09:51:57Z","mergedAt":"2026-04-25T05:31:04Z","additions":1545,"deletions":114},{"id":"PR_kwDOMT5cIs7VWcWM","title":"fix(character): tokenize name occurrences on save so renames propagate","author":"dutchiono","number":7093,"body":"$6","repository":"elizaos/eliza","createdAt":"2026-04-24T13:37:34Z","mergedAt":null,"additions":389,"deletions":27},{"id":"PR_kwDOMT5cIs7VjOuO","title":"fix(character): tokenize name occurrences on save so renames propagate","author":"lalalune","number":7101,"body":"$7","repository":"elizaos/eliza","createdAt":"2026-04-25T05:32:13Z","mergedAt":"2026-04-25T05:32:29Z","additions":251,"deletions":12},{"id":"PR_kwDOMT5cIs7VOtvB","title":"fix(agent): deliver swarm synthesis to the triggering room","author":"NubsCarson","number":7090,"body":"$8","repository":"elizaos/eliza","createdAt":"2026-04-24T06:14:55Z","mergedAt":"2026-04-25T05:30:41Z","additions":107,"deletions":6},{"id":"PR_kwDOMT5cIs7VY0x8","title":"fix(auth): distinguish Claude Code CLI credentials from in-app OAuth","author":"2-A-M","number":7094,"body":"$9","repository":"elizaos/eliza","createdAt":"2026-04-24T15:42:16Z","mergedAt":"2026-04-25T05:30:54Z","additions":103,"deletions":3},{"id":"PR_kwDOMT5cIs7ViJno","title":"fix(message): tolerate malformed planner action XML","author":"NubsCarson","number":7099,"body":"$a","repository":"elizaos/eliza","createdAt":"2026-04-25T03:07:08Z","mergedAt":"2026-04-25T04:15:55Z","additions":90,"deletions":12},{"id":"PR_kwDONkwHXM7TbTVX","title":"feat: add Radius Network support (eip155:723487)","author":"TJ-Frederick","number":29,"body":"$b","repository":"elizaos-plugins/plugin-evm","createdAt":"2026-04-17T19:27:19Z","mergedAt":"2026-04-25T04:20:26Z","additions":70,"deletions":8},{"id":"PR_kwDOOtl_Us7Sfel9","title":"fix(telegram): prevent duplicate pollers per bot token","author":"dutchiono","number":27,"body":"## Summary\\n- track active poller per bot token\\n- stop/replace old poller before launching a new runtime instance\\n- cleanly deregister on service stop\\n\\n## Why\\nPrevents duplicate polling conflicts and runtime restart contention.\n\n<!-- This is an auto-generated comment: release notes by coderabbit.ai -->\n\n## Summary by CodeRabbit\n\n* **Bug Fixes**\n  * Improved handling of multiple Telegram bot instances to prevent conflicts and ensure proper cleanup when bots are stopped or replaced.\n  * Enhanced resource management with graceful transitions when registering a new bot with a previously used token.\n\n<!-- end of auto-generated comment: release notes by coderabbit.ai -->","repository":"elizaos-plugins/plugin-telegram","createdAt":"2026-04-15T02:04:40Z","mergedAt":"2026-04-25T04:20:33Z","additions":58,"deletions":2},{"id":"PR_kwDOMT5cIs7VeyiZ","title":"fix(agent): stop workbench task list from leaking runtime scheduler tasks","author":"NubsCarson","number":7095,"body":"$c","repository":"elizaos/eliza","createdAt":"2026-04-24T22:02:28Z","mergedAt":"2026-04-25T04:15:55Z","additions":31,"deletions":0},{"id":"PR_kwDOMT5cIs7Vez81","title":"fix(message): stop leaking internal mechanism words in transient-failure replies","author":"NubsCarson","number":7098,"body":"$d","repository":"elizaos/eliza","createdAt":"2026-04-24T22:03:54Z","mergedAt":"2026-04-25T04:15:55Z","additions":24,"deletions":36},{"id":"PR_kwDOMT5cIs7VezfU","title":"fix(message): drop passive bookkeeping actions when delegation owns the turn","author":"NubsCarson","number":7097,"body":"$e","repository":"elizaos/eliza","createdAt":"2026-04-24T22:03:24Z","mergedAt":"2026-04-25T04:15:55Z","additions":16,"deletions":8},{"id":"PR_kwDOOiniuM7QiMX7","title":"fix: remove PGlite :memory: artifacts blocking Windows git checkout","author":"dutchiono","number":25,"body":"$f","repository":"elizaos-plugins/plugin-openrouter","createdAt":"2026-04-07T15:07:09Z","mergedAt":"2026-04-25T04:20:29Z","additions":10,"deletions":4212},{"id":"PR_kwDONkg7v87Vo0Z1","title":"feat: add @undesirables/plugin-tcg-oracle and plugin-undesirables","author":"sailorpepe","number":351,"body":"$10","repository":"elizaos-plugins/registry","createdAt":"2026-04-25T19:57:52Z","mergedAt":null,"additions":3,"deletions":1},{"id":"PR_kwDONkg7v87VnLlH","title":"Add @traderouter/plugin-elizaos","author":"re-bruce-wayne","number":350,"body":"$11","repository":"elizaos-plugins/registry","createdAt":"2026-04-25T15:34:32Z","mergedAt":null,"additions":1,"deletions":0}],"detailedContributorSummaries":{"NubsCarson":"NubsCarson: Focused on enhancing system reliability by resolving a critical bug in elizaos/eliza via PR #7099, which ensures the planner correctly handles malformed XML actions. Their work today involved 9 commits across 14 files, with a primary emphasis on bugfix efforts balanced equally between code and test implementation.","greptile-apps":"greptile-apps: No activity today.","lalalune":"lalalune: Focused on improving character data integrity by merging PR #7101 in elizaos/eliza, which implemented tokenization for name occurrences during save operations. Their work today involved extensive codebase modifications across 61 commits, primarily centered on general maintenance and bugfix efforts.","odilitime":"odilitime: Drove a significant architectural update to the agent framework by merging PR #7100 in elizaos/eliza, which implemented x402 paid plugin routes and hardened the test harness. This extensive contribution involved modifying 11,166 files, reflecting a balanced focus across feature development, bug fixes, testing, and general codebase maintenance.","re-bruce-wayne":"re-bruce-wayne: Focused on expanding ecosystem integrations by opening PR #350 in elizaos-plugins/registry to add the @traderouter/plugin-elizaos.","sailorpepe":"sailorpepe: Focused on expanding the ecosystem by opening PR #351 in elizaos-plugins/registry to integrate new TCG and undesirable plugins. This work involved a balanced effort of feature implementation and bug fixing within configuration files."}},"summaryContent":"$12","className":"self-end sm:self-start"}]]}],"$L13","$L14","$L15"]}]}],["$L16","$L17","$L18"],"$L19"]}],"loading":null,"isPartial":false}
+13:["$","div",null,{"className":"mb-6","children":["$","div",null,{"className":"flex items-center justify-between","children":[[["$","$L1a",null,{"href":"/summary/day/2026-04-24","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left mr-2 h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"children":"Previous"}],false],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$L1a",null,{"href":"/summary/day/2026-04-24","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Previous"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]],["$","div",null,{"className":"flex flex-col items-center","children":[["$","div",null,{"className":"text-sm font-medium text-gray-500","children":["Daily"," Summary"]}],["$","time",null,{"dateTime":"2026-04-25","className":"text-md font-bold","children":"Apr 25, 2026"}]]}],[["$","$L1a",null,{"href":"/summary/day/2026-04-26","children":[false,["$","span",null,{"children":"Next"}],["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right ml-2 h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}]],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$L1a",null,{"href":"/summary/day/2026-04-26","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Next"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]]]}]}]
+1c:Tc3e,- Add x402 seller middleware: payment gate on plugin routes, startup validation, replay/facilitator/standard payment flows, and Vitest coverage.
+- Extend Route and payment types in @elizaos/core; document x402 in Mintlify and link from webhooks-and-routes.
+- Re-export @elizaos/app-lifeops lifeops-browser-packaging; expose ./api/server-auth in package exports; onboarding-presets shim.
+- Harden @elizaos/app-core tests: Vitest workspace path aliases, repo-root detection for flat monorepos, fix test helper imports, skip drift checks when optional workflows are absent, ComputerUse approval overlay and local plugin inventory fixes.
+- @elizaos/plugin-computeruse: key alias helpers, validateInt edge cases, partial helper mocks, longer timeouts, gate full runtime e2E behind env, relax live permission assertions.
+- Add package README/CHANGELOG and x402 smoke script for @elizaos/agent.
+
+Made-with: Cursor
+
+<!-- CURSOR_SUMMARY -->
+---
+
+> [!NOTE]
+> **High Risk**
+> Introduces payment-gating and settlement logic on HTTP plugin routes (including replay protection and remote facilitator verification), which is security- and revenue-critical and could block routes or allow unintended access if misconfigured.
+> 
+> **Overview**
+> Adds first-class **x402 paid plugin routes** to `@elizaos/agent`: routes can declare `x402`, and the new middleware enforces 402 responses plus payment verification (on-chain proofs, facilitator payment IDs, and standard `PAYMENT-SIGNATURE`/`X-Payment` flows) with **facilitator `POST /verify` then `POST /settle`** before running handlers, emitting `PAYMENT_REQUIRED`/`PAYMENT_VERIFIED` events and returning `PAYMENT-REQUIRED`/`PAYMENT-RESPONSE` headers.
+> 
+> Integrates this into the runtime route dispatcher (auto-wraps `x402` routes unless already wrapped) and adds startup-time x402 validation in `server.ts` to fail fast on invalid configs. Also adds built-in payment config presets, durable (SQL-backed) replay protection, extensive Vitest coverage, plus new package docs (`README.md`, `CHANGELOG.md`) and an `x402` smoke-test script; updates package exports and dependencies accordingly.
+> 
+> <sup>Reviewed by [Cursor Bugbot](https://cursor.com/bugbot) for commit 016ae6d387ccac74a281afc46ff6f8b5bac2b69a. Bugbot is set up for automated code reviews on this repo. Configure [here](https://www.cursor.com/dashboard/bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+* **New Features**
+  * Added X402 payment middleware for protecting plugin HTTP routes with micropayment requirements
+  * Introduced payment configuration system with support for BASE, SOLANA, and POLYGON networks
+  * Added startup validation for X402-protected routes with detailed error reporting
+
+* **Documentation**
+  * New guides for X402 paid plugin routes and implementation roadmap
+  * Updated webhook and routes documentation with X402 micropayment references
+
+* **Refactoring**
+  * Reorganized internal imports and code formatting across agent package
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->1d:T20e3,## Plan
+- Open app catalog selections in managed Electrobun windows using the existing native toolbar-backed surfaces.
+- Keep detached windows connected to page-scoped chat/control context.
+- Add targeted coverage for always-on-top controls and the duplicate launch guard.
+
+## Patch summary
+- Electrobun: add managed app window RPCs, always-on-top toggles, and explicit webview load handling for detached windows.
+- Apps: add App Windows controls, hash-safe detached app routes, and prevent manual launches from being replayed by slug auto-launch.
+- Agent chat: add Connectors, Plugins, and Settings page scopes so detached surfaces retain scoped chat context.
+
+## Validation
+- `bunx @biomejs/biome check <touched files>`
+- `bunx vitest run eliza/packages/app-core/src/components/pages/AppsView.test.tsx eliza/packages/app-core/src/components/pages/page-scoped-conversations.test.ts eliza/packages/app-core/src/components/workspace/AppWorkspaceChrome.test.tsx eliza/packages/agent/src/api/conversation-metadata.test.ts --passWithNoTests`
+- `(cd packages/app-core/platforms/electrobun && bun run test -- src/surface-windows.test.ts src/native/canvas.test.ts)`
+- `(cd packages/app-core && bun run typecheck)`
+- `bun run dev:desktop -- --force-renderer`
+- Live smoke: clicked Apps -> Plugin Viewer; one elizaOS Plugins window opened, loaded the existing Plugins surface, and showed the Plugins chat panel.
+
+## Notes
+- Direct upstream push was denied for Dexploarer, so this PR is opened from the fork branch.
+- Desktop dev still reports existing whisper.cpp and n8n sidecar warnings; they are unrelated to this patch.
+
+<!-- greptile_comment -->
+
+<details><summary><h3>Greptile Summary</h3></summary>
+
+This PR wires up app catalog selections to open in managed Electrobun desktop windows, adds always-on-top controls for both managed surface windows and canvas/game windows, introduces concurrent-open coalescing for detached surfaces, and extends chat scope to cover Connectors, Plugins, and Settings views in detached windows. The previously flagged issues — silent no-op on `setAlwaysOnTop`, stale pin state on canvas window failure, and the `shouldUseHashNavigation` duplication — are all resolved in this patch.
+</details>
+
+<h3>Confidence Score: 5/5</h3>
+
+Safe to merge — all previously flagged issues are addressed and no new P0/P1 defects found.
+
+The patch resolves every issue from the prior review thread: setAlwaysOnTop now returns {success:boolean} instead of silently no-opping, the alwaysOnTop state on canvasListWindows failure is handled in a try/catch, shouldUseHashNavigation duplication is eliminated by extracting shared utilities to navigation/index.ts, and the duplicate-surface-window guard is implemented via openSurfaceWindowOnce. New tests cover the concurrent-open coalescing, singleton guard, explicit webview loadURL, and the always-on-top toggle contract. No P1 or P0 issues found in the new code paths.
+
+No files require special attention.
+
+<details><summary><h3>Important Files Changed</h3></summary>
+
+| Filename | Overview |
+|----------|----------|
+| packages/app-core/platforms/electrobun/src/surface-windows.ts | Adds openAppWindow, concurrent-open coalescing via pendingSurfaceWindows, setWindowAlwaysOnTop, and explicit webview loadURL. Singleton guard for detached surfaces is now present; loadURL deferred via setTimeout(0) to allow webview to initialize. |
+| packages/app-core/src/components/pages/AppsView.tsx | Adds AppWindowRecord tracking, heartbeat loop, desktop window event subscriptions, and the App Windows control strip. slugAutoLaunchDone.current is now set before the slug lookup to prevent re-launch after a manual catalog open updates the URL — intentional guard. |
+| packages/app-core/platforms/electrobun/src/rpc-handlers.ts | Adds desktopOpenAppWindow, desktopSetManagedWindowAlwaysOnTop, and canvasSetAlwaysOnTop RPC handlers. normalizeRendererRoutePath validates the incoming path is a renderer route before it reaches the URL builder. |
+| packages/app-core/platforms/electrobun/src/native/canvas.ts | Adds setAlwaysOnTop (returns {success: boolean}), exposes alwaysOnTop in listWindows output, and accepts alwaysOnTop in openGameWindow. Addresses the previously flagged silent no-op issue. |
+| packages/app-core/platforms/electrobun/src/native/desktop.ts | Adds openAppWindowCallback and managedWindowAlwaysOnTopCallback wiring. openSurfaceWindow now returns a ManagedWindowSnapshot rather than void, enabling callers to receive the created window ID. |
+| packages/app-core/platforms/electrobun/src/rpc-schema.ts | Schema-level additions: DesktopManagedWindowSnapshot, desktopOpenAppWindow, desktopSetManagedWindowAlwaysOnTop, canvasSetAlwaysOnTop, desktopManagedWindowsChanged push event, and alwaysOnTop on canvas/game types. |
+| packages/app-core/src/navigation/index.ts | Extracts shouldUseHashNavigation, getWindowNavigationPath, and isAppWindowRoute into shared utilities, eliminating the previously flagged duplication across AppsView, AppsPageView, AppContext, and useNavigationState. |
+| packages/agent/src/api/conversation-metadata.ts | Adds page-connectors, page-plugins, and page-settings to VALID_SCOPES. page-settings was already in the ConversationScope type union but was missing from the runtime validation set — this is a correct sync fix. |
+| packages/app-core/src/shell/DetachedShellRoot.tsx | Wraps connectors, plugins, triggers, and settings detached views in DetachedWorkspaceView to provide scoped chat context. Settings section gains overflow-y-auto for scroll. |
+| packages/app-core/src/components/apps/GameView.tsx | Adds always-on-top toggle button for game windows with try/catch guard on canvasListWindows fetch (addressing previous stale-state comment) and success-response check before updating local state. |
+| packages/app-core/platforms/electrobun/src/surface-windows.test.ts | New test file covering surface URL building, singleton guard, concurrent-open coalescing, and explicit webview loadURL. Good coverage of the new deduplication logic. |
+| packages/app-core/platforms/electrobun/src/native/canvas.test.ts | New test file covering openGameWindow with alwaysOnTop, setAlwaysOnTop toggle, and failure path for missing window IDs. Validates the { success: boolean } return contract. |
+
+</details>
+
+</details>
+
+<details><summary><h3>Sequence Diagram</h3></summary>
+
+```mermaid
+sequenceDiagram
+    participant UI as AppsView (Renderer)
+    participant Bridge as Desktop Bridge (RPC)
+    participant SM as SurfaceWindowManager
+    participant DM as DesktopManager
+    participant CM as CanvasManager
+
+    Note over UI: User clicks catalog app
+
+    alt Internal tool app (plugins/connectors/browser/triggers)
+        UI->>Bridge: desktopOpenSurfaceWindow(surface, alwaysOnTop)
+        Bridge->>DM: openSurfaceWindow()
+        DM->>SM: openSurfaceWindow(surface, browse, alwaysOnTop)
+        SM->>SM: Check pendingSurfaceWindows (coalesce)
+        SM->>SM: Check existing window (singleton guard)
+        SM-->>UI: ManagedWindowSnapshot {id, alwaysOnTop}
+        SM->>UI: desktopManagedWindowsChanged push event
+    else External viewer app (game/canvas)
+        UI->>Bridge: gameOpenWindow(url, title, alwaysOnTop)
+        Bridge->>CM: openGameWindow(url, alwaysOnTop)
+        CM-->>UI: {id}
+        Note over UI: Heartbeat loop started
+    else Generic app route
+        UI->>Bridge: desktopOpenAppWindow(title, path, alwaysOnTop)
+        Bridge->>SM: openAppWindow(title, path, alwaysOnTop)
+        SM->>SM: buildAppWindowRendererUrl(rendererUrl, path)
+        Note over SM: URL: host/?appWindow=1#/route
+        SM-->>UI: ManagedWindowSnapshot {id, alwaysOnTop}
+        SM->>UI: desktopManagedWindowsChanged push event
+    end
+
+    Note over UI: Toggle pin on open window
+    alt Managed window
+        UI->>Bridge: desktopSetManagedWindowAlwaysOnTop(id, flag)
+        Bridge->>SM: setWindowAlwaysOnTop(id, flag)
+        SM-->>UI: {success: boolean}
+    else Canvas/game window
+        UI->>Bridge: canvasSetAlwaysOnTop(id, flag)
+        Bridge->>CM: setAlwaysOnTop(id, flag)
+        CM-->>UI: {success: boolean}
+    end
+```
+</details>
+
+<sub>Reviews (2): Last reviewed commit: ["fix: address managed app window review c..."](https://github.com/elizaos/eliza/commit/58831fa8e73bc48c4ab8586b9ac1d7780717b2fc) | [Re-trigger Greptile](https://app.greptile.com/api/retrigger?id=29583462)</sub>
+
+<!-- /greptile_comment -->1e:T23f4,## Problem
+
+The character editor already resolves `{{name}}` / `{{agentName}}` tokens on **load** (`replaceNameTokens` in `packages/app-core/src/utils/name-tokens.ts`, seeded by the onboarding presets in `packages/shared/src/onboarding-presets.characters.ts`).
+
+But `prepareDraftForSave` in `packages/app-core/src/character/character-draft-helpers.ts` never ran the reverse pass. The moment a user saved via the editor, expanded literals got persisted and the tokens were lost forever. From that point on, renaming the agent in Identity settings stopped propagating — bio, system, message examples, post examples, style, and topics all kept the old name as dead text.
+
+User-visible symptom: renaming the agent requires find-and-replacing the name across ~20 lines of bio, every time.
+
+## Fix
+
+Make save the mirror of load.
+
+- Add `tokenizeNameOccurrences(text, name)` next to `replaceNameTokens`. Whole-word, case-sensitive, idempotent; refuses single-character names to avoid eating prose.
+- `prepareDraftForSave(draft, previousName?)` now runs the tokenizer over every free-text field: `bio`, `system`, `topics`, `postExamples`, `style.{all,chat,post}`, and `messageExamples[].examples[].content.text`. Speaker-label tokenization via `normalizeSpeakerName` is unchanged.
+- Both the current draft name and (optionally) the previous saved name are tokenized so a rename within the same save pass also catches stale old-name literals that the user didn't hand-edit.
+- `useCharacterState.handleSaveCharacter` threads `characterData?.name` through as the previous name.
+
+Runtime prompt composition already resolves `{{name}}` / `{{agentName}}` tokens via `@elizaos/prompts`, so no backend or runtime changes are needed — the fix is purely at the UI persistence boundary.
+
+## Migration
+
+No explicit one-shot migration needed. The first save after this change tokenizes the character in place, and the load path already renders tokens back to literals for display. Because tokenization is idempotent and case-sensitive/whole-word, re-running it is safe.
+
+## Tests
+
+15 new cases in `packages/app-core/src/utils/name-tokens.test.ts` covering:
+
+- Whole-word boundary behavior (e.g. name "Kai" does not match inside "Kaizen")
+- Case sensitivity (lowercase "momo" is not tokenized when name is "Momo")
+- Idempotency (`tokenize(tokenize(x)) === tokenize(x)`)
+- Guardrails (single-character names, empty inputs, regex special chars)
+- `prepareDraftForSave` field coverage: bio / system / topics / postExamples / style / messageExamples bodies
+- Previous-name tokenization during rename
+- Round-trip through `replaceNameTokens` after a rename
+
+```
+ Test Files  1 passed (1)
+      Tests  15 passed (15)
+```
+
+## Verified
+
+- `bun run typecheck` — clean
+- `bunx @biomejs/biome check` on all four changed files — clean
+- Unit test suite — 15/15 passing
+
+## Not claimed
+
+- Knowledge / Experience / Relationships tabs may also store the name literally; they're on different API surfaces. If they do, a follow-up PR extends the tokenizer to those endpoints. No change to them here.
+- Nickname / alternate-form support (`{{nickname}}`) is not added. Schema leaves space for it; not needed for the core rename-propagation fix.
+
+<!-- greptile_comment -->
+
+<h3>Greptile Summary</h3>
+
+This PR adds `tokenizeNameOccurrences` and wires it into `prepareDraftForSave` so that literal name text is re-tokenized to `{{name}}` on every save, making agent renames propagate without manual find-and-replace. The approach is sound, but there is a critical asymmetry between the save and load paths.
+
+- **Save path** now tokenizes `bio`, `system`, `topics`, `postExamples`, `style.all/chat/post`, and `messageExamples[].content.text`.
+- **Load path** (`loadCharacter` in `useCharacterState.ts`) applies `replaceNameTokens` only to `bio` and `system` — the four additional field groups are passed through raw. After the first save with this fix, users will see literal `{{name}}` tokens in the Topics, Style, Post Examples, and Message Examples editor fields.
+
+<h3>Confidence Score: 3/5</h3>
+
+Not safe to merge — the save/load asymmetry will surface raw `{{name}}` tokens in the editor UI immediately after first save.
+
+A single clear P1 defect: the save path tokenizes six field groups but the load path only un-tokenizes two, creating an immediate and reproducible UX regression for every user who saves after this change ships.
+
+`packages/app-core/src/state/useCharacterState.ts` — `loadCharacter` must apply `replaceNameTokens` to `topics`, `style.*`, `postExamples`, and `messageExamples[].content.text` to match the expanded save-side coverage.
+
+<h3>Important Files Changed</h3>
+
+
+
+
+| Filename | Overview |
+|----------|----------|
+| packages/app-core/src/state/useCharacterState.ts | Threads `characterData?.name` as `previousName` into `prepareDraftForSave`, but the `loadCharacter` callback only applies `replaceNameTokens` to `bio` and `system` — not to the six field groups now tokenized on save — causing raw `{{name}}` tokens to appear in the editor UI after first save. |
+| packages/app-core/src/character/character-draft-helpers.ts | Adds `previousName` param and applies tokenization across all free-text fields on save; logic is sound, but correctness depends on the load path being symmetrically updated (which it isn't for several field groups). |
+| packages/app-core/src/utils/name-tokens.ts | Adds `tokenizeNameOccurrences` — case-sensitive, whole-word, idempotent, with guardrails for short/empty names and regex-special chars. Word boundary behaviour is limited to ASCII names; non-ASCII names may not tokenize reliably. |
+| packages/app-core/src/utils/name-tokens.test.ts | Good unit coverage of `tokenizeNameOccurrences` and `prepareDraftForSave` field tokenization; missing round-trip tests verifying load-side expansion for `topics`, `style`, `postExamples`, and `messageExamples`. |
+
+</details>
+
+
+
+<h3>Sequence Diagram</h3>
+
+```mermaid
+sequenceDiagram
+    participant UI as Editor UI
+    participant State as useCharacterState
+    participant Helpers as character-draft-helpers
+    participant API as Backend API
+
+    Note over UI,API: Save flow (this PR)
+    UI->>State: handleSaveCharacter()
+    State->>Helpers: prepareDraftForSave(draft, previousName)
+    Note over Helpers: tokenizes bio, system, topics,<br/>postExamples, style.*, messageExamples
+    Helpers-->>State: tokenized draft
+    State->>API: updateCharacter(tokenizedDraft)
+    API-->>State: success
+    State->>State: loadCharacter()
+
+    Note over UI,API: Load flow (this PR — unchanged)
+    State->>API: getCharacter()
+    API-->>State: character data (with {{name}} tokens)
+    Note over State: clean() applied to bio + system only
+    Note over State: topics / style / postExamples /<br/>messageExamples NOT cleaned ⚠️
+    State->>UI: setCharacterDraft (raw {{name}} tokens visible in editor)
+```
+
+<!-- greptile_failed_comments -->
+<details><summary><h3>Comments Outside Diff (1)</h3></summary>
+
+1. `packages/app-core/src/state/useCharacterState.ts`, line 86-101 ([link](https://github.com/elizaos/eliza/blob/7cb0d48b06af3b7ab64803113994ac619151d18b/packages/app-core/src/state/useCharacterState.ts#L86-L101)) 
+
+   <a href="#"><img alt="P1" src="https://greptile-static-assets.s3.amazonaws.com/badges/p1.svg?v=7" align="top"></a> **Load path doesn't un-tokenize `topics`, `style`, `postExamples`, `messageExamples`**
+
+   `loadCharacter` applies `clean` (i.e. `replaceNameTokens`) to `bio` and `system` only, but `prepareDraftForSave` now tokenizes six additional field groups — `topics`, `postExamples`, `style.all/chat/post`, and `messageExamples[].content.text`. After the first save with this fix, those fields will be persisted with `{{name}}` tokens. On reload, the draft will contain raw token strings such as `"how {{name}} thinks"`, which the editor will display verbatim to the user.
+
+   ```ts
+   // before setting the draft, add:
+   const cleanArr = (arr: string[]) => arr.map(clean);
+
+   setCharacterDraft({
+     name: savedName,
+     username: character.username ?? "",
+     bio: Array.isArray(character.bio)
+       ? character.bio.map(clean).join("\n")
+       : clean(character.bio ?? ""),
+     system: clean(character.system ?? ""),
+     adjectives: character.adjectives ?? [],
+     topics: cleanArr(character.topics ?? []),
+     style: {
+       all: cleanArr(character.style?.all ?? []),
+       chat: cleanArr(character.style?.chat ?? []),
+       post: cleanArr(character.style?.post ?? []),
+     },
+     messageExamples: (character.messageExamples ?? []).map((group) => ({
+       ...group,
+       examples: group.examples.map((ex) => ({
+         ...ex,
+         content: { ...ex.content, text: clean(ex.content.text) },
+       })),
+     })),
+     postExamples: cleanArr(character.postExamples ?? []),
+   });
+   ```
+
+</details>
+
+<!-- /greptile_failed_comments -->
+
+<sub>Reviews (1): Last reviewed commit: ["fix(character): tokenize name occurrence..."](https://github.com/elizaos/eliza/commit/7cb0d48b06af3b7ab64803113994ac619151d18b) | [Re-trigger Greptile](https://app.greptile.com/api/retrigger?id=29603728)</sub>
+
+> Greptile also left **1 inline comment** on this PR.
+
+<!-- /greptile_comment -->1f:T1d08,Cherry-picked from #7093 (by @dutchiono) — only the character rename fix, without the unrelated submodule pointer bumps, Windows pty patch, and coding-agent chip changes that #7093 also carried.
+
+## Problem
+
+The character editor resolves \`{{name}}\` / \`{{agentName}}\` tokens on **load** (\`replaceNameTokens\`), but \`prepareDraftForSave\` never ran the reverse pass. The moment a user saved via the editor, expanded literals got persisted and the tokens were lost. From that point on, renaming the agent in Identity settings stopped propagating — bio, system, message examples, post examples, style, and topics all kept the old name as dead text.
+
+## Fix
+
+- Add \`tokenizeNameOccurrences(text, name)\` next to \`replaceNameTokens\`. Whole-word, case-sensitive, idempotent; refuses single-character names to avoid eating prose.
+- \`prepareDraftForSave(draft, previousName?)\` runs the tokenizer over every free-text field: \`bio\`, \`system\`, \`topics\`, \`postExamples\`, \`style.{all,chat,post}\`, and \`messageExamples[].examples[].content.text\`.
+- Both the current draft name and (optionally) the previous saved name are tokenized so a rename within the same save pass also catches stale old-name literals.
+- \`useCharacterState.handleSaveCharacter\` threads \`characterData?.name\` through as the previous name.
+
+Runtime prompt composition already resolves \`{{name}}\` / \`{{agentName}}\` tokens via \`@elizaos/prompts\`, so no backend changes are needed.
+
+## Tests
+
+15 cases in \`name-tokens.test.ts\`: whole-word boundaries, case sensitivity, idempotency, single-char/empty/regex-special guardrails, full \`prepareDraftForSave\` field coverage, previous-name during rename, round-trip with \`replaceNameTokens\`.
+
+Supersedes #7093.
+
+<!-- greptile_comment -->
+
+<h3>Greptile Summary</h3>
+
+This PR adds `tokenizeNameOccurrences` to reverse the load-side `replaceNameTokens` expansion on save, so character renames propagate through all free-text fields. The core logic and tests are solid, but the save-side tokenization is not symmetric with the load-side de-tokenization.
+
+- **P1 — Editor shows raw `{{name}}` after save**: `prepareDraftForSave` now tokenizes `topics`, `postExamples`, `style.*`, and `messageExamples[].content.text`, but `loadCharacter` in `useCharacterState.ts` only calls `replaceNameTokens` on `bio` and `system`. Because `handleSaveCharacter` calls `loadCharacter()` on success, these fields immediately reload with raw `{{name}}` template syntax visible in the editor UI.
+
+<h3>Confidence Score: 3/5</h3>
+
+Not safe to merge — the load/save asymmetry will cause raw {{name}} tokens to appear in the editor immediately after any save.
+
+One P1 defect: loadCharacter in useCharacterState.ts does not de-tokenize the four field groups that prepareDraftForSave now tokenizes. Because handleSaveCharacter calls loadCharacter() on success, users will see {{name}} as literal text in the topics, post-examples, style, and message-example editors after every save.
+
+packages/app-core/src/state/useCharacterState.ts — the loadCharacter callback (lines 86–102) must be extended to apply replaceNameTokens to all newly-tokenized fields.
+
+<h3>Important Files Changed</h3>
+
+
+
+
+| Filename | Overview |
+|----------|----------|
+| packages/app-core/src/state/useCharacterState.ts | Adds characterData to the dependency array and passes it as previousName to prepareDraftForSave, but loadCharacter only de-tokenizes bio and system — leaving topics, postExamples, style.*, and messageExamples with raw {{name}} tokens visible in the editor after each save. |
+| packages/app-core/src/character/character-draft-helpers.ts | Correctly introduces a tokenize closure that covers all free-text fields on save; adjectives are intentionally excluded. Implementation is well-structured. |
+| packages/app-core/src/utils/name-tokens.ts | New tokenizeNameOccurrences is case-sensitive, whole-word, idempotent, and safely escapes regex metacharacters; single-char guard is correct. |
+| packages/app-core/src/utils/name-tokens.test.ts | Comprehensive 15-case test suite covering tokenization, idempotency, edge guards, and round-trip with replaceNameTokens; no issues found. |
+
+</details>
+
+
+
+<h3>Sequence Diagram</h3>
+
+```mermaid
+sequenceDiagram
+    participant Editor
+    participant useCharacterState
+    participant prepareDraftForSave
+    participant Server
+
+    Editor->>useCharacterState: handleSaveCharacter()
+    useCharacterState->>prepareDraftForSave: draft + previousName
+    prepareDraftForSave->>prepareDraftForSave: tokenize(bio, system, topics, postExamples, style.*, messageExamples)
+    prepareDraftForSave-->>useCharacterState: tokenized draft
+    useCharacterState->>Server: updateCharacter(draft)
+    Server-->>useCharacterState: success
+    useCharacterState->>useCharacterState: loadCharacter()
+    useCharacterState->>Server: getCharacter()
+    Server-->>useCharacterState: character with {{name}} in all fields
+    useCharacterState->>useCharacterState: clean(bio) ✅ clean(system) ✅ topics as-is ❌ postExamples as-is ❌ style.* as-is ❌ messageExamples as-is ❌
+    useCharacterState-->>Editor: draft with raw {{name}} visible in topics/style/etc
+```
+
+<!-- greptile_failed_comments -->
+<details><summary><h3>Comments Outside Diff (1)</h3></summary>
+
+1. `packages/app-core/src/state/useCharacterState.ts`, line 86-102 ([link](https://github.com/elizaos/eliza/blob/406f30fea4094536e09fce7c72935c8b668edf2b/packages/app-core/src/state/useCharacterState.ts#L86-L102)) 
+
+   <a href="#"><img alt="P1" src="https://greptile-static-assets.s3.amazonaws.com/badges/p1.svg?v=7" align="top"></a> **Load-side de-tokenization is incomplete — users will see raw `{{name}}` in the editor**
+
+   `prepareDraftForSave` now tokenizes `topics`, `postExamples`, `style.*`, and `messageExamples[].content.text`, but `loadCharacter` (lines 86–102) only calls `clean` on `bio` and `system`. After a successful save, `handleSaveCharacter` calls `loadCharacter()` (line 137), which reloads the character without de-tokenizing those four field groups — so the user immediately sees `{{name}}` as raw text in the topics, style, post-examples, and message-example editors.
+
+   Concrete path: save character "Momo" with topic `"how Momo thinks"` → stored as `"how {{name}} thinks"` → `loadCharacter` puts it back into the draft untouched → editor renders `"how {{name}} thinks"`.
+
+   Fix: extend the `clean` pass in `loadCharacter` to cover all fields that `prepareDraftForSave` now tokenizes:
+
+   ```
+   topics: (character.topics ?? []).map(clean),
+   postExamples: (character.postExamples ?? []).map(clean),
+   style: {
+     all: (character.style?.all ?? []).map(clean),
+     chat: (character.style?.chat ?? []).map(clean),
+     post: (character.style?.post ?? []).map(clean),
+   },
+   messageExamples: (character.messageExamples ?? []).map((group) => ({
+     ...group,
+     examples: group.examples.map((ex) => ({
+       ...ex,
+       content: { ...ex.content, text: clean(ex.content.text) },
+     })),
+   })),
+   ```
+
+</details>
+
+<!-- /greptile_failed_comments -->
+
+<sub>Reviews (1): Last reviewed commit: ["fix(character): tokenize name occurrence..."](https://github.com/elizaos/eliza/commit/406f30fea4094536e09fce7c72935c8b668edf2b) | [Re-trigger Greptile](https://app.greptile.com/api/retrigger?id=29694663)</sub>
+
+> Greptile also left **2 inline comments** on this PR.
+
+<!-- /greptile_comment -->20:T1092,## Summary
+
+The swarm synthesis path was broken in three stacked ways. When a task agent finished its work (opens a PR, builds a page, fetches data, etc.), nothing was posted back to the triggering room — the agent silently dropped its final result on the floor.
+
+### 1. `setSwarmCompleteCallback` was a no-op
+
+`wireCodingAgentSwarmSynthesis` installed a deliberate no-op with a comment claiming *"synthesis happens via the streamer instead."* In practice `handleSwarmSynthesis` (defined in the same file) is never called anywhere in the repo. Task agents completed, `swarm_complete` fired, the callback ran, returned — no user-facing message was ever emitted.
+
+**Fix:** wire the callback to `await handleSwarmSynthesis(st, payload)`.
+
+### 2. `routeSynthesisToConnector` gated on a field that's never assigned
+
+The connector-routing path early-returns when `coordinator.sourceRoomId` is null. That field is declared on the coordinator interface but **never assigned anywhere in the orchestrator**, so the path was always dead.
+
+**Fix:** thread a `fallbackRoomId` parameter through `routeSynthesisToConnector`. Derive it from the most recently terminal task in the payload — the task whose completion fired `swarm_complete`, and whose room is waiting for an answer. Naively taking *"first task with a roomId"* leaked results into stale rooms when the coordinator carried tasks across rooms. `coordinator.sourceRoomId` is still preferred when set, so any future direct assignment still wins.
+
+### 3. Synthesis rendered a meta-summary instead of the actual result
+
+`buildTaskResultLine` used the coordinator's `completionSummary` as the user-facing output. That's a meta-judgment about *whether* the task finished ("The agent delivered a complete evening news brief with 7 headlines..."), not the content the agent produced. The real deliverable — the brief itself, the PR URL line, the built page URL — was sitting unread in the task agent's `claude-code` session transcript.
+
+**Fix:** read the newest `.jsonl` at `~/.claude/projects/<sanitized-workdir>/` and return the last assistant message as the primary synthesis content. Only fall through to `completionSummary` (and then to port-heuristic text) when the jsonl can't be read. The workdir sanitizer replaces both `/` and `.` with `-` so hidden paths like `/home/u/.milady/workspaces/<id>` resolve to their matching project directory.
+
+## Changes
+
+One file: `packages/agent/src/api/server-helpers-swarm.ts` (+107, -6).
+
+- `wireCodingAgentSwarmSynthesis` now invokes `handleSwarmSynthesis`
+- `handleSwarmSynthesis` payload carries per-task `roomId` and `workdir`
+- `routeSynthesisToConnector` accepts an optional `fallbackRoomId`
+- New `readAgentFinalAssistantMessage(workdir)` helper reads the agent's final message from its claude-code transcript
+- `buildTaskResultLine` prefers the agent's real output over the coordinator's meta-summary
+
+## Test plan
+
+- [x] Verified end-to-end on a real Discord-triggered delegation: user prompt → planner picks SPAWN_AGENT → task agent completes → synthesis posts the actual deliverable into the originating Discord room. Log shows:
+  ```
+  [swarm-synthesis] Generating synthesis for 1 tasks (1 completed, 0 stopped, 0 errored)
+  [swarm-synthesis] Synthesis generated, routing to user
+  [swarm-synthesis] Routed result to discord room <uuid>
+  ```
+- [x] Multi-task swarm where some tasks span different rooms: synthesis lands in the correct (most recently terminal) room, not in a stale room from a sibling task.
+- [x] `tsc --noEmit` clean in `packages/agent`.
+
+## Compatibility notes
+
+- Behavior for turns where `coordinator.sourceRoomId` is actually set (any downstream consumer that populates it): unchanged — still preferred over the fallback.
+- Behavior when the jsonl isn't readable (non-claude task agents, race at early-kill time, etc.): falls back to existing `completionSummary` / port-heuristic path, so no regression vs. pre-patch rendering.
+- Net effect for users relying on the synthesis NOT running (none observed, but noting it): they now get a post-task message where they previously got silence. If that's desired behavior for some deployment, it should be guarded explicitly rather than left to a silent-drop bug.
+21:T12fd,## Problem
+When the Claude Code CLI is installed and authenticated on the user's machine, the Anthropic subscription panel in Settings → AI Models incorrectly reports "Connected to Claude Subscription" with an active Disconnect button — even though the user never ran the in-app OAuth flow. Clicking Disconnect is a no-op: it only clears app-owned credentials (`~/.eliza/auth/anthropic-subscription.json`), never the CLI's (`~/.claude/.credentials.json` or the macOS keychain entry). Status re-fetches, sees the CLI blob, UI stays "Connected". Phantom state the user can't dismiss.
+
+## Fix
+Surface the credential source on `GET /api/subscription/status`:
+
+```ts
+source: "app" | "claude-code-cli" | "setup-token" | "codex-cli" | null
+
+<!-- greptile_comment -->
+
+<h3>Greptile Summary</h3>
+
+This PR fixes a phantom \"Connected\" state for Anthropic subscriptions by surfacing a `source` field (`"app" | "claude-code-cli" | "setup-token" | "codex-cli"`) on the subscription status endpoint and gating the UI's connected/disconnect affordances on that source. The credential-priority logic in `getSubscriptionStatus` is sound and the CLI-detected banner path works correctly.
+
+- **P1 regression**: Users authenticated via `source === \"setup-token\"` now fall through both the `anthAppConnected` and `anthropicCliDetected` branches in `ProviderSwitcher`, causing the panel to render a \"Disconnected\" state with a login button even when the subscription is valid. Previously `configured && valid` was sufficient to show \"Connected\".
+
+<h3>Confidence Score: 3/5</h3>
+
+The fix is correct for the CLI case but introduces a UI regression for setup-token users who will see a misleading disconnected state
+
+One P1 logic regression (setup-token users silently appear disconnected) pulls the score below the P1 ceiling of 4; the rest of the changes are well-reasoned and correctly implemented
+
+packages/app-core/src/components/settings/ProviderSwitcher.tsx — the useEffect that computes anthropicConnected/anthropicCliDetected needs a third branch for source==="setup-token"
+
+<h3>Important Files Changed</h3>
+
+| Filename | Overview |
+|----------|----------|
+| packages/app-core/src/components/settings/ProviderSwitcher.tsx | Introduces anthropicCliDetected state and gates anthropicConnected on source==="app", but setup-token users (source==="setup-token") are now silently treated as disconnected with no UI explanation — a regression from prior behavior |
+| packages/agent/src/auth/credentials.ts | Adds SubscriptionCredentialSource type and populates source field in getSubscriptionStatus(); logic is correct for app/cli/setup-token/codex-cli prioritization, but the type is duplicated rather than imported from the shared contract |
+| packages/app-core/src/components/settings/SubscriptionStatus.tsx | Adds canDisconnect/externalNotice props to SubscriptionProviderPanel and renders a CLI-detected notice; canDisconnect defaults to true correctly (only relevant when connected=true, which requires source==="app") |
+| packages/shared/src/contracts/onboarding.ts | Adds SubscriptionCredentialSource type and source field to SubscriptionProviderStatus; duplicates the type definition that also lives in packages/agent/src/auth/credentials.ts |
+| packages/app-core/src/i18n/locales/en.json | Adds two new i18n keys for the CLI-detected banner; body text hardcodes "Milady" which may be namespace-specific |
+
+</details>
+
+<h3>Flowchart</h3>
+
+```mermaid
+%%{init: {'theme': 'neutral'}}%%
+flowchart TD
+    A["GET /api/subscription/status"] --> B["getSubscriptionStatus()"]
+    B --> C{"stored != null\n(~/.eliza/auth/…)"}
+    C -- "yes" --> D["source = 'app'"]
+    C -- "no" --> E{"claudeBlob?.accessToken"}
+    E -- "yes" --> F["claudeSource = 'claude-code-cli'"]
+    E -- "no" --> G{"readConfiguredAnthropicSetupToken()"}
+    G -- "found" --> H["claudeSource = 'setup-token'"]
+    G -- "not found" --> I["claudeSource = null"]
+    F --> J["source = 'claude-code-cli'"]
+    H --> K["source = 'setup-token'"]
+    I --> L["source = null"]
+    D & J & K & L --> M["ProviderSwitcher useEffect"]
+    M --> N{"source === 'app'"}
+    N -- "yes" --> O["anthropicConnected = true\nanthropicCliDetected = false\n✅ Disconnect shown"]
+    N -- "no" --> P{"source === 'claude-code-cli'"}
+    P -- "yes" --> Q["anthropicConnected = false\nanthropicCliDetected = true\n✅ CLI notice shown"]
+    P -- "no" --> R["anthropicConnected = false\nanthropicCliDetected = false\n⚠️ 'Disconnected' shown\neven for setup-token users"]
+```
+
+<sub>Reviews (1): Last reviewed commit: ["fix(auth): distinguish Claude Code CLI c..."](https://github.com/elizaos/eliza/commit/58cf63a9b03bed4e8b26b638c2d65c12d6e013d0) | [Re-trigger Greptile](https://app.greptile.com/api/retrigger?id=29619682)</sub>
+
+> Greptile also left **3 inline comments** on this PR.
+
+<!-- /greptile_comment -->22:T1497,## Summary
+
+The planner LLM occasionally emits an unclosed `<action>` wrapper around a well-formed `<name>X</name>`, e.g.:
+
+```xml
+<actions><action><name>REPLY</name></actions>
+```
+
+(closing `</action>` is missing). The strict `<action>...</action>` regex in `unwrapPlannerIdentifier` falls through to "return trimmed" and the entire XML chunk becomes the action identifier. That never matches a registered action, the bot logs `Dropping unknown planner action`, and the user sees silence — even though `shouldRespond` already decided to engage.
+
+## Symptom
+
+Production log line, observed live in the milady server (2026-04-25 02:41 UTC) on a real user prompt:
+
+```
+Warn  Dropping unknown planner action (actionName=<action><name>REPLY</name>)
+```
+
+The bot stayed silent for ~2 minutes before a retry path eventually recovered. In a quieter test channel the same prompt produced no reply at all within the test window.
+
+## Fix
+
+`packages/typescript/src/services/message.ts` — one fall-through branch added in `unwrapPlannerIdentifier`. When the input begins with `<action>` and contains a `<name>X</name>` somewhere inside, prefer that name even if the wrapper is unclosed or has trailing content.
+
+The strict patterns still take precedence — this is purely a defensive fallback added before the bare `return trimmed`. No behavior change for canonical inputs.
+
+## Tests
+
+`packages/typescript/src/services/message.test.ts` — new `describe` block with 7 cases through the exported `extractPlannerActionNames`:
+
+- canonical `<action><name>X</name></action>`
+- flat `<action>X</action>`
+- **missing closing `</action>` (the bug)**
+- trailing garbage after the name
+- empty actions field
+- comma-separated literal identifiers
+- multiple well-formed action blocks
+
+All pass; full `vitest` and `tsc --noEmit` clean in `packages/typescript`.
+
+## Live verification
+
+Bot was restaged with this fix applied on top of `develop` + 4 other in-flight fixes (#7090, #7095, #7097, #7098). 10/10 webhook test scenarios passed cleanly, including the two REPLY-type prompts ("tell me a joke", "what year is it") that silently dropped on the immediately previous run without this patch.
+
+<!-- greptile_comment -->
+
+<h3>Greptile Summary</h3>
+
+This PR adds a defensive fallback in `unwrapPlannerIdentifier` so that malformed planner XML like `<action><name>REPLY</name>` (missing closing `</action>`) is recovered by extracting the inner `<name>` content, instead of falling through to return the whole XML chunk as the action identifier. The fix is narrow, well-commented, strictly additive (strict patterns still win), and covered by 7 targeted test cases.
+
+<h3>Confidence Score: 5/5</h3>
+
+Safe to merge — targeted defensive fallback with no behavior change on canonical inputs and full test coverage.
+
+The change is strictly additive: the two existing strict regex branches (bare `<name>` and closed `<action>`) still take precedence. The new branch only fires when both fail but the input still looks like a malformed `<action>` block with an inner `<name>`. Seven test cases exercise all relevant shapes, tsc and vitest both pass, and the production symptom is directly reproduced and fixed by the tests.
+
+No files require special attention.
+
+<h3>Important Files Changed</h3>
+
+| Filename | Overview |
+|----------|----------|
+| packages/typescript/src/services/message.ts | Adds a loose `<action>` + `<name>` fallback branch in `unwrapPlannerIdentifier` before the bare `return trimmed`; all canonical paths are unchanged and still take precedence. |
+| packages/typescript/src/services/message.test.ts | Exports `extractPlannerActionNames` for testing and adds a focused describe block with 7 cases covering canonical, flat, unclosed, trailing-garbage, empty, comma-separated, and multi-action inputs. |
+
+</details>
+
+<h3>Flowchart</h3>
+
+```mermaid
+%%{init: {'theme': 'neutral'}}%%
+flowchart TD
+    A["extractPlannerActionNames(parsedXml)"] --> B{actions is string?}
+    B -- No --> Z["return []"]
+    B -- Yes --> C{contains &lt;action&gt; tag?}
+    C -- No --> G["comma-split → unwrapPlannerIdentifier each"]
+    C -- Yes --> D["matchAll strict &lt;action&gt;...&lt;/action&gt; regex"]
+    D --> E{any matches?}
+    E -- Yes --> F["extract &lt;name&gt; or full match per entry → return names"]
+    E -- No (malformed / unclosed) --> G
+    G --> H["unwrapPlannerIdentifier(value)"]
+    H --> I{starts with &lt;name&gt;...&lt;/name&gt;?}
+    I -- Yes --> J["return inner name ✓"]
+    I -- No --> K{strict &lt;action&gt;...&lt;/action&gt; match?}
+    K -- Yes --> L{has nested &lt;name&gt;?}
+    L -- Yes --> M["return nested name ✓"]
+    L -- No --> N{inner has XML tags?}
+    N -- Yes --> O["return trimmed (original)"]
+    N -- No --> P["return inner text ✓"]
+    K -- No --> Q{"NEW: starts with &lt;action&gt; AND contains &lt;name&gt;X&lt;/name&gt;?"}
+    Q -- Yes --> R["return extracted name ✓ (fixes missing &lt;/action&gt; bug)"]
+    Q -- No --> S["return trimmed (original)"]
+```
+
+<sub>Reviews (1): Last reviewed commit: ["fix(message): tolerate malformed planner..."](https://github.com/elizaos/eliza/commit/542494d5d4105894c2eef717241912840e70789a) | [Re-trigger Greptile](https://app.greptile.com/api/retrigger?id=29689379)</sub>
+
+<!-- /greptile_comment -->23:T1a9a,## Summary
+
+Add Radius Network (chain ID `723487`) and its testnet (chain ID `72344`) to the Rust and Python implementations of `plugin-evm`. The TypeScript implementation already picks up Radius automatically via `viem/chains` (`SupportedChain = keyof typeof viemChains`), so only the README needs updating there.
+
+[Radius Network](https://radiustech.xyz) is an EVM-compatible platform purpose-built for agentic micropayments — sub-penny costs (~$0.0001/tx), sub-second finality (~500ms), and stablecoin-native gas (RUSD). It's a natural fit for plugin-evm's agent payment workflows.
+
+### Chain details
+
+| | Chain ID | RPC | Explorer |
+|-|---|---|---|
+| Mainnet | 723487 | https://rpc.radiustech.xyz | https://network.radiustech.xyz |
+| Testnet | 72344  | https://rpc.testnet.radiustech.xyz | https://testnet.radiustech.xyz |
+
+Native currency: **RUSD** (Radius USD, 18 decimals).
+
+Registered in viem 2.48.0 as `radius` / `radiusTestnet`, and in ethereum-lists/chains ([PR #8168](https://github.com/ethereum-lists/chains/pull/8168), merged).
+
+### Links
+
+- Website: https://radiustech.xyz
+- Docs: https://docs.radiustech.xyz
+
+<!-- greptile_comment -->
+
+<h3>Greptile Summary</h3>
+
+This PR adds Radius Network (chain ID `723487`) and Radius Testnet (chain ID `72344`) to the Rust and Python implementations of `plugin-evm`, and updates the README — the TypeScript layer already picks up the chain automatically via `viem/chains`. All chain metadata (RPC URLs, native symbol `RUSD`, `is_testnet` flag) is correct and consistent across both languages, and the new variants are fully covered by the extended test suites.
+
+<h3>Confidence Score: 5/5</h3>
+
+Safe to merge; all remaining findings are P2 style suggestions about the pre-existing serde/Display naming gap and missing display assertions in tests.
+
+Chain IDs, RPC URLs, native symbol, and testnet flags are all correct and consistent across Rust and Python. Tests are comprehensive. The only noteworthy issue is the pre-existing serde rename_all = 'lowercase' mismatch for multi-word chain names — RadiusTestnet follows the same pattern as BaseSepolia, which already exists in the codebase without observed breakage.
+
+rust/src/types.rs warrants a follow-up to address the serde/Display inconsistency for both RadiusTestnet and BaseSepolia, but this is not blocking.
+
+<h3>Important Files Changed</h3>
+
+
+
+
+| Filename | Overview |
+|----------|----------|
+| rust/src/types.rs | Adds Radius/RadiusTestnet chain variants with correct chain IDs, RPC URLs, native symbol, and testnet flag; serde(rename_all = 'lowercase') creates a latent mismatch between wire format and Display for multi-word names. |
+| python/elizaos_plugin_evm/types.py | Adds RADIUS and RADIUS_TESTNET enum members with correct chain ID, symbol, RPC URL, and is_testnet flag; consistent with the rest of the Python implementation. |
+| rust/tests/integration_tests.rs | Adds chain_id, native_symbol, HTTPS RPC, testnet, and from_str tests for Radius/RadiusTestnet; Display and serde roundtrip tests are not extended to the new chains. |
+| python/tests/test_types.py | Updates testnet set and chain count to 16; thorough coverage of the new chains. |
+| README.md | Adds Radius Network and Radius Testnet rows to the supported chains table with correct chain IDs and RUSD symbol. |
+
+</details>
+
+
+
+<h3>Flowchart</h3>
+
+```mermaid
+%%{init: {'theme': 'neutral'}}%%
+flowchart TD
+    A[SupportedChain input] --> B{FromStr lookup}
+    B -->|radius| C[Radius - chain ID 723487]
+    B -->|radiustestnet or radius-testnet| D[RadiusTestnet - chain ID 72344]
+    C --> E[symbol: RUSD\nrpc: rpc.radiustech.xyz\nis_testnet: false]
+    D --> F[symbol: RUSD\nrpc: rpc.testnet.radiustech.xyz\nis_testnet: true]
+    E --> G[Display → radius\nSerde → radius]
+    F --> H[Display → radiusTestnet\nSerde warning → radiustestnet]
+```
+
+<!-- greptile_failed_comments -->
+<details><summary><h3>Comments Outside Diff (2)</h3></summary>
+
+1. `rust/src/types.rs`, line 11 ([link](https://github.com/elizaos-plugins/plugin-evm/blob/fc3ca1606484d1625dd4d7bd8bb95e8d7cac105b/rust/src/types.rs#L11)) 
+
+   <a href="#"><img alt="P2" src="https://greptile-static-assets.s3.amazonaws.com/badges/p2.svg?v=7" align="top"></a> **Serde serialisation diverges from `Display` for `RadiusTestnet`**
+
+   `#[serde(rename_all = "lowercase")]` serialises `RadiusTestnet` as `"radiustestnet"`, but `Display` returns `"radiusTestnet"` and the Python enum value is `"radiusTestnet"`. This means `serde_json::from_str::<SupportedChain>("\"radiusTestnet\"")` would silently fail while `"radiustestnet"` succeeds — a mismatch between the serde wire format and what `to_string()` produces.
+
+   This pre-existing gap also affects `BaseSepolia` (serde: `"basesepolia"` vs Display: `"baseSepolia"`). Adding a per-variant rename on both would align all representations:
+
+   ```rust
+   #[serde(rename = "radiusTestnet")]
+   RadiusTestnet,
+   ```
+
+   The same fix applied to `BaseSepolia` would close the pre-existing gap too.
+
+
+2. `rust/tests/integration_tests.rs`, line 325-330 ([link](https://github.com/elizaos-plugins/plugin-evm/blob/fc3ca1606484d1625dd4d7bd8bb95e8d7cac105b/rust/tests/integration_tests.rs#L325-L330)) 
+
+   <a href="#"><img alt="P2" src="https://greptile-static-assets.s3.amazonaws.com/badges/p2.svg?v=7" align="top"></a> **`test_chain_display` and serde tests not extended to Radius chains**
+
+   The existing `test_chain_display` test covers `BaseSepolia` and `Zksync` but the new chains are not tested. Similarly, `test_chain_serde_all` only covers single-word variants and deliberately skips multi-word ones (where the serde/Display mismatch would surface). Adding assertions here would catch the `"radiusTestnet"` → `"radiusTestnet"` Display roundtrip and make the serde gap visible:
+
+   ```rust
+   // in test_chain_display
+   assert_eq!(SupportedChain::Radius.to_string(), "radius");
+   assert_eq!(SupportedChain::RadiusTestnet.to_string(), "radiusTestnet");
+   ```
+
+</details>
+
+<!-- /greptile_failed_comments -->
+
+<sub>Reviews (1): Last reviewed commit: ["feat: add Radius Network support (eip155..."](https://github.com/elizaos-plugins/plugin-evm/commit/fc3ca1606484d1625dd4d7bd8bb95e8d7cac105b) | [Re-trigger Greptile](https://app.greptile.com/api/retrigger?id=28813395)</sub>
+
+<!-- /greptile_comment -->
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+## Release Notes
+
+* **New Features**
+  * Added support for Radius Network (mainnet) and Radius Testnet to the EVM plugin, enabling users to interact with these chains alongside existing supported networks.
+
+* **Tests**
+  * Updated test coverage to validate chain properties and network identification for the newly added networks.
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->24:T171e,## Summary
+
+Two stacked issues caused the agent to dump its internal task table into chat whenever the planner picked `MANAGE_TASKS` with `operation=list`. A prompt like *"doomscroll the web for me"* or any vague phrase could produce a Discord reply listing 100+ `EMBEDDING_DRAIN` ticks alongside `PROACTIVE_AGENT`, `LIFEOPS_SCHEDULER`, and `heartbeat` entries.
+
+### 1. `toWorkbenchTask` filter was permissive
+
+`workbench-helpers.ts:109` excluded only trigger configs and todo tasks. The runtime's `utils/batch-queue` util (used for drain / queue tasks like `EMBEDDING_DRAIN`) registers system ticks as elizaOS `Task` records in the same table. Those have no trigger config and are not todos, so they sailed through and appeared in the user-facing workbench list.
+
+The CREATE side of `MANAGE_TASKS` already tags user-created tasks with `WORKBENCH_TASK_TAG`. Make the filter inclusive and require that tag, matching the convention.
+
+### 2. `MANAGE_TASKS` list operation fired without explicit list intent
+
+`manage-tasks.ts` `validate` admits the action when `looksLikeTaskIntent` matches either the current message or any of the last 4 room messages. That lookback handles *"yes, list them"* follow-ups intentionally. Combined with `TEXT_SMALL` extraction occasionally classifying vague prompts as `operation=list`, though, the action could fire on a message that did not ask for a task list at all.
+
+Add a defensive guard at the top of the LIST branch using a tighter `LIST_INTENT_TERMS` subset (`list tasks`, `show tasks`, `my tasks`, `what are my tasks`, `task list`). If the current message does not match list intent, the action returns `success=false` with an error and nothing is sent to chat.
+
+## Changes
+
+- `packages/agent/src/api/workbench-helpers.ts` (+6): `toWorkbenchTask` requires `WORKBENCH_TASK_TAG`
+- `packages/agent/src/actions/manage-tasks.ts` (+25): new `LIST_INTENT_TERMS` + `looksLikeListTaskIntent` helper, guard in LIST branch
+
+Total: 2 files, +31, −0.
+
+## Test plan
+
+- [x] Verified live on the bot: prior to patch, a `"doomscroll the web"` prompt produced a Discord reply listing 100+ EMBEDDING_DRAIN ticks. After patch, the same prompt routes through the planner to `SPAWN_AGENT` (the right action), and no system tasks appear in any user-visible surface.
+- [x] Manual regression: explicit list prompts (`"list my tasks"`, `"show tasks"`) still work and show only user-created tasks tagged with `WORKBENCH_TASK_TAG`.
+- [x] `tsc --noEmit` clean in `packages/agent`.
+
+## Compatibility notes
+
+- The filter tightening is backwards-compatible with the CREATE path, which already tags user tasks. Any task that was intentionally created without `WORKBENCH_TASK_TAG` (e.g. by a plugin that forgot the tag) will stop appearing in the workbench list. That's the same behavior those tasks would have gotten if they had been correctly filed as a todo or trigger.
+- The LIST intent guard only suppresses the `list` branch when the current message doesn't match list intent. The `create`, `complete`, `delete`, `update` branches are unchanged.
+
+<!-- greptile_comment -->
+
+<h3>Greptile Summary</h3>
+
+This PR fixes two stacked issues that caused internal runtime scheduler tasks (`EMBEDDING_DRAIN`, `heartbeat`, etc.) to leak into user-facing chat replies. `toWorkbenchTask` is tightened to require `WORKBENCH_TASK_TAG`, and a `looksLikeListTaskIntent` guard is added to the LIST branch of `MANAGE_TASKS` to block LLM-misclassified vague prompts from triggering a task dump.
+
+<h3>Confidence Score: 4/5</h3>
+
+Safe to merge; the core bug fixes are correct and the only concerns are a narrow intent-term list and a silent failure path that are P2 quality issues.
+
+Both changes address real bugs with correct logic. The tag-guard in toWorkbenchTask is clean and backward-compatible. The LIST intent guard works but has a narrow term set and returns an empty silent failure that could leave users with no response if they phrase their request in an unrecognized way. No P0/P1 issues found.
+
+packages/agent/src/actions/manage-tasks.ts — review LIST_INTENT_TERMS coverage and the silent success=false, text='' return path.
+
+<h3>Important Files Changed</h3>
+
+| Filename | Overview |
+|----------|----------|
+| packages/agent/src/actions/manage-tasks.ts | Adds LIST_INTENT_TERMS constant and looksLikeListTaskIntent helper; inserts a guard in the LIST branch that silently returns success=false when the current message lacks explicit list intent — narrow term set and silent failure are minor UX concerns. |
+| packages/agent/src/api/workbench-helpers.ts | Adds an inclusive WORKBENCH_TASK_TAG check at the top of toWorkbenchTask, correctly blocking system scheduler tasks (EMBEDDING_DRAIN, etc.) from surfacing in the user-facing list; subsequent trigger/todo checks are now redundant but harmless. |
+
+</details>
+
+<h3>Flowchart</h3>
+
+```mermaid
+%%{init: {'theme': 'neutral'}}%%
+flowchart TD
+    A[User message received] --> B{looksLikeTaskIntent?}
+    B -- No --> Z[Action skipped]
+    B -- Yes --> C[MANAGE_TASKS handler]
+    C --> D[Fetch all agent tasks]
+    D --> E{toWorkbenchTask filter}
+    E -- "Missing WORKBENCH_TASK_TAG\n(system/scheduler tasks)" --> F[Excluded from workbenchTasks]
+    E -- "Has WORKBENCH_TASK_TAG\n(user tasks only)" --> G[Included in workbenchTasks]
+    G --> H[LLM extracts operation]
+    H --> I{operation == list?}
+    I -- No --> J[create / complete / delete / update branches]
+    I -- Yes --> K{looksLikeListTaskIntent\ncurrent message?}
+    K -- No --> L["Return success=false, text=''"]
+    K -- Yes --> M[Return task list to user]
+```
+
+<sub>Reviews (1): Last reviewed commit: ["fix(agent): stop workbench task list fro..."](https://github.com/elizaos/eliza/commit/e972fbe74a05d506b47f2d5b55075f52712667ca) | [Re-trigger Greptile](https://app.greptile.com/api/retrigger?id=29670078)</sub>
+
+> Greptile also left **2 inline comments** on this PR.
+
+<!-- /greptile_comment -->25:T191f,## Summary
+
+`buildStructuredFailureReply` previously instructed the recovery model to *"Explain what failed and why using only the diagnostics below"* and fed it raw structured-output diagnostics plus action-result summaries. The resulting replies leaked internal terminology users have no business seeing. Observed live in discord when the planner hit transient Anthropic errors:
+
+> *"planner blew up again. the action_planner call to sonnet-4-6 failed all 4 retries with a generic anthropic 'unexpected error', so no xml plan came back and i couldn't commit to a real action this turn. the doomscroll task is already queued from my earlier ack, it just can't hand off through the planner right now."*
+
+That reply leaks "planner", "action_planner", "sonnet-4-6", "anthropic", "xml plan", "hand off through the planner". The user doesn't know or care what any of those are.
+
+## Fix
+
+Rewrite the prompt so the recovery model:
+- Stays in character (uses the character's voice + tone)
+- Avoids naming internal mechanism words (planner, action_planner, XML, TOON, JSON, schema, model names, retries, runtime, dispatch, hand off)
+- Avoids em/en dashes (easy way for the model to sound like a shipping-log paraphrase instead of the character)
+- Just acknowledges something flaked and suggests a retry
+- Optionally offers to act directly on a clear command if it can
+
+The hard-fallback string used when every model retry also fails is now a voice-neutral default `"Something went wrong on my end. Please try again."` and is overridable per character via `character.templates.transientFailureReply` (following the existing pattern used for `messageHandlerTemplate`, `multiStepDecisionTemplate`, `replyTemplate`, etc.).
+
+## Changes
+
+One file: `packages/typescript/src/services/message.ts` (+24, −36, net −12).
+
+- Prompt rewritten around character voice + mechanism-word ban list
+- Hard-fallback uses `character.templates?.transientFailureReply` with a neutral default
+- Removed now-unused `failure` and `actionResults` locals + dependency on `summarizeStructuredOutputFailure` / `summarizeActionResultsForUser` inside this function (those helpers remain used elsewhere)
+
+## Test plan
+
+- [x] Verified on the bot with a character that has its own voice config: transient-failure replies stay in that voice, don't mention planner/XML/etc.
+- [x] Verified the neutral fallback ("Something went wrong on my end. Please try again.") is what gets used when every model retry also fails (simulated by rejecting all model calls in the replay).
+- [x] `tsc --noEmit` clean in `packages/typescript`.
+
+## Compatibility
+
+- `character.templates.transientFailureReply` is a new optional template key. Characters that don't define it get the neutral default. Backwards-compatible.
+- The diagnostic information that used to flow into the user-facing text is still logged via `runtime.logger` on the failure path. Debuggability is preserved; only the user-facing surface is cleaned up.
+
+<!-- greptile_comment -->
+
+<h3>Greptile Summary</h3>
+
+This PR fixes user-visible information leakage in transient-failure replies by rewriting the `buildStructuredFailureReply` prompt to prohibit internal mechanism words (planner, XML, model names, etc.) and replacing the hard-coded fallback with a voice-neutral default that characters can override via `character.templates.transientFailureReply`. The change is backwards-compatible and diagnostic detail is preserved in logger output.
+
+<h3>Confidence Score: 4/5</h3>
+
+Safe to merge; the fix is well-scoped with only minor P2 style observations.
+
+Only P2 findings: the thought field retains internal-mechanism language, and the prompt preamble still primes the recovery model with 'model error.' Neither causes incorrect behavior, so confidence stays at 4.
+
+packages/typescript/src/services/message.ts — specifically the thought field (line 6530) and prompt preamble (line 6447).
+
+<h3>Important Files Changed</h3>
+
+
+
+
+| Filename | Overview |
+|----------|----------|
+| packages/typescript/src/services/message.ts | Rewrites buildStructuredFailureReply prompt to suppress internal mechanism words in user-facing replies and introduces a character-overridable transientFailureReply template key; two minor P2 style issues around the thought field and prompt preamble |
+
+</details>
+
+
+
+<h3>Flowchart</h3>
+
+```mermaid
+%%{init: {'theme': 'neutral'}}%%
+flowchart TD
+    A[Structured output failure detected] --> B[buildStructuredFailureReply called]
+    B --> C[Build failurePrompt\ncharacter voice + mechanism-word ban list\nrecent conversation context]
+    C --> D{Try recovery models\nin priority order}
+    D -->|TEXT_LARGE| E[useModel]
+    D -->|RESPONSE_HANDLER| E
+    D -->|TEXT_SMALL| E
+    D -->|TEXT_NANO| E
+    E -->|valid string| F[Strip think tags\nparse if structured]
+    F --> G[replyText set — break]
+    E -->|error / empty| D
+    D -->|all models failed| H{character.templates\n.transientFailureReply?}
+    H -->|defined| I[Use character override]
+    H -->|not defined| J[Use neutral default:\nSomething went wrong on my end.\nPlease try again.]
+    G --> K[truncateToCompleteSentence]
+    I --> K
+    J --> K
+    K --> L[Return StrategyResult\nmode: simple]
+```
+
+<!-- greptile_failed_comments -->
+<details><summary><h3>Comments Outside Diff (1)</h3></summary>
+
+1. `packages/typescript/src/services/message.ts`, line 6530 ([link](https://github.com/elizaos/eliza/blob/a7fff9578353e294754fa5eed7fd2df4c9ec803a/packages/typescript/src/services/message.ts#L6530)) 
+
+   <a href="#"><img alt="P2" src="https://greptile-static-assets.s3.amazonaws.com/badges/p2.svg?v=7" align="top"></a> **Stale internal-terminology in `thought` field**
+
+   The `thought` field still embeds raw internal terms ("structured-output failure", the raw `stage` string) that the rest of this PR is deliberately hiding from users. While `thought` is not rendered in chat today, it is persisted in `responseMessages` and may surface in debug UIs, evaluators, or logged memory. A neutral description keeps this consistent with the spirit of the fix.
+
+</details>
+
+<!-- /greptile_failed_comments -->
+
+<sub>Reviews (1): Last reviewed commit: ["fix(message): stop leaking internal mech..."](https://github.com/elizaos/eliza/commit/a7fff9578353e294754fa5eed7fd2df4c9ec803a) | [Re-trigger Greptile](https://app.greptile.com/api/retrigger?id=29670247)</sub>
+
+> Greptile also left **1 inline comment** on this PR.
+
+<!-- /greptile_comment -->26:T149e,## Summary
+
+`stripReplyWhenActionOwnsTurn` previously only suppressed `REPLY` when another action with `suppressPostActionContinuation = true` (e.g. `SPAWN_AGENT`) was selected for the same turn. The planner commonly also picks `MANAGE_TASKS` (operation=create) alongside `SPAWN_AGENT` for delegation prompts ("build me a tip calculator", "send a PR to eliza", etc.). `MANAGE_TASKS` is not suppressed by the current logic, so the user gets a noisy `"Created task <name>."` confirmation followed moments later by the real delegated result from synthesis — two messages for one intent.
+
+## Fix
+
+Generalize the dedup. Define `PASSIVE_TURN_ACTIONS = { REPLY, MANAGE_TASKS }` and drop all members of that set when a turn-owning action (one with `suppressPostActionContinuation = true`) is also picked.
+
+- Same fall-back behavior: returns `["REPLY"]` when everything was passive and the drop would leave the action list empty
+- No-op for turns that don't include a passive action (no behavior change for the common cases)
+- Log message adjusted from "Dropped REPLY" to "Dropped passive actions" to match the broader scope
+
+## Changes
+
+One file: `packages/typescript/src/services/message.ts` (+16, −8).
+
+- New constant `PASSIVE_TURN_ACTIONS` with a comment explaining why MANAGE_TASKS joins REPLY in the set
+- `stripReplyWhenActionOwnsTurn` consults the set instead of the hardcoded `normalizedReply` comparison
+
+## Test plan
+
+- [x] Verified live on a Discord-triggered delegation: `"remilio open a pr on milady-ai/milady that renames X"` previously produced `"Created task X"` followed by the PR URL. After patch, only the real result posts. Log line: `"Dropped passive actions because another selected action already owns the turn (originalActions=['REPLY','MANAGE_TASKS','SPAWN_AGENT'], filteredActions=['SPAWN_AGENT'], suppressedBy=['SPAWN_AGENT'])"`.
+- [x] Normal MANAGE_TASKS-only turns (create/update/delete) continue to work — the dedup only engages when a turn-owning action is present.
+- [x] `tsc --noEmit` clean in `packages/typescript`.
+
+## Compatibility / design notes
+
+- If a deployment intentionally wants both the task confirmation AND the delegated result, this PR changes that behavior. No such deployment is observed upstream; the existing dedup of `REPLY` already chose the "one message per turn" policy. This extends that policy to MANAGE_TASKS' equivalent confirmation.
+- If reviewers prefer the set be opt-in per-action (e.g. a new `Action.isPassiveTurnAction` flag instead of the hardcoded name list), that's a reasonable follow-up. Going with the explicit name list here because it matches the existing `suppressPostActionContinuation` pattern's shape — both are "this action modifies turn dispatch behavior" declared at the usage site.
+
+<!-- greptile_comment -->
+
+<h3>Greptile Summary</h3>
+
+This PR generalizes `stripReplyWhenActionOwnsTurn` to suppress `MANAGE_TASKS` confirmations (in addition to `REPLY`) whenever a turn-owning action like `SPAWN_AGENT` is also selected, preventing a noisy \"Created task X\" message from appearing before the real delegated result. The logic change is minimal and the fall-back behavior (returning `[\"REPLY\"]` on an empty filtered list) is preserved, though that fallback is now unreachable.
+
+<h3>Confidence Score: 4/5</h3>
+
+Safe to merge with minor follow-up; logic is correct but the new MANAGE_TASKS suppression path has no unit test coverage.
+
+Only P2 findings: missing unit tests for the new code path and a now-unreachable fallback. No P0/P1 issues; the core dedup logic correctly short-circuits when no turn-owning action is present and correctly drops passive actions otherwise.
+
+packages/typescript/src/services/message.ts — the PASSIVE_TURN_ACTIONS expansion and the unreachable fallback on line 2401.
+
+<h3>Important Files Changed</h3>
+
+| Filename | Overview |
+|----------|----------|
+| packages/typescript/src/services/message.ts | Widens REPLY-suppression logic to also drop MANAGE_TASKS when a turn-owning action is present; core logic is correct but no unit tests cover the new code path and the REPLY fallback on an empty filtered list is unreachable. |
+
+</details>
+
+<h3>Flowchart</h3>
+
+```mermaid
+%%{init: {'theme': 'neutral'}}%%
+flowchart TD
+    A["stripReplyWhenActionOwnsTurn(actions)"] --> B{actions null\nor length ≤ 1?}
+    B -- Yes --> C[Return actions as-is]
+    B -- No --> D{Any action in\nPASSIVE_TURN_ACTIONS?\nREPLY or MANAGE_TASKS}
+    D -- No --> E[Return all actions unchanged]
+    D -- Yes --> F[Build runtime action lookup]
+    F --> G{Any non-passive action\nhas suppressPostAction\nContinuation = true?}
+    G -- No ownedActions --> H[Return all actions unchanged]
+    G -- ownedActions present --> I[Filter out all\nPASSIVE_TURN_ACTIONS]
+    I --> J[Log: Dropped passive actions]
+    J --> K{filtered list\nnon-empty?}
+    K -- Yes --> L[Return filtered e.g. SPAWN_AGENT only]
+    K -- No unreachable --> M[Return REPLY fallback]
+```
+
+<sub>Reviews (1): Last reviewed commit: ["fix(message): drop passive bookkeeping a..."](https://github.com/elizaos/eliza/commit/a7c3d2a1451510698b62a5ddc511bb1d74a00737) | [Re-trigger Greptile](https://app.greptile.com/api/retrigger?id=29670196)</sub>
+
+> Greptile also left **2 inline comments** on this PR.
+
+<!-- /greptile_comment -->27:T5c9,## What
+
+Removes four PGlite in-memory database directories that were accidentally committed under \`typescript/:memory:<UUID>/\` and prevents them from recurring.
+
+## Why
+
+These paths contain colons, which are valid on macOS/Linux but **illegal as Windows filenames**. Every Windows git checkout of this repo fails with:
+
+\`\`\`
+error: invalid path 'typescript/:memory:83863d27-7fd3-4e4a-ab21-9d8a7c6d4f4c/PG_VERSION'
+fatal: Unable to checkout in submodule path 'plugins/plugin-openrouter'
+\`\`\`
+
+This has been blocking the Milady Electrobun 4-platform release build on Windows CI for 3+ days (milady-ai/milady releases v2.0.0-alpha.133 and alpha.134 both blocked).
+
+## Root cause
+
+PGlite initializes with a \`:memory:<UUID>\` path that resolves relative to CWD when no explicit data directory is configured. On macOS/Linux the files land silently in the working tree and get swept up by \`git add -A\` during a release commit. Windows git then rejects them at checkout.
+
+## Changes
+
+- **Remove** all four \`typescript/:memory:<UUID>/\` subtrees
+- **\`.gitignore\`** — add \`:memory:*/\` and \`typescript/:memory:*/\` to prevent recurrence
+- **\`typescript/vitest.config.ts\`** — set \`PGDATA\` env to \`os.tmpdir()\` so PGlite never writes into the working tree during test runs
+
+## Validation
+
+- \`bun run build\` passes (no source files changed)
+- \`bun run test:ts\` passes (PGDATA redirect is transparent to tests)
+- Windows git checkout succeeds (no colon paths remain)28:T880,Add two new plugins to the registry:
+- @undesirables/plugin-tcg-oracle
+- - plugin-undesirables
+Alphabetically sorted.
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+* **New Features**
+  * Registered new plugin mappings for the TCG Oracle plugin, expanding available functionality and plugin options on the platform.
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->
+
+<!-- greptile_comment -->
+
+<h3>Greptile Summary</h3>
+
+This PR registers two new plugins in `index.json`: `@undesirables/plugin-tcg-oracle` (pointing to `github:sailorpepe/elizaos-tcg-oracle-plugin`) and `plugin-undesirables` (pointing to `github:sailorpepe/plugin-undesirables`). Both entries are now pointing to distinct repositories, resolving a prior concern, though the indentation issues noted in earlier review threads remain unaddressed.
+
+<h3>Confidence Score: 4/5</h3>
+
+Safe to merge once the indentation issues flagged in prior review threads are corrected.
+
+The two entries now correctly point to separate repositories (addressing the earlier same-repo concern), but both still carry the incorrect indentation noted in previous review comments — no new P0/P1 issues were found.
+
+index.json — both new entries use non-standard indentation
+
+<h3>Important Files Changed</h3>
+
+| Filename | Overview |
+|----------|----------|
+| index.json | Adds two plugin entries with inconsistent indentation (4-space and 8-space vs the 2-space used throughout the rest of the file); both now point to distinct GitHub repositories |
+
+</details>
+
+<h3>Flowchart</h3>
+
+```mermaid
+%%{init: {'theme': 'neutral'}}%%
+flowchart TD
+    A[index.json Registry] --> B["@undesirables/plugin-tcg-oracle"]
+    A --> C["plugin-undesirables"]
+    B --> D["github:sailorpepe/elizaos-tcg-oracle-plugin"]
+    C --> E["github:sailorpepe/plugin-undesirables"]
+```
+
+<sub>Reviews (2): Last reviewed commit: ["fix: correct repo URL for plugin-undesir..."](https://github.com/elizaos-plugins/registry/commit/fad9cb68692ddaa4dbf70aa50bb737e7607ec551) | [Re-trigger Greptile](https://app.greptile.com/api/retrigger?id=29723454)</sub>
+
+<!-- /greptile_comment -->29:Tfbd,Adds the official Trade Router ElizaOS plugin to the registry.
+
+## Plugin
+
+- **Package**: `@traderouter/plugin-elizaos`
+- **Source**: <https://github.com/TradeRouter/plugin-elizaos> (MIT)
+
+The plugin spawns the [`@traderouter/trade-router-mcp`](https://github.com/TradeRouter/trade-router-mcp) MCP server as a child process, performs the MCP `initialize` handshake, calls `tools/list` to discover the live tool surface, and registers each Trade Router tool as an ElizaOS Action. ~140-line TypeScript wrapper.
+
+## What ElizaOS agents get
+
+- 21 trading tools (swap, limit, trailing, TWAP, DCA, and 4 combo orders)
+- Multi-DEX routing across Raydium, PumpSwap, Orca, Meteora
+- MEV-protected execution by default via Jito
+- Ed25519-signed `order_filled` callbacks
+- Holdings endpoint (most accurate on Solana)
+- Private key never leaves the agent
+
+## Format check
+
+- [x] `index.json` is the only file modified
+- [x] Single-line addition, alphabetical (between `@tonyflam/plugin-openchat` and `@zane-archer/plugin-aimo-router`)
+- [x] JSON syntactically valid
+- [x] Plugin GitHub repo exists and is public: <https://github.com/TradeRouter/plugin-elizaos>
+- [x] Plugin repo has README, LICENSE (MIT), package.json with `@elizaos/core ^1.0.0` peer dep
+
+## Trust signals (underlying MCP package)
+
+- VirusTotal **0/62** on `@traderouter/trade-router-mcp@1.0.12`
+- CI green on Node 18/20/22 with tarball-leak guard
+- Branch protection on `main`
+- Signed npm publishes
+- Already in the official MCP Registry as `ai.traderouter/trade-router-mcp@1.0.12` (`isLatest: true`)
+- Glama listing (author-verified): <https://glama.ai/mcp/servers/@traderouter/trade-router-mcp>
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+* **New Features**
+  * Added support for a new plugin package, extending the available plugin options for users.
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->
+
+<!-- greptile_comment -->
+
+<h3>Greptile Summary</h3>
+
+This PR adds a single registry entry for `@traderouter/plugin-elizaos` → `github:TradeRouter/plugin-elizaos` to `index.json`. The entry is syntactically valid JSON, uses the correct `github:Owner/repo` format, and is correctly placed in alphabetical order between `@tonyflam/plugin-openchat` and `@zane-archer/plugin-aimo-router`.
+
+<h3>Confidence Score: 5/5</h3>
+
+This PR is safe to merge — it is a minimal, correctly formatted single-line registry entry with no structural issues.
+
+The change is a single-line addition to a JSON registry file. Format, alphabetical ordering, and value pattern all match existing entries. No P0 or P1 issues found.
+
+No files require special attention.
+
+<h3>Important Files Changed</h3>
+
+| Filename | Overview |
+|----------|----------|
+| index.json | Single-line addition of @traderouter/plugin-elizaos pointing to github:TradeRouter/plugin-elizaos; format, JSON validity, and alphabetical ordering all check out |
+
+</details>
+
+<h3>Sequence Diagram</h3>
+
+```mermaid
+sequenceDiagram
+    participant Agent as ElizaOS Agent
+    participant Plugin as @traderouter/plugin-elizaos
+    participant MCP as @traderouter/trade-router-mcp (child process)
+    participant DEX as DEX (Raydium/PumpSwap/Orca/Meteora)
+
+    Agent->>Plugin: load plugin
+    Plugin->>MCP: spawn child process
+    Plugin->>MCP: MCP initialize handshake
+    Plugin->>MCP: tools/list
+    MCP-->>Plugin: 21 tool definitions
+    Plugin-->>Agent: register tools as ElizaOS Actions
+
+    Agent->>Plugin: invoke trade action (e.g. swap)
+    Plugin->>MCP: call tool via MCP protocol
+    MCP->>DEX: route + execute order (Jito MEV-protected)
+    DEX-->>MCP: order_filled (Ed25519-signed callback)
+    MCP-->>Plugin: result
+    Plugin-->>Agent: action result
+```
+
+<sub>Reviews (1): Last reviewed commit: ["Add @traderouter/plugin-elizaos"](https://github.com/elizaos-plugins/registry/commit/5058273c9b7661aa77506911c508880b7fc6c9a6) | [Re-trigger Greptile](https://app.greptile.com/api/retrigger?id=29713349)</sub>
+
+<!-- /greptile_comment -->14:["$","div",null,{"className":"mb-8 space-y-6","children":[["$","$L1b",null,{"metrics":{"date":"2026-04-25","interval":{"intervalStart":"$D2026-04-25T00:00:00.000Z","intervalEnd":"$D2026-04-26T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":5,"merged":12,"total":14},"issues":{"new":0,"closed":0,"total":0},"activeContributors":21,"codeChanges":{"additions":9418,"deletions":1169,"files":142,"commitCount":85},"topContributors":[{"username":"lalalune","avatarUrl":"https://avatars.githubusercontent.com/u/18633264?u=e2e906c3712c2506ebfa98df01c2cfdc50050b30&v=4","totalScore":46.35189820629263,"prScore":46.15189820629263,"issueScore":0,"reviewScore":0,"commentScore":0.2,"summary":"lalalune: Focused on improving character data integrity by merging PR #7101 in elizaos/eliza, which implemented tokenization for name occurrences during save operations. Their work today involved extensive codebase modifications across 61 commits, primarily centered on general maintenance and bugfix efforts."},{"username":"odilitime","avatarUrl":"https://avatars.githubusercontent.com/u/16395496?u=c9bac48e632aae594a0d85aaf9e9c9c69b674d8b&v=4","totalScore":42.9457738965761,"prScore":42.9457738965761,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"odilitime: Drove a significant architectural update to the agent framework by merging PR #7100 in elizaos/eliza, which implemented x402 paid plugin routes and hardened the test harness. This extensive contribution involved modifying 11,166 files, reflecting a balanced focus across feature development, bug fixes, testing, and general codebase maintenance."},{"username":"NubsCarson","avatarUrl":"https://avatars.githubusercontent.com/u/192162056?u=d2be9082dbee60fcbad21d32bf6e662ab1af3674&v=4","totalScore":39.63472898822964,"prScore":39.63472898822964,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"NubsCarson: Focused on enhancing system reliability by resolving a critical bug in elizaos/eliza via PR #7099, which ensures the planner correctly handles malformed XML actions. Their work today involved 9 commits across 14 files, with a primary emphasis on bugfix efforts balanced equally between code and test implementation."},{"username":"re-bruce-wayne","avatarUrl":"https://avatars.githubusercontent.com/u/196209605?u=0f106df5aeadfc126ee7ca9d05c34171fe5b6476&v=4","totalScore":14.346573590279972,"prScore":14.346573590279972,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"re-bruce-wayne: Focused on expanding ecosystem integrations by opening PR #350 in elizaos-plugins/registry to add the @traderouter/plugin-elizaos."},{"username":"sailorpepe","avatarUrl":"https://avatars.githubusercontent.com/u/159828807?u=9298c48eb8b41b0a0b0968e987c029e307771855&v=4","totalScore":11.32071895621705,"prScore":11.32071895621705,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"sailorpepe: Focused on expanding the ecosystem by opening PR #351 in elizaos-plugins/registry to integrate new TCG and undesirable plugins. This work involved a balanced effort of feature implementation and bug fixing within configuration files."},{"username":"greptile-apps","avatarUrl":"https://avatars.githubusercontent.com/in/867647?v=4","totalScore":9,"prScore":0,"issueScore":0,"reviewScore":9,"commentScore":0,"summary":"greptile-apps: No activity today."},{"username":"fel123","avatarUrl":"https://avatars.githubusercontent.com/u/33407903?v=4","totalScore":0.2,"prScore":0,"issueScore":0,"reviewScore":0,"commentScore":0.2,"summary":null}],"focusAreas":[{"area":"typescript/:memory:83863d27-7fd3-4e4a-ab21-9d8a7c6d4f4c","count":49},{"area":"agent","count":43},{"area":"app-core","count":36},{"area":"typescript","count":4},{"area":"shared","count":1},{"area":"python/elizaos_plugin_evm","count":1},{"area":"python/tests","count":1},{"area":"rust/src","count":1},{"area":"rust/tests","count":1},{"area":"src","count":1}],"topIssues":[],"topPullRequests":[{"id":"PR_kwDOMT5cIs7VipzR","title":"feat(agent): x402 paid plugin routes and test harness hardening","author":"odilitime","number":7100,"body":"$1c","repository":"elizaos/eliza","createdAt":"2026-04-25T04:06:45Z","mergedAt":"2026-04-25T23:39:49Z","additions":7917,"deletions":1256},{"id":"PR_kwDOMT5cIs7VSiXK","title":"feat: open app surfaces in managed desktop windows","author":"Dexploarer","number":7092,"body":"$1d","repository":"elizaos/eliza","createdAt":"2026-04-24T09:51:57Z","mergedAt":"2026-04-25T05:31:04Z","additions":1545,"deletions":114},{"id":"PR_kwDOMT5cIs7VWcWM","title":"fix(character): tokenize name occurrences on save so renames propagate","author":"dutchiono","number":7093,"body":"$1e","repository":"elizaos/eliza","createdAt":"2026-04-24T13:37:34Z","mergedAt":null,"additions":389,"deletions":27},{"id":"PR_kwDOMT5cIs7VjOuO","title":"fix(character): tokenize name occurrences on save so renames propagate","author":"lalalune","number":7101,"body":"$1f","repository":"elizaos/eliza","createdAt":"2026-04-25T05:32:13Z","mergedAt":"2026-04-25T05:32:29Z","additions":251,"deletions":12},{"id":"PR_kwDOMT5cIs7VOtvB","title":"fix(agent): deliver swarm synthesis to the triggering room","author":"NubsCarson","number":7090,"body":"$20","repository":"elizaos/eliza","createdAt":"2026-04-24T06:14:55Z","mergedAt":"2026-04-25T05:30:41Z","additions":107,"deletions":6},{"id":"PR_kwDOMT5cIs7VY0x8","title":"fix(auth): distinguish Claude Code CLI credentials from in-app OAuth","author":"2-A-M","number":7094,"body":"$21","repository":"elizaos/eliza","createdAt":"2026-04-24T15:42:16Z","mergedAt":"2026-04-25T05:30:54Z","additions":103,"deletions":3},{"id":"PR_kwDOMT5cIs7ViJno","title":"fix(message): tolerate malformed planner action XML","author":"NubsCarson","number":7099,"body":"$22","repository":"elizaos/eliza","createdAt":"2026-04-25T03:07:08Z","mergedAt":"2026-04-25T04:15:55Z","additions":90,"deletions":12},{"id":"PR_kwDONkwHXM7TbTVX","title":"feat: add Radius Network support (eip155:723487)","author":"TJ-Frederick","number":29,"body":"$23","repository":"elizaos-plugins/plugin-evm","createdAt":"2026-04-17T19:27:19Z","mergedAt":"2026-04-25T04:20:26Z","additions":70,"deletions":8},{"id":"PR_kwDOOtl_Us7Sfel9","title":"fix(telegram): prevent duplicate pollers per bot token","author":"dutchiono","number":27,"body":"## Summary\\n- track active poller per bot token\\n- stop/replace old poller before launching a new runtime instance\\n- cleanly deregister on service stop\\n\\n## Why\\nPrevents duplicate polling conflicts and runtime restart contention.\n\n<!-- This is an auto-generated comment: release notes by coderabbit.ai -->\n\n## Summary by CodeRabbit\n\n* **Bug Fixes**\n  * Improved handling of multiple Telegram bot instances to prevent conflicts and ensure proper cleanup when bots are stopped or replaced.\n  * Enhanced resource management with graceful transitions when registering a new bot with a previously used token.\n\n<!-- end of auto-generated comment: release notes by coderabbit.ai -->","repository":"elizaos-plugins/plugin-telegram","createdAt":"2026-04-15T02:04:40Z","mergedAt":"2026-04-25T04:20:33Z","additions":58,"deletions":2},{"id":"PR_kwDOMT5cIs7VeyiZ","title":"fix(agent): stop workbench task list from leaking runtime scheduler tasks","author":"NubsCarson","number":7095,"body":"$24","repository":"elizaos/eliza","createdAt":"2026-04-24T22:02:28Z","mergedAt":"2026-04-25T04:15:55Z","additions":31,"deletions":0},{"id":"PR_kwDOMT5cIs7Vez81","title":"fix(message): stop leaking internal mechanism words in transient-failure replies","author":"NubsCarson","number":7098,"body":"$25","repository":"elizaos/eliza","createdAt":"2026-04-24T22:03:54Z","mergedAt":"2026-04-25T04:15:55Z","additions":24,"deletions":36},{"id":"PR_kwDOMT5cIs7VezfU","title":"fix(message): drop passive bookkeeping actions when delegation owns the turn","author":"NubsCarson","number":7097,"body":"$26","repository":"elizaos/eliza","createdAt":"2026-04-24T22:03:24Z","mergedAt":"2026-04-25T04:15:55Z","additions":16,"deletions":8},{"id":"PR_kwDOOiniuM7QiMX7","title":"fix: remove PGlite :memory: artifacts blocking Windows git checkout","author":"dutchiono","number":25,"body":"$27","repository":"elizaos-plugins/plugin-openrouter","createdAt":"2026-04-07T15:07:09Z","mergedAt":"2026-04-25T04:20:29Z","additions":10,"deletions":4212},{"id":"PR_kwDONkg7v87Vo0Z1","title":"feat: add @undesirables/plugin-tcg-oracle and plugin-undesirables","author":"sailorpepe","number":351,"body":"$28","repository":"elizaos-plugins/registry","createdAt":"2026-04-25T19:57:52Z","mergedAt":null,"additions":3,"deletions":1},{"id":"PR_kwDONkg7v87VnLlH","title":"Add @traderouter/plugin-elizaos","author":"re-bruce-wayne","number":350,"body":"$29","repository":"elizaos-plugins/registry","createdAt":"2026-04-25T15:34:32Z","mergedAt":null,"additions":1,"deletions":0}],"detailedContributorSummaries":{"NubsCarson":"NubsCarson: Focused on enhancing system reliability by resolving a critical bug in elizaos/eliza via PR #7099, which ensures the planner correctly handles malformed XML actions. Their work today involved 9 commits across 14 files, with a primary emphasis on bugfix efforts balanced equally between code and test implementation.","greptile-apps":"greptile-apps: No activity today.","lalalune":"lalalune: Focused on improving character data integrity by merging PR #7101 in elizaos/eliza, which implemented tokenization for name occurrences during save operations. Their work today involved extensive codebase modifications across 61 commits, primarily centered on general maintenance and bugfix efforts.","odilitime":"odilitime: Drove a significant architectural update to the agent framework by merging PR #7100 in elizaos/eliza, which implemented x402 paid plugin routes and hardened the test harness. This extensive contribution involved modifying 11,166 files, reflecting a balanced focus across feature development, bug fixes, testing, and general codebase maintenance.","re-bruce-wayne":"re-bruce-wayne: Focused on expanding ecosystem integrations by opening PR #350 in elizaos-plugins/registry to add the @traderouter/plugin-elizaos.","sailorpepe":"sailorpepe: Focused on expanding the ecosystem by opening PR #351 in elizaos-plugins/registry to integrate new TCG and undesirable plugins. This work involved a balanced effort of feature implementation and bug fixing within configuration files."}}}],"$L2a"]}]
+15:["$","div",null,{"className":"prose prose-sm mx-auto mt-8 dark:prose-invert sm:prose lg:prose-lg xl:prose-xl","children":[["$","p","p-0",{"children":"On April 25, 2026, the ElizaOS ecosystem saw significant advancements in agent monetization, cross-platform stability, and network integration. Key highlights include the implementation of x402 paid plugin architecture, expanded EVM chain support, and critical fixes to runtime polling and file system compatibility."}],"\n",["$","h2","h2-0",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"✅ Completed Work","position":{"start":{"line":5,"column":4,"offset":362},"end":{"line":5,"column":20,"offset":378}}}],"position":{"start":{"line":5,"column":1,"offset":359},"end":{"line":5,"column":20,"offset":378}}},"children":"✅ Completed Work"}],"\n",["$","h3","h3-0",{"children":"Agent Monetization & Communication"}],"\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"x402 Infrastructure"}],": Implemented seller middleware and payment gating to support paid plugin routes and startup validation (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/7100","children":"elizaos/eliza#7100"}],")."]}],"\n",["$","li","li-1",{"children":[["$","strong","strong-0",{"children":"Message Reliability"}],": Fixed data leakage issues where agents exposed internal task lists and improved planner robustness against malformed XML (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/7098","children":"elizaos/eliza#7098"}],", ",["$","a","a-1",{"href":"https://github.com/elizaos/eliza/pull/7095","children":"elizaos/eliza#7095"}],", ",["$","a","a-2",{"href":"https://github.com/elizaos/eliza/pull/7099","children":"elizaos/eliza#7099"}],", ",["$","a","a-3",{"href":"https://github.com/elizaos/eliza/pull/7090","children":"elizaos/eliza#7090"}],")."]}],"\n",["$","li","li-2",{"children":[["$","strong","strong-0",{"children":"Action Delegation"}],": Optimized delegation logic to ensure primary turn ownership is maintained during agent tasks (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/7097","children":"elizaos/eliza#7097"}],")."]}],"\n"]}],"\n",["$","h3","h3-1",{"children":"Ecosystem & Network Integration"}],"\n",["$","ul","ul-1",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"EVM Expansion"}],": Integrated Radius Network support (mainnet and testnet) into both Rust and Python implementations of the EVM plugin (",["$","a","a-0",{"href":"https://github.com/elizaos-plugins/plugin-evm/pull/29","children":"elizaos-plugins/plugin-evm#29"}],")."]}],"\n",["$","li","li-1",{"children":[["$","strong","strong-0",{"children":"Desktop Enhancements"}],": Enabled managed Electrobun windows for app catalog selections and improved window management for detached shells (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/7092","children":"elizaos/eliza#7092"}],")."]}],"\n"]}],"\n",["$","h3","h3-2",{"children":"Stability & Environment Fixes"}],"\n",["$","ul","ul-2",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"Telegram Polling"}],": Resolved duplicate polling conflicts by implementing active poller tracking and clean service deregistration (",["$","a","a-0",{"href":"https://github.com/elizaos-plugins/plugin-telegram/pull/27","children":"elizaos-plugins/plugin-telegram#27"}],")."]}],"\n",["$","li","li-1",{"children":[["$","strong","strong-0",{"children":"Cross-Platform Compatibility"}],": Resolved Windows git checkout issues by removing incompatible PGlite database artifacts and updating ",["$","code","code-0",{"children":".gitignore"}]," (",["$","a","a-0",{"href":"https://github.com/elizaos-plugins/plugin-openrouter/pull/25","children":"elizaos-plugins/plugin-openrouter#25"}],")."]}],"\n",["$","li","li-2",{"children":[["$","strong","strong-0",{"children":"Authentication & Identity"}],": Fixed credential conflicts between Claude Code CLI and OAuth, and enabled character name tokenization for persistent renames (","$L2b",", ","$L2c",")."]}],"\n"]}],"\n","$L2d","\n","$L2e","\n","$L2f"]}]
+16:["$","script","script-0",{"src":"/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","async":true}]
+17:["$","script","script-1",{"src":"/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","async":true}]
+18:["$","script","script-2",{"src":"/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js","async":true}]
+19:["$","$L30",null,{"children":["$","$31",null,{"name":"Next.MetadataOutlet","children":"$@32"}]}]
+2a:["$","div",null,{"className":"rounded-lg border bg-card text-card-foreground shadow-sm","children":[["$","div",null,{"className":"flex flex-col space-y-1.5 p-6 py-4","children":["$","div",null,{"className":"tracking-tight text-sm font-medium","children":["$undefined","Code Changes"]}]}],["$","div",null,{"className":"p-6 pt-0","children":["$","div",null,{"className":"grid grid-cols-2 gap-4 md:grid-cols-4","children":[["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-git-commit-vertical h-5 w-5","aria-hidden":"true","children":[["$","path","1holv5",{"d":"M12 3v6"}],["$","circle","1v7zrd",{"cx":"12","cy":"12","r":"3"}],["$","path","a9ows0",{"d":"M12 15v6"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":85}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Commits"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-file-code h-5 w-5","aria-hidden":"true","children":[["$","path","1oefj6",{"d":"M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"}],["$","path","wfsgrz",{"d":"M14 2v5a1 1 0 0 0 1 1h5"}],["$","path","1tg20x",{"d":"M10 12.5 8 15l2 2.5"}],["$","path","yinavb",{"d":"m14 12.5 2 2.5-2 2.5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":142}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Files Changed"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-green-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-up h-5 w-5 text-green-500","aria-hidden":"true","children":[["$","path","hav0vg",{"d":"m5 12 7-7 7 7"}],["$","path","x0mq9r",{"d":"M12 19V5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-green-500","children":"+9,418"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Added"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-red-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-down h-5 w-5 text-red-500","aria-hidden":"true","children":[["$","path","s699le",{"d":"M12 5v14"}],["$","path","1idqje",{"d":"m19 12-7 7-7-7"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-red-500","children":"-1,169"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Deleted"}]]}]]}]]}]}]]}]
+2b:["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/7094","children":"elizaos/eliza#7094"}]
+2c:["$","a","a-1",{"href":"https://github.com/elizaos/eliza/pull/7101","children":"elizaos/eliza#7101"}]
+2d:["$","h2","h2-1",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"🏗️ Work in Progress","position":{"start":{"line":21,"column":4,"offset":2523},"end":{"line":21,"column":24,"offset":2543}}}],"position":{"start":{"line":21,"column":1,"offset":2520},"end":{"line":21,"column":24,"offset":2543}}},"children":"🏗️ Work in Progress"}]
+2e:["$","h3","h3-3",{"children":"New Pull Requests"}]
+2f:["$","ul","ul-3",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"elizaos-plugins/registry"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos-plugins/registry/pull/351","children":"#351"}],": Addition of ",["$","code","code-0",{"children":"@undesirables/plugin-tcg-oracle"}]," and ",["$","code","code-1",{"children":"plugin-undesirables"}],"."]}],"\n",["$","li","li-1",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos-plugins/registry/pull/350","children":"#350"}],": Addition of ",["$","code","code-0",{"children":"@traderouter/plugin-elizaos"}],"."]}],"\n"]}],"\n"]}],"\n"]}]
+32:null

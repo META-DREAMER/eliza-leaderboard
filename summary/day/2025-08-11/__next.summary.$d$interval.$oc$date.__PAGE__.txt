@@ -1,0 +1,832 @@
+1:"$Sreact.fragment"
+2:I[4817319,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"IntervalSelector"]
+3:I[6998365,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"LlmCopyButton"]
+13:I[3642796,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],""]
+14:I[3238488,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"StatCardsDisplay"]
+20:I[4261541,["/eliza-leaderboard/_next/static/chunks/b33bcbdcb3f88354.js","/eliza-leaderboard/_next/static/chunks/8ba59154b6704904.js"],"OutletBoundary"]
+21:"$Sreact.suspense"
+4:T10d2,## Issue Summary
+The `elizaos publish --npm` command reports successful publishing but the plugin is not actually published to npm, despite showing success messages. The npm publish is failing with a 404 error, but the ElizaOS CLI incorrectly reports success.
+
+## Key Problems Identified
+
+### 1. Critical NPM Publishing Failure
+- **Error**: `npm error 404 Not Found - PUT https://registry.npmjs.org/@elizaos%2fplugin-polygon - Not found`
+- **Issue**: The package scope `@elizaos` doesn't exist on npm, preventing publishing
+- **Impact**: Package cannot be published to npm, but CLI reports success
+
+### 2. False Success Reporting
+- **Issue**: CLI reports `[√] Successfully published @elizaos/plugin-polygon@1.0.0 to npm`
+- **Reality**: npm publish failed with 404 error
+- **Impact**: Developers believe their plugin is published when it's not
+
+### 3. Registry Repository Mismatch
+- **Expected**: Should create PR against `https://github.com/elizaos-plugins/registry`
+- **Actual**: Still references old registry `https://github.com/elizaos/registry`
+- **Impact**: Plugin won't appear in the official ElizaOS registry
+
+## Steps to Reproduce
+
+```bash
+# Navigate to the plugin directory
+cd packages/plugin-polygon
+
+# Ensure you're on the correct branch with the changes
+git checkout polygon
+
+# Run the publish command
+elizaos publish --npm
+
+# Verify the success message appears
+# [√] Successfully published @elizaos/plugin-polygon@1.0.0 to npm
+
+# Check if package actually exists on npm
+npm view @elizaos/plugin-polygon@1.0.0
+# Result: 404 Not Found - '@elizaos/plugin-polygon@1.0.0' is not in this registry
+```
+
+## Technical Details
+
+### NPM Error Analysis
+The npm logs show the root cause:
+```
+http fetch PUT 404 https://registry.npmjs.org/@elizaos%2fplugin-polygon 507ms
+error 404 Not Found - PUT https://registry.npmjs.org/@elizaos%2fplugin-polygon - Not found
+```
+
+This indicates that the `@elizaos` scope doesn't exist on npm, which is required for publishing scoped packages.
+
+### CLI Error Handling Failure
+The ElizaOS CLI is not properly parsing npm error codes:
+- npm returns exit code 1 (failure)
+- CLI ignores the error and reports success
+- No validation that the package actually exists on npm
+
+## Expected Behavior
+1. CLI should detect npm publish failures (exit code 1)
+2. CLI should fail with clear error message when package scope doesn't exist
+3. CLI should validate that package actually exists on npm after publishing
+4. CLI should create PRs against the correct registry repository
+
+## Recommended Fixes
+
+### 1. Fix NPM Error Detection
+```typescript
+// In the publish command, check npm exit code
+const npmResult = await exec('npm publish', { cwd: pluginDir });
+if (npmResult.exitCode !== 0) {
+  throw new Error(`NPM publish failed: ${npmResult.stderr}`);
+}
+```
+
+### 2. Add Package Scope Validation
+```typescript
+// Before publishing, check if scope exists
+const scopeExists = await checkNpmScope('@elizaos');
+if (!scopeExists) {
+  throw new Error('Package scope @elizaos does not exist on npm. Contact npm support to create the scope.');
+}
+```
+
+### 3. Add Post-Publish Validation
+```typescript
+// After publishing, verify package exists
+const packageExists = await checkPackageExists(packageName, version);
+if (!packageExists) {
+  throw new Error(`Package was not published successfully. Check npm logs for details.`);
+}
+```
+
+## Priority
+**Critical** - This completely blocks plugin publishing and creates false success reports.
+
+## Affected Components
+- `packages/cli/src/commands/publish.ts`
+- NPM publishing logic
+- Error handling and success reporting
+- Package scope validation
+- Registry repository configuration
+
+## Immediate Action Required
+1. **Create the `@elizaos` scope on npm** or use an existing scope
+2. Update CLI to properly detect and handle npm publish failures
+3. Add post-publish validation to ensure packages actually exist on npm
+4. Update registry repository configuration
+
+## Alternative Solutions
+1. **Use existing scope**: Change package name to `@monilpat/plugin-polygon`
+2. **Create organization scope**: Set up `@elizaos` organization on npm
+3. **Use unscoped package**: Publish as `elizaos-plugin-polygon`
+
+This issue is critically blocking plugin developers from successfully publishing their work and needs immediate attention from the ElizaOS team.
+5:Te73,### Problem Statement
+Currently, ElizaOS scenario testing lacks the ability to mock internal agent runtime calls (particularly LLM interactions) when testing via the API client. This makes it difficult to create deterministic tests for agent behavior and workflows.
+
+### Current Limitations
+- Global function mocks only work for code executed in the same process
+- No way to intercept `runtime.useModel` calls from the bootstrap plugin
+- Agent behavior is non-deterministic due to real LLM calls
+- Difficult to test specific agent decision paths and responses
+
+### Why Different Approach Was Needed
+
+The existing mocking system was designed for **code execution environments** (E2B sandbox and local `node -e` processes), where mocks are applied to the execution context. However, **agent testing** works differently:
+
+- **E2B/Local Execution**: Code runs in isolated processes/sandboxes where global mocks can be applied
+- **Agent Testing**: Agent runs as a service with API client interaction, requiring direct runtime method interception
+- **Architecture Gap**: The bootstrap plugin calls `runtime.useModel` internally, which can't be mocked through the execution environment approach
+
+This architectural difference necessitated a new approach that directly intercepts runtime methods rather than relying on execution context mocking.
+
+### Proposed Solution: Runtime Method Mocking
+
+We've implemented a new mocking approach that directly intercepts `IAgentRuntime` method calls:
+
+#### Key Components
+
+1. **MockEngine Enhancement**
+   - Added `runtimeMethodMocks` to support mocking runtime methods
+   - Priority system: `runtimeMethod` > `service` > `globalFunction`
+   - Direct method replacement on the runtime instance
+
+2. **Schema Updates**
+   - Extended `MockSchema` to include `runtimeMethod: z.string().optional()`
+   - Supports mocking any `IAgentRuntime` method (e.g., `useModel`, `getService`)
+
+3. **Conditional Matching**
+   - Matcher functions can inspect method arguments
+   - Example: `"return args[1] && args[1].prompt && args[1].prompt.includes('should respond')"`
+   - Supports complex conditional logic for when to apply mocks
+
+#### Usage Example
+
+```yaml
+setup:
+  mocks:
+    - runtimeMethod: "useModel"
+      method: "useModel"
+      when:
+        matcher: "return args[1] && args[1].prompt && args[1].prompt.includes('should respond')"
+      response: "<response><name>agent</name><reasoning>Mocked response</reasoning><action>RESPOND</action></response>"
+```
+
+#### Benefits
+
+1. **Deterministic Testing**: Replace LLM calls with static responses
+2. **Full Workflow Testing**: Test complete agent decision flows
+3. **Conditional Mocking**: Apply mocks based on specific conditions
+4. **Runtime Integration**: Works seamlessly with existing agent architecture
+5. **Backward Compatibility**: Existing mocks continue to work
+
+#### Implementation Steps
+
+- MockEngine runtime method support
+- Schema updates for runtimeMethod mocks
+- Conditional matching with matcher functions
+- Integration with scenario runner
+- Basic useModel mocking working
+- Add support for mocking other runtime methods (getService, etc.)
+- Create comprehensive test scenarios
+- Add documentation and examples
+- Consider adding mock recording/replay capabilities
+
+### Technical Details
+
+The implementation works by:
+1. Creating the `IAgentRuntime` instance in the scenario runner
+2. Applying mocks directly to the runtime object before agent initialization
+3. The bootstrap plugin receives the mocked runtime and uses the mocked methods
+4. Mocks are reverted after scenario completion
+
+This approach provides the foundation for robust, deterministic agent testing while maintaining the existing architecture.6:T824,This pull request introduces a new EVM (Ethereum Virtual Machine) plugin, integrating wallet and blockchain tooling into the application. It adds a modular service for managing EVM chains and clients, several tools for interacting with wallets and tokens, and updates the main application to initialize and use these tools when a private key is provided. The changes are grouped below by theme.
+
+**EVM Plugin Implementation**
+
+* Added the `EVMService` singleton class in `services/index.ts` to manage EVM clients, chain configuration, and wallet initialization, supporting multiple chains and private key management.
+* Created tools for wallet and token operations: `getWalletAddress`, `getWalletBalance`, `getTokenBalance`, and `getEVMChains`, each exposing a typed and documented API for agent use. [[1]](diffhunk://#diff-e1cc64e72e760fcd6abb43875bb23467454be701262c5956359b002f7779db31R1-R21) [[2]](diffhunk://#diff-d4a4b475e04d621fe0a29bb3c16ed8bf86ed271be701116ecde2d78a0b8885deR1-R30) [[3]](diffhunk://#diff-e75f9b72cf42c4737b0a53c8e997a259af26c7f13bcf9b38ff36e903371430f3R1-R55) [[4]](diffhunk://#diff-5e0f2d1cf5ea5545068eccb1825093cc7a938c7ba2f542391726376a3a2b22b7R1-R49)
+* Exported all tools and the EVM service from the plugin entry point for external consumption.
+
+**Project Setup and Configuration**
+
+* Added `package.json` and `tsconfig.json` for the new plugin, specifying dependencies (`viem`, `zod`, etc.), build scripts, and TypeScript settings. [[1]](diffhunk://#diff-d3f83e69e38803d41e055612ff11506ba082953cbeadcae56a3bca418d30c54bR1-R26) [[2]](diffhunk://#diff-3af2426805243a2b3ebf4d3f1a7877df9ef4685384a163bd203f9e3ce6c534a1R1-R17)
+
+**Main Application Integration**
+
+* Imported EVM tools and service into the main application (`src/index.ts`).
+* On startup, if `WALLET_PRIVATE_KEY` is set, initialized the EVM service and registered the EVM tools for agent use.
+* Added example agent prompts to demonstrate EVM wallet address retrieval, chain listing, native balance fetching, and ERC20 token balance querying, with results logged to the console.7:Tde7,# Character Type System and Jesse Pollak Character Implementation
+
+This PR introduces a comprehensive character type system using Zod validation and implements a new Jesse Pollak (jesseXBT) character focused on Base ecosystem support.
+
+## Key Changes
+
+### 🏗️ Character Type System (`lib/core/character.ts`)
+- **Complete Zod Schema Validation**: Robust runtime validation for character definitions
+- **TypeScript Type Safety**: Proper types with discriminated unions for complex data structures  
+- **Circular Reference Support**: Handles directory structures in knowledge base items
+- **Comprehensive Coverage**: Validation for all character properties including:
+  - UUID identifiers and usernames
+  - Bio arrays and message examples
+  - Knowledge base items (strings, directories, or path objects)
+  - Settings and secrets with flexible value types
+  - Style guides for different communication contexts
+  - Template systems for consistent responses
+
+### 👤 Jesse Pollak Character (`characters/jessexbt.json`)
+- **Base Ecosystem Expert**: Specialized character for Base Layer 2 development support
+- **Comprehensive Profile**: 126 lines of detailed character configuration
+- **Response Templates**: Pre-defined templates for Base documentation, ecosystem navigation
+- **Message Examples**: Natural conversation flows for Base-related queries
+- **System Integration**: Character system prompt applied to default agent
+
+### 🔧 API Improvements (`src/server.ts`)
+- **Character Loading**: Automatic character validation and loading on server startup
+- **System Prompt Integration**: Character system prompts properly applied to agents
+- **Tool Call Consistency**: Standardized tool argument handling (`toolCall.input` vs mixed approaches)
+- **Response Structure**: Cleaner finish reason handling using `result.finishReason`
+- **Error Handling**: Improved tool result processing and response formatting
+
+### 📦 Module Organization (`lib/core/index.ts`)
+- **Export Integration**: Character module and types properly exported from core
+- **Type Availability**: All character-related types accessible for external use
+
+## Benefits
+
+✅ **Type Safety**: Prevents runtime errors with comprehensive Zod validation  
+✅ **Extensibility**: Easy to add new characters with consistent schema  
+✅ **Specialization**: Jesse character provides expert Base ecosystem guidance  
+✅ **Developer Experience**: Better API consistency and error handling  
+✅ **Maintainability**: Clear separation of character data and validation logic  
+
+## Technical Details
+
+- **Schema Design**: Uses discriminated unions for knowledge base items to handle different data types safely
+- **Circular References**: Properly handles directory structures with `z.lazy()` for recursive schemas
+- **Validation Strategy**: Runtime validation with detailed error messages for debugging
+- **Character Integration**: Seamless loading and application of character data to AI agents
+
+## Files Changed
+- `lib/core/character.ts` (new file, 116 lines)
+- `characters/jessexbt.json` (new file, 126 lines) 
+- `src/server.ts` (23 lines modified)
+- `lib/core/index.ts` (1 line added)
+
+**Total**: 258 additions, 8 deletions across 4 files
+
+## Backward Compatibility
+✅ All existing API endpoints remain functional  
+✅ No breaking changes to existing character loading  
+✅ Tool call improvements maintain compatibility  
+
+---
+
+This PR establishes the foundation for a robust character system while providing immediate value through the specialized Jesse Pollak character for Base ecosystem support.8:T6bf,This pull request introduces significant improvements to the agent management system and adds a new HTTP server for interacting with agents via an OpenAI-compatible API. The changes refactor how agents are stored and accessed, update related usage throughout the codebase, and add new scripts and dependencies to support server functionality.
+
+**Agent Management Refactor:**
+
+- Refactored the `ElizaOS` class to use a `Map` (`agentsById`) for storing agents by ID, replacing the previous array-based approach. Added methods for adding agents with IDs, listing agent IDs, and retrieving agents by ID. This change enforces unique agent IDs and enables more efficient lookups. [[1]](diffhunk://#diff-d0617da286fa90850f3ce90590cfd646f6354f2bf9bd816782501c671abd72f9L6-R6) [[2]](diffhunk://#diff-d0617da286fa90850f3ce90590cfd646f6354f2bf9bd816782501c671abd72f9L15-R28)
+- Updated agent registration in `src/index.ts` to use the new `addAgent(agent, id)` method, assigning the default agent an explicit ID.
+
+**New HTTP Server and API:**
+
+- Added `src/server.ts`, which sets up a Hono-based HTTP server. The server exposes endpoints to list agents and to handle OpenAI-compatible chat completion requests, routing them to the appropriate agent by ID. It also initializes services and tools conditionally based on environment variables, mirroring the setup in `src/index.ts`.
+
+**Build and Scripts Updates:**
+
+- Updated `package.json` scripts to support building, starting, and developing the new server entrypoint (`src/server.ts`).
+- Added a new dependency on `hono` for the HTTP server.
+
+**Path Import Fixes:**
+
+- Fixed import paths in `src/index.ts` to use alias imports (`@/plugins/...`) instead of relative paths.9:T8c3,## Summary
+
+This PR adds support for viewing intermediate tool calls and results in the chat completions API while maintaining full OpenAI API compliance.
+
+## Changes
+
+- **OpenAI API Compliance**: Default responses remain fully compliant with OpenAI's chat completions API
+- **Optional Tool Call Visibility**: Add `include_intermediate_steps` parameter to expose tool execution flow
+- **Proper Tool Call Formatting**: Tool calls follow OpenAI's exact format with `tool_calls` array
+- **Tool Result Messages**: Tool results are returned as proper `tool` role messages with `tool_call_id`
+- **Multi-step Execution**: Support for agents with multiple tool execution steps
+
+## Usage
+
+### Standard OpenAI Response (default)
+```bash
+curl -X POST http://localhost:3000/v1/chat/completions \
+  -H 'Content-Type: application/json' \
+  -d '{"agent_id":"default","messages":[{"role":"user","content":"What is my wallet address?"}]}'
+```
+
+Returns standard OpenAI format:
+```json
+{
+  "choices": [{
+    "message": {
+      "role": "assistant",
+      "content": "Your wallet address is: 0x123...",
+      "tool_calls": [...] // Only if tools were used
+    },
+    "finish_reason": "stop" // or "tool_calls"
+  }]
+}
+```
+
+### With Tool Call Visibility
+```bash
+curl -X POST http://localhost:3000/v1/chat/completions \
+  -H 'Content-Type: application/json' \
+  -d '{"agent_id":"default","messages":[{"role":"user","content":"What is my wallet address?"}],"include_intermediate_steps":true}'
+```
+
+Returns additional `conversation_flow` with complete execution trace:
+```json
+{
+  "choices": [...],
+  "conversation_flow": [
+    {"role": "user", "content": "What is my wallet address?"},
+    {"role": "assistant", "tool_calls": [{"id": "call_123", "function": {"name": "getWalletAddress"}}]},
+    {"role": "tool", "tool_call_id": "call_123", "content": "{\"address\":\"0x123...\"}"},
+    {"role": "assistant", "content": "Your wallet address is: 0x123..."}
+  ]
+}
+```
+
+## Benefits
+
+- **Full OpenAI Compatibility**: Works with any OpenAI-compatible client
+- **Complete Traceability**: See exactly what tools were called and their results
+- **Debugging Support**: Understand agent decision-making process
+- **Backward Compatible**: No breaking changes to existing API usagea:T6d8,## Description
+
+This PR fixes failing component tests in the project-starter template by replacing `mock.module` with `spyOn` for logger mocking.
+
+## Problem
+
+The project-starter template had 3 test files using `mock.module('@elizaos/core')` which completely replaced the logger module, breaking Pino's structured logging behavior. This caused tests to fail when expecting structured log calls like:
+
+```typescript
+logger.info({ keys: Object.keys(params) }, 'MESSAGE_RECEIVED param keys');
+```
+
+## Solution
+
+Replace `mock.module` with `spyOn` in the following files:
+- `src/__tests__/events.test.ts`
+- `src/__tests__/error-handling.test.ts`
+- `src/__tests__/config.test.ts`
+
+This aligns with the testing approach used in all other starter templates and preserves the original logger behavior while still allowing test assertions.
+
+## Testing
+
+- ✅ All component tests now pass (`elizaos test --type component`)
+- ✅ Verified consistency across all starter templates
+- ✅ No behavior changes to the actual plugin code
+
+## Impact
+
+This is a test-only fix with no impact on runtime behavior. It ensures developers creating new projects with `elizaos create` will have all tests passing out of the box (as a follow-up to PR #5705 )
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+* **Tests**
+  * Updated test setup to use spies on logger methods instead of full module mocks, simplifying logger interception during testing.
+  * Enhanced event handler tests to verify structured logging calls with specific object formats.
+  * Improved clarity and maintainability of logger-related test assertions.
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->b:Tc89,Today, ElizaOS significantly advanced its core agent capabilities with a new character type system and enhanced OpenAI API compliance for tool calls, alongside integrating a new EVM plugin for blockchain tooling. Core infrastructure was also strengthened with a Hono server and refactored agent registry, while critical build and testing issues were addressed.
+
+## 🚨 Needs Attention 
+- **Blocked Issues/PRs**:
+    - [elizaos/eliza#5738](https://github.com/elizaos/eliza/issues/5738): Build failure in `@elizaos/core` is blocking testing of complex scenarios and requires an update on its resolution.
+    - [elizaos/eliza#5719](https://github.com/elizaos/eliza/issues/5719): The `startAgent` hanging issue needs an update on its resolution, as it impacts CLI functionality.
+- **Urgent Discussions**:
+    - [elizaos/eliza#5738](https://github.com/elizaos/eliza/issues/5738): jkbrooks is asking for an update on whether the build failure issue has been resolved.
+    - [elizaos/eliza#5719](https://github.com/elizaos/eliza/issues/5719): jkbrooks is asking for an update on whether the `startAgent` hanging issue has been resolved.
+
+## ✅ Completed Work
+- **Enhanced Agent Capabilities & API Compliance**:
+    - A new character type system, including "JesseXBT," was introduced to improve API consistency for agents. [elizaos/eliza#5756](https://github.com/elizaos/eliza/pull/5756)
+    - The chat completions API now supports visibility of intermediate tool calls and results while maintaining full OpenAI API compliance. [elizaos/eliza#5755](https://github.com/elizaos/eliza/pull/5755)
+- **Core Infrastructure & EVM Integration**:
+    - The ElizaOS agent registry was refactored with the addition of a Hono server, enabling OpenAI-compatible API interaction with agents. [elizaos/eliza#5753](https://github.com/elizaos/eliza/pull/5753)
+    - A new EVM plugin was integrated, providing wallet and blockchain tooling, including services for managing EVM chains and clients, and tools for token and wallet balance retrieval. [elizaos/eliza#5752](https://github.com/elizaos/eliza/pull/5752)
+- **Build System & Testing Improvements**:
+    - Failing component tests in the project-starter template were fixed by replacing `mock.module` with `spyOn` for consistent logger testing. [elizaos/eliza#5748](https://github.com/elizaos/eliza/pull/5748)
+    - Import paths were standardized by converting to `@/` aliases and barrel imports, along with a new Cursor rule for import consistency. [elizaos/eliza#5751](https://github.com/elizaos/eliza/pull/5751)
+    - A temporary revert to relative import paths was performed as part of the import path standardization process. [elizaos/eliza/pull/5750](https://github.com/elizaos/eliza/pull/5750)
+
+## 🐞 Issue Triage
+- **New Issues**:
+    - elizaos/eliza:
+        - [elizaos/eliza#5749](https://github.com/elizaos/eliza/issues/5749): Highlights the need for implementing runtime method mocking for deterministic agent testing, specifically for LLM interactions.
+        - [elizaos/eliza#5754](https://github.com/elizaos/eliza/issues/5754): Reports that plugin publishing fails with false success reports, where `elizaos publish --npm` indicates success despite a 404 error.0:{"buildId":"US8XLB_zHXYj_PVAECGcd","rsc":["$","$1","c",{"children":[["$","div",null,{"className":"container mx-auto px-6 py-8 md:px-8","children":["$","div",null,{"className":"mx-auto max-w-4xl","children":[["$","div",null,{"className":"mb-4 flex flex-col justify-between sm:flex-row","children":[["$","$L2",null,{"currentInterval":"day","currentDate":"2025-08-11"}],["$","$L3",null,{"metrics":{"date":"2025-08-11","interval":{"intervalStart":"$D2025-08-11T00:00:00.000Z","intervalEnd":"$D2025-08-12T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":6,"merged":7,"total":7},"issues":{"new":2,"closed":0,"total":2},"activeContributors":5,"codeChanges":{"additions":1114,"deletions":81,"files":24,"commitCount":13},"topContributors":[{"username":"wtfsayo","avatarUrl":"https://avatars.githubusercontent.com/u/82053242?u=98209a1f10456f42d4d2fa71db4d5bf4a672cbc3&v=4","totalScore":236.43606445233044,"prScore":236.43606445233044,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"wtfsayo: Focused on significant feature development, merging six pull requests in elizaos/eliza, including the addition of a character type system with a new character (#5756), OpenAI-compliant tool calls visibility (#5755), and the implementation of an EVM plugin and tools (#5752), demonstrating a strong emphasis on expanding core functionalities. Their work primarily involved feature development and other foundational code changes across 33 files."},{"username":"ChristopherTrimboli","avatarUrl":"https://avatars.githubusercontent.com/u/27584221?u=de148a498b5af814e037c2975112fadd09df743f&v=4","totalScore":39.7,"prScore":0,"issueScore":0,"reviewScore":39.5,"commentScore":0.2,"summary":"ChristopherTrimboli: Today, Christopher provided 8 reviews, including 7 approvals, demonstrating a focus on code quality and team collaboration. They also contributed 3 commits, modifying 15 files with a net addition of 880 lines, evenly split between feature work, bug fixes, and other tasks."},{"username":"monilpat","avatarUrl":"https://avatars.githubusercontent.com/u/15067321?v=4","totalScore":6.1,"prScore":0,"issueScore":6.1,"reviewScore":0,"commentScore":0,"summary":"monilpat: Focused on identifying critical issues and planning new features, creating a critical bug report for elizaos/eliza (#5754) regarding false success reports in plugin publishing and proposing a new feature for runtime method mocking in elizaos/eliza (#5749) to improve deterministic agent testing."}],"focusAreas":[{"area":"src","count":6},{"area":"plugins/plugin-evm","count":6},{"area":"lib/core","count":4},{"area":"project-starter","count":3},{"area":".cursor/rules","count":1},{"area":"lib/db","count":1},{"area":"characters","count":1}],"topIssues":[{"id":"I_kwDOMT5cIs7FTvRT","title":"Critical: Plugin Publishing Fails with False Success Reports","author":"monilpat","number":5754,"repository":"elizaos/eliza","body":"$4","createdAt":"2025-08-11T14:20:08Z","closedAt":"2025-08-15T03:19:49Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7FLaT0","title":"Implement Runtime Method Mocking for Deterministic Agent Testing","author":"monilpat","number":5749,"repository":"elizaos/eliza","body":"$5","createdAt":"2025-08-11T00:08:49Z","closedAt":"2026-02-12T22:43:03Z","state":"CLOSED","commentCount":0}],"topPullRequests":[{"id":"PR_kwDOMT5cIs6bjrTf","title":"Next","author":"lalalune","number":5242,"body":"Roads? Where we're going, we don't need roads!","repository":"elizaos/eliza","createdAt":"2025-06-22T16:11:08Z","mergedAt":null,"additions":1367486,"deletions":69177},{"id":"PR_kwDOMT5cIs6jBhZB","title":"feat: add EVM plugin and tools","author":"wtfsayo","number":5752,"body":"$6","repository":"elizaos/eliza","createdAt":"2025-08-11T11:09:57Z","mergedAt":"2025-08-11T16:02:10Z","additions":446,"deletions":1},{"id":"PR_kwDOMT5cIs6jG9KE","title":"feat: Add character type system with JesseXBT character and improve API consistency","author":"wtfsayo","number":5756,"body":"$7","repository":"elizaos/eliza","createdAt":"2025-08-11T18:40:30Z","mergedAt":"2025-08-11T19:25:47Z","additions":258,"deletions":8},{"id":"PR_kwDOMT5cIs6jDE1Y","title":"feat: add Hono server, refactor ElizaOS agent registry","author":"wtfsayo","number":5753,"body":"$8","repository":"elizaos/eliza","createdAt":"2025-08-11T13:18:29Z","mergedAt":"2025-08-11T16:09:15Z","additions":156,"deletions":9},{"id":"PR_kwDOMT5cIs6jAUtK","title":"chore(imports): use @/ alias and barrels; add Cursor rule","author":"wtfsayo","number":5751,"body":"- Converted relative imports to '@/'\n- Prefer barrels (e.g., '@/lib/core', '@/lib/db/schema')\n- Added Cursor rule: .cursor/rules/use-atslash-alias-imports.mdc\n- Verified build with Bun","repository":"elizaos/eliza","createdAt":"2025-08-11T09:24:17Z","mergedAt":"2025-08-11T09:57:26Z","additions":116,"deletions":3},{"id":"PR_kwDOMT5cIs6jGsWZ","title":"feat: Add OpenAI-compliant tool calls visibility to chat completions","author":"wtfsayo","number":5755,"body":"$9","repository":"elizaos/eliza","createdAt":"2025-08-11T18:13:43Z","mergedAt":"2025-08-11T18:21:51Z","additions":95,"deletions":2},{"id":"PR_kwDOMT5cIs6i54EL","title":"fix: (project-starter) replace mock.module with spyOn for consistent logger testing","author":"yungalgo","number":5748,"body":"$a","repository":"elizaos/eliza","createdAt":"2025-08-09T22:43:19Z","mergedAt":"2025-08-11T03:28:45Z","additions":38,"deletions":57},{"id":"PR_kwDOMT5cIs6jADGP","title":"revert: Use relative paths for imports","author":"wtfsayo","number":5750,"body":"## Description\nThis PR ensures consistent use of relative paths for imports throughout the project.\n\n## Changes\n- ✅ Reverted import in `src/index.ts` to use relative path `../lib/core`\n- ✅ Removed path aliases configuration from `tsconfig.json`\n- ✅ Maintains consistency with relative path conventions\n\n## Benefits\n- Explicit and clear import relationships\n- No additional configuration needed in TypeScript\n- Consistent with relative path conventions\n- Direct file-to-file relationships are visible\n\n## Testing\n- [x] Code compiles without TypeScript errors\n- [x] Import resolves correctly with relative path","repository":"elizaos/eliza","createdAt":"2025-08-11T09:01:43Z","mergedAt":"2025-08-11T09:02:25Z","additions":5,"deletions":1}],"detailedContributorSummaries":{"ChristopherTrimboli":"ChristopherTrimboli: Today, Christopher provided 8 reviews, including 7 approvals, demonstrating a focus on code quality and team collaboration. They also contributed 3 commits, modifying 15 files with a net addition of 880 lines, evenly split between feature work, bug fixes, and other tasks.","monilpat":"monilpat: Focused on identifying critical issues and planning new features, creating a critical bug report for elizaos/eliza (#5754) regarding false success reports in plugin publishing and proposing a new feature for runtime method mocking in elizaos/eliza (#5749) to improve deterministic agent testing.","wtfsayo":"wtfsayo: Focused on significant feature development, merging six pull requests in elizaos/eliza, including the addition of a character type system with a new character (#5756), OpenAI-compliant tool calls visibility (#5755), and the implementation of an EVM plugin and tools (#5752), demonstrating a strong emphasis on expanding core functionalities. Their work primarily involved feature development and other foundational code changes across 33 files."}},"summaryContent":"$b","className":"self-end sm:self-start"}]]}],"$Lc","$Ld","$Le"]}]}],["$Lf","$L10","$L11"],"$L12"]}],"loading":null,"isPartial":false}
+c:["$","div",null,{"className":"mb-6","children":["$","div",null,{"className":"flex items-center justify-between","children":[[["$","$L13",null,{"href":"/summary/day/2025-08-10","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left mr-2 h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"children":"Previous"}],false],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$L13",null,{"href":"/summary/day/2025-08-10","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Previous"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]],["$","div",null,{"className":"flex flex-col items-center","children":[["$","div",null,{"className":"text-sm font-medium text-gray-500","children":["Daily"," Summary"]}],["$","time",null,{"dateTime":"2025-08-11","className":"text-md font-bold","children":"Aug 11, 2025"}]]}],[["$","$L13",null,{"href":"/summary/day/2025-08-12","children":[false,["$","span",null,{"children":"Next"}],["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right ml-2 h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}]],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$L13",null,{"href":"/summary/day/2025-08-12","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Next"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]]]}]}]
+15:T10d2,## Issue Summary
+The `elizaos publish --npm` command reports successful publishing but the plugin is not actually published to npm, despite showing success messages. The npm publish is failing with a 404 error, but the ElizaOS CLI incorrectly reports success.
+
+## Key Problems Identified
+
+### 1. Critical NPM Publishing Failure
+- **Error**: `npm error 404 Not Found - PUT https://registry.npmjs.org/@elizaos%2fplugin-polygon - Not found`
+- **Issue**: The package scope `@elizaos` doesn't exist on npm, preventing publishing
+- **Impact**: Package cannot be published to npm, but CLI reports success
+
+### 2. False Success Reporting
+- **Issue**: CLI reports `[√] Successfully published @elizaos/plugin-polygon@1.0.0 to npm`
+- **Reality**: npm publish failed with 404 error
+- **Impact**: Developers believe their plugin is published when it's not
+
+### 3. Registry Repository Mismatch
+- **Expected**: Should create PR against `https://github.com/elizaos-plugins/registry`
+- **Actual**: Still references old registry `https://github.com/elizaos/registry`
+- **Impact**: Plugin won't appear in the official ElizaOS registry
+
+## Steps to Reproduce
+
+```bash
+# Navigate to the plugin directory
+cd packages/plugin-polygon
+
+# Ensure you're on the correct branch with the changes
+git checkout polygon
+
+# Run the publish command
+elizaos publish --npm
+
+# Verify the success message appears
+# [√] Successfully published @elizaos/plugin-polygon@1.0.0 to npm
+
+# Check if package actually exists on npm
+npm view @elizaos/plugin-polygon@1.0.0
+# Result: 404 Not Found - '@elizaos/plugin-polygon@1.0.0' is not in this registry
+```
+
+## Technical Details
+
+### NPM Error Analysis
+The npm logs show the root cause:
+```
+http fetch PUT 404 https://registry.npmjs.org/@elizaos%2fplugin-polygon 507ms
+error 404 Not Found - PUT https://registry.npmjs.org/@elizaos%2fplugin-polygon - Not found
+```
+
+This indicates that the `@elizaos` scope doesn't exist on npm, which is required for publishing scoped packages.
+
+### CLI Error Handling Failure
+The ElizaOS CLI is not properly parsing npm error codes:
+- npm returns exit code 1 (failure)
+- CLI ignores the error and reports success
+- No validation that the package actually exists on npm
+
+## Expected Behavior
+1. CLI should detect npm publish failures (exit code 1)
+2. CLI should fail with clear error message when package scope doesn't exist
+3. CLI should validate that package actually exists on npm after publishing
+4. CLI should create PRs against the correct registry repository
+
+## Recommended Fixes
+
+### 1. Fix NPM Error Detection
+```typescript
+// In the publish command, check npm exit code
+const npmResult = await exec('npm publish', { cwd: pluginDir });
+if (npmResult.exitCode !== 0) {
+  throw new Error(`NPM publish failed: ${npmResult.stderr}`);
+}
+```
+
+### 2. Add Package Scope Validation
+```typescript
+// Before publishing, check if scope exists
+const scopeExists = await checkNpmScope('@elizaos');
+if (!scopeExists) {
+  throw new Error('Package scope @elizaos does not exist on npm. Contact npm support to create the scope.');
+}
+```
+
+### 3. Add Post-Publish Validation
+```typescript
+// After publishing, verify package exists
+const packageExists = await checkPackageExists(packageName, version);
+if (!packageExists) {
+  throw new Error(`Package was not published successfully. Check npm logs for details.`);
+}
+```
+
+## Priority
+**Critical** - This completely blocks plugin publishing and creates false success reports.
+
+## Affected Components
+- `packages/cli/src/commands/publish.ts`
+- NPM publishing logic
+- Error handling and success reporting
+- Package scope validation
+- Registry repository configuration
+
+## Immediate Action Required
+1. **Create the `@elizaos` scope on npm** or use an existing scope
+2. Update CLI to properly detect and handle npm publish failures
+3. Add post-publish validation to ensure packages actually exist on npm
+4. Update registry repository configuration
+
+## Alternative Solutions
+1. **Use existing scope**: Change package name to `@monilpat/plugin-polygon`
+2. **Create organization scope**: Set up `@elizaos` organization on npm
+3. **Use unscoped package**: Publish as `elizaos-plugin-polygon`
+
+This issue is critically blocking plugin developers from successfully publishing their work and needs immediate attention from the ElizaOS team.
+16:Te73,### Problem Statement
+Currently, ElizaOS scenario testing lacks the ability to mock internal agent runtime calls (particularly LLM interactions) when testing via the API client. This makes it difficult to create deterministic tests for agent behavior and workflows.
+
+### Current Limitations
+- Global function mocks only work for code executed in the same process
+- No way to intercept `runtime.useModel` calls from the bootstrap plugin
+- Agent behavior is non-deterministic due to real LLM calls
+- Difficult to test specific agent decision paths and responses
+
+### Why Different Approach Was Needed
+
+The existing mocking system was designed for **code execution environments** (E2B sandbox and local `node -e` processes), where mocks are applied to the execution context. However, **agent testing** works differently:
+
+- **E2B/Local Execution**: Code runs in isolated processes/sandboxes where global mocks can be applied
+- **Agent Testing**: Agent runs as a service with API client interaction, requiring direct runtime method interception
+- **Architecture Gap**: The bootstrap plugin calls `runtime.useModel` internally, which can't be mocked through the execution environment approach
+
+This architectural difference necessitated a new approach that directly intercepts runtime methods rather than relying on execution context mocking.
+
+### Proposed Solution: Runtime Method Mocking
+
+We've implemented a new mocking approach that directly intercepts `IAgentRuntime` method calls:
+
+#### Key Components
+
+1. **MockEngine Enhancement**
+   - Added `runtimeMethodMocks` to support mocking runtime methods
+   - Priority system: `runtimeMethod` > `service` > `globalFunction`
+   - Direct method replacement on the runtime instance
+
+2. **Schema Updates**
+   - Extended `MockSchema` to include `runtimeMethod: z.string().optional()`
+   - Supports mocking any `IAgentRuntime` method (e.g., `useModel`, `getService`)
+
+3. **Conditional Matching**
+   - Matcher functions can inspect method arguments
+   - Example: `"return args[1] && args[1].prompt && args[1].prompt.includes('should respond')"`
+   - Supports complex conditional logic for when to apply mocks
+
+#### Usage Example
+
+```yaml
+setup:
+  mocks:
+    - runtimeMethod: "useModel"
+      method: "useModel"
+      when:
+        matcher: "return args[1] && args[1].prompt && args[1].prompt.includes('should respond')"
+      response: "<response><name>agent</name><reasoning>Mocked response</reasoning><action>RESPOND</action></response>"
+```
+
+#### Benefits
+
+1. **Deterministic Testing**: Replace LLM calls with static responses
+2. **Full Workflow Testing**: Test complete agent decision flows
+3. **Conditional Mocking**: Apply mocks based on specific conditions
+4. **Runtime Integration**: Works seamlessly with existing agent architecture
+5. **Backward Compatibility**: Existing mocks continue to work
+
+#### Implementation Steps
+
+- MockEngine runtime method support
+- Schema updates for runtimeMethod mocks
+- Conditional matching with matcher functions
+- Integration with scenario runner
+- Basic useModel mocking working
+- Add support for mocking other runtime methods (getService, etc.)
+- Create comprehensive test scenarios
+- Add documentation and examples
+- Consider adding mock recording/replay capabilities
+
+### Technical Details
+
+The implementation works by:
+1. Creating the `IAgentRuntime` instance in the scenario runner
+2. Applying mocks directly to the runtime object before agent initialization
+3. The bootstrap plugin receives the mocked runtime and uses the mocked methods
+4. Mocks are reverted after scenario completion
+
+This approach provides the foundation for robust, deterministic agent testing while maintaining the existing architecture.17:T824,This pull request introduces a new EVM (Ethereum Virtual Machine) plugin, integrating wallet and blockchain tooling into the application. It adds a modular service for managing EVM chains and clients, several tools for interacting with wallets and tokens, and updates the main application to initialize and use these tools when a private key is provided. The changes are grouped below by theme.
+
+**EVM Plugin Implementation**
+
+* Added the `EVMService` singleton class in `services/index.ts` to manage EVM clients, chain configuration, and wallet initialization, supporting multiple chains and private key management.
+* Created tools for wallet and token operations: `getWalletAddress`, `getWalletBalance`, `getTokenBalance`, and `getEVMChains`, each exposing a typed and documented API for agent use. [[1]](diffhunk://#diff-e1cc64e72e760fcd6abb43875bb23467454be701262c5956359b002f7779db31R1-R21) [[2]](diffhunk://#diff-d4a4b475e04d621fe0a29bb3c16ed8bf86ed271be701116ecde2d78a0b8885deR1-R30) [[3]](diffhunk://#diff-e75f9b72cf42c4737b0a53c8e997a259af26c7f13bcf9b38ff36e903371430f3R1-R55) [[4]](diffhunk://#diff-5e0f2d1cf5ea5545068eccb1825093cc7a938c7ba2f542391726376a3a2b22b7R1-R49)
+* Exported all tools and the EVM service from the plugin entry point for external consumption.
+
+**Project Setup and Configuration**
+
+* Added `package.json` and `tsconfig.json` for the new plugin, specifying dependencies (`viem`, `zod`, etc.), build scripts, and TypeScript settings. [[1]](diffhunk://#diff-d3f83e69e38803d41e055612ff11506ba082953cbeadcae56a3bca418d30c54bR1-R26) [[2]](diffhunk://#diff-3af2426805243a2b3ebf4d3f1a7877df9ef4685384a163bd203f9e3ce6c534a1R1-R17)
+
+**Main Application Integration**
+
+* Imported EVM tools and service into the main application (`src/index.ts`).
+* On startup, if `WALLET_PRIVATE_KEY` is set, initialized the EVM service and registered the EVM tools for agent use.
+* Added example agent prompts to demonstrate EVM wallet address retrieval, chain listing, native balance fetching, and ERC20 token balance querying, with results logged to the console.18:Tde7,# Character Type System and Jesse Pollak Character Implementation
+
+This PR introduces a comprehensive character type system using Zod validation and implements a new Jesse Pollak (jesseXBT) character focused on Base ecosystem support.
+
+## Key Changes
+
+### 🏗️ Character Type System (`lib/core/character.ts`)
+- **Complete Zod Schema Validation**: Robust runtime validation for character definitions
+- **TypeScript Type Safety**: Proper types with discriminated unions for complex data structures  
+- **Circular Reference Support**: Handles directory structures in knowledge base items
+- **Comprehensive Coverage**: Validation for all character properties including:
+  - UUID identifiers and usernames
+  - Bio arrays and message examples
+  - Knowledge base items (strings, directories, or path objects)
+  - Settings and secrets with flexible value types
+  - Style guides for different communication contexts
+  - Template systems for consistent responses
+
+### 👤 Jesse Pollak Character (`characters/jessexbt.json`)
+- **Base Ecosystem Expert**: Specialized character for Base Layer 2 development support
+- **Comprehensive Profile**: 126 lines of detailed character configuration
+- **Response Templates**: Pre-defined templates for Base documentation, ecosystem navigation
+- **Message Examples**: Natural conversation flows for Base-related queries
+- **System Integration**: Character system prompt applied to default agent
+
+### 🔧 API Improvements (`src/server.ts`)
+- **Character Loading**: Automatic character validation and loading on server startup
+- **System Prompt Integration**: Character system prompts properly applied to agents
+- **Tool Call Consistency**: Standardized tool argument handling (`toolCall.input` vs mixed approaches)
+- **Response Structure**: Cleaner finish reason handling using `result.finishReason`
+- **Error Handling**: Improved tool result processing and response formatting
+
+### 📦 Module Organization (`lib/core/index.ts`)
+- **Export Integration**: Character module and types properly exported from core
+- **Type Availability**: All character-related types accessible for external use
+
+## Benefits
+
+✅ **Type Safety**: Prevents runtime errors with comprehensive Zod validation  
+✅ **Extensibility**: Easy to add new characters with consistent schema  
+✅ **Specialization**: Jesse character provides expert Base ecosystem guidance  
+✅ **Developer Experience**: Better API consistency and error handling  
+✅ **Maintainability**: Clear separation of character data and validation logic  
+
+## Technical Details
+
+- **Schema Design**: Uses discriminated unions for knowledge base items to handle different data types safely
+- **Circular References**: Properly handles directory structures with `z.lazy()` for recursive schemas
+- **Validation Strategy**: Runtime validation with detailed error messages for debugging
+- **Character Integration**: Seamless loading and application of character data to AI agents
+
+## Files Changed
+- `lib/core/character.ts` (new file, 116 lines)
+- `characters/jessexbt.json` (new file, 126 lines) 
+- `src/server.ts` (23 lines modified)
+- `lib/core/index.ts` (1 line added)
+
+**Total**: 258 additions, 8 deletions across 4 files
+
+## Backward Compatibility
+✅ All existing API endpoints remain functional  
+✅ No breaking changes to existing character loading  
+✅ Tool call improvements maintain compatibility  
+
+---
+
+This PR establishes the foundation for a robust character system while providing immediate value through the specialized Jesse Pollak character for Base ecosystem support.19:T6bf,This pull request introduces significant improvements to the agent management system and adds a new HTTP server for interacting with agents via an OpenAI-compatible API. The changes refactor how agents are stored and accessed, update related usage throughout the codebase, and add new scripts and dependencies to support server functionality.
+
+**Agent Management Refactor:**
+
+- Refactored the `ElizaOS` class to use a `Map` (`agentsById`) for storing agents by ID, replacing the previous array-based approach. Added methods for adding agents with IDs, listing agent IDs, and retrieving agents by ID. This change enforces unique agent IDs and enables more efficient lookups. [[1]](diffhunk://#diff-d0617da286fa90850f3ce90590cfd646f6354f2bf9bd816782501c671abd72f9L6-R6) [[2]](diffhunk://#diff-d0617da286fa90850f3ce90590cfd646f6354f2bf9bd816782501c671abd72f9L15-R28)
+- Updated agent registration in `src/index.ts` to use the new `addAgent(agent, id)` method, assigning the default agent an explicit ID.
+
+**New HTTP Server and API:**
+
+- Added `src/server.ts`, which sets up a Hono-based HTTP server. The server exposes endpoints to list agents and to handle OpenAI-compatible chat completion requests, routing them to the appropriate agent by ID. It also initializes services and tools conditionally based on environment variables, mirroring the setup in `src/index.ts`.
+
+**Build and Scripts Updates:**
+
+- Updated `package.json` scripts to support building, starting, and developing the new server entrypoint (`src/server.ts`).
+- Added a new dependency on `hono` for the HTTP server.
+
+**Path Import Fixes:**
+
+- Fixed import paths in `src/index.ts` to use alias imports (`@/plugins/...`) instead of relative paths.1a:T8c3,## Summary
+
+This PR adds support for viewing intermediate tool calls and results in the chat completions API while maintaining full OpenAI API compliance.
+
+## Changes
+
+- **OpenAI API Compliance**: Default responses remain fully compliant with OpenAI's chat completions API
+- **Optional Tool Call Visibility**: Add `include_intermediate_steps` parameter to expose tool execution flow
+- **Proper Tool Call Formatting**: Tool calls follow OpenAI's exact format with `tool_calls` array
+- **Tool Result Messages**: Tool results are returned as proper `tool` role messages with `tool_call_id`
+- **Multi-step Execution**: Support for agents with multiple tool execution steps
+
+## Usage
+
+### Standard OpenAI Response (default)
+```bash
+curl -X POST http://localhost:3000/v1/chat/completions \
+  -H 'Content-Type: application/json' \
+  -d '{"agent_id":"default","messages":[{"role":"user","content":"What is my wallet address?"}]}'
+```
+
+Returns standard OpenAI format:
+```json
+{
+  "choices": [{
+    "message": {
+      "role": "assistant",
+      "content": "Your wallet address is: 0x123...",
+      "tool_calls": [...] // Only if tools were used
+    },
+    "finish_reason": "stop" // or "tool_calls"
+  }]
+}
+```
+
+### With Tool Call Visibility
+```bash
+curl -X POST http://localhost:3000/v1/chat/completions \
+  -H 'Content-Type: application/json' \
+  -d '{"agent_id":"default","messages":[{"role":"user","content":"What is my wallet address?"}],"include_intermediate_steps":true}'
+```
+
+Returns additional `conversation_flow` with complete execution trace:
+```json
+{
+  "choices": [...],
+  "conversation_flow": [
+    {"role": "user", "content": "What is my wallet address?"},
+    {"role": "assistant", "tool_calls": [{"id": "call_123", "function": {"name": "getWalletAddress"}}]},
+    {"role": "tool", "tool_call_id": "call_123", "content": "{\"address\":\"0x123...\"}"},
+    {"role": "assistant", "content": "Your wallet address is: 0x123..."}
+  ]
+}
+```
+
+## Benefits
+
+- **Full OpenAI Compatibility**: Works with any OpenAI-compatible client
+- **Complete Traceability**: See exactly what tools were called and their results
+- **Debugging Support**: Understand agent decision-making process
+- **Backward Compatible**: No breaking changes to existing API usage1b:T6d8,## Description
+
+This PR fixes failing component tests in the project-starter template by replacing `mock.module` with `spyOn` for logger mocking.
+
+## Problem
+
+The project-starter template had 3 test files using `mock.module('@elizaos/core')` which completely replaced the logger module, breaking Pino's structured logging behavior. This caused tests to fail when expecting structured log calls like:
+
+```typescript
+logger.info({ keys: Object.keys(params) }, 'MESSAGE_RECEIVED param keys');
+```
+
+## Solution
+
+Replace `mock.module` with `spyOn` in the following files:
+- `src/__tests__/events.test.ts`
+- `src/__tests__/error-handling.test.ts`
+- `src/__tests__/config.test.ts`
+
+This aligns with the testing approach used in all other starter templates and preserves the original logger behavior while still allowing test assertions.
+
+## Testing
+
+- ✅ All component tests now pass (`elizaos test --type component`)
+- ✅ Verified consistency across all starter templates
+- ✅ No behavior changes to the actual plugin code
+
+## Impact
+
+This is a test-only fix with no impact on runtime behavior. It ensures developers creating new projects with `elizaos create` will have all tests passing out of the box (as a follow-up to PR #5705 )
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+* **Tests**
+  * Updated test setup to use spies on logger methods instead of full module mocks, simplifying logger interception during testing.
+  * Enhanced event handler tests to verify structured logging calls with specific object formats.
+  * Improved clarity and maintainability of logger-related test assertions.
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->d:["$","div",null,{"className":"mb-8 space-y-6","children":[["$","$L14",null,{"metrics":{"date":"2025-08-11","interval":{"intervalStart":"$D2025-08-11T00:00:00.000Z","intervalEnd":"$D2025-08-12T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":6,"merged":7,"total":7},"issues":{"new":2,"closed":0,"total":2},"activeContributors":5,"codeChanges":{"additions":1114,"deletions":81,"files":24,"commitCount":13},"topContributors":[{"username":"wtfsayo","avatarUrl":"https://avatars.githubusercontent.com/u/82053242?u=98209a1f10456f42d4d2fa71db4d5bf4a672cbc3&v=4","totalScore":236.43606445233044,"prScore":236.43606445233044,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"wtfsayo: Focused on significant feature development, merging six pull requests in elizaos/eliza, including the addition of a character type system with a new character (#5756), OpenAI-compliant tool calls visibility (#5755), and the implementation of an EVM plugin and tools (#5752), demonstrating a strong emphasis on expanding core functionalities. Their work primarily involved feature development and other foundational code changes across 33 files."},{"username":"ChristopherTrimboli","avatarUrl":"https://avatars.githubusercontent.com/u/27584221?u=de148a498b5af814e037c2975112fadd09df743f&v=4","totalScore":39.7,"prScore":0,"issueScore":0,"reviewScore":39.5,"commentScore":0.2,"summary":"ChristopherTrimboli: Today, Christopher provided 8 reviews, including 7 approvals, demonstrating a focus on code quality and team collaboration. They also contributed 3 commits, modifying 15 files with a net addition of 880 lines, evenly split between feature work, bug fixes, and other tasks."},{"username":"monilpat","avatarUrl":"https://avatars.githubusercontent.com/u/15067321?v=4","totalScore":6.1,"prScore":0,"issueScore":6.1,"reviewScore":0,"commentScore":0,"summary":"monilpat: Focused on identifying critical issues and planning new features, creating a critical bug report for elizaos/eliza (#5754) regarding false success reports in plugin publishing and proposing a new feature for runtime method mocking in elizaos/eliza (#5749) to improve deterministic agent testing."}],"focusAreas":[{"area":"src","count":6},{"area":"plugins/plugin-evm","count":6},{"area":"lib/core","count":4},{"area":"project-starter","count":3},{"area":".cursor/rules","count":1},{"area":"lib/db","count":1},{"area":"characters","count":1}],"topIssues":[{"id":"I_kwDOMT5cIs7FTvRT","title":"Critical: Plugin Publishing Fails with False Success Reports","author":"monilpat","number":5754,"repository":"elizaos/eliza","body":"$15","createdAt":"2025-08-11T14:20:08Z","closedAt":"2025-08-15T03:19:49Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7FLaT0","title":"Implement Runtime Method Mocking for Deterministic Agent Testing","author":"monilpat","number":5749,"repository":"elizaos/eliza","body":"$16","createdAt":"2025-08-11T00:08:49Z","closedAt":"2026-02-12T22:43:03Z","state":"CLOSED","commentCount":0}],"topPullRequests":[{"id":"PR_kwDOMT5cIs6bjrTf","title":"Next","author":"lalalune","number":5242,"body":"Roads? Where we're going, we don't need roads!","repository":"elizaos/eliza","createdAt":"2025-06-22T16:11:08Z","mergedAt":null,"additions":1367486,"deletions":69177},{"id":"PR_kwDOMT5cIs6jBhZB","title":"feat: add EVM plugin and tools","author":"wtfsayo","number":5752,"body":"$17","repository":"elizaos/eliza","createdAt":"2025-08-11T11:09:57Z","mergedAt":"2025-08-11T16:02:10Z","additions":446,"deletions":1},{"id":"PR_kwDOMT5cIs6jG9KE","title":"feat: Add character type system with JesseXBT character and improve API consistency","author":"wtfsayo","number":5756,"body":"$18","repository":"elizaos/eliza","createdAt":"2025-08-11T18:40:30Z","mergedAt":"2025-08-11T19:25:47Z","additions":258,"deletions":8},{"id":"PR_kwDOMT5cIs6jDE1Y","title":"feat: add Hono server, refactor ElizaOS agent registry","author":"wtfsayo","number":5753,"body":"$19","repository":"elizaos/eliza","createdAt":"2025-08-11T13:18:29Z","mergedAt":"2025-08-11T16:09:15Z","additions":156,"deletions":9},{"id":"PR_kwDOMT5cIs6jAUtK","title":"chore(imports): use @/ alias and barrels; add Cursor rule","author":"wtfsayo","number":5751,"body":"- Converted relative imports to '@/'\n- Prefer barrels (e.g., '@/lib/core', '@/lib/db/schema')\n- Added Cursor rule: .cursor/rules/use-atslash-alias-imports.mdc\n- Verified build with Bun","repository":"elizaos/eliza","createdAt":"2025-08-11T09:24:17Z","mergedAt":"2025-08-11T09:57:26Z","additions":116,"deletions":3},{"id":"PR_kwDOMT5cIs6jGsWZ","title":"feat: Add OpenAI-compliant tool calls visibility to chat completions","author":"wtfsayo","number":5755,"body":"$1a","repository":"elizaos/eliza","createdAt":"2025-08-11T18:13:43Z","mergedAt":"2025-08-11T18:21:51Z","additions":95,"deletions":2},{"id":"PR_kwDOMT5cIs6i54EL","title":"fix: (project-starter) replace mock.module with spyOn for consistent logger testing","author":"yungalgo","number":5748,"body":"$1b","repository":"elizaos/eliza","createdAt":"2025-08-09T22:43:19Z","mergedAt":"2025-08-11T03:28:45Z","additions":38,"deletions":57},{"id":"PR_kwDOMT5cIs6jADGP","title":"revert: Use relative paths for imports","author":"wtfsayo","number":5750,"body":"## Description\nThis PR ensures consistent use of relative paths for imports throughout the project.\n\n## Changes\n- ✅ Reverted import in `src/index.ts` to use relative path `../lib/core`\n- ✅ Removed path aliases configuration from `tsconfig.json`\n- ✅ Maintains consistency with relative path conventions\n\n## Benefits\n- Explicit and clear import relationships\n- No additional configuration needed in TypeScript\n- Consistent with relative path conventions\n- Direct file-to-file relationships are visible\n\n## Testing\n- [x] Code compiles without TypeScript errors\n- [x] Import resolves correctly with relative path","repository":"elizaos/eliza","createdAt":"2025-08-11T09:01:43Z","mergedAt":"2025-08-11T09:02:25Z","additions":5,"deletions":1}],"detailedContributorSummaries":{"ChristopherTrimboli":"ChristopherTrimboli: Today, Christopher provided 8 reviews, including 7 approvals, demonstrating a focus on code quality and team collaboration. They also contributed 3 commits, modifying 15 files with a net addition of 880 lines, evenly split between feature work, bug fixes, and other tasks.","monilpat":"monilpat: Focused on identifying critical issues and planning new features, creating a critical bug report for elizaos/eliza (#5754) regarding false success reports in plugin publishing and proposing a new feature for runtime method mocking in elizaos/eliza (#5749) to improve deterministic agent testing.","wtfsayo":"wtfsayo: Focused on significant feature development, merging six pull requests in elizaos/eliza, including the addition of a character type system with a new character (#5756), OpenAI-compliant tool calls visibility (#5755), and the implementation of an EVM plugin and tools (#5752), demonstrating a strong emphasis on expanding core functionalities. Their work primarily involved feature development and other foundational code changes across 33 files."}}}],"$L1c"]}]
+e:["$","div",null,{"className":"prose prose-sm mx-auto mt-8 dark:prose-invert sm:prose lg:prose-lg xl:prose-xl","children":[["$","p","p-0",{"children":"Today, ElizaOS significantly advanced its core agent capabilities with a new character type system and enhanced OpenAI API compliance for tool calls, alongside integrating a new EVM plugin for blockchain tooling. Core infrastructure was also strengthened with a Hono server and refactored agent registry, while critical build and testing issues were addressed."}],"\n",["$","h2","h2-0",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"🚨 Needs Attention","position":{"start":{"line":3,"column":4,"offset":365},"end":{"line":3,"column":22,"offset":383}}}],"position":{"start":{"line":3,"column":1,"offset":362},"end":{"line":3,"column":23,"offset":384}}},"children":"🚨 Needs Attention"}],"\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"Blocked Issues/PRs"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/5738","children":"elizaos/eliza#5738"}],": Build failure in ",["$","code","code-0",{"children":"@elizaos/core"}]," is blocking testing of complex scenarios and requires an update on its resolution."]}],"\n",["$","li","li-1",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/5719","children":"elizaos/eliza#5719"}],": The ",["$","code","code-0",{"children":"startAgent"}]," hanging issue needs an update on its resolution, as it impacts CLI functionality."]}],"\n"]}],"\n"]}],"\n",["$","li","li-1",{"children":[["$","strong","strong-0",{"children":"Urgent Discussions"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/5738","children":"elizaos/eliza#5738"}],": jkbrooks is asking for an update on whether the build failure issue has been resolved."]}],"\n",["$","li","li-1",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/5719","children":"elizaos/eliza#5719"}],": jkbrooks is asking for an update on whether the ",["$","code","code-0",{"children":"startAgent"}]," hanging issue has been resolved."]}],"\n"]}],"\n"]}],"\n"]}],"\n",["$","h2","h2-1",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"✅ Completed Work","position":{"start":{"line":11,"column":4,"offset":1133},"end":{"line":11,"column":20,"offset":1149}}}],"position":{"start":{"line":11,"column":1,"offset":1130},"end":{"line":11,"column":20,"offset":1149}}},"children":"✅ Completed Work"}],"\n",["$","ul","ul-1",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"Enhanced Agent Capabilities & API Compliance"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["A new character type system, including \"JesseXBT,\" was introduced to improve API consistency for agents. ",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5756","children":"elizaos/eliza#5756"}]]}],"\n",["$","li","li-1",{"children":["The chat completions API now supports visibility of intermediate tool calls and results while maintaining full OpenAI API compliance. ",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5755","children":"elizaos/eliza#5755"}]]}],"\n"]}],"\n"]}],"\n",["$","li","li-1",{"children":[["$","strong","strong-0",{"children":"Core Infrastructure & EVM Integration"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["The ElizaOS agent registry was refactored with the addition of a Hono server, enabling OpenAI-compatible API interaction with agents. ",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5753","children":"elizaos/eliza#5753"}]]}],"\n",["$","li","li-1",{"children":["A new EVM plugin was integrated, providing wallet and blockchain tooling, including services for managing EVM chains and clients, and tools for token and wallet balance retrieval. ",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5752","children":"elizaos/eliza#5752"}]]}],"\n"]}],"\n"]}],"\n","$L1d","\n"]}],"\n","$L1e","\n","$L1f"]}]
+f:["$","script","script-0",{"src":"/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","async":true}]
+10:["$","script","script-1",{"src":"/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","async":true}]
+11:["$","script","script-2",{"src":"/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js","async":true}]
+12:["$","$L20",null,{"children":["$","$21",null,{"name":"Next.MetadataOutlet","children":"$@22"}]}]
+1c:["$","div",null,{"className":"rounded-lg border bg-card text-card-foreground shadow-sm","children":[["$","div",null,{"className":"flex flex-col space-y-1.5 p-6 py-4","children":["$","div",null,{"className":"tracking-tight text-sm font-medium","children":["$undefined","Code Changes"]}]}],["$","div",null,{"className":"p-6 pt-0","children":["$","div",null,{"className":"grid grid-cols-2 gap-4 md:grid-cols-4","children":[["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-git-commit-vertical h-5 w-5","aria-hidden":"true","children":[["$","path","1holv5",{"d":"M12 3v6"}],["$","circle","1v7zrd",{"cx":"12","cy":"12","r":"3"}],["$","path","a9ows0",{"d":"M12 15v6"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":13}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Commits"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-file-code h-5 w-5","aria-hidden":"true","children":[["$","path","1oefj6",{"d":"M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"}],["$","path","wfsgrz",{"d":"M14 2v5a1 1 0 0 0 1 1h5"}],["$","path","1tg20x",{"d":"M10 12.5 8 15l2 2.5"}],["$","path","yinavb",{"d":"m14 12.5 2 2.5-2 2.5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":24}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Files Changed"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-green-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-up h-5 w-5 text-green-500","aria-hidden":"true","children":[["$","path","hav0vg",{"d":"m5 12 7-7 7 7"}],["$","path","x0mq9r",{"d":"M12 19V5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-green-500","children":"+1,114"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Added"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-red-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-down h-5 w-5 text-red-500","aria-hidden":"true","children":[["$","path","s699le",{"d":"M12 5v14"}],["$","path","1idqje",{"d":"m19 12-7 7-7-7"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-red-500","children":"-81"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Deleted"}]]}]]}]]}]}]]}]
+1d:["$","li","li-2",{"children":[["$","strong","strong-0",{"children":"Build System & Testing Improvements"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["Failing component tests in the project-starter template were fixed by replacing ",["$","code","code-0",{"children":"mock.module"}]," with ",["$","code","code-1",{"children":"spyOn"}]," for consistent logger testing. ",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5748","children":"elizaos/eliza#5748"}]]}],"\n",["$","li","li-1",{"children":["Import paths were standardized by converting to ",["$","code","code-0",{"children":"@/"}]," aliases and barrel imports, along with a new Cursor rule for import consistency. ",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5751","children":"elizaos/eliza#5751"}]]}],"\n",["$","li","li-2",{"children":["A temporary revert to relative import paths was performed as part of the import path standardization process. ",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5750","children":"elizaos/eliza/pull/5750"}]]}],"\n"]}],"\n"]}]
+1e:["$","h2","h2-2",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"🐞 Issue Triage","position":{"start":{"line":23,"column":4,"offset":2731},"end":{"line":23,"column":19,"offset":2746}}}],"position":{"start":{"line":23,"column":1,"offset":2728},"end":{"line":23,"column":19,"offset":2746}}},"children":"🐞 Issue Triage"}]
+1f:["$","ul","ul-2",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"New Issues"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["elizaos/eliza:","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/5749","children":"elizaos/eliza#5749"}],": Highlights the need for implementing runtime method mocking for deterministic agent testing, specifically for LLM interactions."]}],"\n",["$","li","li-1",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/5754","children":"elizaos/eliza#5754"}],": Reports that plugin publishing fails with false success reports, where ",["$","code","code-0",{"children":"elizaos publish --npm"}]," indicates success despite a 404 error."]}],"\n"]}],"\n"]}],"\n"]}],"\n"]}],"\n"]}]
+22:null

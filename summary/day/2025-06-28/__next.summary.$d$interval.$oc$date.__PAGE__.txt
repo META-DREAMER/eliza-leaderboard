@@ -1,0 +1,619 @@
+1:"$Sreact.fragment"
+2:I[4817319,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"IntervalSelector"]
+3:I[6998365,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"LlmCopyButton"]
+11:I[3642796,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],""]
+12:I[3238488,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"StatCardsDisplay"]
+19:I[4261541,["/eliza-leaderboard/_next/static/chunks/b33bcbdcb3f88354.js","/eliza-leaderboard/_next/static/chunks/8ba59154b6704904.js"],"OutletBoundary"]
+1a:"$Sreact.suspense"
+4:T1500,# Standardize Testing Framework: Migrate from vitest to bun:test
+
+## Problem Statement
+
+The ElizaOS monorepo currently uses a mixed testing setup with both `vitest` and `bun:test`, creating inconsistency and potential maintenance overhead. Since the project already uses bun as the package manager and runtime, standardizing on `bun:test` would provide better integration and consistency across the codebase.
+
+## Current State Analysis
+
+**vitest Usage (extensive):**
+- 21+ `vitest.config.ts` files across packages
+- vitest listed as devDependency in root `package.json` and multiple package-specific `package.json` files
+- Used in: `@elizaos/core`, `@elizaos/cli`, `@elizaos/plugin-sql`, `@elizaos/server`, `@elizaos/client`, and others
+- Documentation specifically mentions "Component tests use **Vitest**"
+- Test scripts in packages use `vitest run`, `vitest watch`, etc.
+
+**bun:test Usage (minimal):**
+- Only 1 `bunfig.toml` file found in `packages/cli`
+- Limited configuration: just test preload setup
+- No evidence of extensive bun:test usage in test files
+
+## Proposed Solution
+
+Migrate the entire monorepo to use `bun:test` exclusively, removing vitest dependencies and configurations while maintaining all existing test functionality.
+
+## Benefits of bun:test
+
+1. **Consistency**: Single testing framework aligned with bun package manager usage
+2. **Performance**: Native bun testing typically faster than vitest
+3. **Simplicity**: Reduced dependency count and configuration complexity
+4. **Maintenance**: One less external dependency to maintain and update
+5. **Integration**: Better integration with bun's built-in development tools
+
+## Implementation Plan
+
+### Phase 1: Preparation
+- [ ] Audit all test files to identify vitest-specific APIs that need migration
+- [ ] Create bun:test configuration templates for different package types
+- [ ] Update test utilities in `@elizaos/plugin-bootstrap/__tests__/test-utils` for bun:test compatibility
+
+### Phase 2: Core Packages Migration
+- [ ] Migrate `@elizaos/core` package
+  - [ ] Replace `vitest.config.ts` with appropriate `bunfig.toml`
+  - [ ] Update test imports (`describe`, `it`, `expect`, etc.)
+  - [ ] Update package.json test scripts
+  - [ ] Verify all 9 test files work with bun:test
+- [ ] Migrate `@elizaos/plugin-bootstrap` (contains test utilities used by other packages)
+
+### Phase 3: Application Packages Migration
+- [ ] Migrate `@elizaos/cli` package
+  - [ ] Update existing `bunfig.toml` configuration
+  - [ ] Replace vitest scripts with bun:test equivalents
+  - [ ] Update `run-all-tests.sh` script
+  - [ ] Ensure compatibility with BATS tests (keep separate)
+- [ ] Migrate `@elizaos/server` package
+  - [ ] Handle both `vitest.config.ts` and `vitest.config.integration.ts`
+  - [ ] Update integration test setup
+- [ ] Migrate `@elizaos/client` package
+
+### Phase 4: Plugin Packages Migration
+- [ ] Migrate `@elizaos/plugin-sql` (complex test suite)
+- [ ] Migrate remaining plugin packages
+- [ ] Update plugin templates to use bun:test
+
+### Phase 5: Documentation & Templates
+- [ ] Update `/packages/docs/docs/core/testing.md` 
+- [ ] Update plugin and project starter templates
+- [ ] Update CLI template generation to use bun:test configuration
+
+### Phase 6: Cleanup
+- [ ] Remove vitest dependencies from all package.json files
+- [ ] Remove all vitest.config.ts files
+- [ ] Update root-level test scripts and turbo.json configuration
+- [ ] Update CI/CD workflows if needed
+
+## Acceptance Criteria
+
+- [ ] All existing tests pass with bun:test
+- [ ] No vitest dependencies remain in any package.json
+- [ ] No vitest configuration files remain
+- [ ] Test coverage functionality maintained (if used)
+- [ ] CI/CD pipeline works with bun:test
+- [ ] Documentation updated to reflect bun:test usage
+- [ ] New project templates use bun:test by default
+- [ ] All test scripts use bun:test commands
+- [ ] Performance benchmarks show no regression (preferably improvement)
+
+## Migration Considerations
+
+**Potential Challenges:**
+1. **API Differences**: Some vitest-specific APIs may not have direct bun:test equivalents
+2. **Coverage Reports**: Ensure test coverage functionality is maintained
+3. **IDE Integration**: Verify IDE/editor test runners work with bun:test
+4. **CI Performance**: Monitor CI build times during transition
+5. **Complex Test Configurations**: Some packages have sophisticated vitest configurations that need careful translation
+
+**Risk Mitigation:**
+- Migrate packages incrementally to catch issues early
+- Maintain comprehensive test suite throughout migration
+- Keep detailed documentation of configuration changes
+- Test in CI environment before merging changes
+
+## Related Files
+
+**High-priority migration targets:**
+- `packages/core/vitest.config.ts` (9 test files)
+- `packages/cli/vitest.config.ts` (extensive test suite)
+- `packages/plugin-sql/vitest.config.ts` (complex integration tests)
+- `packages/server/vitest.config.ts` & `vitest.config.integration.ts`
+- `packages/docs/docs/core/testing.md` (documentation)
+
+**Configuration files to update:**
+- Root `package.json` (remove vitest devDependency)
+- Individual package `package.json` files
+- `turbo.json` (if test pipeline configuration needs updates)
+
+---
+
+This migration will significantly simplify the testing infrastructure while maintaining all existing functionality and improving consistency across the ElizaOS monorepo.5:T913,## Summary
+- Fix document loading bugs and improved error handling
+- Enhanced logging throughout the application with better rate limiting
+- Improved UI components including searchbar and document list view
+- Fixed contextual knowledge functionality issues
+- Better document processing and navigation
+
+## Changes
+- Document loading reliability improvements
+- Rate limiting enhancements for better API usage
+- UI/UX improvements in knowledge management interface
+- Logging improvements for better debugging
+- Bug fixes in context knowledge processing
+
+## Test plan
+- [ ] Verify document loading works correctly without errors
+- [ ] Test rate limiting functionality under load
+- [ ] Validate UI improvements in document list and search functionality
+- [ ] Confirm enhanced logging provides better debugging information
+- [ ] Test contextual knowledge features work as expected
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+* **New Features**
+  * Added retrieval-augmented generation (RAG) metadata enrichment for conversation memories, allowing detailed tracking of retrieved fragments and queries.
+  * Enhanced document processing with more robust configuration handling, improved logging, and precise rate limiting based on both requests and tokens.
+
+* **Improvements**
+  * Updated plugin initialization to better detect and log contextual knowledge settings from multiple configuration sources.
+  * Refined logging across the application with clearer prefixes, emojis, and more informative messages.
+  * Increased default document retrieval limits in knowledge endpoints for larger result sets.
+  * Improved memory graph visualization with a new legend and enhanced node selection handling.
+
+* **Bug Fixes**
+  * Added exponential backoff retry logic for Anthropic text generation to handle rate limit errors more gracefully.
+
+* **Documentation**
+  * Improved README formatting for better readability.
+
+* **Refactor / Style**
+  * Standardized string quoting and formatting throughout the codebase.
+  * Simplified and clarified JSX returns in UI components for readability.
+
+* **Chores**
+  * Removed unused properties from the `KnowledgeDocumentMetadata` interface for a cleaner type definition.
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->6:T4e6,## Summary
+- Fixes #5268 by increasing Express JSON payload limit from 100KB to 2MB
+- Adds comprehensive regression test to prevent future issues
+- Addresses user reports of 150KB character files failing with "request entity too large" errors
+
+## Changes
+- Updated Express JSON limit in `packages/server/src/index.ts` from `100kb` to `2mb`
+- Added regression test in `packages/server/src/__tests__/character-file-size-regression.test.ts`
+- Test covers the exact 150KB scenario reported and validates 20x increase in limit
+
+## Test Coverage
+- ✅ Regression test reproduces original 150KB failure scenario
+- ✅ Validates new 2MB limit handles various character sizes (150KB, 500KB, 1MB)
+- ✅ Documents the fix and prevents future regressions
+
+🤖 Generated with [Claude Code](https://claude.ai/code)
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+* **Bug Fixes**
+  * Resolved an issue preventing upload of large character files by increasing the supported file size limit from 100KB to 2MB.
+
+* **Tests**
+  * Added tests to verify support for larger character files and prevent future regressions related to file size limits.
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->7:T7f5,## Summary
+
+Enhances documentation to clearly communicate that plugin-bootstrap is mandatory for communication and basic agent functionality unless doing heavy customizations.
+
+## Changes Made
+
+### 📚 Documentation Updates
+
+- **FAQ Section**: Enhanced the "Can I skip the bootstrap plugin?" section to emphasize it's mandatory for communication
+- **README.md**: Updated plugin-bootstrap description to highlight it as "Essential communication core" and "Required for basic agent functionality"
+- **Core Plugins Documentation**: Added clear warnings about bootstrap plugin requirement and what happens without it
+- **Quickstart Guide**: Added important note about plugin-bootstrap being essential for communication
+
+### 🎯 Key Improvements
+
+- Clarifies that plugin-bootstrap is **mandatory for communication** unless building custom event handling
+- Explains what functionality breaks without plugin-bootstrap (message processing, responses, etc.)
+- Maintains information about IGNORE_BOOTSTRAP for testing purposes
+- Provides clear guidance on when it can be skipped (heavy customizations only)
+
+### 📋 Files Changed
+
+- `README.md` - Enhanced plugin-bootstrap description
+- `packages/docs/docs/faq.md` - Improved FAQ answer with emphasis on requirement
+- `packages/docs/docs/core/plugins.md` - Added warnings and requirements section
+- `packages/docs/docs/quickstart.md` - Added important note for new users
+
+## Problem Solved
+
+Previously, the documentation suggested plugin-bootstrap was "optional" or "should be imported into most agents," which led to confusion. Users might skip it thinking it's just nice-to-have, when in reality it contains critical event handlers for message processing and communication.
+
+## Impact
+
+- New users will understand plugin-bootstrap is essential for basic agent functionality
+- Reduces confusion about why agents don't respond when plugin-bootstrap is missing
+- Maintains flexibility for advanced users doing heavy customizations
+- Improves onboarding experience by setting correct expectations8:T97f,# Registry Update Checklist
+
+Registry:
+- [x] I've made the left side of the colon of JSON entry in index.json match the potential NPM package name
+- [x] I've used github not github.com
+- [x] There is no .git extension
+- [x] It's placed it alphabetically in the list
+- [x] I've dealt with commas properly so the list is still valid JSON
+
+If not an eliza-plugins official repo, i.e. new plugin: 
+
+The plugin repo has:
+- [x] is publically accessible (not a private repo)
+- [x] uses main as it's default branch
+- [x] I have include `elizaos-plugins` in the topics in the GitHub repo settings. If the plugin is related to `AI` or `crypto`, please add those as topics as well.
+- [x] add simple description in github repo
+- [x] follows this convention
+```
+plugin-name/
+├── images/
+│   ├── logo.jpg        # Plugin branding logo
+│   ├── banner.jpg      # Plugin banner image
+├── src/
+│   ├── index.ts        # Main plugin entry point
+│   ├── actions/        # Plugin-specific actions
+│   ├── clients/        # Client implementations
+│   ├── adapters/       # Adapter implementations
+│   └── types.ts        # Type definitions
+│   └── environment.ts  # runtime.getSetting, zod validation
+├── package.json        # Plugin dependencies
+└── README.md          # Plugin documentation
+```
+- [x] an `images/banner.jpg` and `images/logo.jpg` and they
+  - Use clear, high-resolution images
+  - Keep file sizes optimized (< 500KB for logos, < 1MB for banners)
+  - Follow the [elizaOS Brand Guidelines](https://github.com/elizaOS/brandkit)
+  - Include alt text for accessibility
+- [x] package.json has a agentConfig like the following
+```json
+{
+  "name": "@myNpmOrg/plugin-example",
+  "version": "1.0.0",
+  "agentConfig": {
+    "pluginType": "elizaos:plugin:1.0.0",
+    "pluginParameters": {
+      "API_KEY": {
+        "type": "string",
+        "description": "API key for the service"
+      }
+    }
+  }
+}
+```
+
+## Discord username
+`imthatcarlos`
+
+
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+## Summary by CodeRabbit
+
+* **New Features**
+  * Added a new plugin: Bonsai Plugin, making it available for use.
+* **Bug Fixes**
+  * Corrected version information for the Bootstrap plugin to ensure consistency.
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->9:T5fd,On June 28, 2025, the ElizaOS project saw progress in standardizing the testing framework within the `eliza` repository by migrating to `bun:test`, and the `plugin-bonsai` was added to the `registry`. Other repositories, `auto.fun`, `plugin-solana`, and `plugin-knowledge`, had no activity.
+
+## ✅ Completed Work
+### Core Framework Enhancements
+*   **Testing Framework Standardization**: The `eliza` repository migrated its testing framework from a mixed setup of `vitest` and `bun:test` to a unified `bun:test` framework, aiming for consistency and reduced maintenance overhead ([elizaos/eliza#5185](https://github.com/elizaos/eliza/issues/5185)).
+*   **Plugin Loading Information Clarification**: An issue in `eliza` regarding how to check currently loaded plugins in a running agent was closed, with the solution indicating that plugin loading information is available in the agent's log output ([elizaos/eliza#4931](https://github.com/elizaos/eliza/issues/4931)).
+
+### Plugin Registry Updates
+*   **New Plugin Added**: The `plugin-bonsai` was added to the `index.json` file in the `registry` repository, following established naming conventions and repository references ([elizaos-plugins/registry#181](https://github.com/elizaos-plugins/registry/pull/181)).
+
+## 🐞 Issue Triage
+### Closed Issues
+*   **eliza**:
+    *   Testing Framework Standardization ([elizaos/eliza#5185](https://github.com/elizaos/eliza/issues/5185))
+    *   Plugin Loading Information ([elizaos/eliza#4931](https://github.com/elizaos/eliza/issues/4931))0:{"buildId":"US8XLB_zHXYj_PVAECGcd","rsc":["$","$1","c",{"children":[["$","div",null,{"className":"container mx-auto px-6 py-8 md:px-8","children":["$","div",null,{"className":"mx-auto max-w-4xl","children":[["$","div",null,{"className":"mb-4 flex flex-col justify-between sm:flex-row","children":[["$","$L2",null,{"currentInterval":"day","currentDate":"2025-06-28"}],["$","$L3",null,{"metrics":{"date":"2025-06-28","interval":{"intervalStart":"$D2025-06-28T00:00:00.000Z","intervalEnd":"$D2025-06-29T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":3,"merged":1,"total":4},"issues":{"new":0,"closed":2,"total":2},"activeContributors":5,"codeChanges":{"additions":1,"deletions":0,"files":1,"commitCount":15},"topContributors":[{"username":"wtfsayo","avatarUrl":"https://avatars.githubusercontent.com/u/82053242?u=98209a1f10456f42d4d2fa71db4d5bf4a672cbc3&v=4","totalScore":68.23279897140252,"prScore":67.79479897140251,"issueScore":0,"reviewScore":0,"commentScore":0.43799999999999994,"summary":"wtfsayo: Merged 2 PRs in elizaos/eliza, including a fix to increase the character file size limit to 2MB (+109/-3 lines) and documentation enhancements (+152/-19 lines), and also created issue elizaos/eliza#5185 to standardize the testing framework. They also commented on 3 PRs."},{"username":"jiggyjo11","avatarUrl":"https://avatars.githubusercontent.com/u/47065319?u=d39708dec3b6e4f2fbaf26b7d6e705f9b1961aa7&v=4","totalScore":56.5127738965761,"prScore":56.5127738965761,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":null},{"username":"bealers","avatarUrl":"https://avatars.githubusercontent.com/u/6403055?u=8c40778251e25b92cdee727056415b6c0d1bcdc5&v=4","totalScore":0.2,"prScore":0,"issueScore":0,"reviewScore":0,"commentScore":0.2,"summary":null}],"focusAreas":[],"topIssues":[{"id":"I_kwDOMT5cIs653q_k","title":"How to check currently loaded plugins in the agent","author":"omariosman","number":4931,"repository":"elizaos/eliza","body":"When I start the agent using `elizaos start`, how can I check the currently loaded plugins in the agent while it is running?\n\n","createdAt":"2025-06-04T16:14:19Z","closedAt":"2025-06-28T14:57:25Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs68QEwg","title":"Standardize Testing Framework: Migrate from vitest to bun:test","author":"wtfsayo","number":5185,"repository":"elizaos/eliza","body":"$4","createdAt":"2025-06-18T22:23:56Z","closedAt":"2025-06-28T14:57:50Z","state":"CLOSED","commentCount":0}],"topPullRequests":[{"id":"PR_kwDOOu4gVs6ci9J4","title":"Fix contextual knowledge bugs, improve logging and document processing","author":"jiggyjo11","number":29,"body":"$5","repository":"elizaos-plugins/plugin-knowledge","createdAt":"2025-06-28T18:55:49Z","mergedAt":"2025-06-29T13:05:45Z","additions":2872,"deletions":2282},{"id":"PR_kwDOMT5cIs6ch6YT","title":"fix: increase character file size limit to 2MB","author":"wtfsayo","number":5308,"body":"$6","repository":"elizaos/eliza","createdAt":"2025-06-28T14:42:13Z","mergedAt":"2025-06-29T06:45:24Z","additions":108,"deletions":2},{"id":"PR_kwDOMT5cIs6ciCTV","title":"docs: enhance plugin-bootstrap requirements documentation","author":"wtfsayo","number":5309,"body":"$7","repository":"elizaos/eliza","createdAt":"2025-06-28T15:08:14Z","mergedAt":"2025-06-29T06:45:54Z","additions":44,"deletions":17},{"id":"PR_kwDONkg7v86cRTUQ","title":"add: plugin-bonsai","author":"imthatcarlos","number":181,"body":"$8","repository":"elizaos-plugins/registry","createdAt":"2025-06-26T17:22:01Z","mergedAt":"2025-06-28T11:12:06Z","additions":1,"deletions":0}],"detailedContributorSummaries":{"wtfsayo":"wtfsayo: Merged 2 PRs in elizaos/eliza, including a fix to increase the character file size limit to 2MB (+109/-3 lines) and documentation enhancements (+152/-19 lines), and also created issue elizaos/eliza#5185 to standardize the testing framework. They also commented on 3 PRs."}},"summaryContent":"$9","className":"self-end sm:self-start"}]]}],"$La","$Lb","$Lc"]}]}],["$Ld","$Le","$Lf"],"$L10"]}],"loading":null,"isPartial":false}
+a:["$","div",null,{"className":"mb-6","children":["$","div",null,{"className":"flex items-center justify-between","children":[[["$","$L11",null,{"href":"/summary/day/2025-06-27","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left mr-2 h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"children":"Previous"}],false],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$L11",null,{"href":"/summary/day/2025-06-27","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Previous"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]],["$","div",null,{"className":"flex flex-col items-center","children":[["$","div",null,{"className":"text-sm font-medium text-gray-500","children":["Daily"," Summary"]}],["$","time",null,{"dateTime":"2025-06-28","className":"text-md font-bold","children":"Jun 28, 2025"}]]}],[["$","$L11",null,{"href":"/summary/day/2025-06-29","children":[false,["$","span",null,{"children":"Next"}],["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right ml-2 h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}]],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$L11",null,{"href":"/summary/day/2025-06-29","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Next"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]]]}]}]
+13:T1500,# Standardize Testing Framework: Migrate from vitest to bun:test
+
+## Problem Statement
+
+The ElizaOS monorepo currently uses a mixed testing setup with both `vitest` and `bun:test`, creating inconsistency and potential maintenance overhead. Since the project already uses bun as the package manager and runtime, standardizing on `bun:test` would provide better integration and consistency across the codebase.
+
+## Current State Analysis
+
+**vitest Usage (extensive):**
+- 21+ `vitest.config.ts` files across packages
+- vitest listed as devDependency in root `package.json` and multiple package-specific `package.json` files
+- Used in: `@elizaos/core`, `@elizaos/cli`, `@elizaos/plugin-sql`, `@elizaos/server`, `@elizaos/client`, and others
+- Documentation specifically mentions "Component tests use **Vitest**"
+- Test scripts in packages use `vitest run`, `vitest watch`, etc.
+
+**bun:test Usage (minimal):**
+- Only 1 `bunfig.toml` file found in `packages/cli`
+- Limited configuration: just test preload setup
+- No evidence of extensive bun:test usage in test files
+
+## Proposed Solution
+
+Migrate the entire monorepo to use `bun:test` exclusively, removing vitest dependencies and configurations while maintaining all existing test functionality.
+
+## Benefits of bun:test
+
+1. **Consistency**: Single testing framework aligned with bun package manager usage
+2. **Performance**: Native bun testing typically faster than vitest
+3. **Simplicity**: Reduced dependency count and configuration complexity
+4. **Maintenance**: One less external dependency to maintain and update
+5. **Integration**: Better integration with bun's built-in development tools
+
+## Implementation Plan
+
+### Phase 1: Preparation
+- [ ] Audit all test files to identify vitest-specific APIs that need migration
+- [ ] Create bun:test configuration templates for different package types
+- [ ] Update test utilities in `@elizaos/plugin-bootstrap/__tests__/test-utils` for bun:test compatibility
+
+### Phase 2: Core Packages Migration
+- [ ] Migrate `@elizaos/core` package
+  - [ ] Replace `vitest.config.ts` with appropriate `bunfig.toml`
+  - [ ] Update test imports (`describe`, `it`, `expect`, etc.)
+  - [ ] Update package.json test scripts
+  - [ ] Verify all 9 test files work with bun:test
+- [ ] Migrate `@elizaos/plugin-bootstrap` (contains test utilities used by other packages)
+
+### Phase 3: Application Packages Migration
+- [ ] Migrate `@elizaos/cli` package
+  - [ ] Update existing `bunfig.toml` configuration
+  - [ ] Replace vitest scripts with bun:test equivalents
+  - [ ] Update `run-all-tests.sh` script
+  - [ ] Ensure compatibility with BATS tests (keep separate)
+- [ ] Migrate `@elizaos/server` package
+  - [ ] Handle both `vitest.config.ts` and `vitest.config.integration.ts`
+  - [ ] Update integration test setup
+- [ ] Migrate `@elizaos/client` package
+
+### Phase 4: Plugin Packages Migration
+- [ ] Migrate `@elizaos/plugin-sql` (complex test suite)
+- [ ] Migrate remaining plugin packages
+- [ ] Update plugin templates to use bun:test
+
+### Phase 5: Documentation & Templates
+- [ ] Update `/packages/docs/docs/core/testing.md` 
+- [ ] Update plugin and project starter templates
+- [ ] Update CLI template generation to use bun:test configuration
+
+### Phase 6: Cleanup
+- [ ] Remove vitest dependencies from all package.json files
+- [ ] Remove all vitest.config.ts files
+- [ ] Update root-level test scripts and turbo.json configuration
+- [ ] Update CI/CD workflows if needed
+
+## Acceptance Criteria
+
+- [ ] All existing tests pass with bun:test
+- [ ] No vitest dependencies remain in any package.json
+- [ ] No vitest configuration files remain
+- [ ] Test coverage functionality maintained (if used)
+- [ ] CI/CD pipeline works with bun:test
+- [ ] Documentation updated to reflect bun:test usage
+- [ ] New project templates use bun:test by default
+- [ ] All test scripts use bun:test commands
+- [ ] Performance benchmarks show no regression (preferably improvement)
+
+## Migration Considerations
+
+**Potential Challenges:**
+1. **API Differences**: Some vitest-specific APIs may not have direct bun:test equivalents
+2. **Coverage Reports**: Ensure test coverage functionality is maintained
+3. **IDE Integration**: Verify IDE/editor test runners work with bun:test
+4. **CI Performance**: Monitor CI build times during transition
+5. **Complex Test Configurations**: Some packages have sophisticated vitest configurations that need careful translation
+
+**Risk Mitigation:**
+- Migrate packages incrementally to catch issues early
+- Maintain comprehensive test suite throughout migration
+- Keep detailed documentation of configuration changes
+- Test in CI environment before merging changes
+
+## Related Files
+
+**High-priority migration targets:**
+- `packages/core/vitest.config.ts` (9 test files)
+- `packages/cli/vitest.config.ts` (extensive test suite)
+- `packages/plugin-sql/vitest.config.ts` (complex integration tests)
+- `packages/server/vitest.config.ts` & `vitest.config.integration.ts`
+- `packages/docs/docs/core/testing.md` (documentation)
+
+**Configuration files to update:**
+- Root `package.json` (remove vitest devDependency)
+- Individual package `package.json` files
+- `turbo.json` (if test pipeline configuration needs updates)
+
+---
+
+This migration will significantly simplify the testing infrastructure while maintaining all existing functionality and improving consistency across the ElizaOS monorepo.14:T913,## Summary
+- Fix document loading bugs and improved error handling
+- Enhanced logging throughout the application with better rate limiting
+- Improved UI components including searchbar and document list view
+- Fixed contextual knowledge functionality issues
+- Better document processing and navigation
+
+## Changes
+- Document loading reliability improvements
+- Rate limiting enhancements for better API usage
+- UI/UX improvements in knowledge management interface
+- Logging improvements for better debugging
+- Bug fixes in context knowledge processing
+
+## Test plan
+- [ ] Verify document loading works correctly without errors
+- [ ] Test rate limiting functionality under load
+- [ ] Validate UI improvements in document list and search functionality
+- [ ] Confirm enhanced logging provides better debugging information
+- [ ] Test contextual knowledge features work as expected
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+* **New Features**
+  * Added retrieval-augmented generation (RAG) metadata enrichment for conversation memories, allowing detailed tracking of retrieved fragments and queries.
+  * Enhanced document processing with more robust configuration handling, improved logging, and precise rate limiting based on both requests and tokens.
+
+* **Improvements**
+  * Updated plugin initialization to better detect and log contextual knowledge settings from multiple configuration sources.
+  * Refined logging across the application with clearer prefixes, emojis, and more informative messages.
+  * Increased default document retrieval limits in knowledge endpoints for larger result sets.
+  * Improved memory graph visualization with a new legend and enhanced node selection handling.
+
+* **Bug Fixes**
+  * Added exponential backoff retry logic for Anthropic text generation to handle rate limit errors more gracefully.
+
+* **Documentation**
+  * Improved README formatting for better readability.
+
+* **Refactor / Style**
+  * Standardized string quoting and formatting throughout the codebase.
+  * Simplified and clarified JSX returns in UI components for readability.
+
+* **Chores**
+  * Removed unused properties from the `KnowledgeDocumentMetadata` interface for a cleaner type definition.
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->15:T4e6,## Summary
+- Fixes #5268 by increasing Express JSON payload limit from 100KB to 2MB
+- Adds comprehensive regression test to prevent future issues
+- Addresses user reports of 150KB character files failing with "request entity too large" errors
+
+## Changes
+- Updated Express JSON limit in `packages/server/src/index.ts` from `100kb` to `2mb`
+- Added regression test in `packages/server/src/__tests__/character-file-size-regression.test.ts`
+- Test covers the exact 150KB scenario reported and validates 20x increase in limit
+
+## Test Coverage
+- ✅ Regression test reproduces original 150KB failure scenario
+- ✅ Validates new 2MB limit handles various character sizes (150KB, 500KB, 1MB)
+- ✅ Documents the fix and prevents future regressions
+
+🤖 Generated with [Claude Code](https://claude.ai/code)
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+* **Bug Fixes**
+  * Resolved an issue preventing upload of large character files by increasing the supported file size limit from 100KB to 2MB.
+
+* **Tests**
+  * Added tests to verify support for larger character files and prevent future regressions related to file size limits.
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->16:T7f5,## Summary
+
+Enhances documentation to clearly communicate that plugin-bootstrap is mandatory for communication and basic agent functionality unless doing heavy customizations.
+
+## Changes Made
+
+### 📚 Documentation Updates
+
+- **FAQ Section**: Enhanced the "Can I skip the bootstrap plugin?" section to emphasize it's mandatory for communication
+- **README.md**: Updated plugin-bootstrap description to highlight it as "Essential communication core" and "Required for basic agent functionality"
+- **Core Plugins Documentation**: Added clear warnings about bootstrap plugin requirement and what happens without it
+- **Quickstart Guide**: Added important note about plugin-bootstrap being essential for communication
+
+### 🎯 Key Improvements
+
+- Clarifies that plugin-bootstrap is **mandatory for communication** unless building custom event handling
+- Explains what functionality breaks without plugin-bootstrap (message processing, responses, etc.)
+- Maintains information about IGNORE_BOOTSTRAP for testing purposes
+- Provides clear guidance on when it can be skipped (heavy customizations only)
+
+### 📋 Files Changed
+
+- `README.md` - Enhanced plugin-bootstrap description
+- `packages/docs/docs/faq.md` - Improved FAQ answer with emphasis on requirement
+- `packages/docs/docs/core/plugins.md` - Added warnings and requirements section
+- `packages/docs/docs/quickstart.md` - Added important note for new users
+
+## Problem Solved
+
+Previously, the documentation suggested plugin-bootstrap was "optional" or "should be imported into most agents," which led to confusion. Users might skip it thinking it's just nice-to-have, when in reality it contains critical event handlers for message processing and communication.
+
+## Impact
+
+- New users will understand plugin-bootstrap is essential for basic agent functionality
+- Reduces confusion about why agents don't respond when plugin-bootstrap is missing
+- Maintains flexibility for advanced users doing heavy customizations
+- Improves onboarding experience by setting correct expectations17:T97f,# Registry Update Checklist
+
+Registry:
+- [x] I've made the left side of the colon of JSON entry in index.json match the potential NPM package name
+- [x] I've used github not github.com
+- [x] There is no .git extension
+- [x] It's placed it alphabetically in the list
+- [x] I've dealt with commas properly so the list is still valid JSON
+
+If not an eliza-plugins official repo, i.e. new plugin: 
+
+The plugin repo has:
+- [x] is publically accessible (not a private repo)
+- [x] uses main as it's default branch
+- [x] I have include `elizaos-plugins` in the topics in the GitHub repo settings. If the plugin is related to `AI` or `crypto`, please add those as topics as well.
+- [x] add simple description in github repo
+- [x] follows this convention
+```
+plugin-name/
+├── images/
+│   ├── logo.jpg        # Plugin branding logo
+│   ├── banner.jpg      # Plugin banner image
+├── src/
+│   ├── index.ts        # Main plugin entry point
+│   ├── actions/        # Plugin-specific actions
+│   ├── clients/        # Client implementations
+│   ├── adapters/       # Adapter implementations
+│   └── types.ts        # Type definitions
+│   └── environment.ts  # runtime.getSetting, zod validation
+├── package.json        # Plugin dependencies
+└── README.md          # Plugin documentation
+```
+- [x] an `images/banner.jpg` and `images/logo.jpg` and they
+  - Use clear, high-resolution images
+  - Keep file sizes optimized (< 500KB for logos, < 1MB for banners)
+  - Follow the [elizaOS Brand Guidelines](https://github.com/elizaOS/brandkit)
+  - Include alt text for accessibility
+- [x] package.json has a agentConfig like the following
+```json
+{
+  "name": "@myNpmOrg/plugin-example",
+  "version": "1.0.0",
+  "agentConfig": {
+    "pluginType": "elizaos:plugin:1.0.0",
+    "pluginParameters": {
+      "API_KEY": {
+        "type": "string",
+        "description": "API key for the service"
+      }
+    }
+  }
+}
+```
+
+## Discord username
+`imthatcarlos`
+
+
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+## Summary by CodeRabbit
+
+* **New Features**
+  * Added a new plugin: Bonsai Plugin, making it available for use.
+* **Bug Fixes**
+  * Corrected version information for the Bootstrap plugin to ensure consistency.
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->b:["$","div",null,{"className":"mb-8 space-y-6","children":[["$","$L12",null,{"metrics":{"date":"2025-06-28","interval":{"intervalStart":"$D2025-06-28T00:00:00.000Z","intervalEnd":"$D2025-06-29T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":3,"merged":1,"total":4},"issues":{"new":0,"closed":2,"total":2},"activeContributors":5,"codeChanges":{"additions":1,"deletions":0,"files":1,"commitCount":15},"topContributors":[{"username":"wtfsayo","avatarUrl":"https://avatars.githubusercontent.com/u/82053242?u=98209a1f10456f42d4d2fa71db4d5bf4a672cbc3&v=4","totalScore":68.23279897140252,"prScore":67.79479897140251,"issueScore":0,"reviewScore":0,"commentScore":0.43799999999999994,"summary":"wtfsayo: Merged 2 PRs in elizaos/eliza, including a fix to increase the character file size limit to 2MB (+109/-3 lines) and documentation enhancements (+152/-19 lines), and also created issue elizaos/eliza#5185 to standardize the testing framework. They also commented on 3 PRs."},{"username":"jiggyjo11","avatarUrl":"https://avatars.githubusercontent.com/u/47065319?u=d39708dec3b6e4f2fbaf26b7d6e705f9b1961aa7&v=4","totalScore":56.5127738965761,"prScore":56.5127738965761,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":null},{"username":"bealers","avatarUrl":"https://avatars.githubusercontent.com/u/6403055?u=8c40778251e25b92cdee727056415b6c0d1bcdc5&v=4","totalScore":0.2,"prScore":0,"issueScore":0,"reviewScore":0,"commentScore":0.2,"summary":null}],"focusAreas":[],"topIssues":[{"id":"I_kwDOMT5cIs653q_k","title":"How to check currently loaded plugins in the agent","author":"omariosman","number":4931,"repository":"elizaos/eliza","body":"When I start the agent using `elizaos start`, how can I check the currently loaded plugins in the agent while it is running?\n\n","createdAt":"2025-06-04T16:14:19Z","closedAt":"2025-06-28T14:57:25Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs68QEwg","title":"Standardize Testing Framework: Migrate from vitest to bun:test","author":"wtfsayo","number":5185,"repository":"elizaos/eliza","body":"$13","createdAt":"2025-06-18T22:23:56Z","closedAt":"2025-06-28T14:57:50Z","state":"CLOSED","commentCount":0}],"topPullRequests":[{"id":"PR_kwDOOu4gVs6ci9J4","title":"Fix contextual knowledge bugs, improve logging and document processing","author":"jiggyjo11","number":29,"body":"$14","repository":"elizaos-plugins/plugin-knowledge","createdAt":"2025-06-28T18:55:49Z","mergedAt":"2025-06-29T13:05:45Z","additions":2872,"deletions":2282},{"id":"PR_kwDOMT5cIs6ch6YT","title":"fix: increase character file size limit to 2MB","author":"wtfsayo","number":5308,"body":"$15","repository":"elizaos/eliza","createdAt":"2025-06-28T14:42:13Z","mergedAt":"2025-06-29T06:45:24Z","additions":108,"deletions":2},{"id":"PR_kwDOMT5cIs6ciCTV","title":"docs: enhance plugin-bootstrap requirements documentation","author":"wtfsayo","number":5309,"body":"$16","repository":"elizaos/eliza","createdAt":"2025-06-28T15:08:14Z","mergedAt":"2025-06-29T06:45:54Z","additions":44,"deletions":17},{"id":"PR_kwDONkg7v86cRTUQ","title":"add: plugin-bonsai","author":"imthatcarlos","number":181,"body":"$17","repository":"elizaos-plugins/registry","createdAt":"2025-06-26T17:22:01Z","mergedAt":"2025-06-28T11:12:06Z","additions":1,"deletions":0}],"detailedContributorSummaries":{"wtfsayo":"wtfsayo: Merged 2 PRs in elizaos/eliza, including a fix to increase the character file size limit to 2MB (+109/-3 lines) and documentation enhancements (+152/-19 lines), and also created issue elizaos/eliza#5185 to standardize the testing framework. They also commented on 3 PRs."}}}],"$L18"]}]
+c:["$","div",null,{"className":"prose prose-sm mx-auto mt-8 dark:prose-invert sm:prose lg:prose-lg xl:prose-xl","children":[["$","p","p-0",{"children":["On June 28, 2025, the ElizaOS project saw progress in standardizing the testing framework within the ",["$","code","code-0",{"children":"eliza"}]," repository by migrating to ",["$","code","code-1",{"children":"bun:test"}],", and the ",["$","code","code-2",{"children":"plugin-bonsai"}]," was added to the ",["$","code","code-3",{"children":"registry"}],". Other repositories, ",["$","code","code-4",{"children":"auto.fun"}],", ",["$","code","code-5",{"children":"plugin-solana"}],", and ",["$","code","code-6",{"children":"plugin-knowledge"}],", had no activity."]}],"\n",["$","h2","h2-0",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"✅ Completed Work","position":{"start":{"line":3,"column":4,"offset":295},"end":{"line":3,"column":20,"offset":311}}}],"position":{"start":{"line":3,"column":1,"offset":292},"end":{"line":3,"column":20,"offset":311}}},"children":"✅ Completed Work"}],"\n",["$","h3","h3-0",{"children":"Core Framework Enhancements"}],"\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"Testing Framework Standardization"}],": The ",["$","code","code-0",{"children":"eliza"}]," repository migrated its testing framework from a mixed setup of ",["$","code","code-1",{"children":"vitest"}]," and ",["$","code","code-2",{"children":"bun:test"}]," to a unified ",["$","code","code-3",{"children":"bun:test"}]," framework, aiming for consistency and reduced maintenance overhead (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/5185","children":"elizaos/eliza#5185"}],")."]}],"\n",["$","li","li-1",{"children":[["$","strong","strong-0",{"children":"Plugin Loading Information Clarification"}],": An issue in ",["$","code","code-0",{"children":"eliza"}]," regarding how to check currently loaded plugins in a running agent was closed, with the solution indicating that plugin loading information is available in the agent's log output (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/4931","children":"elizaos/eliza#4931"}],")."]}],"\n"]}],"\n",["$","h3","h3-1",{"children":"Plugin Registry Updates"}],"\n",["$","ul","ul-1",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"New Plugin Added"}],": The ",["$","code","code-0",{"children":"plugin-bonsai"}]," was added to the ",["$","code","code-1",{"children":"index.json"}]," file in the ",["$","code","code-2",{"children":"registry"}]," repository, following established naming conventions and repository references (",["$","a","a-0",{"href":"https://github.com/elizaos-plugins/registry/pull/181","children":"elizaos-plugins/registry#181"}],")."]}],"\n"]}],"\n",["$","h2","h2-1",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"🐞 Issue Triage","position":{"start":{"line":11,"column":4,"offset":1266},"end":{"line":11,"column":19,"offset":1281}}}],"position":{"start":{"line":11,"column":1,"offset":1263},"end":{"line":11,"column":19,"offset":1281}}},"children":"🐞 Issue Triage"}],"\n",["$","h3","h3-2",{"children":"Closed Issues"}],"\n",["$","ul","ul-2",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"eliza"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["Testing Framework Standardization (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/5185","children":"elizaos/eliza#5185"}],")"]}],"\n",["$","li","li-1",{"children":["Plugin Loading Information (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/4931","children":"elizaos/eliza#4931"}],")"]}],"\n"]}],"\n"]}],"\n"]}]]}]
+d:["$","script","script-0",{"src":"/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","async":true}]
+e:["$","script","script-1",{"src":"/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","async":true}]
+f:["$","script","script-2",{"src":"/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js","async":true}]
+10:["$","$L19",null,{"children":["$","$1a",null,{"name":"Next.MetadataOutlet","children":"$@1b"}]}]
+18:["$","div",null,{"className":"rounded-lg border bg-card text-card-foreground shadow-sm","children":[["$","div",null,{"className":"flex flex-col space-y-1.5 p-6 py-4","children":["$","div",null,{"className":"tracking-tight text-sm font-medium","children":["$undefined","Code Changes"]}]}],["$","div",null,{"className":"p-6 pt-0","children":["$","div",null,{"className":"grid grid-cols-2 gap-4 md:grid-cols-4","children":[["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-git-commit-vertical h-5 w-5","aria-hidden":"true","children":[["$","path","1holv5",{"d":"M12 3v6"}],["$","circle","1v7zrd",{"cx":"12","cy":"12","r":"3"}],["$","path","a9ows0",{"d":"M12 15v6"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":15}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Commits"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-file-code h-5 w-5","aria-hidden":"true","children":[["$","path","1oefj6",{"d":"M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"}],["$","path","wfsgrz",{"d":"M14 2v5a1 1 0 0 0 1 1h5"}],["$","path","1tg20x",{"d":"M10 12.5 8 15l2 2.5"}],["$","path","yinavb",{"d":"m14 12.5 2 2.5-2 2.5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":1}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Files Changed"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-green-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-up h-5 w-5 text-green-500","aria-hidden":"true","children":[["$","path","hav0vg",{"d":"m5 12 7-7 7 7"}],["$","path","x0mq9r",{"d":"M12 19V5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-green-500","children":"+1"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Added"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-red-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-down h-5 w-5 text-red-500","aria-hidden":"true","children":[["$","path","s699le",{"d":"M12 5v14"}],["$","path","1idqje",{"d":"m19 12-7 7-7-7"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-red-500","children":"-0"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Deleted"}]]}]]}]]}]}]]}]
+1b:null

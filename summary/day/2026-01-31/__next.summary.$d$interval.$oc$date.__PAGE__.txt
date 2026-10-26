@@ -1,0 +1,1190 @@
+1:"$Sreact.fragment"
+2:I[4817319,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"IntervalSelector"]
+3:I[6998365,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"LlmCopyButton"]
+10:I[3642796,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],""]
+11:I[3238488,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"StatCardsDisplay"]
+17:I[4261541,["/eliza-leaderboard/_next/static/chunks/b33bcbdcb3f88354.js","/eliza-leaderboard/_next/static/chunks/8ba59154b6704904.js"],"OutletBoundary"]
+18:"$Sreact.suspense"
+4:T24fc,## Summary
+
+- **BREAKING**: Transform MCP tools from single `CALL_MCP_TOOL` action to dynamically registered native ElizaOS actions
+- Reduces LLM calls from 3 to 1 per MCP tool invocation
+- Add optional Redis caching for MCP tool schemas (set `MCP_CACHE_REDIS_URL` to Upstash REST URL)
+- Add comprehensive test suite (204 tests, 388 assertions)
+
+## Changes
+
+### New Architecture
+- `dynamic-tool-actions.ts` - Factory for converting MCP tools to ElizaOS actions
+- `schema-converter.ts` - JSON Schema to ActionParameter conversion
+- `action-naming.ts` - Consistent action naming with collision avoidance
+- `schema-cache.ts` - Redis caching layer for tool schemas
+
+### Tool Compatibility Refactor
+- Extract base class to `base.ts` to break circular dependencies
+- Use static imports instead of `eval('require')` for ESM compatibility
+- Properly detect and handle reasoning models (o1, o3)
+
+### Bug Fixes
+- Fix `parseJSON` to handle arrays and use bracket depth counting
+- Fix `hashConfig` to recursively sort nested objects
+- Fix validation to fail on missing required parameters (was logging only)
+- Fix `processToolResult` to generate unique attachment IDs
+
+### Code Quality
+- Remove ~1000 lines of dead/over-engineered code
+- Delete unused `McpError` class with 5 factory methods
+- Consolidate 4 separate constraint interfaces into inline types
+- Add error logging to previously silent catch blocks
+
+## Test plan
+
+- [x] All 204 tests pass locally
+- [x] Tested on eliza-cloud-v2 - works correctly
+- [x] MCP tools register as native actions
+- [x] Tool invocation works with single LLM call
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+<!-- CURSOR_SUMMARY -->
+---
+
+> [!NOTE]
+> **High Risk**
+> High risk because this is a breaking change that rewires MCP tool invocation and mutates runtime action registration, plus adds new caching/lazy-connection paths that can affect startup and tool availability.
+> 
+> **Overview**
+> **BREAKING:** Removes the monolithic `CALL_MCP_TOOL` action and instead dynamically registers one native ElizaOS action per MCP tool (with generated names/similes, schema-derived `parameters`, and runtime param validation) so tool execution no longer depends on an LLM tool-selection/argument step.
+> 
+> Adds an optional Upstash REST schema cache (`McpSchemaCache`) and *lazy connection* behavior: tool schemas can be loaded from cache and actions registered without connecting to MCP until first use; `McpService` is refactored accordingly (connect/disconnect, action (un)registration, updated ping/reconnect handling).
+> 
+> Includes supporting utilities/refactors (schema conversion, action naming, simplified tool-compatibility exports/detection, improved JSON extraction and attachment IDs, streamlined error/processing code), removes legacy selection/templates/helpers, bumps to `1.8.0`, and adds comprehensive Bun tests.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit ecd270a78f21cb48cc60a9c6dbf953e8f6411f92. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+## Summary by CodeRabbit
+
+* **New Features**
+  * Dynamic MCP tool actions with automatic parameter mapping and runtime validation
+  * Optional schema cache to speed tool discovery and cold starts
+  * Schema-to-action parameter conversion utilities
+
+* **Improvements**
+  * Service lifecycle refactor for explicit init, lazy connections, and safer startup
+  * Streamlined tool-compatibility and parsing logic; improved error fallback behavior
+
+* **Removed**
+  * Several legacy templates and selection/feedback helpers removed
+
+* **Version**
+  * Bumped to 1.8.0
+
+* **Tests**
+  * Extensive new unit and integration tests covering actions, caching, parsing, and processing
+
+<sub>✏️ Tip: You can customize this high-level summary in your review settings.</sub>
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->
+
+<!-- greptile_comment -->
+
+<h2>Greptile Overview</h2>
+
+<h3>Greptile Summary</h3>
+
+This PR transforms the MCP plugin architecture from a multi-step tool invocation pattern to native dynamic action registration, achieving significant performance improvements and code quality gains.
+
+## Key Changes
+
+**Breaking Architecture Change:**
+- Removed single `CALL_MCP_TOOL` action that required 3 LLM calls (tool selection → argument generation → execution)
+- Replaced with dynamically registered native ElizaOS actions for each MCP tool (1 LLM call per invocation)
+- Each MCP tool now appears as a first-class action with proper parameters, validation, and metadata
+
+**Performance Optimizations:**
+- Added optional Redis schema caching via Upstash REST API (set `MCP_CACHE_REDIS_URL` to enable)
+- Caches tool schemas with config hash validation to avoid MCP connection on cold starts
+- Lazy connection support: registers actions from cache before establishing actual MCP connection
+
+**Bug Fixes:**
+- Fixed `parseJSON` to handle arrays and use bracket depth counting instead of regex
+- Fixed `hashConfig` to recursively sort object keys for consistent hashing
+- Fixed validation to properly fail on missing required parameters (was only logging warnings)
+- Fixed `processToolResult` to generate unique attachment IDs using incrementing index
+
+**Code Quality Improvements:**
+- Removed ~1,000 lines of dead/over-engineered code
+- Deleted unused `McpError` class with 5 factory methods
+- Consolidated 4 separate constraint interfaces into inline types  
+- Extracted base class to break circular dependencies in tool-compatibility
+- Replaced `eval('require')` with static imports for ESM compatibility
+- Added error logging to previously silent catch blocks
+
+**Testing:**
+- Added comprehensive test suite: 204 tests with 388 assertions
+- Tests cover action creation, schema conversion, caching, JSON parsing, and integration scenarios
+- 63 tests pass in isolated environment (others require `@elizaos/core` dependency)
+
+<h3>Confidence Score: 5/5</h3>
+
+- This PR is safe to merge with minimal risk - well-tested breaking change with clear migration path
+- The breaking change is intentional and well-documented. The refactor removes significant amounts of dead code, adds comprehensive test coverage (204 tests), includes important bug fixes, and demonstrates successful deployment on eliza-cloud-v2. The architectural change from 3 LLM calls to 1 is a significant improvement that justifies the breaking change marker.
+- No files require special attention - the refactor is well-structured with comprehensive test coverage
+
+<h3>Important Files Changed</h3>
+
+
+
+
+| Filename | Overview |
+|----------|----------|
+| src/actions/dynamic-tool-actions.ts | New factory for converting MCP tools to native ElizaOS actions - clean implementation with proper validation and error handling |
+| src/utils/schema-converter.ts | Converts JSON Schema to ActionParameter format with comprehensive validation and type mapping |
+| src/cache/schema-cache.ts | Optional Redis caching for tool schemas with graceful fallback - includes config hash validation |
+| src/service.ts | Major refactor to register MCP tools as native actions, adds cache support, removes ~500 lines of dead code |
+| src/utils/json.ts | Fixed parseJSON to handle arrays and use bracket depth counting instead of regex |
+| src/utils/processing.ts | Fixed processToolResult to generate unique attachment IDs using incrementing index |
+| src/tool-compatibility/base.ts | Extracted base class to break circular dependencies, uses static imports for ESM compatibility |
+
+</details>
+
+
+
+<h3>Sequence Diagram</h3>
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Runtime
+    participant McpService
+    participant Cache as SchemaCache
+    participant MCP as MCP Server
+    participant Action as Dynamic Action
+
+    Note over Runtime,McpService: Initialization (Cold Start)
+    Runtime->>McpService: start()
+    McpService->>Cache: getSchemas(agentId, serverName, hash)
+    alt Cache Hit
+        Cache-->>McpService: Return cached tools
+        McpService->>McpService: registerToolsAsActions()
+        McpService->>McpService: Store lazy connection config
+        Note over McpService: Server not connected yet
+    else Cache Miss
+        McpService->>MCP: connect()
+        MCP-->>McpService: Return tools
+        McpService->>McpService: registerToolsAsActions()
+        McpService->>Cache: setSchemas(agentId, serverName, hash, tools)
+    end
+    McpService-->>Runtime: Ready (actions registered)
+
+    Note over User,Action: Tool Invocation (1 LLM call)
+    User->>Runtime: "Use search tool with query=hello"
+    Runtime->>Runtime: LLM selects GOOGLE_SEARCH action
+    Runtime->>Action: handler(runtime, message, state)
+    Action->>Action: extractParams(message, state)
+    Action->>Action: validateParamsAgainstSchema(params)
+    alt Lazy Connection
+        Action->>McpService: callTool() triggers connection
+        McpService->>MCP: connect()
+        MCP-->>McpService: Connected
+    end
+    Action->>McpService: callTool(serverName, toolName, params)
+    McpService->>MCP: Execute tool
+    MCP-->>McpService: Tool result
+    McpService-->>Action: Result with content
+    Action->>Action: processToolResult()
+    Action-->>Runtime: ActionResult
+    Runtime-->>User: Response with tool output
+```
+
+<!-- greptile_other_comments_section -->
+
+<!-- /greptile_comment -->5:T1a99,## Summary
+- Add `StreamableHTTPClientTransport` for non-SSE HTTP connections (avoids Redis requirement)
+- Add `headers` support for HTTP transports (enables auth header injection)
+- Simplify error handling with `errMsg` helper (deduplicated 10+ patterns)
+- Clean up verbose logging and redundant code (~250 lines removed)
+- Fix `restartConnection` to throw on missing connection (was silently failing)
+
+## Test plan
+- [x] Build passes
+- [ ] Test with streamable-http MCP server
+- [ ] Test with SSE MCP server
+- [ ] Verify header injection works for authenticated endpoints
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+<!-- CURSOR_SUMMARY -->
+---
+
+> [!NOTE]
+> **Medium Risk**
+> Touches MCP connection/transport initialization, timeouts, and reconnection behavior, so failures could break tool availability or change runtime error handling. Changes are contained to the MCP plugin but impact all tool calls over HTTP/SSE.
+> 
+> **Overview**
+> Adds `StreamableHTTPClientTransport` support for HTTP MCP servers (defaulting non-`sse` HTTP configs to streamable HTTP) and allows optional per-server `headers` to be sent on transport creation for authenticated endpoints.
+> 
+> Tightens and simplifies `McpService` lifecycle/robustness: explicit 60s connect timeout, clearer error formatting via `errMsg`, ping monitoring only for `stdio` transports, and `restartConnection` now throws if the server isn’t connected. Provider fetching now waits for MCP initialization and returns a consistent empty provider when unavailable; provider/memory text formatting and `CALL_MCP_TOOL` action logging were also refined, and the package version bumps to `1.7.1`.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit 57e0d018919af2cdc43dd67da3f52aca4037cc6e. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+## Summary by CodeRabbit
+
+* **New Features**
+  * Returns a default provider when MCP services are unavailable and improves provider summaries.
+
+* **Bug Fixes**
+  * More resilient per-server connection handling and graceful behavior when servers are missing.
+  * Improved error reporting, timeout handling, and connection lifecycle stability.
+
+* **Chores**
+  * Bumped package version to 1.7.1.
+  * Refined provider, memory and textual summaries for clearer display.
+
+<sub>✏️ Tip: You can customize this high-level summary in your review settings.</sub>
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->
+
+<!-- greptile_comment -->
+
+<h2>Greptile Overview</h2>
+
+<h3>Greptile Summary</h3>
+
+This PR adds `StreamableHTTPClientTransport` support for non-SSE HTTP connections, enables custom header injection for authentication, and performs significant code cleanup.
+
+**Major changes:**
+- Added `StreamableHTTPClientTransport` as an alternative to SSE (avoids Redis dependency)
+- Added `headers` field to `HttpMcpServerConfig` for authentication token injection
+- Introduced `errMsg` helper to standardize error message extraction (~10+ patterns deduplicated)
+- Removed ~250 lines of verbose logging and redundant code
+- Fixed `restartConnection` to throw when connection is missing (previously silent failure)
+- Added 60s timeout to connection initialization with `Promise.race`
+- Simplified provider data building and error handling
+
+**Issues found:**
+- `src/types.ts` is missing the `StreamableHTTPClientTransport` import and type union update - this will cause TypeScript compilation errors
+- Some catch blocks silently swallow errors without logging (minor debugging impact)
+- `errMsg` helper is defined before imports (style inconsistency)
+
+The changes align well with the stated goals of reducing Redis requirements and enabling authenticated MCP endpoints. The code quality improvements make the codebase more maintainable.
+
+<h3>Confidence Score: 2/5</h3>
+
+- TypeScript compilation will fail due to missing type imports and union update in types.ts
+- The PR introduces critical type errors that will prevent compilation - StreamableHTTPClientTransport is used but not imported in types.ts, and the McpConnection.transport union type is incomplete. While the logic changes are sound and well-tested according to the test plan, the type system errors must be fixed before merge.
+- Fix `src/types.ts` to add StreamableHTTPClientTransport import and update the transport union type on line 74
+
+<h3>Important Files Changed</h3>
+
+
+
+
+| Filename | Overview |
+|----------|----------|
+| src/types.ts | Added headers support to HttpMcpServerConfig, but missing StreamableHTTPClientTransport import and type union update |
+| src/service.ts | Added StreamableHTTPClientTransport support, errMsg helper, code cleanup. Error helper defined before imports, some silent error catches could use logging |
+
+</details>
+
+
+
+<h3>Sequence Diagram</h3>
+
+```mermaid
+sequenceDiagram
+    participant Client as ElizaOS Client
+    participant Service as McpService
+    participant Transport as StreamableHTTPClientTransport
+    participant Server as MCP Server
+
+    Client->>Service: initializeMcpServers()
+    Service->>Service: getMcpSettings()
+    Service->>Service: updateServerConnections(configs)
+    
+    loop For each server config
+        Service->>Service: initializeConnection(name, config)
+        Service->>Service: buildHttpClientTransport(name, config)
+        
+        alt config.type === 'sse'
+            Service->>Transport: new SSEClientTransport(url, opts)
+            Note over Service: Warns: SSE requires Redis
+        else config.type === 'http' | 'streamable-http'
+            Service->>Transport: new StreamableHTTPClientTransport(url, opts)
+            Note over Transport: Supports custom headers for auth
+        end
+        
+        Service->>Transport: client.connect(transport)
+        Transport->>Server: HTTP Connection (with headers)
+        Server-->>Transport: Connection established
+        
+        Service->>Server: fetchToolsList()
+        Server-->>Service: Tools list
+        
+        Service->>Server: fetchResourcesList()
+        Server-->>Service: Resources list
+        
+        Service->>Service: startPingMonitoring()
+        Note over Service: Only for stdio, HTTP is stateless
+    end
+    
+    Service->>Service: buildMcpProviderData(servers)
+    Service-->>Client: Initialization complete
+
+    Client->>Service: callTool(serverName, toolName, args)
+    Service->>Transport: client.callTool(request, timeout)
+    Transport->>Server: HTTP Request (with auth headers)
+    Server-->>Transport: Tool result
+    Transport-->>Service: CallToolResult
+    Service-->>Client: Result
+```
+
+<!-- greptile_other_comments_section -->
+
+<!-- /greptile_comment -->6:T1547,## Summary
+
+`buildHttpClientTransport` currently returns `SSEClientTransport` for all HTTP transport types (`"http"`, `"streamable-http"`, `"sse"`), despite the README and type definitions advertising Streamable HTTP support. This PR implements the actual transport routing and adds custom headers passthrough.
+
+## Key Changes
+
+### Streamable HTTP Transport Support
+- Use `StreamableHTTPClientTransport` from `@modelcontextprotocol/sdk` for `"http"` and `"streamable-http"` types
+- Keep `SSEClientTransport` only for legacy `"sse"` type
+- Aligns runtime behavior with the documented config and `HttpMcpServerConfig` type definition
+
+**Before:**
+
+```typescript
+// Always returns SSE regardless of config type
+return new SSEClientTransport(new URL(config.url));
+```
+
+**After:**
+
+```typescript
+if (config.type === 'sse') {
+  return new SSEClientTransport(new URL(config.url), { requestInit });
+}
+return new StreamableHTTPClientTransport(new URL(config.url), { requestInit });
+```
+
+### Custom Headers Support
+- Added `headers?: Record<string, string>` to `HttpMcpServerConfig`
+- Passed through to both transports via `requestInit`
+- Enables `Authorization`, API key headers, and other custom headers without workarounds
+
+```json
+{
+  "my-server": {
+    "type": "http",
+    "url": "https://example.com/mcp",
+    "headers": {
+      "Authorization": "Bearer my-api-key"
+    }
+  }
+}
+```
+
+### Type Updates
+- Added `StreamableHTTPClientTransport` to `McpConnection.transport` union type
+- Updated local type annotations in `initializeConnection`
+
+## Impact
+- **Correctness**: `type: "http"` now actually uses Streamable HTTP instead of SSE
+- **No breaking changes**: `type: "sse"` behavior is unchanged
+- **Headers**: Allow authenticated MCP server connections using headers
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+* **New Features**
+  * Introduced StreamableHTTPClientTransport as a new option for HTTP and streamable-HTTP MCP server connections
+  * HTTP server configurations now support optional custom headers for authentication and advanced use cases
+
+<sub>✏️ Tip: You can customize this high-level summary in your review settings.</sub>
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->
+
+<!-- greptile_comment -->
+
+<h2>Greptile Overview</h2>
+
+<h3>Greptile Summary</h3>
+
+Implements actual Streamable HTTP transport routing that was previously advertised but not working - `type: "http"` and `type: "streamable-http"` now correctly use `StreamableHTTPClientTransport` instead of incorrectly using `SSEClientTransport` for all HTTP types.
+
+- Fixes critical bug where all HTTP transport types were using SSE transport regardless of config
+- Adds `headers` field to `HttpMcpServerConfig` for passing custom headers (Authorization, API keys, etc.) to both transport types
+- Maintains backward compatibility by keeping `type: "sse"` working with `SSEClientTransport`
+- Updates type definitions to include `StreamableHTTPClientTransport` in union types
+
+The changes align runtime behavior with documented config options in README and type definitions. No breaking changes - existing SSE configs continue working with deprecation warning.
+
+<h3>Confidence Score: 5/5</h3>
+
+- Safe to merge - fixes documented behavior, maintains backward compatibility, no breaking changes
+- Clean implementation that fixes a critical correctness bug where documented transport types weren't working. The code properly routes to correct transport classes, passes headers through standard RequestInit interface, preserves legacy SSE support with deprecation warning, and includes appropriate logging. Type definitions are properly updated.
+- No files require special attention
+
+<h3>Important Files Changed</h3>
+
+
+
+
+| Filename | Overview |
+|----------|----------|
+| src/types.ts | Added `StreamableHTTPClientTransport` to type unions and `headers` field to HTTP config - clean type additions |
+| src/service.ts | Implemented proper transport routing: `StreamableHTTPClientTransport` for http/streamable-http, `SSEClientTransport` only for legacy sse |
+
+</details>
+
+
+
+<h3>Sequence Diagram</h3>
+
+```mermaid
+sequenceDiagram
+    participant Client as McpService
+    participant Builder as buildHttpClientTransport
+    participant SSE as SSEClientTransport
+    participant Streamable as StreamableHTTPClientTransport
+    participant Server as MCP Server
+
+    Client->>Builder: buildHttpClientTransport(config)
+    
+    alt config.type === 'sse'
+        Builder->>Builder: Log deprecation warning
+        Builder->>SSE: new SSEClientTransport(url, {requestInit})
+        Note over SSE: Legacy transport<br/>for backward compatibility
+        SSE-->>Builder: transport instance
+    else config.type === 'http' OR 'streamable-http'
+        Builder->>Builder: Log: using Streamable HTTP
+        Builder->>Streamable: new StreamableHTTPClientTransport(url, {requestInit})
+        Note over Streamable: Modern transport<br/>with custom headers support
+        Streamable-->>Builder: transport instance
+    end
+    
+    Builder-->>Client: return transport
+    Client->>Server: client.connect(transport)
+    
+    Note over Client,Server: Headers from config.headers<br/>passed via requestInit
+```
+
+<!-- greptile_other_comments_section -->
+
+<sub>(2/5) Greptile learns from your feedback when you react with thumbs up/down!</sub>
+
+<!-- /greptile_comment -->7:Te50,## Plugin Details
+
+**Package:** `agentindex-eliza-plugin`
+**Repository:** https://github.com/CIII-glitch/agentindex-eliza-plugin
+**NPM:** https://www.npmjs.com/package/agentindex-eliza-plugin
+
+## Description
+
+Agent Index plugin enables Eliza agents to discover x402 endpoints - the payment-enabled APIs in the x402 ecosystem.
+
+### Actions
+- `SEARCH_AGENT_INDEX` - Search for x402 endpoints by keyword, category, or price
+- `TRENDING_ENDPOINTS` - Get trending x402 endpoints
+
+### Installation
+```bash
+npm install agentindex-eliza-plugin
+```
+
+### Usage
+```typescript
+import { agentIndexPlugin } from 'agentindex-eliza-plugin';
+
+// Add to your Eliza agent
+plugins: [agentIndexPlugin]
+```
+
+## Links
+- Website: https://theagentindex.app
+- API Docs: https://api.theagentindex.app/docs.html
+- x402 Protocol: https://x402.org
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+## Chores
+* Added a new plugin source to the available registry, expanding the integration ecosystem.
+
+<sub>✏️ Tip: You can customize this high-level summary in your review settings.</sub>
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->
+
+<!-- greptile_comment -->
+
+<h2>Greptile Overview</h2>
+
+<h3>Greptile Summary</h3>
+
+This PR adds the `agentindex-eliza-plugin` to the elizaOS plugin registry. The plugin enables Eliza agents to discover x402 payment-enabled API endpoints.
+
+**Key Changes:**
+- Added registry entry mapping `agentindex-eliza-plugin` to `github:CIII-glitch/agentindex-eliza-plugin`
+- Plugin provides actions for searching x402 endpoints and viewing trending endpoints
+
+**Issues Found:**
+- **Alphabetical ordering violation**: The entry is placed at the top of the file but should appear after all `@`-scoped packages (between `@tonyflam/plugin-openchat` and `plugin-connections` at line 215-216). The README explicitly requires alphabetical sorting of entries.
+
+<h3>Confidence Score: 2/5</h3>
+
+- Not safe to merge due to alphabetical ordering requirement violation
+- The change itself is simple and follows the correct format for registry entries. However, it violates the explicit alphabetical sorting requirement documented in the README (line 23). This will cause inconsistency in the registry and may affect automated processing or searching. The entry must be moved to the correct alphabetical position before merging.
+- index.json requires the entry to be moved to the correct alphabetical position (after line 215)
+
+<h3>Important Files Changed</h3>
+
+
+
+
+| Filename | Overview |
+|----------|----------|
+| index.json | Added `agentindex-eliza-plugin` entry but violates alphabetical ordering requirement |
+
+</details>
+
+
+
+<h3>Sequence Diagram</h3>
+
+```mermaid
+sequenceDiagram
+    participant Dev as Plugin Developer
+    participant PR as Pull Request
+    participant GHA as GitHub Actions
+    participant Reg as Registry (index.json)
+    participant Gen as generated-registry.json
+    participant CLI as elizaOS CLI
+
+    Dev->>PR: Add plugin entry to index.json
+    PR->>GHA: Trigger on merge to main
+    GHA->>Reg: Read index.json
+    GHA->>GHA: Fetch plugin metadata from GitHub
+    GHA->>GHA: Gather version info from Git tags
+    GHA->>GHA: Check NPM package metadata
+    GHA->>Gen: Generate and commit updated registry
+    CLI->>Gen: Fetch plugin registry data
+    CLI->>CLI: Display available plugins
+    Dev->>CLI: Install plugin via elizaOS CLI
+    CLI->>GitHub: Clone plugin repository
+    CLI->>CLI: Load plugin dynamically
+```
+
+<!-- greptile_other_comments_section -->
+
+<sub>(2/5) Greptile learns from your feedback when you react with thumbs up/down!</sub>
+
+<!-- /greptile_comment -->8:T6c3,Today, ElizaOS development focused on enhancing agent discovery and communication with the introduction of an Agent Index plugin in the `registry`, alongside significant performance and functionality improvements in `plugin-mcp` through dynamic tool actions and enhanced HTTP transport. These updates aim to streamline agent interactions and optimize resource utilization within the ecosystem.
+
+## 🚨 Needs Attention
+- **Pull Requests to Review**:
+    - [elizaos-plugins/registry#252](https://github.com/elizaos-plugins/registry/pull/252): This new pull request introduces an Agent Index plugin for x402 endpoint discovery and requires review.
+
+## ✅ Completed Work
+### MCP Tooling Enhancements & Performance Optimization
+- Dynamic registration of MCP tools now reduces LLM calls from three to one per invocation, significantly improving efficiency, with optional Redis caching for schemas introduced in [elizaos-plugins/plugin-mcp#22](https://github.com/elizaos-plugins/plugin-mcp/pull/22).
+
+### HTTP Transport Improvements
+- `plugin-mcp` now supports `StreamableHTTPClientTransport` for non-SSE HTTP connections, removing Redis requirements for certain transport types, as detailed in [elizaos-plugins/plugin-mcp#20](https://github.com/elizaos-plugins/plugin-mcp/pull/20).
+- Custom header support has been added for HTTP transports, enabling features like authentication header injection, and error handling has been simplified, as implemented in [elizaos-plugins/plugin-mcp#21](https://github.com/elizaos-plugins/plugin-mcp/pull/21).
+
+## 🏗️ Work in Progress
+### New Pull Requests
+- **elizaos-plugins/registry**:
+    - [Agent Index Plugin for x402 Endpoint Discovery](https://github.com/elizaos-plugins/registry/pull/252)0:{"buildId":"US8XLB_zHXYj_PVAECGcd","rsc":["$","$1","c",{"children":[["$","div",null,{"className":"container mx-auto px-6 py-8 md:px-8","children":["$","div",null,{"className":"mx-auto max-w-4xl","children":[["$","div",null,{"className":"mb-4 flex flex-col justify-between sm:flex-row","children":[["$","$L2",null,{"currentInterval":"day","currentDate":"2026-01-31"}],["$","$L3",null,{"metrics":{"date":"2026-01-31","interval":{"intervalStart":"$D2026-01-31T00:00:00.000Z","intervalEnd":"$D2026-02-01T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":3,"merged":3,"total":4},"issues":{"new":0,"closed":0,"total":0},"activeContributors":5,"codeChanges":{"additions":4205,"deletions":3246,"files":40,"commitCount":19},"topContributors":[{"username":"0xbbjoker","avatarUrl":"https://avatars.githubusercontent.com/u/54844437?u=90fe1762420de6ad493a1c1582f1f70c0d87d8e2&v=4","totalScore":145.67904680509304,"prScore":109.47904680509303,"issueScore":0,"reviewScore":36,"commentScore":0.2,"summary":"0xbbjoker: Focused on significant feature development and code quality improvements within the `elizaos-plugins/plugin-mcp` repository, merging two substantial pull requests, including \"feat!: Dynamic MCP tool actions (v1.8.0)\" (#22) with over 4000 lines of changes, and \"feat: add StreamableHTTP transport and code quality improvements\" (#21). Their work primarily involved bug fixes and feature development, with a strong emphasis on code and test file modifications."},{"username":"CIII-glitch","avatarUrl":"https://avatars.githubusercontent.com/u/256561388?v=4","totalScore":14.346573590279972,"prScore":14.346573590279972,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"CIII-glitch: Focused on expanding agent discovery capabilities by opening a new PR, elizaos-plugins/registry#252, to add an Agent Index plugin for x402 endpoint discovery."},{"username":"greptile-apps","avatarUrl":"https://avatars.githubusercontent.com/in/867647?v=4","totalScore":4.5,"prScore":0,"issueScore":0,"reviewScore":4.5,"commentScore":0,"summary":"greptile-apps: No activity today."}],"focusAreas":[{"area":"src/utils","count":11},{"area":"src","count":9},{"area":"tests","count":9},{"area":"src/tool-compatibility","count":7},{"area":"src/actions","count":3},{"area":"src/templates","count":3},{"area":"src/cache","count":2}],"topIssues":[],"topPullRequests":[{"id":"PR_kwDOOqp3ps7Akq8D","title":"feat!: Dynamic MCP tool actions (v1.8.0)","author":"0xbbjoker","number":22,"body":"$4","repository":"elizaos-plugins/plugin-mcp","createdAt":"2026-01-31T14:11:21Z","mergedAt":"2026-01-31T19:24:21Z","additions":3911,"deletions":2756},{"id":"PR_kwDOOqp3ps7Ahm65","title":"feat: add StreamableHTTP transport and code quality improvements","author":"0xbbjoker","number":21,"body":"$5","repository":"elizaos-plugins/plugin-mcp","createdAt":"2026-01-31T04:25:53Z","mergedAt":"2026-01-31T19:21:09Z","additions":281,"deletions":487},{"id":"PR_kwDOOqp3ps7AWoHu","title":"feat: implement StreamableHTTP transport and custom headers for HTTP connections","author":"BaseGold","number":20,"body":"$6","repository":"elizaos-plugins/plugin-mcp","createdAt":"2026-01-30T09:53:46Z","mergedAt":"2026-01-31T18:48:03Z","additions":13,"deletions":3},{"id":"PR_kwDONkg7v87AhEHJ","title":"Add Agent Index plugin for x402 endpoint discovery","author":"CIII-glitch","number":252,"body":"$7","repository":"elizaos-plugins/registry","createdAt":"2026-01-31T02:33:25Z","mergedAt":null,"additions":1,"deletions":0}],"detailedContributorSummaries":{"0xbbjoker":"0xbbjoker: Focused on significant feature development and code quality improvements within the `elizaos-plugins/plugin-mcp` repository, merging two substantial pull requests, including \"feat!: Dynamic MCP tool actions (v1.8.0)\" (#22) with over 4000 lines of changes, and \"feat: add StreamableHTTP transport and code quality improvements\" (#21). Their work primarily involved bug fixes and feature development, with a strong emphasis on code and test file modifications.","CIII-glitch":"CIII-glitch: Focused on expanding agent discovery capabilities by opening a new PR, elizaos-plugins/registry#252, to add an Agent Index plugin for x402 endpoint discovery.","greptile-apps":"greptile-apps: No activity today."}},"summaryContent":"$8","className":"self-end sm:self-start"}]]}],"$L9","$La","$Lb"]}]}],["$Lc","$Ld","$Le"],"$Lf"]}],"loading":null,"isPartial":false}
+9:["$","div",null,{"className":"mb-6","children":["$","div",null,{"className":"flex items-center justify-between","children":[[["$","$L10",null,{"href":"/summary/day/2026-01-30","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left mr-2 h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"children":"Previous"}],false],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$L10",null,{"href":"/summary/day/2026-01-30","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Previous"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]],["$","div",null,{"className":"flex flex-col items-center","children":[["$","div",null,{"className":"text-sm font-medium text-gray-500","children":["Daily"," Summary"]}],["$","time",null,{"dateTime":"2026-01-31","className":"text-md font-bold","children":"Jan 31, 2026"}]]}],[["$","$L10",null,{"href":"/summary/day/2026-02-01","children":[false,["$","span",null,{"children":"Next"}],["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right ml-2 h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}]],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$L10",null,{"href":"/summary/day/2026-02-01","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Next"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]]]}]}]
+12:T24fc,## Summary
+
+- **BREAKING**: Transform MCP tools from single `CALL_MCP_TOOL` action to dynamically registered native ElizaOS actions
+- Reduces LLM calls from 3 to 1 per MCP tool invocation
+- Add optional Redis caching for MCP tool schemas (set `MCP_CACHE_REDIS_URL` to Upstash REST URL)
+- Add comprehensive test suite (204 tests, 388 assertions)
+
+## Changes
+
+### New Architecture
+- `dynamic-tool-actions.ts` - Factory for converting MCP tools to ElizaOS actions
+- `schema-converter.ts` - JSON Schema to ActionParameter conversion
+- `action-naming.ts` - Consistent action naming with collision avoidance
+- `schema-cache.ts` - Redis caching layer for tool schemas
+
+### Tool Compatibility Refactor
+- Extract base class to `base.ts` to break circular dependencies
+- Use static imports instead of `eval('require')` for ESM compatibility
+- Properly detect and handle reasoning models (o1, o3)
+
+### Bug Fixes
+- Fix `parseJSON` to handle arrays and use bracket depth counting
+- Fix `hashConfig` to recursively sort nested objects
+- Fix validation to fail on missing required parameters (was logging only)
+- Fix `processToolResult` to generate unique attachment IDs
+
+### Code Quality
+- Remove ~1000 lines of dead/over-engineered code
+- Delete unused `McpError` class with 5 factory methods
+- Consolidate 4 separate constraint interfaces into inline types
+- Add error logging to previously silent catch blocks
+
+## Test plan
+
+- [x] All 204 tests pass locally
+- [x] Tested on eliza-cloud-v2 - works correctly
+- [x] MCP tools register as native actions
+- [x] Tool invocation works with single LLM call
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+<!-- CURSOR_SUMMARY -->
+---
+
+> [!NOTE]
+> **High Risk**
+> High risk because this is a breaking change that rewires MCP tool invocation and mutates runtime action registration, plus adds new caching/lazy-connection paths that can affect startup and tool availability.
+> 
+> **Overview**
+> **BREAKING:** Removes the monolithic `CALL_MCP_TOOL` action and instead dynamically registers one native ElizaOS action per MCP tool (with generated names/similes, schema-derived `parameters`, and runtime param validation) so tool execution no longer depends on an LLM tool-selection/argument step.
+> 
+> Adds an optional Upstash REST schema cache (`McpSchemaCache`) and *lazy connection* behavior: tool schemas can be loaded from cache and actions registered without connecting to MCP until first use; `McpService` is refactored accordingly (connect/disconnect, action (un)registration, updated ping/reconnect handling).
+> 
+> Includes supporting utilities/refactors (schema conversion, action naming, simplified tool-compatibility exports/detection, improved JSON extraction and attachment IDs, streamlined error/processing code), removes legacy selection/templates/helpers, bumps to `1.8.0`, and adds comprehensive Bun tests.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit ecd270a78f21cb48cc60a9c6dbf953e8f6411f92. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+## Summary by CodeRabbit
+
+* **New Features**
+  * Dynamic MCP tool actions with automatic parameter mapping and runtime validation
+  * Optional schema cache to speed tool discovery and cold starts
+  * Schema-to-action parameter conversion utilities
+
+* **Improvements**
+  * Service lifecycle refactor for explicit init, lazy connections, and safer startup
+  * Streamlined tool-compatibility and parsing logic; improved error fallback behavior
+
+* **Removed**
+  * Several legacy templates and selection/feedback helpers removed
+
+* **Version**
+  * Bumped to 1.8.0
+
+* **Tests**
+  * Extensive new unit and integration tests covering actions, caching, parsing, and processing
+
+<sub>✏️ Tip: You can customize this high-level summary in your review settings.</sub>
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->
+
+<!-- greptile_comment -->
+
+<h2>Greptile Overview</h2>
+
+<h3>Greptile Summary</h3>
+
+This PR transforms the MCP plugin architecture from a multi-step tool invocation pattern to native dynamic action registration, achieving significant performance improvements and code quality gains.
+
+## Key Changes
+
+**Breaking Architecture Change:**
+- Removed single `CALL_MCP_TOOL` action that required 3 LLM calls (tool selection → argument generation → execution)
+- Replaced with dynamically registered native ElizaOS actions for each MCP tool (1 LLM call per invocation)
+- Each MCP tool now appears as a first-class action with proper parameters, validation, and metadata
+
+**Performance Optimizations:**
+- Added optional Redis schema caching via Upstash REST API (set `MCP_CACHE_REDIS_URL` to enable)
+- Caches tool schemas with config hash validation to avoid MCP connection on cold starts
+- Lazy connection support: registers actions from cache before establishing actual MCP connection
+
+**Bug Fixes:**
+- Fixed `parseJSON` to handle arrays and use bracket depth counting instead of regex
+- Fixed `hashConfig` to recursively sort object keys for consistent hashing
+- Fixed validation to properly fail on missing required parameters (was only logging warnings)
+- Fixed `processToolResult` to generate unique attachment IDs using incrementing index
+
+**Code Quality Improvements:**
+- Removed ~1,000 lines of dead/over-engineered code
+- Deleted unused `McpError` class with 5 factory methods
+- Consolidated 4 separate constraint interfaces into inline types  
+- Extracted base class to break circular dependencies in tool-compatibility
+- Replaced `eval('require')` with static imports for ESM compatibility
+- Added error logging to previously silent catch blocks
+
+**Testing:**
+- Added comprehensive test suite: 204 tests with 388 assertions
+- Tests cover action creation, schema conversion, caching, JSON parsing, and integration scenarios
+- 63 tests pass in isolated environment (others require `@elizaos/core` dependency)
+
+<h3>Confidence Score: 5/5</h3>
+
+- This PR is safe to merge with minimal risk - well-tested breaking change with clear migration path
+- The breaking change is intentional and well-documented. The refactor removes significant amounts of dead code, adds comprehensive test coverage (204 tests), includes important bug fixes, and demonstrates successful deployment on eliza-cloud-v2. The architectural change from 3 LLM calls to 1 is a significant improvement that justifies the breaking change marker.
+- No files require special attention - the refactor is well-structured with comprehensive test coverage
+
+<h3>Important Files Changed</h3>
+
+
+
+
+| Filename | Overview |
+|----------|----------|
+| src/actions/dynamic-tool-actions.ts | New factory for converting MCP tools to native ElizaOS actions - clean implementation with proper validation and error handling |
+| src/utils/schema-converter.ts | Converts JSON Schema to ActionParameter format with comprehensive validation and type mapping |
+| src/cache/schema-cache.ts | Optional Redis caching for tool schemas with graceful fallback - includes config hash validation |
+| src/service.ts | Major refactor to register MCP tools as native actions, adds cache support, removes ~500 lines of dead code |
+| src/utils/json.ts | Fixed parseJSON to handle arrays and use bracket depth counting instead of regex |
+| src/utils/processing.ts | Fixed processToolResult to generate unique attachment IDs using incrementing index |
+| src/tool-compatibility/base.ts | Extracted base class to break circular dependencies, uses static imports for ESM compatibility |
+
+</details>
+
+
+
+<h3>Sequence Diagram</h3>
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Runtime
+    participant McpService
+    participant Cache as SchemaCache
+    participant MCP as MCP Server
+    participant Action as Dynamic Action
+
+    Note over Runtime,McpService: Initialization (Cold Start)
+    Runtime->>McpService: start()
+    McpService->>Cache: getSchemas(agentId, serverName, hash)
+    alt Cache Hit
+        Cache-->>McpService: Return cached tools
+        McpService->>McpService: registerToolsAsActions()
+        McpService->>McpService: Store lazy connection config
+        Note over McpService: Server not connected yet
+    else Cache Miss
+        McpService->>MCP: connect()
+        MCP-->>McpService: Return tools
+        McpService->>McpService: registerToolsAsActions()
+        McpService->>Cache: setSchemas(agentId, serverName, hash, tools)
+    end
+    McpService-->>Runtime: Ready (actions registered)
+
+    Note over User,Action: Tool Invocation (1 LLM call)
+    User->>Runtime: "Use search tool with query=hello"
+    Runtime->>Runtime: LLM selects GOOGLE_SEARCH action
+    Runtime->>Action: handler(runtime, message, state)
+    Action->>Action: extractParams(message, state)
+    Action->>Action: validateParamsAgainstSchema(params)
+    alt Lazy Connection
+        Action->>McpService: callTool() triggers connection
+        McpService->>MCP: connect()
+        MCP-->>McpService: Connected
+    end
+    Action->>McpService: callTool(serverName, toolName, params)
+    McpService->>MCP: Execute tool
+    MCP-->>McpService: Tool result
+    McpService-->>Action: Result with content
+    Action->>Action: processToolResult()
+    Action-->>Runtime: ActionResult
+    Runtime-->>User: Response with tool output
+```
+
+<!-- greptile_other_comments_section -->
+
+<!-- /greptile_comment -->13:T1a99,## Summary
+- Add `StreamableHTTPClientTransport` for non-SSE HTTP connections (avoids Redis requirement)
+- Add `headers` support for HTTP transports (enables auth header injection)
+- Simplify error handling with `errMsg` helper (deduplicated 10+ patterns)
+- Clean up verbose logging and redundant code (~250 lines removed)
+- Fix `restartConnection` to throw on missing connection (was silently failing)
+
+## Test plan
+- [x] Build passes
+- [ ] Test with streamable-http MCP server
+- [ ] Test with SSE MCP server
+- [ ] Verify header injection works for authenticated endpoints
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+<!-- CURSOR_SUMMARY -->
+---
+
+> [!NOTE]
+> **Medium Risk**
+> Touches MCP connection/transport initialization, timeouts, and reconnection behavior, so failures could break tool availability or change runtime error handling. Changes are contained to the MCP plugin but impact all tool calls over HTTP/SSE.
+> 
+> **Overview**
+> Adds `StreamableHTTPClientTransport` support for HTTP MCP servers (defaulting non-`sse` HTTP configs to streamable HTTP) and allows optional per-server `headers` to be sent on transport creation for authenticated endpoints.
+> 
+> Tightens and simplifies `McpService` lifecycle/robustness: explicit 60s connect timeout, clearer error formatting via `errMsg`, ping monitoring only for `stdio` transports, and `restartConnection` now throws if the server isn’t connected. Provider fetching now waits for MCP initialization and returns a consistent empty provider when unavailable; provider/memory text formatting and `CALL_MCP_TOOL` action logging were also refined, and the package version bumps to `1.7.1`.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit 57e0d018919af2cdc43dd67da3f52aca4037cc6e. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+## Summary by CodeRabbit
+
+* **New Features**
+  * Returns a default provider when MCP services are unavailable and improves provider summaries.
+
+* **Bug Fixes**
+  * More resilient per-server connection handling and graceful behavior when servers are missing.
+  * Improved error reporting, timeout handling, and connection lifecycle stability.
+
+* **Chores**
+  * Bumped package version to 1.7.1.
+  * Refined provider, memory and textual summaries for clearer display.
+
+<sub>✏️ Tip: You can customize this high-level summary in your review settings.</sub>
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->
+
+<!-- greptile_comment -->
+
+<h2>Greptile Overview</h2>
+
+<h3>Greptile Summary</h3>
+
+This PR adds `StreamableHTTPClientTransport` support for non-SSE HTTP connections, enables custom header injection for authentication, and performs significant code cleanup.
+
+**Major changes:**
+- Added `StreamableHTTPClientTransport` as an alternative to SSE (avoids Redis dependency)
+- Added `headers` field to `HttpMcpServerConfig` for authentication token injection
+- Introduced `errMsg` helper to standardize error message extraction (~10+ patterns deduplicated)
+- Removed ~250 lines of verbose logging and redundant code
+- Fixed `restartConnection` to throw when connection is missing (previously silent failure)
+- Added 60s timeout to connection initialization with `Promise.race`
+- Simplified provider data building and error handling
+
+**Issues found:**
+- `src/types.ts` is missing the `StreamableHTTPClientTransport` import and type union update - this will cause TypeScript compilation errors
+- Some catch blocks silently swallow errors without logging (minor debugging impact)
+- `errMsg` helper is defined before imports (style inconsistency)
+
+The changes align well with the stated goals of reducing Redis requirements and enabling authenticated MCP endpoints. The code quality improvements make the codebase more maintainable.
+
+<h3>Confidence Score: 2/5</h3>
+
+- TypeScript compilation will fail due to missing type imports and union update in types.ts
+- The PR introduces critical type errors that will prevent compilation - StreamableHTTPClientTransport is used but not imported in types.ts, and the McpConnection.transport union type is incomplete. While the logic changes are sound and well-tested according to the test plan, the type system errors must be fixed before merge.
+- Fix `src/types.ts` to add StreamableHTTPClientTransport import and update the transport union type on line 74
+
+<h3>Important Files Changed</h3>
+
+
+
+
+| Filename | Overview |
+|----------|----------|
+| src/types.ts | Added headers support to HttpMcpServerConfig, but missing StreamableHTTPClientTransport import and type union update |
+| src/service.ts | Added StreamableHTTPClientTransport support, errMsg helper, code cleanup. Error helper defined before imports, some silent error catches could use logging |
+
+</details>
+
+
+
+<h3>Sequence Diagram</h3>
+
+```mermaid
+sequenceDiagram
+    participant Client as ElizaOS Client
+    participant Service as McpService
+    participant Transport as StreamableHTTPClientTransport
+    participant Server as MCP Server
+
+    Client->>Service: initializeMcpServers()
+    Service->>Service: getMcpSettings()
+    Service->>Service: updateServerConnections(configs)
+    
+    loop For each server config
+        Service->>Service: initializeConnection(name, config)
+        Service->>Service: buildHttpClientTransport(name, config)
+        
+        alt config.type === 'sse'
+            Service->>Transport: new SSEClientTransport(url, opts)
+            Note over Service: Warns: SSE requires Redis
+        else config.type === 'http' | 'streamable-http'
+            Service->>Transport: new StreamableHTTPClientTransport(url, opts)
+            Note over Transport: Supports custom headers for auth
+        end
+        
+        Service->>Transport: client.connect(transport)
+        Transport->>Server: HTTP Connection (with headers)
+        Server-->>Transport: Connection established
+        
+        Service->>Server: fetchToolsList()
+        Server-->>Service: Tools list
+        
+        Service->>Server: fetchResourcesList()
+        Server-->>Service: Resources list
+        
+        Service->>Service: startPingMonitoring()
+        Note over Service: Only for stdio, HTTP is stateless
+    end
+    
+    Service->>Service: buildMcpProviderData(servers)
+    Service-->>Client: Initialization complete
+
+    Client->>Service: callTool(serverName, toolName, args)
+    Service->>Transport: client.callTool(request, timeout)
+    Transport->>Server: HTTP Request (with auth headers)
+    Server-->>Transport: Tool result
+    Transport-->>Service: CallToolResult
+    Service-->>Client: Result
+```
+
+<!-- greptile_other_comments_section -->
+
+<!-- /greptile_comment -->14:T1547,## Summary
+
+`buildHttpClientTransport` currently returns `SSEClientTransport` for all HTTP transport types (`"http"`, `"streamable-http"`, `"sse"`), despite the README and type definitions advertising Streamable HTTP support. This PR implements the actual transport routing and adds custom headers passthrough.
+
+## Key Changes
+
+### Streamable HTTP Transport Support
+- Use `StreamableHTTPClientTransport` from `@modelcontextprotocol/sdk` for `"http"` and `"streamable-http"` types
+- Keep `SSEClientTransport` only for legacy `"sse"` type
+- Aligns runtime behavior with the documented config and `HttpMcpServerConfig` type definition
+
+**Before:**
+
+```typescript
+// Always returns SSE regardless of config type
+return new SSEClientTransport(new URL(config.url));
+```
+
+**After:**
+
+```typescript
+if (config.type === 'sse') {
+  return new SSEClientTransport(new URL(config.url), { requestInit });
+}
+return new StreamableHTTPClientTransport(new URL(config.url), { requestInit });
+```
+
+### Custom Headers Support
+- Added `headers?: Record<string, string>` to `HttpMcpServerConfig`
+- Passed through to both transports via `requestInit`
+- Enables `Authorization`, API key headers, and other custom headers without workarounds
+
+```json
+{
+  "my-server": {
+    "type": "http",
+    "url": "https://example.com/mcp",
+    "headers": {
+      "Authorization": "Bearer my-api-key"
+    }
+  }
+}
+```
+
+### Type Updates
+- Added `StreamableHTTPClientTransport` to `McpConnection.transport` union type
+- Updated local type annotations in `initializeConnection`
+
+## Impact
+- **Correctness**: `type: "http"` now actually uses Streamable HTTP instead of SSE
+- **No breaking changes**: `type: "sse"` behavior is unchanged
+- **Headers**: Allow authenticated MCP server connections using headers
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+* **New Features**
+  * Introduced StreamableHTTPClientTransport as a new option for HTTP and streamable-HTTP MCP server connections
+  * HTTP server configurations now support optional custom headers for authentication and advanced use cases
+
+<sub>✏️ Tip: You can customize this high-level summary in your review settings.</sub>
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->
+
+<!-- greptile_comment -->
+
+<h2>Greptile Overview</h2>
+
+<h3>Greptile Summary</h3>
+
+Implements actual Streamable HTTP transport routing that was previously advertised but not working - `type: "http"` and `type: "streamable-http"` now correctly use `StreamableHTTPClientTransport` instead of incorrectly using `SSEClientTransport` for all HTTP types.
+
+- Fixes critical bug where all HTTP transport types were using SSE transport regardless of config
+- Adds `headers` field to `HttpMcpServerConfig` for passing custom headers (Authorization, API keys, etc.) to both transport types
+- Maintains backward compatibility by keeping `type: "sse"` working with `SSEClientTransport`
+- Updates type definitions to include `StreamableHTTPClientTransport` in union types
+
+The changes align runtime behavior with documented config options in README and type definitions. No breaking changes - existing SSE configs continue working with deprecation warning.
+
+<h3>Confidence Score: 5/5</h3>
+
+- Safe to merge - fixes documented behavior, maintains backward compatibility, no breaking changes
+- Clean implementation that fixes a critical correctness bug where documented transport types weren't working. The code properly routes to correct transport classes, passes headers through standard RequestInit interface, preserves legacy SSE support with deprecation warning, and includes appropriate logging. Type definitions are properly updated.
+- No files require special attention
+
+<h3>Important Files Changed</h3>
+
+
+
+
+| Filename | Overview |
+|----------|----------|
+| src/types.ts | Added `StreamableHTTPClientTransport` to type unions and `headers` field to HTTP config - clean type additions |
+| src/service.ts | Implemented proper transport routing: `StreamableHTTPClientTransport` for http/streamable-http, `SSEClientTransport` only for legacy sse |
+
+</details>
+
+
+
+<h3>Sequence Diagram</h3>
+
+```mermaid
+sequenceDiagram
+    participant Client as McpService
+    participant Builder as buildHttpClientTransport
+    participant SSE as SSEClientTransport
+    participant Streamable as StreamableHTTPClientTransport
+    participant Server as MCP Server
+
+    Client->>Builder: buildHttpClientTransport(config)
+    
+    alt config.type === 'sse'
+        Builder->>Builder: Log deprecation warning
+        Builder->>SSE: new SSEClientTransport(url, {requestInit})
+        Note over SSE: Legacy transport<br/>for backward compatibility
+        SSE-->>Builder: transport instance
+    else config.type === 'http' OR 'streamable-http'
+        Builder->>Builder: Log: using Streamable HTTP
+        Builder->>Streamable: new StreamableHTTPClientTransport(url, {requestInit})
+        Note over Streamable: Modern transport<br/>with custom headers support
+        Streamable-->>Builder: transport instance
+    end
+    
+    Builder-->>Client: return transport
+    Client->>Server: client.connect(transport)
+    
+    Note over Client,Server: Headers from config.headers<br/>passed via requestInit
+```
+
+<!-- greptile_other_comments_section -->
+
+<sub>(2/5) Greptile learns from your feedback when you react with thumbs up/down!</sub>
+
+<!-- /greptile_comment -->15:Te50,## Plugin Details
+
+**Package:** `agentindex-eliza-plugin`
+**Repository:** https://github.com/CIII-glitch/agentindex-eliza-plugin
+**NPM:** https://www.npmjs.com/package/agentindex-eliza-plugin
+
+## Description
+
+Agent Index plugin enables Eliza agents to discover x402 endpoints - the payment-enabled APIs in the x402 ecosystem.
+
+### Actions
+- `SEARCH_AGENT_INDEX` - Search for x402 endpoints by keyword, category, or price
+- `TRENDING_ENDPOINTS` - Get trending x402 endpoints
+
+### Installation
+```bash
+npm install agentindex-eliza-plugin
+```
+
+### Usage
+```typescript
+import { agentIndexPlugin } from 'agentindex-eliza-plugin';
+
+// Add to your Eliza agent
+plugins: [agentIndexPlugin]
+```
+
+## Links
+- Website: https://theagentindex.app
+- API Docs: https://api.theagentindex.app/docs.html
+- x402 Protocol: https://x402.org
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+## Chores
+* Added a new plugin source to the available registry, expanding the integration ecosystem.
+
+<sub>✏️ Tip: You can customize this high-level summary in your review settings.</sub>
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->
+
+<!-- greptile_comment -->
+
+<h2>Greptile Overview</h2>
+
+<h3>Greptile Summary</h3>
+
+This PR adds the `agentindex-eliza-plugin` to the elizaOS plugin registry. The plugin enables Eliza agents to discover x402 payment-enabled API endpoints.
+
+**Key Changes:**
+- Added registry entry mapping `agentindex-eliza-plugin` to `github:CIII-glitch/agentindex-eliza-plugin`
+- Plugin provides actions for searching x402 endpoints and viewing trending endpoints
+
+**Issues Found:**
+- **Alphabetical ordering violation**: The entry is placed at the top of the file but should appear after all `@`-scoped packages (between `@tonyflam/plugin-openchat` and `plugin-connections` at line 215-216). The README explicitly requires alphabetical sorting of entries.
+
+<h3>Confidence Score: 2/5</h3>
+
+- Not safe to merge due to alphabetical ordering requirement violation
+- The change itself is simple and follows the correct format for registry entries. However, it violates the explicit alphabetical sorting requirement documented in the README (line 23). This will cause inconsistency in the registry and may affect automated processing or searching. The entry must be moved to the correct alphabetical position before merging.
+- index.json requires the entry to be moved to the correct alphabetical position (after line 215)
+
+<h3>Important Files Changed</h3>
+
+
+
+
+| Filename | Overview |
+|----------|----------|
+| index.json | Added `agentindex-eliza-plugin` entry but violates alphabetical ordering requirement |
+
+</details>
+
+
+
+<h3>Sequence Diagram</h3>
+
+```mermaid
+sequenceDiagram
+    participant Dev as Plugin Developer
+    participant PR as Pull Request
+    participant GHA as GitHub Actions
+    participant Reg as Registry (index.json)
+    participant Gen as generated-registry.json
+    participant CLI as elizaOS CLI
+
+    Dev->>PR: Add plugin entry to index.json
+    PR->>GHA: Trigger on merge to main
+    GHA->>Reg: Read index.json
+    GHA->>GHA: Fetch plugin metadata from GitHub
+    GHA->>GHA: Gather version info from Git tags
+    GHA->>GHA: Check NPM package metadata
+    GHA->>Gen: Generate and commit updated registry
+    CLI->>Gen: Fetch plugin registry data
+    CLI->>CLI: Display available plugins
+    Dev->>CLI: Install plugin via elizaOS CLI
+    CLI->>GitHub: Clone plugin repository
+    CLI->>CLI: Load plugin dynamically
+```
+
+<!-- greptile_other_comments_section -->
+
+<sub>(2/5) Greptile learns from your feedback when you react with thumbs up/down!</sub>
+
+<!-- /greptile_comment -->a:["$","div",null,{"className":"mb-8 space-y-6","children":[["$","$L11",null,{"metrics":{"date":"2026-01-31","interval":{"intervalStart":"$D2026-01-31T00:00:00.000Z","intervalEnd":"$D2026-02-01T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":3,"merged":3,"total":4},"issues":{"new":0,"closed":0,"total":0},"activeContributors":5,"codeChanges":{"additions":4205,"deletions":3246,"files":40,"commitCount":19},"topContributors":[{"username":"0xbbjoker","avatarUrl":"https://avatars.githubusercontent.com/u/54844437?u=90fe1762420de6ad493a1c1582f1f70c0d87d8e2&v=4","totalScore":145.67904680509304,"prScore":109.47904680509303,"issueScore":0,"reviewScore":36,"commentScore":0.2,"summary":"0xbbjoker: Focused on significant feature development and code quality improvements within the `elizaos-plugins/plugin-mcp` repository, merging two substantial pull requests, including \"feat!: Dynamic MCP tool actions (v1.8.0)\" (#22) with over 4000 lines of changes, and \"feat: add StreamableHTTP transport and code quality improvements\" (#21). Their work primarily involved bug fixes and feature development, with a strong emphasis on code and test file modifications."},{"username":"CIII-glitch","avatarUrl":"https://avatars.githubusercontent.com/u/256561388?v=4","totalScore":14.346573590279972,"prScore":14.346573590279972,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"CIII-glitch: Focused on expanding agent discovery capabilities by opening a new PR, elizaos-plugins/registry#252, to add an Agent Index plugin for x402 endpoint discovery."},{"username":"greptile-apps","avatarUrl":"https://avatars.githubusercontent.com/in/867647?v=4","totalScore":4.5,"prScore":0,"issueScore":0,"reviewScore":4.5,"commentScore":0,"summary":"greptile-apps: No activity today."}],"focusAreas":[{"area":"src/utils","count":11},{"area":"src","count":9},{"area":"tests","count":9},{"area":"src/tool-compatibility","count":7},{"area":"src/actions","count":3},{"area":"src/templates","count":3},{"area":"src/cache","count":2}],"topIssues":[],"topPullRequests":[{"id":"PR_kwDOOqp3ps7Akq8D","title":"feat!: Dynamic MCP tool actions (v1.8.0)","author":"0xbbjoker","number":22,"body":"$12","repository":"elizaos-plugins/plugin-mcp","createdAt":"2026-01-31T14:11:21Z","mergedAt":"2026-01-31T19:24:21Z","additions":3911,"deletions":2756},{"id":"PR_kwDOOqp3ps7Ahm65","title":"feat: add StreamableHTTP transport and code quality improvements","author":"0xbbjoker","number":21,"body":"$13","repository":"elizaos-plugins/plugin-mcp","createdAt":"2026-01-31T04:25:53Z","mergedAt":"2026-01-31T19:21:09Z","additions":281,"deletions":487},{"id":"PR_kwDOOqp3ps7AWoHu","title":"feat: implement StreamableHTTP transport and custom headers for HTTP connections","author":"BaseGold","number":20,"body":"$14","repository":"elizaos-plugins/plugin-mcp","createdAt":"2026-01-30T09:53:46Z","mergedAt":"2026-01-31T18:48:03Z","additions":13,"deletions":3},{"id":"PR_kwDONkg7v87AhEHJ","title":"Add Agent Index plugin for x402 endpoint discovery","author":"CIII-glitch","number":252,"body":"$15","repository":"elizaos-plugins/registry","createdAt":"2026-01-31T02:33:25Z","mergedAt":null,"additions":1,"deletions":0}],"detailedContributorSummaries":{"0xbbjoker":"0xbbjoker: Focused on significant feature development and code quality improvements within the `elizaos-plugins/plugin-mcp` repository, merging two substantial pull requests, including \"feat!: Dynamic MCP tool actions (v1.8.0)\" (#22) with over 4000 lines of changes, and \"feat: add StreamableHTTP transport and code quality improvements\" (#21). Their work primarily involved bug fixes and feature development, with a strong emphasis on code and test file modifications.","CIII-glitch":"CIII-glitch: Focused on expanding agent discovery capabilities by opening a new PR, elizaos-plugins/registry#252, to add an Agent Index plugin for x402 endpoint discovery.","greptile-apps":"greptile-apps: No activity today."}}}],"$L16"]}]
+b:["$","div",null,{"className":"prose prose-sm mx-auto mt-8 dark:prose-invert sm:prose lg:prose-lg xl:prose-xl","children":[["$","p","p-0",{"children":["Today, ElizaOS development focused on enhancing agent discovery and communication with the introduction of an Agent Index plugin in the ",["$","code","code-0",{"children":"registry"}],", alongside significant performance and functionality improvements in ",["$","code","code-1",{"children":"plugin-mcp"}]," through dynamic tool actions and enhanced HTTP transport. These updates aim to streamline agent interactions and optimize resource utilization within the ecosystem."]}],"\n",["$","h2","h2-0",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"🚨 Needs Attention","position":{"start":{"line":3,"column":4,"offset":398},"end":{"line":3,"column":22,"offset":416}}}],"position":{"start":{"line":3,"column":1,"offset":395},"end":{"line":3,"column":22,"offset":416}}},"children":"🚨 Needs Attention"}],"\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"Pull Requests to Review"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos-plugins/registry/pull/252","children":"elizaos-plugins/registry#252"}],": This new pull request introduces an Agent Index plugin for x402 endpoint discovery and requires review."]}],"\n"]}],"\n"]}],"\n"]}],"\n",["$","h2","h2-1",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"✅ Completed Work","position":{"start":{"line":7,"column":4,"offset":648},"end":{"line":7,"column":20,"offset":664}}}],"position":{"start":{"line":7,"column":1,"offset":645},"end":{"line":7,"column":20,"offset":664}}},"children":"✅ Completed Work"}],"\n",["$","h3","h3-0",{"children":"MCP Tooling Enhancements & Performance Optimization"}],"\n",["$","ul","ul-1",{"children":["\n",["$","li","li-0",{"children":["Dynamic registration of MCP tools now reduces LLM calls from three to one per invocation, significantly improving efficiency, with optional Redis caching for schemas introduced in ",["$","a","a-0",{"href":"https://github.com/elizaos-plugins/plugin-mcp/pull/22","children":"elizaos-plugins/plugin-mcp#22"}],"."]}],"\n"]}],"\n",["$","h3","h3-1",{"children":"HTTP Transport Improvements"}],"\n",["$","ul","ul-2",{"children":["\n",["$","li","li-0",{"children":[["$","code","code-0",{"children":"plugin-mcp"}]," now supports ",["$","code","code-1",{"children":"StreamableHTTPClientTransport"}]," for non-SSE HTTP connections, removing Redis requirements for certain transport types, as detailed in ",["$","a","a-0",{"href":"https://github.com/elizaos-plugins/plugin-mcp/pull/20","children":"elizaos-plugins/plugin-mcp#20"}],"."]}],"\n",["$","li","li-1",{"children":["Custom header support has been added for HTTP transports, enabling features like authentication header injection, and error handling has been simplified, as implemented in ",["$","a","a-0",{"href":"https://github.com/elizaos-plugins/plugin-mcp/pull/21","children":"elizaos-plugins/plugin-mcp#21"}],"."]}],"\n"]}],"\n",["$","h2","h2-2",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"🏗️ Work in Progress","position":{"start":{"line":15,"column":4,"offset":1540},"end":{"line":15,"column":24,"offset":1560}}}],"position":{"start":{"line":15,"column":1,"offset":1537},"end":{"line":15,"column":24,"offset":1560}}},"children":"🏗️ Work in Progress"}],"\n",["$","h3","h3-2",{"children":"New Pull Requests"}],"\n",["$","ul","ul-3",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"elizaos-plugins/registry"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["$","a","a-0",{"href":"https://github.com/elizaos-plugins/registry/pull/252","children":"Agent Index Plugin for x402 Endpoint Discovery"}]}],"\n"]}],"\n"]}],"\n"]}]]}]
+c:["$","script","script-0",{"src":"/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","async":true}]
+d:["$","script","script-1",{"src":"/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","async":true}]
+e:["$","script","script-2",{"src":"/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js","async":true}]
+f:["$","$L17",null,{"children":["$","$18",null,{"name":"Next.MetadataOutlet","children":"$@19"}]}]
+16:["$","div",null,{"className":"rounded-lg border bg-card text-card-foreground shadow-sm","children":[["$","div",null,{"className":"flex flex-col space-y-1.5 p-6 py-4","children":["$","div",null,{"className":"tracking-tight text-sm font-medium","children":["$undefined","Code Changes"]}]}],["$","div",null,{"className":"p-6 pt-0","children":["$","div",null,{"className":"grid grid-cols-2 gap-4 md:grid-cols-4","children":[["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-git-commit-vertical h-5 w-5","aria-hidden":"true","children":[["$","path","1holv5",{"d":"M12 3v6"}],["$","circle","1v7zrd",{"cx":"12","cy":"12","r":"3"}],["$","path","a9ows0",{"d":"M12 15v6"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":19}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Commits"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-file-code h-5 w-5","aria-hidden":"true","children":[["$","path","1oefj6",{"d":"M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"}],["$","path","wfsgrz",{"d":"M14 2v5a1 1 0 0 0 1 1h5"}],["$","path","1tg20x",{"d":"M10 12.5 8 15l2 2.5"}],["$","path","yinavb",{"d":"m14 12.5 2 2.5-2 2.5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":40}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Files Changed"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-green-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-up h-5 w-5 text-green-500","aria-hidden":"true","children":[["$","path","hav0vg",{"d":"m5 12 7-7 7 7"}],["$","path","x0mq9r",{"d":"M12 19V5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-green-500","children":"+4,205"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Added"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-red-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-down h-5 w-5 text-red-500","aria-hidden":"true","children":[["$","path","s699le",{"d":"M12 5v14"}],["$","path","1idqje",{"d":"m19 12-7 7-7-7"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-red-500","children":"-3,246"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Deleted"}]]}]]}]]}]}]]}]
+19:null

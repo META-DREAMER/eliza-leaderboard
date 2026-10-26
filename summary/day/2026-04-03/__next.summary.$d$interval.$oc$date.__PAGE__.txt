@@ -1,0 +1,579 @@
+1:"$Sreact.fragment"
+2:I[4817319,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"IntervalSelector"]
+3:I[6998365,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"LlmCopyButton"]
+10:I[3642796,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],""]
+11:I[3238488,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"StatCardsDisplay"]
+17:I[4261541,["/eliza-leaderboard/_next/static/chunks/b33bcbdcb3f88354.js","/eliza-leaderboard/_next/static/chunks/8ba59154b6704904.js"],"OutletBoundary"]
+18:"$Sreact.suspense"
+4:Ta4c,## Description
+
+Running `elizaos create <project-name>` fails at the build step on macOS with:
+
+```
+$ bun run build.ts
+Error: Bun's postinstall script was not run.
+
+This occurs when using --ignore-scripts during installation, or when using a
+package manager like pnpm that does not run postinstall scripts by default.
+
+To fix this, run the postinstall script manually:
+  cd node_modules/bun && node install.js
+
+Or reinstall bun without the --ignore-scripts flag.
+error: script "build" exited with code 1
+```
+
+The CLI then cleans up the project directory and exits, leaving nothing behind.
+
+## Root Cause
+
+`@elizaos/cli` and `@elizaos/plugin-bootstrap` both list `"bun": "^1.3.4"` as a **runtime dependency**. When a new project installs these packages, the `bun` npm package becomes a transitive dependency.
+
+The `bun` npm package has a `postinstall` script (`node install.js`) that:
+1. Looks for `node_modules/@oven/bun-darwin-aarch64/bin/bun` (on Apple Silicon)
+2. Copies it to `node_modules/bun/bin/bun.exe`
+
+However, **bun the package manager intentionally skips extracting its own 60MB binary** from `@oven/bun-darwin-aarch64` into node_modules (it's already installed system-wide). This leaves `node_modules/@oven/bun-darwin-aarch64/bin/` empty.
+
+When `install.js` runs, it can't find the binary and exits silently. `node_modules/bun/bin/` is left with Windows `.exe` stubs. When `bun run build.ts` executes, bun detects the stubs and throws the error above.
+
+## Steps to Reproduce
+
+1. Install bun via `curl -fsSL https://bun.sh/install | bash`
+2. Install elizaos CLI: `bun install -g @elizaos/cli`
+3. Run: `elizaos create my-first-agent`
+4. Follow prompts (any database/model choice)
+5. Observe failure at build step
+
+## Environment
+
+- macOS (Apple Silicon / darwin-aarch64)
+- bun 1.3.11
+- @elizaos/cli 1.7.2
+
+## Fix
+
+The `bun` npm package should be removed from the runtime dependencies of `@elizaos/cli` and `@elizaos/plugin-bootstrap`. It is only needed as a devDependency for types (`@types/bun`). The bun runtime is already available system-wide when users install elizaos via bun.
+
+```diff
+# In @elizaos/cli and @elizaos/plugin-bootstrap package.json:
+- "dependencies": {
+-   "bun": "^1.3.4",
++ "devDependencies": {
++   "@types/bun": "^1.x.x",
+```
+
+## Workaround
+
+Until fixed, users can create projects manually:
+
+```bash
+cp -r ~/.bun/install/global/node_modules/@elizaos/cli/templates/project-starter ~/my-first-agent
+cd ~/my-first-agent
+bun install
+cp ~/.bun/bin/bun node_modules/@oven/bun-darwin-aarch64/bin/bun
+chmod +x node_modules/@oven/bun-darwin-aarch64/bin/bun
+node node_modules/bun/install.js
+bun run build.ts
+```5:T20d8,just something to boot up the repo
+
+<!-- CURSOR_SUMMARY -->
+---
+
+> [!NOTE]
+> **Medium Risk**
+> Medium risk because it introduces a new `agent` workspace and changes core runtime-composition APIs (`loadCharacters` accepts file paths/options; `createRuntimes` adds `checkShouldRespond`), which could affect downstream hosts; plus substantial dependency/lockfile churn from adding plugin submodules and local plugin workspaces.
+> 
+> **Overview**
+> Adds a new `agent/` workspace providing a stdin/stdout REPL harness around `@elizaos/core`, including a default character, CLI flags (`--character`, `--log-level`), and a SQL-backed runtime setup via `@elizaos/plugin-sql`’s `createDatabaseAdapter`.
+> 
+> Introduces a plugin-submodule local-dev workflow: `.gitmodules` now tracks `plugin-sql`, `plugin-ollama`, and `plugin-local-ai`, root workspaces include their `typescript/` packages, and new scripts (`scripts/dev.mjs`, `scripts/plugin-submodules-dev.mjs`, `plugin-submodules:restore`) automate linking/restoring submodules and workspace dependency rewrites.
+> 
+> Extends `@elizaos/core` runtime composition by letting `loadCharacters` accept JSON file paths (with optional `cwd` for relative resolution) and by threading a new `checkShouldRespond` option through `createRuntimes`/`AgentRuntime`; adds tests covering file-path loading behavior. Updates root scripts to start/dev via the new agent harness and adjusts dependencies to use local `workspace:*` plugin builds, with corresponding `bun.lock` updates.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit b05d1ecbca04804f5267dad5c77b4f7ef27f0f81. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->
+
+<!-- greptile_comment -->
+
+<h3>Greptile Summary</h3>
+
+This PR introduces a developer harness (`agent/`) for booting up the elizaOS repo locally — a stdin/stdout REPL that loads a character, connects to a PGLite database via `@elizaos/plugin-sql`, and routes user input through `runtime.messageService`. It also adds three git submodules (`plugin-sql`, `plugin-ollama`, `plugin-local-ai`) under `plugins/`, a suite of workspace-management scripts (`dev.mjs`, `plugin-submodules-dev.mjs`, `fix-workspace-deps.mjs`), and new `runtime-composition` helpers (`loadCharacters`, `createRuntimes`, `getBasicCapabilitiesSettings`, `mergeSettingsInto`) with tests in `packages/typescript`.
+
+**Key issues found:**
+- The root `package.json` was committed with the plugin submodule workspace entries (`plugins/plugin-sql/typescript`, etc.) still present — according to the `plugin-submodules-dev.mjs` workflow these should be stripped before committing (`bun run plugin-submodules:restore`). On a fresh clone without submodules checked out, bun will encounter missing workspace directories.
+- `agent/package.json` declares these plugins as `workspace:*` but `bun.lock` records them as the `alpha` registry dist-tag, indicating the lockfile was generated before the workspace paths resolved — the two are out of sync.
+- In `agent/typescript/index.ts`, if `runtime.messageService` is not ready the code calls `break`, which permanently exits the REPL loop rather than skipping the current message with `continue`.
+- The `line === undefined || line === null` guard on line 279 is unreachable dead code — `readline/promises` either resolves to a `string` or throws, and the throw path is already handled by the inner try/catch above it.
+- A single `sqlAdapter` is constructed from the first (primary) character's settings and shared across all characters in `createRuntimes`; multi-character configs with different DB settings will silently use the primary character's database.
+
+<h3>Confidence Score: 2/5</h3>
+
+Not safe to merge as-is — the committed `package.json` and `bun.lock` are in an inconsistent state that will break fresh clones and CI installs.
+
+Two P1 infrastructure issues: (1) the root `package.json` has submodule workspace entries that should have been stripped before committing, and (2) `agent/package.json` declares `workspace:*` for the submodule plugins while `bun.lock` records them as `alpha` registry deps — the lockfile and package manifest disagree. Together these will cause `bun install` failures or wrong resolutions on any machine that doesn't have the submodules initialised. The `messageService` break-vs-continue issue is also a behavioural bug in the harness itself.
+
+`package.json` (committed with submodule workspace paths), `agent/package.json` + `bun.lock` (workspace:* vs alpha mismatch), `agent/typescript/index.ts` (messageService break + unreachable null check).
+
+<h3>Important Files Changed</h3>
+
+| Filename | Overview |
+|----------|----------|
+| agent/typescript/index.ts | New stdin/stdout REPL harness for @elizaos/core; has an unreachable null check on `line`, a breaking `messageService` guard that kills the session permanently, and a single shared adapter for all characters. |
+| agent/package.json | New workspace package for the harness; lists submodule plugins as `workspace:*` but bun.lock records them as the `alpha` registry tag — the lockfile was not regenerated after the workspace references were added. |
+| package.json | Root package.json committed with plugin submodule workspace paths already added; these should normally be stripped before committing (via `plugin-submodules:restore`) since submodules are not checked out on a fresh clone. |
+| scripts/dev.mjs | New root dev script that inits submodules, runs install if needed, builds plugin dist/ if missing, then starts the agent harness in watch mode — logic is clean and idempotent. |
+| scripts/plugin-submodules-dev.mjs | New script managing submodule linking/unlinking and workspace entries; dev/restore modes are well-structured and idempotent, though the restore step was not run before committing this PR. |
+| packages/typescript/src/__tests__/runtime-composition.test.ts | New unit tests for `getBasicCapabilitiesSettings`, `mergeSettingsInto`, `loadCharacters`, and `createRuntimes`; well-structured coverage for the runtime-composition module. |
+| packages/typescript/src/runtime-composition.ts | New exported `loadCharacters`, `getBasicCapabilitiesSettings`, `mergeSettingsInto`, and `createRuntimes` helpers for runtime host composition — well-documented with clear WHY comments. |
+
+</details>
+
+<h3>Flowchart</h3>
+
+```mermaid
+%%{init: {'theme': 'neutral'}}%%
+flowchart TD
+    A[bun run dev] --> B[scripts/dev.mjs]
+    B --> C[plugin-submodules-dev.mjs]
+    C --> D{submodules present?}
+    D -- No --> E[git submodule update --init]
+    D -- Yes --> F[skip]
+    E --> G[ensureWorkspaces: add plugins to package.json]
+    F --> G
+    G --> H[removeSelfDependencies]
+    H --> I[fix-workspace-deps.mjs]
+    I --> J{bun install needed?}
+    J -- Yes --> K[bun install]
+    J -- No --> L[skip]
+    K --> M[build plugin dist/ if missing]
+    L --> M
+    M --> N[bun run --cwd agent dev]
+    N --> O[agent/typescript/index.ts]
+    O --> P[parseHarnessArgs]
+    P --> Q[loadCharacters]
+    Q --> R[mergeHarnessSqlPlugins]
+    R --> S[createDatabaseAdapter from primary character]
+    S --> T[createRuntimes with shared adapter]
+    T --> U[runtime.ensureConnection]
+    U --> V[stdin REPL loop]
+    V -- user input --> W[runtime.messageService.handleMessage]
+    W -- response --> X[stdout output]
+    X --> V
+    V -- exit/Ctrl+D --> Y[runtime.stop]
+```
+
+<sub>Reviews (1): Last reviewed commit: ["feat(dev): submodule plugins, idempotent..."](https://github.com/elizaos/eliza/commit/b05d1ecbca04804f5267dad5c77b4f7ef27f0f81) | [Re-trigger Greptile](https://app.greptile.com/api/retrigger?id=27242938)</sub>
+
+> Greptile also left **6 inline comments** on this PR.
+
+<!-- /greptile_comment -->
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+* **New Features**
+  * Added a local development agent harness with interactive REPL for testing runtimes.
+  * Added support for loading character definitions from JSON files.
+  * Enhanced plugin management with development workflow scripts.
+
+* **Chores**
+  * Added agent package configuration supporting TypeScript, Python, and Rust.
+  * Updated workspace structure to integrate optional plugins.
+  * Updated plugin submodule references.
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->6:Td17,Adds the MadeOnSol plugin for Solana KOL trading intelligence and deployer analytics.
+
+**Package:** `@madeonsol/plugin-madeonsol` ([npm](https://www.npmjs.com/package/@madeonsol/plugin-madeonsol))
+**Repository:** [github.com/LamboPoewert/plugin-madeonsol](https://github.com/LamboPoewert/plugin-madeonsol)
+
+**What it does:**
+- Real-time trade feed from 946 tracked Solana KOL wallets
+- KOL convergence signals (multi-KOL coordination detection)
+- KOL PnL leaderboard rankings
+- Pump.fun deployer alerts with KOL buy enrichment
+- Webhook management and WebSocket streaming tokens
+- Pays per request via x402 USDC micropayments on Solana
+
+**Actions:** `GET_KOL_FEED`, `GET_KOL_COORDINATION`, `GET_KOL_LEADERBOARD`, `GET_DEPLOYER_ALERTS`
+
+**Config:** `SVM_PRIVATE_KEY` (for x402 payments), optional `RAPIDAPI_KEY` (for webhooks/streaming)
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+## Summary by CodeRabbit
+
+* **New Features**
+  * Added support for the @madeonsol/plugin-madeonsol package mapping, enabling the application to recognize and resolve that plugin. This allows users to install and use the plugin more seamlessly without manual configuration.
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->
+
+<!-- greptile_comment -->
+
+<h3>Greptile Summary</h3>
+
+This PR registers the `@madeonsol/plugin-madeonsol` plugin, which provides Solana KOL trading intelligence (trade feed, convergence signals, PnL leaderboard, deployer alerts) via x402 USDC micropayments. The change is a single-line addition to `index.json`, but the entry is placed after `@mascotai/plugin-connections` when it should precede it alphabetically.
+
+<h3>Confidence Score: 5/5</h3>
+
+Safe to merge; the only finding is a minor alphabetical ordering issue (P2).
+
+The change is a single registry entry addition. The sole issue — inserting the key one position out of alphabetical order — is a cosmetic P2 that does not affect functionality or correctness.
+
+index.json — entry should be moved one line earlier to restore alphabetical order.
+
+<h3>Important Files Changed</h3>
+
+| Filename | Overview |
+|----------|----------|
+| index.json | Adds `@madeonsol/plugin-madeonsol` registry entry pointing to `github:LamboPoewert/plugin-madeonsol`; entry is inserted one position too late — it should precede `@mascotai/plugin-connections` to maintain alphabetical order. |
+
+</details>
+
+<h3>Sequence Diagram</h3>
+
+```mermaid
+sequenceDiagram
+    participant Agent as ElizaOS Agent
+    participant Plugin as plugin-madeonsol
+    participant x402 as x402 Payment Layer
+    participant API as MadeOnSol API
+
+    Agent->>Plugin: Invoke action (e.g. GET_KOL_FEED)
+    Plugin->>x402: Pay USDC micropayment (SVM_PRIVATE_KEY)
+    x402-->>Plugin: Payment confirmed
+    Plugin->>API: Authenticated request
+    API-->>Plugin: KOL feed / leaderboard / alerts data
+    Plugin-->>Agent: Structured response
+```
+
+<sub>Reviews (1): Last reviewed commit: ["Add @madeonsol/plugin-madeonsol — Solana..."](https://github.com/elizaos-plugins/registry/commit/cc5888a6673b6f4a9dbc6a6be5b2c364cc5219f6) | [Re-trigger Greptile](https://app.greptile.com/api/retrigger?id=27302816)</sub>
+
+> Greptile also left **1 inline comment** on this PR.
+
+<sub>(2/5) Greptile learns from your feedback when you react with thumbs up/down!</sub>
+
+<!-- /greptile_comment -->7:T5c4,## Summary
+- Adds `@elizaos/plugin-swapapi` to the ElizaOS plugin registry
+- SwapAPI is a free DEX aggregator that returns ready-to-sign token swap calldata across 46 EVM chains
+- No API key required — works out of the box for any ElizaOS agent
+
+## Plugin Details
+- **Repo:** https://github.com/MoonSoon69/eliza-plugin-swapapi
+- **Action:** `SWAP_TOKENS` — fetches swap quotes and returns transaction calldata
+- **Chains:** 46 EVM chains (Ethereum, Base, Arbitrum, Polygon, Optimism, Avalanche, BNB Chain, etc.)
+- **API:** https://api.swapapi.dev (free, no auth)
+
+## Test plan
+- [x] Verify `index.json` entry is alphabetically sorted (between `plugin-suno` and `plugin-tee`)
+- [x] Verify plugin repo builds successfully (see demo comment below)
+- [x] Verify plugin follows elizaos plugin conventions (modeled after plugin-coingecko)
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+* **New Features**
+  * SwapAPI plugin support is now available for immediate use. This new plugin integration enables developers and users to leverage advanced swap functionality within their applications. The addition significantly enhances the plugin ecosystem and provides more flexible and powerful options for implementing token swapping operations across user-facing interfaces and services.
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->8:T489,# ElizaOS Daily Digest: April 3, 2026
+
+Development activity on April 3 focused on expanding the ecosystem through new plugin integrations and framework starter templates. The team is currently addressing a reported installation failure affecting macOS users within the core framework.
+
+## 🚨 Needs Attention 
+- **[elizaos/eliza#6704](https://github.com/elizaos/eliza/issues/6704)**: Users are reporting installation failures on macOS due to a "Bun's postinstall script was not run" error; investigation is required to resolve this environment-specific blocker.
+
+## 🏗️ Work in Progress
+**New Pull Requests**
+*   **elizaos/eliza**
+    *   [#6702](https://github.com/elizaos/eliza/pull/6702): feat: add agent/ like starter in develop.
+*   **elizaos-plugins/registry**
+    *   [#331](https://github.com/elizaos-plugins/registry/pull/331): Add @madeonsol/plugin-madeonsol.
+    *   [#330](https://github.com/elizaos-plugins/registry/pull/330): Add @elizaos/plugin-swapapi.
+
+## 🐞 Issue Triage
+**New Issues**
+*   **elizaos/eliza**
+    *   [#6704](https://github.com/elizaos/eliza/issues/6704): Installation failure on macOS related to Bun postinstall scripts.0:{"buildId":"US8XLB_zHXYj_PVAECGcd","rsc":["$","$1","c",{"children":[["$","div",null,{"className":"container mx-auto px-6 py-8 md:px-8","children":["$","div",null,{"className":"mx-auto max-w-4xl","children":[["$","div",null,{"className":"mb-4 flex flex-col justify-between sm:flex-row","children":[["$","$L2",null,{"currentInterval":"day","currentDate":"2026-04-03"}],["$","$L3",null,{"metrics":{"date":"2026-04-03","interval":{"intervalStart":"$D2026-04-03T00:00:00.000Z","intervalEnd":"$D2026-04-04T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":3,"merged":0,"total":3},"issues":{"new":1,"closed":0,"total":1},"activeContributors":6,"codeChanges":{"additions":0,"deletions":0,"files":0,"commitCount":9},"topContributors":[{"username":"odilitime","avatarUrl":"https://avatars.githubusercontent.com/u/16395496?u=c9bac48e632aae594a0d85aaf9e9c9c69b674d8b&v=4","totalScore":43.5437738965761,"prScore":43.5437738965761,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"odilitime: Focused on expanding the project's starter capabilities by opening PR #6702 in elizaos/eliza, which involved a significant implementation effort of 1,479 total line changes across 25 files. This work centers entirely on new feature development, with a primary emphasis on code and configuration updates."},{"username":"LamboPoewert","avatarUrl":"https://avatars.githubusercontent.com/u/91011698?u=a8b0456dbd9d3e15b0fee96b4cf2813a5e15022c&v=4","totalScore":18.846573590279974,"prScore":14.346573590279972,"issueScore":0,"reviewScore":4.5,"commentScore":0,"summary":"LamboPoewert: Focused on expanding the ecosystem by opening PR #331 to add the @madeonsol/plugin-madeonsol to the elizaos-plugins/registry. This work involved 2 commits and minor configuration adjustments, balancing bugfix efforts with ongoing integration tasks."},{"username":"greptile-apps","avatarUrl":"https://avatars.githubusercontent.com/in/867647?v=4","totalScore":13.5,"prScore":0,"issueScore":0,"reviewScore":13.5,"commentScore":0,"summary":"greptile-apps: No activity today."},{"username":"MoonSoon69","avatarUrl":"https://avatars.githubusercontent.com/u/193276852?u=ae4dfec2ee87ce58e61ddf50d465a8df6618dd8e&v=4","totalScore":8.956573590279971,"prScore":8.756573590279972,"issueScore":0,"reviewScore":0,"commentScore":0.2,"summary":"MoonSoon69: Focused on expanding ecosystem capabilities by opening PR #330 in elizaos-plugins/registry to integrate the @elizaos/plugin-swapapi. This contribution highlights a primary focus on plugin development and registry management."},{"username":"dirtybits","avatarUrl":"https://avatars.githubusercontent.com/u/28834908?u=b8dc1929987e56622b91adf842c1499c4196210d&v=4","totalScore":2,"prScore":0,"issueScore":2,"reviewScore":0,"commentScore":0,"summary":"dirtybits: Focused on project stability by identifying and reporting a critical installation failure in elizaos/eliza via issue #6704. This contribution highlights a focus on improving the developer experience and environment setup."},{"username":"t49qnsx7qt-kpanks","avatarUrl":"https://avatars.githubusercontent.com/u/263812192?v=4","totalScore":0.2,"prScore":0,"issueScore":0,"reviewScore":0,"commentScore":0.2,"summary":null}],"focusAreas":[],"topIssues":[{"id":"I_kwDOMT5cIs76bfyb","title":"elizaos create fails with \"Bun's postinstall script was not run\" on macOS","author":"dirtybits","number":6704,"repository":"elizaos/eliza","body":"$4","createdAt":"2026-04-03T17:36:56Z","closedAt":"2026-04-12T19:05:23Z","state":"CLOSED","commentCount":0}],"topPullRequests":[{"id":"PR_kwDOMT5cIs7PtrTB","title":"feat: add agent/ like starter in develop","author":"odilitime","number":6702,"body":"$5","repository":"elizaos/eliza","createdAt":"2026-04-03T03:14:37Z","mergedAt":"2026-04-09T21:13:13Z","additions":961,"deletions":3286},{"id":"PR_kwDONkg7v87P2cGh","title":"Add @madeonsol/plugin-madeonsol","author":"LamboPoewert","number":331,"body":"$6","repository":"elizaos-plugins/registry","createdAt":"2026-04-03T18:33:28Z","mergedAt":null,"additions":1,"deletions":0},{"id":"PR_kwDONkg7v87PwkIx","title":"Add @elizaos/plugin-swapapi","author":"MoonSoon69","number":330,"body":"$7","repository":"elizaos-plugins/registry","createdAt":"2026-04-03T08:48:15Z","mergedAt":null,"additions":1,"deletions":0}],"detailedContributorSummaries":{"LamboPoewert":"LamboPoewert: Focused on expanding the ecosystem by opening PR #331 to add the @madeonsol/plugin-madeonsol to the elizaos-plugins/registry. This work involved 2 commits and minor configuration adjustments, balancing bugfix efforts with ongoing integration tasks.","MoonSoon69":"MoonSoon69: Focused on expanding ecosystem capabilities by opening PR #330 in elizaos-plugins/registry to integrate the @elizaos/plugin-swapapi. This contribution highlights a primary focus on plugin development and registry management.","dirtybits":"dirtybits: Focused on project stability by identifying and reporting a critical installation failure in elizaos/eliza via issue #6704. This contribution highlights a focus on improving the developer experience and environment setup.","greptile-apps":"greptile-apps: No activity today.","odilitime":"odilitime: Focused on expanding the project's starter capabilities by opening PR #6702 in elizaos/eliza, which involved a significant implementation effort of 1,479 total line changes across 25 files. This work centers entirely on new feature development, with a primary emphasis on code and configuration updates."}},"summaryContent":"$8","className":"self-end sm:self-start"}]]}],"$L9","$La","$Lb"]}]}],["$Lc","$Ld","$Le"],"$Lf"]}],"loading":null,"isPartial":false}
+9:["$","div",null,{"className":"mb-6","children":["$","div",null,{"className":"flex items-center justify-between","children":[[["$","$L10",null,{"href":"/summary/day/2026-04-02","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left mr-2 h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"children":"Previous"}],false],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$L10",null,{"href":"/summary/day/2026-04-02","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Previous"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]],["$","div",null,{"className":"flex flex-col items-center","children":[["$","div",null,{"className":"text-sm font-medium text-gray-500","children":["Daily"," Summary"]}],["$","time",null,{"dateTime":"2026-04-03","className":"text-md font-bold","children":"Apr 3, 2026"}]]}],[["$","$L10",null,{"href":"/summary/day/2026-04-04","children":[false,["$","span",null,{"children":"Next"}],["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right ml-2 h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}]],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$L10",null,{"href":"/summary/day/2026-04-04","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Next"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]]]}]}]
+12:Ta4c,## Description
+
+Running `elizaos create <project-name>` fails at the build step on macOS with:
+
+```
+$ bun run build.ts
+Error: Bun's postinstall script was not run.
+
+This occurs when using --ignore-scripts during installation, or when using a
+package manager like pnpm that does not run postinstall scripts by default.
+
+To fix this, run the postinstall script manually:
+  cd node_modules/bun && node install.js
+
+Or reinstall bun without the --ignore-scripts flag.
+error: script "build" exited with code 1
+```
+
+The CLI then cleans up the project directory and exits, leaving nothing behind.
+
+## Root Cause
+
+`@elizaos/cli` and `@elizaos/plugin-bootstrap` both list `"bun": "^1.3.4"` as a **runtime dependency**. When a new project installs these packages, the `bun` npm package becomes a transitive dependency.
+
+The `bun` npm package has a `postinstall` script (`node install.js`) that:
+1. Looks for `node_modules/@oven/bun-darwin-aarch64/bin/bun` (on Apple Silicon)
+2. Copies it to `node_modules/bun/bin/bun.exe`
+
+However, **bun the package manager intentionally skips extracting its own 60MB binary** from `@oven/bun-darwin-aarch64` into node_modules (it's already installed system-wide). This leaves `node_modules/@oven/bun-darwin-aarch64/bin/` empty.
+
+When `install.js` runs, it can't find the binary and exits silently. `node_modules/bun/bin/` is left with Windows `.exe` stubs. When `bun run build.ts` executes, bun detects the stubs and throws the error above.
+
+## Steps to Reproduce
+
+1. Install bun via `curl -fsSL https://bun.sh/install | bash`
+2. Install elizaos CLI: `bun install -g @elizaos/cli`
+3. Run: `elizaos create my-first-agent`
+4. Follow prompts (any database/model choice)
+5. Observe failure at build step
+
+## Environment
+
+- macOS (Apple Silicon / darwin-aarch64)
+- bun 1.3.11
+- @elizaos/cli 1.7.2
+
+## Fix
+
+The `bun` npm package should be removed from the runtime dependencies of `@elizaos/cli` and `@elizaos/plugin-bootstrap`. It is only needed as a devDependency for types (`@types/bun`). The bun runtime is already available system-wide when users install elizaos via bun.
+
+```diff
+# In @elizaos/cli and @elizaos/plugin-bootstrap package.json:
+- "dependencies": {
+-   "bun": "^1.3.4",
++ "devDependencies": {
++   "@types/bun": "^1.x.x",
+```
+
+## Workaround
+
+Until fixed, users can create projects manually:
+
+```bash
+cp -r ~/.bun/install/global/node_modules/@elizaos/cli/templates/project-starter ~/my-first-agent
+cd ~/my-first-agent
+bun install
+cp ~/.bun/bin/bun node_modules/@oven/bun-darwin-aarch64/bin/bun
+chmod +x node_modules/@oven/bun-darwin-aarch64/bin/bun
+node node_modules/bun/install.js
+bun run build.ts
+```13:T20d8,just something to boot up the repo
+
+<!-- CURSOR_SUMMARY -->
+---
+
+> [!NOTE]
+> **Medium Risk**
+> Medium risk because it introduces a new `agent` workspace and changes core runtime-composition APIs (`loadCharacters` accepts file paths/options; `createRuntimes` adds `checkShouldRespond`), which could affect downstream hosts; plus substantial dependency/lockfile churn from adding plugin submodules and local plugin workspaces.
+> 
+> **Overview**
+> Adds a new `agent/` workspace providing a stdin/stdout REPL harness around `@elizaos/core`, including a default character, CLI flags (`--character`, `--log-level`), and a SQL-backed runtime setup via `@elizaos/plugin-sql`’s `createDatabaseAdapter`.
+> 
+> Introduces a plugin-submodule local-dev workflow: `.gitmodules` now tracks `plugin-sql`, `plugin-ollama`, and `plugin-local-ai`, root workspaces include their `typescript/` packages, and new scripts (`scripts/dev.mjs`, `scripts/plugin-submodules-dev.mjs`, `plugin-submodules:restore`) automate linking/restoring submodules and workspace dependency rewrites.
+> 
+> Extends `@elizaos/core` runtime composition by letting `loadCharacters` accept JSON file paths (with optional `cwd` for relative resolution) and by threading a new `checkShouldRespond` option through `createRuntimes`/`AgentRuntime`; adds tests covering file-path loading behavior. Updates root scripts to start/dev via the new agent harness and adjusts dependencies to use local `workspace:*` plugin builds, with corresponding `bun.lock` updates.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit b05d1ecbca04804f5267dad5c77b4f7ef27f0f81. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->
+
+<!-- greptile_comment -->
+
+<h3>Greptile Summary</h3>
+
+This PR introduces a developer harness (`agent/`) for booting up the elizaOS repo locally — a stdin/stdout REPL that loads a character, connects to a PGLite database via `@elizaos/plugin-sql`, and routes user input through `runtime.messageService`. It also adds three git submodules (`plugin-sql`, `plugin-ollama`, `plugin-local-ai`) under `plugins/`, a suite of workspace-management scripts (`dev.mjs`, `plugin-submodules-dev.mjs`, `fix-workspace-deps.mjs`), and new `runtime-composition` helpers (`loadCharacters`, `createRuntimes`, `getBasicCapabilitiesSettings`, `mergeSettingsInto`) with tests in `packages/typescript`.
+
+**Key issues found:**
+- The root `package.json` was committed with the plugin submodule workspace entries (`plugins/plugin-sql/typescript`, etc.) still present — according to the `plugin-submodules-dev.mjs` workflow these should be stripped before committing (`bun run plugin-submodules:restore`). On a fresh clone without submodules checked out, bun will encounter missing workspace directories.
+- `agent/package.json` declares these plugins as `workspace:*` but `bun.lock` records them as the `alpha` registry dist-tag, indicating the lockfile was generated before the workspace paths resolved — the two are out of sync.
+- In `agent/typescript/index.ts`, if `runtime.messageService` is not ready the code calls `break`, which permanently exits the REPL loop rather than skipping the current message with `continue`.
+- The `line === undefined || line === null` guard on line 279 is unreachable dead code — `readline/promises` either resolves to a `string` or throws, and the throw path is already handled by the inner try/catch above it.
+- A single `sqlAdapter` is constructed from the first (primary) character's settings and shared across all characters in `createRuntimes`; multi-character configs with different DB settings will silently use the primary character's database.
+
+<h3>Confidence Score: 2/5</h3>
+
+Not safe to merge as-is — the committed `package.json` and `bun.lock` are in an inconsistent state that will break fresh clones and CI installs.
+
+Two P1 infrastructure issues: (1) the root `package.json` has submodule workspace entries that should have been stripped before committing, and (2) `agent/package.json` declares `workspace:*` for the submodule plugins while `bun.lock` records them as `alpha` registry deps — the lockfile and package manifest disagree. Together these will cause `bun install` failures or wrong resolutions on any machine that doesn't have the submodules initialised. The `messageService` break-vs-continue issue is also a behavioural bug in the harness itself.
+
+`package.json` (committed with submodule workspace paths), `agent/package.json` + `bun.lock` (workspace:* vs alpha mismatch), `agent/typescript/index.ts` (messageService break + unreachable null check).
+
+<h3>Important Files Changed</h3>
+
+| Filename | Overview |
+|----------|----------|
+| agent/typescript/index.ts | New stdin/stdout REPL harness for @elizaos/core; has an unreachable null check on `line`, a breaking `messageService` guard that kills the session permanently, and a single shared adapter for all characters. |
+| agent/package.json | New workspace package for the harness; lists submodule plugins as `workspace:*` but bun.lock records them as the `alpha` registry tag — the lockfile was not regenerated after the workspace references were added. |
+| package.json | Root package.json committed with plugin submodule workspace paths already added; these should normally be stripped before committing (via `plugin-submodules:restore`) since submodules are not checked out on a fresh clone. |
+| scripts/dev.mjs | New root dev script that inits submodules, runs install if needed, builds plugin dist/ if missing, then starts the agent harness in watch mode — logic is clean and idempotent. |
+| scripts/plugin-submodules-dev.mjs | New script managing submodule linking/unlinking and workspace entries; dev/restore modes are well-structured and idempotent, though the restore step was not run before committing this PR. |
+| packages/typescript/src/__tests__/runtime-composition.test.ts | New unit tests for `getBasicCapabilitiesSettings`, `mergeSettingsInto`, `loadCharacters`, and `createRuntimes`; well-structured coverage for the runtime-composition module. |
+| packages/typescript/src/runtime-composition.ts | New exported `loadCharacters`, `getBasicCapabilitiesSettings`, `mergeSettingsInto`, and `createRuntimes` helpers for runtime host composition — well-documented with clear WHY comments. |
+
+</details>
+
+<h3>Flowchart</h3>
+
+```mermaid
+%%{init: {'theme': 'neutral'}}%%
+flowchart TD
+    A[bun run dev] --> B[scripts/dev.mjs]
+    B --> C[plugin-submodules-dev.mjs]
+    C --> D{submodules present?}
+    D -- No --> E[git submodule update --init]
+    D -- Yes --> F[skip]
+    E --> G[ensureWorkspaces: add plugins to package.json]
+    F --> G
+    G --> H[removeSelfDependencies]
+    H --> I[fix-workspace-deps.mjs]
+    I --> J{bun install needed?}
+    J -- Yes --> K[bun install]
+    J -- No --> L[skip]
+    K --> M[build plugin dist/ if missing]
+    L --> M
+    M --> N[bun run --cwd agent dev]
+    N --> O[agent/typescript/index.ts]
+    O --> P[parseHarnessArgs]
+    P --> Q[loadCharacters]
+    Q --> R[mergeHarnessSqlPlugins]
+    R --> S[createDatabaseAdapter from primary character]
+    S --> T[createRuntimes with shared adapter]
+    T --> U[runtime.ensureConnection]
+    U --> V[stdin REPL loop]
+    V -- user input --> W[runtime.messageService.handleMessage]
+    W -- response --> X[stdout output]
+    X --> V
+    V -- exit/Ctrl+D --> Y[runtime.stop]
+```
+
+<sub>Reviews (1): Last reviewed commit: ["feat(dev): submodule plugins, idempotent..."](https://github.com/elizaos/eliza/commit/b05d1ecbca04804f5267dad5c77b4f7ef27f0f81) | [Re-trigger Greptile](https://app.greptile.com/api/retrigger?id=27242938)</sub>
+
+> Greptile also left **6 inline comments** on this PR.
+
+<!-- /greptile_comment -->
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+* **New Features**
+  * Added a local development agent harness with interactive REPL for testing runtimes.
+  * Added support for loading character definitions from JSON files.
+  * Enhanced plugin management with development workflow scripts.
+
+* **Chores**
+  * Added agent package configuration supporting TypeScript, Python, and Rust.
+  * Updated workspace structure to integrate optional plugins.
+  * Updated plugin submodule references.
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->14:Td17,Adds the MadeOnSol plugin for Solana KOL trading intelligence and deployer analytics.
+
+**Package:** `@madeonsol/plugin-madeonsol` ([npm](https://www.npmjs.com/package/@madeonsol/plugin-madeonsol))
+**Repository:** [github.com/LamboPoewert/plugin-madeonsol](https://github.com/LamboPoewert/plugin-madeonsol)
+
+**What it does:**
+- Real-time trade feed from 946 tracked Solana KOL wallets
+- KOL convergence signals (multi-KOL coordination detection)
+- KOL PnL leaderboard rankings
+- Pump.fun deployer alerts with KOL buy enrichment
+- Webhook management and WebSocket streaming tokens
+- Pays per request via x402 USDC micropayments on Solana
+
+**Actions:** `GET_KOL_FEED`, `GET_KOL_COORDINATION`, `GET_KOL_LEADERBOARD`, `GET_DEPLOYER_ALERTS`
+
+**Config:** `SVM_PRIVATE_KEY` (for x402 payments), optional `RAPIDAPI_KEY` (for webhooks/streaming)
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+## Summary by CodeRabbit
+
+* **New Features**
+  * Added support for the @madeonsol/plugin-madeonsol package mapping, enabling the application to recognize and resolve that plugin. This allows users to install and use the plugin more seamlessly without manual configuration.
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->
+
+<!-- greptile_comment -->
+
+<h3>Greptile Summary</h3>
+
+This PR registers the `@madeonsol/plugin-madeonsol` plugin, which provides Solana KOL trading intelligence (trade feed, convergence signals, PnL leaderboard, deployer alerts) via x402 USDC micropayments. The change is a single-line addition to `index.json`, but the entry is placed after `@mascotai/plugin-connections` when it should precede it alphabetically.
+
+<h3>Confidence Score: 5/5</h3>
+
+Safe to merge; the only finding is a minor alphabetical ordering issue (P2).
+
+The change is a single registry entry addition. The sole issue — inserting the key one position out of alphabetical order — is a cosmetic P2 that does not affect functionality or correctness.
+
+index.json — entry should be moved one line earlier to restore alphabetical order.
+
+<h3>Important Files Changed</h3>
+
+| Filename | Overview |
+|----------|----------|
+| index.json | Adds `@madeonsol/plugin-madeonsol` registry entry pointing to `github:LamboPoewert/plugin-madeonsol`; entry is inserted one position too late — it should precede `@mascotai/plugin-connections` to maintain alphabetical order. |
+
+</details>
+
+<h3>Sequence Diagram</h3>
+
+```mermaid
+sequenceDiagram
+    participant Agent as ElizaOS Agent
+    participant Plugin as plugin-madeonsol
+    participant x402 as x402 Payment Layer
+    participant API as MadeOnSol API
+
+    Agent->>Plugin: Invoke action (e.g. GET_KOL_FEED)
+    Plugin->>x402: Pay USDC micropayment (SVM_PRIVATE_KEY)
+    x402-->>Plugin: Payment confirmed
+    Plugin->>API: Authenticated request
+    API-->>Plugin: KOL feed / leaderboard / alerts data
+    Plugin-->>Agent: Structured response
+```
+
+<sub>Reviews (1): Last reviewed commit: ["Add @madeonsol/plugin-madeonsol — Solana..."](https://github.com/elizaos-plugins/registry/commit/cc5888a6673b6f4a9dbc6a6be5b2c364cc5219f6) | [Re-trigger Greptile](https://app.greptile.com/api/retrigger?id=27302816)</sub>
+
+> Greptile also left **1 inline comment** on this PR.
+
+<sub>(2/5) Greptile learns from your feedback when you react with thumbs up/down!</sub>
+
+<!-- /greptile_comment -->15:T5c4,## Summary
+- Adds `@elizaos/plugin-swapapi` to the ElizaOS plugin registry
+- SwapAPI is a free DEX aggregator that returns ready-to-sign token swap calldata across 46 EVM chains
+- No API key required — works out of the box for any ElizaOS agent
+
+## Plugin Details
+- **Repo:** https://github.com/MoonSoon69/eliza-plugin-swapapi
+- **Action:** `SWAP_TOKENS` — fetches swap quotes and returns transaction calldata
+- **Chains:** 46 EVM chains (Ethereum, Base, Arbitrum, Polygon, Optimism, Avalanche, BNB Chain, etc.)
+- **API:** https://api.swapapi.dev (free, no auth)
+
+## Test plan
+- [x] Verify `index.json` entry is alphabetically sorted (between `plugin-suno` and `plugin-tee`)
+- [x] Verify plugin repo builds successfully (see demo comment below)
+- [x] Verify plugin follows elizaos plugin conventions (modeled after plugin-coingecko)
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+* **New Features**
+  * SwapAPI plugin support is now available for immediate use. This new plugin integration enables developers and users to leverage advanced swap functionality within their applications. The addition significantly enhances the plugin ecosystem and provides more flexible and powerful options for implementing token swapping operations across user-facing interfaces and services.
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->a:["$","div",null,{"className":"mb-8 space-y-6","children":[["$","$L11",null,{"metrics":{"date":"2026-04-03","interval":{"intervalStart":"$D2026-04-03T00:00:00.000Z","intervalEnd":"$D2026-04-04T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":3,"merged":0,"total":3},"issues":{"new":1,"closed":0,"total":1},"activeContributors":6,"codeChanges":{"additions":0,"deletions":0,"files":0,"commitCount":9},"topContributors":[{"username":"odilitime","avatarUrl":"https://avatars.githubusercontent.com/u/16395496?u=c9bac48e632aae594a0d85aaf9e9c9c69b674d8b&v=4","totalScore":43.5437738965761,"prScore":43.5437738965761,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"odilitime: Focused on expanding the project's starter capabilities by opening PR #6702 in elizaos/eliza, which involved a significant implementation effort of 1,479 total line changes across 25 files. This work centers entirely on new feature development, with a primary emphasis on code and configuration updates."},{"username":"LamboPoewert","avatarUrl":"https://avatars.githubusercontent.com/u/91011698?u=a8b0456dbd9d3e15b0fee96b4cf2813a5e15022c&v=4","totalScore":18.846573590279974,"prScore":14.346573590279972,"issueScore":0,"reviewScore":4.5,"commentScore":0,"summary":"LamboPoewert: Focused on expanding the ecosystem by opening PR #331 to add the @madeonsol/plugin-madeonsol to the elizaos-plugins/registry. This work involved 2 commits and minor configuration adjustments, balancing bugfix efforts with ongoing integration tasks."},{"username":"greptile-apps","avatarUrl":"https://avatars.githubusercontent.com/in/867647?v=4","totalScore":13.5,"prScore":0,"issueScore":0,"reviewScore":13.5,"commentScore":0,"summary":"greptile-apps: No activity today."},{"username":"MoonSoon69","avatarUrl":"https://avatars.githubusercontent.com/u/193276852?u=ae4dfec2ee87ce58e61ddf50d465a8df6618dd8e&v=4","totalScore":8.956573590279971,"prScore":8.756573590279972,"issueScore":0,"reviewScore":0,"commentScore":0.2,"summary":"MoonSoon69: Focused on expanding ecosystem capabilities by opening PR #330 in elizaos-plugins/registry to integrate the @elizaos/plugin-swapapi. This contribution highlights a primary focus on plugin development and registry management."},{"username":"dirtybits","avatarUrl":"https://avatars.githubusercontent.com/u/28834908?u=b8dc1929987e56622b91adf842c1499c4196210d&v=4","totalScore":2,"prScore":0,"issueScore":2,"reviewScore":0,"commentScore":0,"summary":"dirtybits: Focused on project stability by identifying and reporting a critical installation failure in elizaos/eliza via issue #6704. This contribution highlights a focus on improving the developer experience and environment setup."},{"username":"t49qnsx7qt-kpanks","avatarUrl":"https://avatars.githubusercontent.com/u/263812192?v=4","totalScore":0.2,"prScore":0,"issueScore":0,"reviewScore":0,"commentScore":0.2,"summary":null}],"focusAreas":[],"topIssues":[{"id":"I_kwDOMT5cIs76bfyb","title":"elizaos create fails with \"Bun's postinstall script was not run\" on macOS","author":"dirtybits","number":6704,"repository":"elizaos/eliza","body":"$12","createdAt":"2026-04-03T17:36:56Z","closedAt":"2026-04-12T19:05:23Z","state":"CLOSED","commentCount":0}],"topPullRequests":[{"id":"PR_kwDOMT5cIs7PtrTB","title":"feat: add agent/ like starter in develop","author":"odilitime","number":6702,"body":"$13","repository":"elizaos/eliza","createdAt":"2026-04-03T03:14:37Z","mergedAt":"2026-04-09T21:13:13Z","additions":961,"deletions":3286},{"id":"PR_kwDONkg7v87P2cGh","title":"Add @madeonsol/plugin-madeonsol","author":"LamboPoewert","number":331,"body":"$14","repository":"elizaos-plugins/registry","createdAt":"2026-04-03T18:33:28Z","mergedAt":null,"additions":1,"deletions":0},{"id":"PR_kwDONkg7v87PwkIx","title":"Add @elizaos/plugin-swapapi","author":"MoonSoon69","number":330,"body":"$15","repository":"elizaos-plugins/registry","createdAt":"2026-04-03T08:48:15Z","mergedAt":null,"additions":1,"deletions":0}],"detailedContributorSummaries":{"LamboPoewert":"LamboPoewert: Focused on expanding the ecosystem by opening PR #331 to add the @madeonsol/plugin-madeonsol to the elizaos-plugins/registry. This work involved 2 commits and minor configuration adjustments, balancing bugfix efforts with ongoing integration tasks.","MoonSoon69":"MoonSoon69: Focused on expanding ecosystem capabilities by opening PR #330 in elizaos-plugins/registry to integrate the @elizaos/plugin-swapapi. This contribution highlights a primary focus on plugin development and registry management.","dirtybits":"dirtybits: Focused on project stability by identifying and reporting a critical installation failure in elizaos/eliza via issue #6704. This contribution highlights a focus on improving the developer experience and environment setup.","greptile-apps":"greptile-apps: No activity today.","odilitime":"odilitime: Focused on expanding the project's starter capabilities by opening PR #6702 in elizaos/eliza, which involved a significant implementation effort of 1,479 total line changes across 25 files. This work centers entirely on new feature development, with a primary emphasis on code and configuration updates."}}}],"$L16"]}]
+b:["$","div",null,{"className":"prose prose-sm mx-auto mt-8 dark:prose-invert sm:prose lg:prose-lg xl:prose-xl","children":[["$","p","p-0",{"children":"Development activity on April 3 focused on expanding the ecosystem through new plugin integrations and framework starter templates. The team is currently addressing a reported installation failure affecting macOS users within the core framework."}],"\n",["$","h2","h2-0",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"🚨 Needs Attention","position":{"start":{"line":5,"column":4,"offset":289},"end":{"line":5,"column":22,"offset":307}}}],"position":{"start":{"line":5,"column":1,"offset":286},"end":{"line":5,"column":23,"offset":308}}},"children":"🚨 Needs Attention"}],"\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/6704","children":"elizaos/eliza#6704"}]}],": Users are reporting installation failures on macOS due to a \"Bun's postinstall script was not run\" error; investigation is required to resolve this environment-specific blocker."]}],"\n"]}],"\n",["$","h2","h2-1",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"🏗️ Work in Progress","position":{"start":{"line":8,"column":4,"offset":565},"end":{"line":8,"column":24,"offset":585}}}],"position":{"start":{"line":8,"column":1,"offset":562},"end":{"line":8,"column":24,"offset":585}}},"children":"🏗️ Work in Progress"}],"\n",["$","p","p-1",{"children":["$","strong","strong-0",{"children":"New Pull Requests"}]}],"\n",["$","ul","ul-1",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"elizaos/eliza"}],"\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/6702","children":"#6702"}],": feat: add agent/ like starter in develop."]}],"\n"]}],"\n"]}],"\n",["$","li","li-1",{"children":[["$","strong","strong-0",{"children":"elizaos-plugins/registry"}],"\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos-plugins/registry/pull/331","children":"#331"}],": Add @madeonsol/plugin-madeonsol."]}],"\n",["$","li","li-1",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos-plugins/registry/pull/330","children":"#330"}],": Add @elizaos/plugin-swapapi."]}],"\n"]}],"\n"]}],"\n"]}],"\n",["$","h2","h2-2",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"🐞 Issue Triage","position":{"start":{"line":16,"column":4,"offset":972},"end":{"line":16,"column":19,"offset":987}}}],"position":{"start":{"line":16,"column":1,"offset":969},"end":{"line":16,"column":19,"offset":987}}},"children":"🐞 Issue Triage"}],"\n",["$","p","p-2",{"children":["$","strong","strong-0",{"children":"New Issues"}]}],"\n",["$","ul","ul-2",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"elizaos/eliza"}],"\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/6704","children":"#6704"}],": Installation failure on macOS related to Bun postinstall scripts."]}],"\n"]}],"\n"]}],"\n"]}]]}]
+c:["$","script","script-0",{"src":"/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","async":true}]
+d:["$","script","script-1",{"src":"/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","async":true}]
+e:["$","script","script-2",{"src":"/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js","async":true}]
+f:["$","$L17",null,{"children":["$","$18",null,{"name":"Next.MetadataOutlet","children":"$@19"}]}]
+16:["$","div",null,{"className":"rounded-lg border bg-card text-card-foreground shadow-sm","children":[["$","div",null,{"className":"flex flex-col space-y-1.5 p-6 py-4","children":["$","div",null,{"className":"tracking-tight text-sm font-medium","children":["$undefined","Code Changes"]}]}],["$","div",null,{"className":"p-6 pt-0","children":["$","div",null,{"className":"grid grid-cols-2 gap-4 md:grid-cols-4","children":[["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-git-commit-vertical h-5 w-5","aria-hidden":"true","children":[["$","path","1holv5",{"d":"M12 3v6"}],["$","circle","1v7zrd",{"cx":"12","cy":"12","r":"3"}],["$","path","a9ows0",{"d":"M12 15v6"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":9}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Commits"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-file-code h-5 w-5","aria-hidden":"true","children":[["$","path","1oefj6",{"d":"M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"}],["$","path","wfsgrz",{"d":"M14 2v5a1 1 0 0 0 1 1h5"}],["$","path","1tg20x",{"d":"M10 12.5 8 15l2 2.5"}],["$","path","yinavb",{"d":"m14 12.5 2 2.5-2 2.5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":0}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Files Changed"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-green-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-up h-5 w-5 text-green-500","aria-hidden":"true","children":[["$","path","hav0vg",{"d":"m5 12 7-7 7 7"}],["$","path","x0mq9r",{"d":"M12 19V5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-green-500","children":"+0"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Added"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-red-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-down h-5 w-5 text-red-500","aria-hidden":"true","children":[["$","path","s699le",{"d":"M12 5v14"}],["$","path","1idqje",{"d":"m19 12-7 7-7-7"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-red-500","children":"-0"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Deleted"}]]}]]}]]}]}]]}]
+19:null

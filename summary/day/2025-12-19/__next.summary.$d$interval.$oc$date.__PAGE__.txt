@@ -1,0 +1,887 @@
+1:"$Sreact.fragment"
+2:I[4817319,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"IntervalSelector"]
+3:I[6998365,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"LlmCopyButton"]
+14:I[3642796,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],""]
+15:I[3238488,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"StatCardsDisplay"]
+23:I[4261541,["/eliza-leaderboard/_next/static/chunks/b33bcbdcb3f88354.js","/eliza-leaderboard/_next/static/chunks/8ba59154b6704904.js"],"OutletBoundary"]
+24:"$Sreact.suspense"
+4:T7be,## Summary
+
+Extend the static JSON API to include summary endpoints alongside the existing leaderboard endpoints.
+
+## Current State
+
+We have leaderboard API endpoints working:
+- `/data/api/leaderboard-monthly.json`
+- `/data/api/leaderboard-weekly.json`
+- `/data/api/leaderboard-lifetime.json`
+
+## Proposed Summary API Endpoints
+
+Export all historical summaries as structured JSON:
+
+```
+/data/api/summaries/overall/{interval}/{date}.json
+/data/api/summaries/repos/{owner}/{repo}/{interval}/{date}.json
+/data/api/summaries/contributors/{username}/{interval}/{date}.json
+```
+
+### Response Structure
+
+```typescript
+interface SummaryAPIResponse {
+  version: "1.0";
+  type: "overall" | "repository" | "contributor";
+  interval: "day" | "week" | "month";
+  date: string;           // YYYY-MM-DD
+  generatedAt: string;    // ISO timestamp
+  content: string;        // Markdown content
+}
+```
+
+## Implementation Plan
+
+### Shared Infrastructure
+Create `src/lib/pipelines/export/apiHelpers.ts` with:
+- `APIResponseBase` interface (version, generatedAt)
+- `writeAPIResponse()` function
+- `calculateDateRange()` (extract from leaderboard)
+
+### Files to Create/Modify
+1. `src/lib/pipelines/export/apiHelpers.ts` - New shared utilities
+2. `src/lib/pipelines/export/exportLeaderboardAPI.ts` - Simplify (remove pagination, keep totalUsers)
+3. `src/lib/pipelines/export/exportSummaryAPI.ts` - New file
+4. `cli/analyze-pipeline.ts` - Add `export-summaries` command
+5. `.github/workflows/deploy.yml` - Add export step
+6. `README.md` - Document all API endpoints
+
+## Additional Changes
+
+- **Simplify leaderboard API**: Remove pagination object, keep just `totalUsers` (pagination doesn't make sense for static JSON files)
+
+## Questions to Discuss
+
+- Should we include index files listing all available summaries?
+- Any additional metadata to include in the response?
+- Rate of export - all summaries on every deploy, or incremental?
+
+---
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)5:T8e5,<!-- CURSOR_SUMMARY -->
+> [!NOTE]
+> Adds hybrid slash-command permissions (Discord perms, channel-whitelist bypass, custom validators) and a safer command registration pipeline; fixes DM channel handling.
+> 
+> - **Discord Slash Commands**:
+>   - **Hybrid permissions**: `guildOnly`, `requiredPermissions`, `contexts`, `bypassChannelWhitelist`, `validator`, `guildIds` on `DiscordSlashCommand`.
+>   - **Runtime checks**: Channel whitelist enforcement with per-command bypass and 15‑min channel bypass for follow-ups; async custom validator layer.
+>   - **Registration pipeline**: Dedup/merge commands, transform to Discord API shape, register globally or per‑guild, queue to avoid races, BigInt-safe logging.
+> - **Interaction Handling**:
+>   - Detailed debug logs; safe default replies on validator failure/errors.
+> - **Fixes/Cleanup**:
+>   - Correct DM channel creation (`user.dmChannel` vs promise) and BigInt-safe error serialization.
+>   - Clear bypass timeouts on service stop.
+> - **Docs**:
+>   - README section documenting permission layers, options, examples, and rationale.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit 60d9a4fdee609c648ddb85529153d70328f49962. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+## Summary by CodeRabbit
+
+* **New Features**
+  * Hybrid permission system for slash commands: Discord checks, channel whitelist with temporary bypasses for follow-ups, and async per-command validators.
+  * Per-command options: guild-only, guild targeting, required permissions, bypass channel whitelist; improved registration merging and per-guild upsert flow.
+  * Automatic expiry and cleanup of channel bypass state; enhanced logging and registration feedback.
+
+* **Bug Fixes**
+  * Fixed DM channel retrieval and BigInt-safe serialization in error reporting.
+
+* **Documentation**
+  * Added comprehensive "Slash Command Permissions" guide with examples, option table, and rationale.
+
+<sub>✏️ Tip: You can customize this high-level summary in your review settings.</sub>
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->6:T89b,# Add JSON Leaderboard API Endpoints
+
+## Summary
+
+This PR adds static JSON API endpoints for leaderboard data, enabling external applications, mobile apps, and third-party integrations to consume leaderboard information programmatically.
+
+## Features
+
+- **Three time periods**: Monthly, weekly, and lifetime leaderboards
+- **Comprehensive scoring**: Includes total score plus breakdown by contribution type (PR, issue, review, comment)
+- **Wallet addresses**: Includes Solana and Ethereum wallet addresses from GitHub profiles
+- **Calendar-based periods**: 
+  - Weekly: Sunday to today
+  - Monthly: 1st of month to today
+  - Lifetime: Project start date to today
+- **CLI command**: `bun run pipeline export-leaderboard`
+- **CI/CD integration**: Automatically generates fresh leaderboard data on every deployment
+- **Full test coverage**: 9 comprehensive tests covering all scenarios
+
+## API Endpoints
+
+The following static JSON files will be available via GitHub Pages:
+
+- `/data/api/leaderboard-monthly.json`
+- `/data/api/leaderboard-weekly.json`
+- `/data/api/leaderboard-lifetime.json`
+
+## Response Format
+
+```json
+{
+  "period": "monthly",
+  "startDate": "2025-10-01",
+  "endDate": "2025-10-23",
+  "generatedAt": "2025-10-23T11:12:25.933Z",
+  "totalUsers": 150,
+  "leaderboard": [
+    {
+      "rank": 1,
+      "username": "contributor1",
+      "avatarUrl": "https://avatars.githubusercontent.com/...",
+      "score": 1234.5,
+      "prScore": 800.0,
+      "issueScore": 200.0,
+      "reviewScore": 150.5,
+      "commentScore": 84.0,
+      "wallets": {
+        "solana": "9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin",
+        "ethereum": "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb"
+      }
+    }
+  ]
+}
+```
+
+## Use Cases
+- Mobile apps: Display leaderboard data in native applications
+- Discord bots: Show contributor rankings and stats
+- Analytics dashboards: Track contributor engagement over time
+- Reward systems: Automate token distributions based on rankings
+- Third-party integrations: Enable community-built tools and services
+
+## Testing
+All tests pass successfully:
+- bun test src/lib/pipelines/export/exportLeaderboardAPI.test.ts7:Te1d,Add a 3x2 permission matrix for Discord bot invites:
+- Role levels: Basic / Moderator / Admin
+- Voice options: With Voice / Without Voice
+
+Changes:
+- Add src/permissions.ts with centralized permission tier definitions
+- Enhance banner.ts with tiered invite URL display (🎙️/💬 sections)
+- Update index.ts to use new banner with all settings displayed
+- Refactor service.ts to use generateInviteUrl() instead of inline perms
+- Add extraMetadata to buildMemoryFromMessage for cross-agent filtering
+- Fix channelState/voiceState providers to handle both channelId and serverId
+- Export permission utilities (DiscordPermissionTiers, generateInviteUrl, etc)
+
+Permission tiers:
+- Basic: text chat, reactions, embeds, threads, slash commands
+- Moderator: + manage messages, mention everyone, polls, timeout
+- Admin: + kick/ban, manage channels/roles/webhooks
+- Voice addon: connect, speak, VAD, priority speaker, stream
+
+<!-- CURSOR_SUMMARY -->
+---
+
+> [!NOTE]
+> Adds a centralized 3x2 Discord permission tier system with generated invite URLs, overhauls the settings banner, and updates actions/services to use new server ID handling and richer metadata.
+> 
+> - **Permissions/Invites**:
+>   - Add `src/permissions.ts` with 3x2 tiers (Basic/Moderator/Admin × Voice/No Voice) and helpers (`generateInviteUrl`, `generateAllInviteUrls`, `getPermissionValues`).
+>   - Replace inline permission math in `service.ts` with `generateInviteUrl('MODERATOR_VOICE')`; log invite URL and audit-log note.
+>   - Export permission utilities from `index.ts`.
+> - **Banner/UI**:
+>   - Replace legacy banner with `printBanner` in `banner.ts` (ANSI overhaul, settings table, tiered invite links); keep `printDiscordBanner` for compatibility.
+>   - Use new banner in `index.ts` and show all Discord settings.
+> - **Actions/Server handling**:
+>   - Use `room.messageServerId` fallback where applicable and fetch guild by resolved `serverId` in `getUserInfo`, `readChannel`, `searchMessages`, `serverInfo`.
+>   - Improve `serverInfo` formatting (localized counts, sticker count).
+> - **Messaging/Metadata**:
+>   - Allow `extraMetadata` in `buildMemoryFromMessage` (`types.ts`), add reply attribution (`replyToAuthor`) and raw Discord IDs (`discordMessageId`, `discordChannelId`, `discordServerId`) in `messages.ts`/`service.ts`.
+>   - `utils.sendMessageInChunks`: thread replies on first chunk; retry without reply if reference is invalid.
+> - **Providers/Logging**:
+>   - `voiceStateProvider`: include `roomType` in values when not in voice.
+>   - Large-guild logs use localized member counts.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit 218d3c3da21d05e7fd691a4a852a9ba6d4e30c9c. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+## Summary by CodeRabbit
+
+* **New Features**
+  * Tiered Discord permission presets and enhanced invite URL generation.
+  * Expanded startup banner showing settings and invite matrix.
+  * Message metadata now captures replied-to author for cross-agent filtering.
+
+* **Improvements**
+  * Locale-aware number formatting for counts.
+  * Better server identification with fallback.
+  * Added Discord IDs to memory for improved cross-entity correlation.
+  * Automatic retry fallback when a reply reference is no longer valid.
+
+<sub>✏️ Tip: You can customize this high-level summary in your review settings.</sub>
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->8:Ta35,## Summary
+
+Extends the static JSON API with summary endpoints using a "piggyback" approach - generating JSON alongside markdown during summarization.
+
+### Changes
+
+- **Simplified Leaderboard API**: Removed unnecessary pagination fields (static files don't support URL params)
+- **Extended fsHelpers**: Added `sha256`, path helpers, `writeJSONWithLatest`, `updateSummaryIndex`, and API types
+- **Overall Summaries**: Now export JSON alongside markdown with `latest.json` and `index.json`
+- **Repository Summaries**: Same JSON export for daily/weekly/monthly repo summaries
+- **Contributor Summaries**: Added both markdown (was missing!) and JSON export
+- **New CLI Command**: `export-summaries` for backfilling JSON from existing DB data
+- **Documentation**: Comprehensive API docs in README
+
+### API Structure
+
+```
+/data/api/
+├── leaderboard-monthly.json
+├── leaderboard-weekly.json
+├── leaderboard-lifetime.json
+└── summaries/
+    ├── overall/{interval}/{date}.json, latest.json, index.json
+    ├── repos/{owner}_{repo}/{interval}/{date}.json, latest.json, index.json
+    └── contributors/{username}/{interval}/{date}.json, latest.json, index.json
+```
+
+### Response Features
+
+- `contentHash` (sha256) for cache validation
+- `sourceLastUpdated` for tracking freshness
+- `latest.json` pointers for easy access to most recent summary
+- `index.json` for listing all available summaries per interval
+
+## Test plan
+
+- [ ] Run `bun run check` - passes lint and type checks
+- [ ] Run `bun run pipeline summarize -t overall --days 1` - generates JSON alongside markdown
+- [ ] Run `bun run pipeline export-summaries --dry-run` - shows what would be exported
+- [ ] Verify JSON structure matches documented schema
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+* **Documentation**
+  * Added comprehensive API documentation for Leaderboard and Summary endpoints, including request/response schemas and export instructions.
+
+* **New Features**
+  * Added new `export-summaries` CLI command to export summaries in JSON API format with configurable types, intervals, and dry-run mode support.
+  * Summary data now exported in both Markdown and JSON API formats with versioned artifacts and latest-link pointers.
+
+* **Changes**
+  * Leaderboard API responses simplified by removing pagination metadata.
+
+<sub>✏️ Tip: You can customize this high-level summary in your review settings.</sub>
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->9:T4d0,## Summary
+
+- Adds static JSON API endpoints for leaderboard data at `/data/api/leaderboard-{period}.json`
+- Includes API versioning (v1.0) for future compatibility
+- Adds pagination metadata (limit, offset, hasMore)
+- Uses `config.contributionStartDate` for lifetime period (fork-friendly)
+- Includes wallet addresses (users opt-in via GitHub profile README)
+- Excludes bot accounts from rankings
+
+**API Endpoints:**
+- `/data/api/leaderboard-monthly.json`
+- `/data/api/leaderboard-weekly.json`
+- `/data/api/leaderboard-lifetime.json`
+
+**CLI Command:**
+```bash
+bun run pipeline export-leaderboard [--limit N] [--output-dir DIR]
+```
+
+## Test plan
+
+- [x] Run `bun run pipeline export-leaderboard --output-dir=./data/` locally
+- [x] Verify JSON files are created with correct structure
+- [ ] Verify wallets are included for users who have opted in
+- [ ] Deploy and verify endpoints are accessible
+
+## Related
+
+Supersedes #164 with additional improvements:
+- API versioning for future compatibility
+- Pagination metadata
+- Fork-friendly configuration (uses `contributionStartDate` from config instead of hardcoded date)
+- Resolved merge conflict with recent CLI changes
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)a:T6e0,# Risks
+
+Low, just fixes
+
+# Background
+
+## What does this PR do?
+
+- exposes initPromise so plugins can actually use it (duplicates some of #5718 but smaller and simpler)
+- fixes message format (we dropped serverId in favor of messageServerId)
+
+## What kind of change is this?
+
+Improvements (misc. changes to existing features)
+
+## Why are we doing this? Any context or related work?
+
+Why wouldn't we
+
+# Documentation changes needed?
+
+My changes do not require a change to the project documentation.
+
+<!-- CURSOR_SUMMARY -->
+---
+
+> [!NOTE]
+> Exposes runtime initPromise and updates bootstrap settings/roles to use worldId/messageServerId with decrypted settings from world metadata.
+> 
+> - **Core**
+>   - Add `initPromise` to `IAgentRuntime`.
+> - **Bootstrap Plugin**
+>   - **Settings action/provider**:
+>     - Replace `serverId`/`createUniqueUuid` usage with `worldId` and `messageServerId` where applicable.
+>     - Read settings directly from `world.metadata.settings`; decrypt secrets via `getSalt`/`unsaltWorldSettings`.
+>     - Persist updates via `runtime.updateWorld` and verify with `getWorldSettings`.
+>     - Adjust logs/response payloads to reference `worldId` and updated keys.
+>   - **Roles provider**:
+>     - Use `room.worldId` to fetch world and roles; remove `serverId` path.
+> - **Tests/Mocks**
+>   - Add `initPromise` to mock runtimes across test utilities.
+>   - Update mocks/returns to use `messageServerId` and `worldId`; remove `serverId` fields.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit 6088455e3f63524f25ffe7959ecc099abce15e6a. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->b:T9ff,## Summary
+
+Improves the registry generation script to:
+1. **Detect and warn** about package version vs core dependency mismatches
+2. **Correctly set `supports` flags** based on actual core dependency (not package version)
+
+## The Problem
+
+Some plugins have mismatched versioning:
+- **v0 packages depending on v1 core** (e.g., `@nuggetslife/plugin-nuggets@0.1.0` → `@elizaos/core: 1.5.5`)
+- **v1 packages depending on v0 core** (e.g., `@elizaos/plugin-ankr@1.0.0` → `@elizaos/core: ^0.25.9`)
+
+Previously, these plugins were incorrectly marked in the `supports` field, making them undiscoverable.
+
+## The Solution
+
+### 1. Core dependency determines compatibility
+
+The core dependency is what actually matters for compatibility:
+
+| Scenario | supports.v0 | supports.v1 | Warning |
+|----------|-------------|-------------|---------|
+| v0 pkg + v0 core | ✓ | - | - |
+| v0 pkg + v1 core | - | ✓ | "should publish as v1.x" |
+| v1 pkg + v1 core | - | ✓ | - |
+| v1 pkg + v0 core | ✓ | - | "needs to update core" |
+
+### 2. Conservative regex for mismatch detection
+
+Only matches **definitive** constraints (`^0.x`, `~0.x`, `0.x`), excludes ambiguous operators (`>=`, `<`) that could span multiple majors.
+
+## Example Output
+
+```
+Processing @nuggetslife/plugin-nuggets...
+@nuggetslife/plugin-nuggets → v0:false v1:true
+
+⚠️  Issues encountered for 8 repositories:
+  @elizaos/plugin-ankr:
+    - ⚠️ v1 package (1.0.0) depends on v0 core (^0.25.9) - needs to update @elizaos/core to ^1.0.0
+  @nuggetslife/plugin-nuggets:
+    - ⚠️ v0 package (0.1.0) depends on v1 core (1.5.5) - should publish as v1.x
+```
+
+## Affected Packages
+
+| Package | Issue | Now Marked As |
+|---------|-------|---------------|
+| `@elizaos/plugin-ankr` | v1 pkg with v0 core | `supports.v0: true` |
+| `@elizaos/plugin-near` | v1 pkg with v0 core | `supports.v0: true` |
+| `@elizaos/plugin-local-ai` | v0 pkg with v1 core | `supports.v1: true` |
+| `@nuggetslife/plugin-nuggets` | v0 pkg with v1 core | `supports.v1: true` |
+| `@kudo-dev/plugin-kudo` | v0 pkg with v1 core | `supports.v1: true` |
+| `@theschein/plugin-polymarket` | v0 pkg with v1 core | `supports.v1: true` |
+| `plugin-octav` | v0 pkg with v1 core | `supports.v1: true` |
+| `@esscrypt/plugin-polkadot` | v0 pkg with v1 core | `supports.v1: true` |
+
+## Changes
+
+- Add `getCoreRangeMajor()` helper with conservative regex
+- Set `supports.v1 = true` for v0 packages that depend on v1 core
+- Set `supports.v0 = true` for v1 packages that depend on v0 core  
+- Add warnings to issues summary for versioning problemsc:T12e2,On Dec 19, 2025, the ElizaOS project significantly advanced its data infrastructure by implementing new static JSON API endpoints for both leaderboard and summary data across multiple repositories, streamlining data access and consistency. Concurrently, core platform stability and user experience were enhanced through critical bug fixes in the `eliza` repository and improved Discord bot permissions.
+
+## ✅ Completed Work
+### API & Data Infrastructure Enhancements
+*   **elizaos/elizaos.github.io**: Enhanced the static JSON API to include summary endpoints, generating JSON alongside markdown for data consistency and simplifying the API structure by removing unnecessary pagination fields from the leaderboard API ([#186](https://github.com/elizaos/elizaos.github.io/pull/186)).
+*   **elizaos/elizaos.github.io**: Introduced new static JSON API endpoints for leaderboard data, including API versioning (v1.0) and pagination metadata ([#184](https://github.com/elizaos/elizaos.github.io/pull/184)).
+*   **elizaos-plugins/registry**: Improved the registry generation script to detect and warn about package version and core dependency mismatches, and correctly set `supports` flags based on actual core dependencies ([#244](https://github.elizaos-plugins/registry/pull/244)).
+
+### Core Platform Stability & User Experience
+*   **elizaos/eliza**: Fixed a significant bug in the `plugin-bootstrap` module, correcting action/provider format changes and resolving an `initPromise` bug across multiple packages ([#6261](https://github.com/elizaos/eliza/pull/6261)).
+*   **elizaos-plugins/plugin-discord**: Implemented a new tiered permission system for Discord bot invite URLs, featuring a 3x2 matrix of role levels and voice options ([#33](https://github.com/elizaos-plugins/plugin-discord/pull/33)).
+*   **elizaos-plugins/plugin-discord**: Added hybrid slash-command permissions, incorporating Discord permissions, channel-whitelist bypass, and custom validators, along with a safer command registration pipeline and fixes for DM channel handling ([#29](https://github.com/elizaos-plugins/plugin-discord/pull/29)).
+
+## 🏗️ Work in Progress
+### Active Discussions
+*   **elizaos-plugins/plugin-discord**: Issue [#185](https://github.com/elizaos-plugins/plugin-discord/issues/185) discusses extending the static JSON API for summaries, with a refined approach to generate JSON alongside markdown during summarization and proposed `SummaryAPIResponse` shape.
+
+## 🐞 Issue Triage
+### Closed Issues
+*   **elizaos/elizaos.github.io**: Implemented JSON API Endpoints for Summaries, extending the static JSON API to include summary endpoints with a refined approach to "piggyback" JSON generation alongside markdown ([#185](https://github.com/elizaos/elizaos.github.io/issues/185)).
+*   **elizaos-plugins/registry**: Closed a feature request to extend the static JSON API to include summary endpoints, with discussions on refining the approach to piggyback JSON generation alongside markdown and enhancing the response shape ([#185](https://github.com/elizaos-plugins/registry/issues/185)).
+*   **elizaos/eliza**: Resolved multiple UI/UX and performance enhancements, including fixing the voices page layout ([#6252](https://github.com/elizaos/eliza/issues/6252)), removing a redundant container list header ([#6251](https://github.com/elizaos/eliza/issues/6251)), addressing a white flash during login ([#6253](https://github.com/elizaos/eliza/issues/6253)), fixing sidebar hover effects ([#6254](https://github.com/elizaos/eliza/issues/6254)), and gallery tab refresh behavior ([#6256](https://github.com/elizaos/eliza/issues/6256)).
+*   **elizaos/eliza**: Investigated and resolved slow image loading in the gallery ([#6255](https://github.com/elizaos/eliza/issues/6255)).
+*   **elizaos/eliza**: Optimized model selection in Agent Builder to use faster models for initial configuration ([#6185](https://github.com/elizaos/eliza/issues/6185)).
+*   **elizaos/eliza**: Renamed the chat assistant to "Agent Builder" to avoid user confusion ([#6258](https://github.com/elizaos/eliza/issues/6258)).
+*   **elizaos/eliza**: Added the ability to export JSON without deploying ([#6259](https://github.com/elizaos/eliza/issues/6259)).
+*   **elizaos/eliza**: Fixed markdown rendering for bullet points in the agent builder chat ([#6257](https://github.com/elizaos/eliza/issues/6257)).
+*   **elizaos/eliza**: Addressed redundant Privy re-authentication calls, consolidating multiple checks into a single authentication check per session ([#6249](https://github.com/elizaos/eliza/issues/6249)).
+*   **elizaos/eliza**: Closed issue [#185](https://github.com/elizaos/eliza/issues/185) after merging the implementation of JSON API endpoints for summaries, which involved generating JSON alongside markdown and defining an enhanced API response shape.0:{"buildId":"US8XLB_zHXYj_PVAECGcd","rsc":["$","$1","c",{"children":[["$","div",null,{"className":"container mx-auto px-6 py-8 md:px-8","children":["$","div",null,{"className":"mx-auto max-w-4xl","children":[["$","div",null,{"className":"mb-4 flex flex-col justify-between sm:flex-row","children":[["$","$L2",null,{"currentInterval":"day","currentDate":"2025-12-19"}],["$","$L3",null,{"metrics":{"date":"2025-12-19","interval":{"intervalStart":"$D2025-12-19T00:00:00.000Z","intervalEnd":"$D2025-12-20T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":4,"merged":6,"total":6},"issues":{"new":1,"closed":12,"total":12},"activeContributors":7,"codeChanges":{"additions":2764,"deletions":453,"files":33,"commitCount":58},"topContributors":[{"username":"madjin","avatarUrl":"https://avatars.githubusercontent.com/u/32600939?u=cdcf89f44c7a50906c7a80d889efa85023af2049&v=4","totalScore":95.9430470703488,"prScore":91.2050470703488,"issueScore":4.3,"reviewScore":0,"commentScore":0.43799999999999994,"summary":"madjin: Focused on enhancing the `elizaos.github.io` repository by implementing new static JSON API endpoints for summaries and leaderboards, as evidenced by merged PRs #186 (+966/-412 lines) and #184 (+402/-0 lines), while also contributing to other work, bug fixes, and feature development across 35 files."},{"username":"odilitime","avatarUrl":"https://avatars.githubusercontent.com/u/16395496?u=c9bac48e632aae594a0d85aaf9e9c9c69b674d8b&v=4","totalScore":63.21894866573836,"prScore":63.21894866573836,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"odilitime: Focused on feature development, successfully merging PR elizaos-plugins/plugin-discord#33 which added a tiered permission system for bot invite URLs, demonstrating a primary focus on bugfix work, other work, and feature work across 81 files."},{"username":"wtfsayo","avatarUrl":"https://avatars.githubusercontent.com/u/82053242?u=98209a1f10456f42d4d2fa71db4d5bf4a672cbc3&v=4","totalScore":29.54725378073324,"prScore":29.34725378073324,"issueScore":0,"reviewScore":0,"commentScore":0.2,"summary":"wtfsayo: Focused on enhancing the registry's robustness by merging PR elizaos-plugins/registry#244, which introduced detection and fixes for version/core dependency mismatches, contributing to bugfix and other work across 2 files with 2 commits."}],"focusAreas":[{"area":"src","count":9},{"area":"src/lib","count":6},{"area":"plugin-bootstrap","count":5},{"area":"src/actions","count":4},{"area":"cli","count":2},{"area":"core","count":1},{"area":"plugin-quick-starter","count":1},{"area":"plugin-starter","count":1},{"area":"project-starter","count":1},{"area":"project-tee-starter","count":1}],"topIssues":[{"id":"I_kwDONNAI987fSHvX","title":"feat: Add JSON API endpoints for summaries","author":"madjin","number":185,"repository":"elizaos/elizaos.github.io","body":"$4","createdAt":"2025-12-19T05:06:15Z","closedAt":"2025-12-19T07:08:17Z","state":"CLOSED","commentCount":4},{"id":"I_kwDOMT5cIs7aq0Yt","title":"Optimize Agent Builder Model Selection","author":"borisudovicic","number":6185,"repository":"elizaos/eliza","body":"The agent builder is slow because it uses heavy models for everything. Switch the \"Provider/Plugin Selection\" logic to use a faster model (Groq/GPT-4o-mini) to speed up the initial configuration steps.","createdAt":"2025-11-26T18:42:18Z","closedAt":"2025-12-19T09:09:14Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7e9oiR","title":"Allow JSON export without deploying","author":"borisudovicic","number":6259,"repository":"elizaos/eliza","body":"Users must deploy agent before they can export JSON; add export option that works on unsaved/undeployed agent state.","createdAt":"2025-12-17T22:15:32Z","closedAt":"2025-12-19T09:09:14Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7e9ocF","title":"Rename chat assistant to \"Agent Builder\"","author":"borisudovicic","number":6258,"repository":"elizaos/eliza","body":"Users confused whether they're talking to the agent or the builder; consistently label the assistant as \"Agent Builder\" instead of \"Eliza.\"","createdAt":"2025-12-17T22:15:20Z","closedAt":"2025-12-19T02:35:07Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7e9oWt","title":"Fix markdown bullet point rendering","author":"borisudovicic","number":6257,"repository":"elizaos/eliza","body":"Bullet point text renders below the bullet instead of beside it in agent builder chat; fix markdown rendering component.","createdAt":"2025-12-17T22:15:09Z","closedAt":"2025-12-19T09:09:14Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7e9oBN","title":"Fix gallery tab refresh behavior","author":"borisudovicic","number":6256,"repository":"elizaos/eliza","body":"Clicking between gallery tabs (All Media, Images, etc.) triggers full page refresh instead of client-side navigation.","createdAt":"2025-12-17T22:14:34Z","closedAt":"2025-12-19T09:09:13Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7e9n2T","title":"Investigate slow image loading in gallery","author":"borisudovicic","number":6255,"repository":"elizaos/eliza","body":"Images taking 7+ seconds to load for 45KB files; investigate Vercel blob or other bottlenecks.","createdAt":"2025-12-17T22:14:22Z","closedAt":"2025-12-19T09:09:14Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7e9nvn","title":"Fix sidebar hover effect","author":"borisudovicic","number":6254,"repository":"elizaos/eliza","body":"Hover effect on sidebar items pushes text and icon off screen; use non-displacement hover style.","createdAt":"2025-12-17T22:14:10Z","closedAt":"2025-12-19T09:09:13Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7e9ncJ","title":"Remove login screen flash","author":"borisudovicic","number":6253,"repository":"elizaos/eliza","body":"White flash occurs during login transition; implement smoother loading state.","createdAt":"2025-12-17T22:13:43Z","closedAt":"2025-12-19T09:09:13Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7e9nO8","title":"Fix voices page layout on MacBook","author":"borisudovicic","number":6252,"repository":"elizaos/eliza","body":"Voices page doesn't fit on standard MacBook screen and requires scrolling to reach \"Create voice\" button; tighten UI to fit single viewport","createdAt":"2025-12-17T22:13:25Z","closedAt":"2025-12-19T09:09:13Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7e9nCR","title":"Remove redundant container list header","author":"borisudovicic","number":6251,"repository":"elizaos/eliza","body":"The duplicate containers/container list header pushes dashboard cards down unnecessarily; consolidate into single header to reclaim vertical space.","createdAt":"2025-12-17T22:13:01Z","closedAt":"2025-12-19T09:09:14Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7e9mVW","title":"Reduce Privy re-authentication calls","author":"borisudovicic","number":6249,"repository":"elizaos/eliza","body":"Privy authentication is being checked up to 12 times per page load across middleware calls; consolidate to single auth check per session.","createdAt":"2025-12-17T22:11:55Z","closedAt":"2025-12-19T22:06:09Z","state":"CLOSED","commentCount":0}],"topPullRequests":[{"id":"PR_kwDOOtXZkc61vxX1","title":"Slash command permissions","author":"odilitime","number":29,"body":"$5","repository":"elizaos-plugins/plugin-discord","createdAt":"2025-11-26T23:30:52Z","mergedAt":"2025-12-19T03:32:39Z","additions":959,"deletions":174},{"id":"PR_kwDONNAI986vPlUQ","title":"feat: add JSON leaderboard API endpoints","author":"standujar","number":164,"body":"$6","repository":"elizaos/elizaos.github.io","createdAt":"2025-10-23T11:22:38Z","mergedAt":null,"additions":715,"deletions":11},{"id":"PR_kwDOOtXZkc65vaKh","title":"feat(discord): add tiered permission system for bot invite URLs","author":"odilitime","number":33,"body":"$7","repository":"elizaos-plugins/plugin-discord","createdAt":"2025-12-19T03:50:48Z","mergedAt":"2025-12-19T05:00:10Z","additions":660,"deletions":107},{"id":"PR_kwDONNAI9865wKeK","title":"feat: add static JSON API for summaries","author":"madjin","number":186,"body":"$8","repository":"elizaos/elizaos.github.io","createdAt":"2025-12-19T05:40:27Z","mergedAt":"2025-12-19T06:47:54Z","additions":616,"deletions":62},{"id":"PR_kwDONNAI9865tiq4","title":"feat: add static JSON leaderboard API endpoints","author":"madjin","number":184,"body":"$9","repository":"elizaos/elizaos.github.io","createdAt":"2025-12-19T00:09:46Z","mergedAt":"2025-12-19T01:05:34Z","additions":402,"deletions":0},{"id":"PR_kwDOMT5cIs65gDZn","title":"fix: bootstrap action/provide format change fix + initPromise fix","author":"odilitime","number":6261,"body":"$a","repository":"elizaos/eliza","createdAt":"2025-12-18T04:14:51Z","mergedAt":"2025-12-19T01:01:58Z","additions":96,"deletions":109},{"id":"PR_kwDONkg7v865yosm","title":"feat: detect version/core dependency mismatches and fix supports flags","author":"wtfsayo","number":244,"body":"$b","repository":"elizaos-plugins/registry","createdAt":"2025-12-19T10:03:38Z","mergedAt":"2025-12-19T10:18:43Z","additions":31,"deletions":1}],"detailedContributorSummaries":{"madjin":"madjin: Focused on enhancing the `elizaos.github.io` repository by implementing new static JSON API endpoints for summaries and leaderboards, as evidenced by merged PRs #186 (+966/-412 lines) and #184 (+402/-0 lines), while also contributing to other work, bug fixes, and feature development across 35 files.","odilitime":"odilitime: Focused on feature development, successfully merging PR elizaos-plugins/plugin-discord#33 which added a tiered permission system for bot invite URLs, demonstrating a primary focus on bugfix work, other work, and feature work across 81 files.","wtfsayo":"wtfsayo: Focused on enhancing the registry's robustness by merging PR elizaos-plugins/registry#244, which introduced detection and fixes for version/core dependency mismatches, contributing to bugfix and other work across 2 files with 2 commits."}},"summaryContent":"$c","className":"self-end sm:self-start"}]]}],"$Ld","$Le","$Lf"]}]}],["$L10","$L11","$L12"],"$L13"]}],"loading":null,"isPartial":false}
+d:["$","div",null,{"className":"mb-6","children":["$","div",null,{"className":"flex items-center justify-between","children":[[["$","$L14",null,{"href":"/summary/day/2025-12-18","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left mr-2 h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"children":"Previous"}],false],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$L14",null,{"href":"/summary/day/2025-12-18","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Previous"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]],["$","div",null,{"className":"flex flex-col items-center","children":[["$","div",null,{"className":"text-sm font-medium text-gray-500","children":["Daily"," Summary"]}],["$","time",null,{"dateTime":"2025-12-19","className":"text-md font-bold","children":"Dec 19, 2025"}]]}],[["$","$L14",null,{"href":"/summary/day/2025-12-20","children":[false,["$","span",null,{"children":"Next"}],["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right ml-2 h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}]],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$L14",null,{"href":"/summary/day/2025-12-20","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Next"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]]]}]}]
+16:T7be,## Summary
+
+Extend the static JSON API to include summary endpoints alongside the existing leaderboard endpoints.
+
+## Current State
+
+We have leaderboard API endpoints working:
+- `/data/api/leaderboard-monthly.json`
+- `/data/api/leaderboard-weekly.json`
+- `/data/api/leaderboard-lifetime.json`
+
+## Proposed Summary API Endpoints
+
+Export all historical summaries as structured JSON:
+
+```
+/data/api/summaries/overall/{interval}/{date}.json
+/data/api/summaries/repos/{owner}/{repo}/{interval}/{date}.json
+/data/api/summaries/contributors/{username}/{interval}/{date}.json
+```
+
+### Response Structure
+
+```typescript
+interface SummaryAPIResponse {
+  version: "1.0";
+  type: "overall" | "repository" | "contributor";
+  interval: "day" | "week" | "month";
+  date: string;           // YYYY-MM-DD
+  generatedAt: string;    // ISO timestamp
+  content: string;        // Markdown content
+}
+```
+
+## Implementation Plan
+
+### Shared Infrastructure
+Create `src/lib/pipelines/export/apiHelpers.ts` with:
+- `APIResponseBase` interface (version, generatedAt)
+- `writeAPIResponse()` function
+- `calculateDateRange()` (extract from leaderboard)
+
+### Files to Create/Modify
+1. `src/lib/pipelines/export/apiHelpers.ts` - New shared utilities
+2. `src/lib/pipelines/export/exportLeaderboardAPI.ts` - Simplify (remove pagination, keep totalUsers)
+3. `src/lib/pipelines/export/exportSummaryAPI.ts` - New file
+4. `cli/analyze-pipeline.ts` - Add `export-summaries` command
+5. `.github/workflows/deploy.yml` - Add export step
+6. `README.md` - Document all API endpoints
+
+## Additional Changes
+
+- **Simplify leaderboard API**: Remove pagination object, keep just `totalUsers` (pagination doesn't make sense for static JSON files)
+
+## Questions to Discuss
+
+- Should we include index files listing all available summaries?
+- Any additional metadata to include in the response?
+- Rate of export - all summaries on every deploy, or incremental?
+
+---
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)17:T8e5,<!-- CURSOR_SUMMARY -->
+> [!NOTE]
+> Adds hybrid slash-command permissions (Discord perms, channel-whitelist bypass, custom validators) and a safer command registration pipeline; fixes DM channel handling.
+> 
+> - **Discord Slash Commands**:
+>   - **Hybrid permissions**: `guildOnly`, `requiredPermissions`, `contexts`, `bypassChannelWhitelist`, `validator`, `guildIds` on `DiscordSlashCommand`.
+>   - **Runtime checks**: Channel whitelist enforcement with per-command bypass and 15‑min channel bypass for follow-ups; async custom validator layer.
+>   - **Registration pipeline**: Dedup/merge commands, transform to Discord API shape, register globally or per‑guild, queue to avoid races, BigInt-safe logging.
+> - **Interaction Handling**:
+>   - Detailed debug logs; safe default replies on validator failure/errors.
+> - **Fixes/Cleanup**:
+>   - Correct DM channel creation (`user.dmChannel` vs promise) and BigInt-safe error serialization.
+>   - Clear bypass timeouts on service stop.
+> - **Docs**:
+>   - README section documenting permission layers, options, examples, and rationale.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit 60d9a4fdee609c648ddb85529153d70328f49962. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+## Summary by CodeRabbit
+
+* **New Features**
+  * Hybrid permission system for slash commands: Discord checks, channel whitelist with temporary bypasses for follow-ups, and async per-command validators.
+  * Per-command options: guild-only, guild targeting, required permissions, bypass channel whitelist; improved registration merging and per-guild upsert flow.
+  * Automatic expiry and cleanup of channel bypass state; enhanced logging and registration feedback.
+
+* **Bug Fixes**
+  * Fixed DM channel retrieval and BigInt-safe serialization in error reporting.
+
+* **Documentation**
+  * Added comprehensive "Slash Command Permissions" guide with examples, option table, and rationale.
+
+<sub>✏️ Tip: You can customize this high-level summary in your review settings.</sub>
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->18:T89b,# Add JSON Leaderboard API Endpoints
+
+## Summary
+
+This PR adds static JSON API endpoints for leaderboard data, enabling external applications, mobile apps, and third-party integrations to consume leaderboard information programmatically.
+
+## Features
+
+- **Three time periods**: Monthly, weekly, and lifetime leaderboards
+- **Comprehensive scoring**: Includes total score plus breakdown by contribution type (PR, issue, review, comment)
+- **Wallet addresses**: Includes Solana and Ethereum wallet addresses from GitHub profiles
+- **Calendar-based periods**: 
+  - Weekly: Sunday to today
+  - Monthly: 1st of month to today
+  - Lifetime: Project start date to today
+- **CLI command**: `bun run pipeline export-leaderboard`
+- **CI/CD integration**: Automatically generates fresh leaderboard data on every deployment
+- **Full test coverage**: 9 comprehensive tests covering all scenarios
+
+## API Endpoints
+
+The following static JSON files will be available via GitHub Pages:
+
+- `/data/api/leaderboard-monthly.json`
+- `/data/api/leaderboard-weekly.json`
+- `/data/api/leaderboard-lifetime.json`
+
+## Response Format
+
+```json
+{
+  "period": "monthly",
+  "startDate": "2025-10-01",
+  "endDate": "2025-10-23",
+  "generatedAt": "2025-10-23T11:12:25.933Z",
+  "totalUsers": 150,
+  "leaderboard": [
+    {
+      "rank": 1,
+      "username": "contributor1",
+      "avatarUrl": "https://avatars.githubusercontent.com/...",
+      "score": 1234.5,
+      "prScore": 800.0,
+      "issueScore": 200.0,
+      "reviewScore": 150.5,
+      "commentScore": 84.0,
+      "wallets": {
+        "solana": "9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin",
+        "ethereum": "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb"
+      }
+    }
+  ]
+}
+```
+
+## Use Cases
+- Mobile apps: Display leaderboard data in native applications
+- Discord bots: Show contributor rankings and stats
+- Analytics dashboards: Track contributor engagement over time
+- Reward systems: Automate token distributions based on rankings
+- Third-party integrations: Enable community-built tools and services
+
+## Testing
+All tests pass successfully:
+- bun test src/lib/pipelines/export/exportLeaderboardAPI.test.ts19:Te1d,Add a 3x2 permission matrix for Discord bot invites:
+- Role levels: Basic / Moderator / Admin
+- Voice options: With Voice / Without Voice
+
+Changes:
+- Add src/permissions.ts with centralized permission tier definitions
+- Enhance banner.ts with tiered invite URL display (🎙️/💬 sections)
+- Update index.ts to use new banner with all settings displayed
+- Refactor service.ts to use generateInviteUrl() instead of inline perms
+- Add extraMetadata to buildMemoryFromMessage for cross-agent filtering
+- Fix channelState/voiceState providers to handle both channelId and serverId
+- Export permission utilities (DiscordPermissionTiers, generateInviteUrl, etc)
+
+Permission tiers:
+- Basic: text chat, reactions, embeds, threads, slash commands
+- Moderator: + manage messages, mention everyone, polls, timeout
+- Admin: + kick/ban, manage channels/roles/webhooks
+- Voice addon: connect, speak, VAD, priority speaker, stream
+
+<!-- CURSOR_SUMMARY -->
+---
+
+> [!NOTE]
+> Adds a centralized 3x2 Discord permission tier system with generated invite URLs, overhauls the settings banner, and updates actions/services to use new server ID handling and richer metadata.
+> 
+> - **Permissions/Invites**:
+>   - Add `src/permissions.ts` with 3x2 tiers (Basic/Moderator/Admin × Voice/No Voice) and helpers (`generateInviteUrl`, `generateAllInviteUrls`, `getPermissionValues`).
+>   - Replace inline permission math in `service.ts` with `generateInviteUrl('MODERATOR_VOICE')`; log invite URL and audit-log note.
+>   - Export permission utilities from `index.ts`.
+> - **Banner/UI**:
+>   - Replace legacy banner with `printBanner` in `banner.ts` (ANSI overhaul, settings table, tiered invite links); keep `printDiscordBanner` for compatibility.
+>   - Use new banner in `index.ts` and show all Discord settings.
+> - **Actions/Server handling**:
+>   - Use `room.messageServerId` fallback where applicable and fetch guild by resolved `serverId` in `getUserInfo`, `readChannel`, `searchMessages`, `serverInfo`.
+>   - Improve `serverInfo` formatting (localized counts, sticker count).
+> - **Messaging/Metadata**:
+>   - Allow `extraMetadata` in `buildMemoryFromMessage` (`types.ts`), add reply attribution (`replyToAuthor`) and raw Discord IDs (`discordMessageId`, `discordChannelId`, `discordServerId`) in `messages.ts`/`service.ts`.
+>   - `utils.sendMessageInChunks`: thread replies on first chunk; retry without reply if reference is invalid.
+> - **Providers/Logging**:
+>   - `voiceStateProvider`: include `roomType` in values when not in voice.
+>   - Large-guild logs use localized member counts.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit 218d3c3da21d05e7fd691a4a852a9ba6d4e30c9c. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+## Summary by CodeRabbit
+
+* **New Features**
+  * Tiered Discord permission presets and enhanced invite URL generation.
+  * Expanded startup banner showing settings and invite matrix.
+  * Message metadata now captures replied-to author for cross-agent filtering.
+
+* **Improvements**
+  * Locale-aware number formatting for counts.
+  * Better server identification with fallback.
+  * Added Discord IDs to memory for improved cross-entity correlation.
+  * Automatic retry fallback when a reply reference is no longer valid.
+
+<sub>✏️ Tip: You can customize this high-level summary in your review settings.</sub>
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->1a:Ta35,## Summary
+
+Extends the static JSON API with summary endpoints using a "piggyback" approach - generating JSON alongside markdown during summarization.
+
+### Changes
+
+- **Simplified Leaderboard API**: Removed unnecessary pagination fields (static files don't support URL params)
+- **Extended fsHelpers**: Added `sha256`, path helpers, `writeJSONWithLatest`, `updateSummaryIndex`, and API types
+- **Overall Summaries**: Now export JSON alongside markdown with `latest.json` and `index.json`
+- **Repository Summaries**: Same JSON export for daily/weekly/monthly repo summaries
+- **Contributor Summaries**: Added both markdown (was missing!) and JSON export
+- **New CLI Command**: `export-summaries` for backfilling JSON from existing DB data
+- **Documentation**: Comprehensive API docs in README
+
+### API Structure
+
+```
+/data/api/
+├── leaderboard-monthly.json
+├── leaderboard-weekly.json
+├── leaderboard-lifetime.json
+└── summaries/
+    ├── overall/{interval}/{date}.json, latest.json, index.json
+    ├── repos/{owner}_{repo}/{interval}/{date}.json, latest.json, index.json
+    └── contributors/{username}/{interval}/{date}.json, latest.json, index.json
+```
+
+### Response Features
+
+- `contentHash` (sha256) for cache validation
+- `sourceLastUpdated` for tracking freshness
+- `latest.json` pointers for easy access to most recent summary
+- `index.json` for listing all available summaries per interval
+
+## Test plan
+
+- [ ] Run `bun run check` - passes lint and type checks
+- [ ] Run `bun run pipeline summarize -t overall --days 1` - generates JSON alongside markdown
+- [ ] Run `bun run pipeline export-summaries --dry-run` - shows what would be exported
+- [ ] Verify JSON structure matches documented schema
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+* **Documentation**
+  * Added comprehensive API documentation for Leaderboard and Summary endpoints, including request/response schemas and export instructions.
+
+* **New Features**
+  * Added new `export-summaries` CLI command to export summaries in JSON API format with configurable types, intervals, and dry-run mode support.
+  * Summary data now exported in both Markdown and JSON API formats with versioned artifacts and latest-link pointers.
+
+* **Changes**
+  * Leaderboard API responses simplified by removing pagination metadata.
+
+<sub>✏️ Tip: You can customize this high-level summary in your review settings.</sub>
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->1b:T4d0,## Summary
+
+- Adds static JSON API endpoints for leaderboard data at `/data/api/leaderboard-{period}.json`
+- Includes API versioning (v1.0) for future compatibility
+- Adds pagination metadata (limit, offset, hasMore)
+- Uses `config.contributionStartDate` for lifetime period (fork-friendly)
+- Includes wallet addresses (users opt-in via GitHub profile README)
+- Excludes bot accounts from rankings
+
+**API Endpoints:**
+- `/data/api/leaderboard-monthly.json`
+- `/data/api/leaderboard-weekly.json`
+- `/data/api/leaderboard-lifetime.json`
+
+**CLI Command:**
+```bash
+bun run pipeline export-leaderboard [--limit N] [--output-dir DIR]
+```
+
+## Test plan
+
+- [x] Run `bun run pipeline export-leaderboard --output-dir=./data/` locally
+- [x] Verify JSON files are created with correct structure
+- [ ] Verify wallets are included for users who have opted in
+- [ ] Deploy and verify endpoints are accessible
+
+## Related
+
+Supersedes #164 with additional improvements:
+- API versioning for future compatibility
+- Pagination metadata
+- Fork-friendly configuration (uses `contributionStartDate` from config instead of hardcoded date)
+- Resolved merge conflict with recent CLI changes
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)1c:T6e0,# Risks
+
+Low, just fixes
+
+# Background
+
+## What does this PR do?
+
+- exposes initPromise so plugins can actually use it (duplicates some of #5718 but smaller and simpler)
+- fixes message format (we dropped serverId in favor of messageServerId)
+
+## What kind of change is this?
+
+Improvements (misc. changes to existing features)
+
+## Why are we doing this? Any context or related work?
+
+Why wouldn't we
+
+# Documentation changes needed?
+
+My changes do not require a change to the project documentation.
+
+<!-- CURSOR_SUMMARY -->
+---
+
+> [!NOTE]
+> Exposes runtime initPromise and updates bootstrap settings/roles to use worldId/messageServerId with decrypted settings from world metadata.
+> 
+> - **Core**
+>   - Add `initPromise` to `IAgentRuntime`.
+> - **Bootstrap Plugin**
+>   - **Settings action/provider**:
+>     - Replace `serverId`/`createUniqueUuid` usage with `worldId` and `messageServerId` where applicable.
+>     - Read settings directly from `world.metadata.settings`; decrypt secrets via `getSalt`/`unsaltWorldSettings`.
+>     - Persist updates via `runtime.updateWorld` and verify with `getWorldSettings`.
+>     - Adjust logs/response payloads to reference `worldId` and updated keys.
+>   - **Roles provider**:
+>     - Use `room.worldId` to fetch world and roles; remove `serverId` path.
+> - **Tests/Mocks**
+>   - Add `initPromise` to mock runtimes across test utilities.
+>   - Update mocks/returns to use `messageServerId` and `worldId`; remove `serverId` fields.
+> 
+> <sup>Written by [Cursor Bugbot](https://cursor.com/dashboard?tab=bugbot) for commit 6088455e3f63524f25ffe7959ecc099abce15e6a. This will update automatically on new commits. Configure [here](https://cursor.com/dashboard?tab=bugbot).</sup>
+<!-- /CURSOR_SUMMARY -->1d:T9ff,## Summary
+
+Improves the registry generation script to:
+1. **Detect and warn** about package version vs core dependency mismatches
+2. **Correctly set `supports` flags** based on actual core dependency (not package version)
+
+## The Problem
+
+Some plugins have mismatched versioning:
+- **v0 packages depending on v1 core** (e.g., `@nuggetslife/plugin-nuggets@0.1.0` → `@elizaos/core: 1.5.5`)
+- **v1 packages depending on v0 core** (e.g., `@elizaos/plugin-ankr@1.0.0` → `@elizaos/core: ^0.25.9`)
+
+Previously, these plugins were incorrectly marked in the `supports` field, making them undiscoverable.
+
+## The Solution
+
+### 1. Core dependency determines compatibility
+
+The core dependency is what actually matters for compatibility:
+
+| Scenario | supports.v0 | supports.v1 | Warning |
+|----------|-------------|-------------|---------|
+| v0 pkg + v0 core | ✓ | - | - |
+| v0 pkg + v1 core | - | ✓ | "should publish as v1.x" |
+| v1 pkg + v1 core | - | ✓ | - |
+| v1 pkg + v0 core | ✓ | - | "needs to update core" |
+
+### 2. Conservative regex for mismatch detection
+
+Only matches **definitive** constraints (`^0.x`, `~0.x`, `0.x`), excludes ambiguous operators (`>=`, `<`) that could span multiple majors.
+
+## Example Output
+
+```
+Processing @nuggetslife/plugin-nuggets...
+@nuggetslife/plugin-nuggets → v0:false v1:true
+
+⚠️  Issues encountered for 8 repositories:
+  @elizaos/plugin-ankr:
+    - ⚠️ v1 package (1.0.0) depends on v0 core (^0.25.9) - needs to update @elizaos/core to ^1.0.0
+  @nuggetslife/plugin-nuggets:
+    - ⚠️ v0 package (0.1.0) depends on v1 core (1.5.5) - should publish as v1.x
+```
+
+## Affected Packages
+
+| Package | Issue | Now Marked As |
+|---------|-------|---------------|
+| `@elizaos/plugin-ankr` | v1 pkg with v0 core | `supports.v0: true` |
+| `@elizaos/plugin-near` | v1 pkg with v0 core | `supports.v0: true` |
+| `@elizaos/plugin-local-ai` | v0 pkg with v1 core | `supports.v1: true` |
+| `@nuggetslife/plugin-nuggets` | v0 pkg with v1 core | `supports.v1: true` |
+| `@kudo-dev/plugin-kudo` | v0 pkg with v1 core | `supports.v1: true` |
+| `@theschein/plugin-polymarket` | v0 pkg with v1 core | `supports.v1: true` |
+| `plugin-octav` | v0 pkg with v1 core | `supports.v1: true` |
+| `@esscrypt/plugin-polkadot` | v0 pkg with v1 core | `supports.v1: true` |
+
+## Changes
+
+- Add `getCoreRangeMajor()` helper with conservative regex
+- Set `supports.v1 = true` for v0 packages that depend on v1 core
+- Set `supports.v0 = true` for v1 packages that depend on v0 core  
+- Add warnings to issues summary for versioning problemse:["$","div",null,{"className":"mb-8 space-y-6","children":[["$","$L15",null,{"metrics":{"date":"2025-12-19","interval":{"intervalStart":"$D2025-12-19T00:00:00.000Z","intervalEnd":"$D2025-12-20T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":4,"merged":6,"total":6},"issues":{"new":1,"closed":12,"total":12},"activeContributors":7,"codeChanges":{"additions":2764,"deletions":453,"files":33,"commitCount":58},"topContributors":[{"username":"madjin","avatarUrl":"https://avatars.githubusercontent.com/u/32600939?u=cdcf89f44c7a50906c7a80d889efa85023af2049&v=4","totalScore":95.9430470703488,"prScore":91.2050470703488,"issueScore":4.3,"reviewScore":0,"commentScore":0.43799999999999994,"summary":"madjin: Focused on enhancing the `elizaos.github.io` repository by implementing new static JSON API endpoints for summaries and leaderboards, as evidenced by merged PRs #186 (+966/-412 lines) and #184 (+402/-0 lines), while also contributing to other work, bug fixes, and feature development across 35 files."},{"username":"odilitime","avatarUrl":"https://avatars.githubusercontent.com/u/16395496?u=c9bac48e632aae594a0d85aaf9e9c9c69b674d8b&v=4","totalScore":63.21894866573836,"prScore":63.21894866573836,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"odilitime: Focused on feature development, successfully merging PR elizaos-plugins/plugin-discord#33 which added a tiered permission system for bot invite URLs, demonstrating a primary focus on bugfix work, other work, and feature work across 81 files."},{"username":"wtfsayo","avatarUrl":"https://avatars.githubusercontent.com/u/82053242?u=98209a1f10456f42d4d2fa71db4d5bf4a672cbc3&v=4","totalScore":29.54725378073324,"prScore":29.34725378073324,"issueScore":0,"reviewScore":0,"commentScore":0.2,"summary":"wtfsayo: Focused on enhancing the registry's robustness by merging PR elizaos-plugins/registry#244, which introduced detection and fixes for version/core dependency mismatches, contributing to bugfix and other work across 2 files with 2 commits."}],"focusAreas":[{"area":"src","count":9},{"area":"src/lib","count":6},{"area":"plugin-bootstrap","count":5},{"area":"src/actions","count":4},{"area":"cli","count":2},{"area":"core","count":1},{"area":"plugin-quick-starter","count":1},{"area":"plugin-starter","count":1},{"area":"project-starter","count":1},{"area":"project-tee-starter","count":1}],"topIssues":[{"id":"I_kwDONNAI987fSHvX","title":"feat: Add JSON API endpoints for summaries","author":"madjin","number":185,"repository":"elizaos/elizaos.github.io","body":"$16","createdAt":"2025-12-19T05:06:15Z","closedAt":"2025-12-19T07:08:17Z","state":"CLOSED","commentCount":4},{"id":"I_kwDOMT5cIs7aq0Yt","title":"Optimize Agent Builder Model Selection","author":"borisudovicic","number":6185,"repository":"elizaos/eliza","body":"The agent builder is slow because it uses heavy models for everything. Switch the \"Provider/Plugin Selection\" logic to use a faster model (Groq/GPT-4o-mini) to speed up the initial configuration steps.","createdAt":"2025-11-26T18:42:18Z","closedAt":"2025-12-19T09:09:14Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7e9oiR","title":"Allow JSON export without deploying","author":"borisudovicic","number":6259,"repository":"elizaos/eliza","body":"Users must deploy agent before they can export JSON; add export option that works on unsaved/undeployed agent state.","createdAt":"2025-12-17T22:15:32Z","closedAt":"2025-12-19T09:09:14Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7e9ocF","title":"Rename chat assistant to \"Agent Builder\"","author":"borisudovicic","number":6258,"repository":"elizaos/eliza","body":"Users confused whether they're talking to the agent or the builder; consistently label the assistant as \"Agent Builder\" instead of \"Eliza.\"","createdAt":"2025-12-17T22:15:20Z","closedAt":"2025-12-19T02:35:07Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7e9oWt","title":"Fix markdown bullet point rendering","author":"borisudovicic","number":6257,"repository":"elizaos/eliza","body":"Bullet point text renders below the bullet instead of beside it in agent builder chat; fix markdown rendering component.","createdAt":"2025-12-17T22:15:09Z","closedAt":"2025-12-19T09:09:14Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7e9oBN","title":"Fix gallery tab refresh behavior","author":"borisudovicic","number":6256,"repository":"elizaos/eliza","body":"Clicking between gallery tabs (All Media, Images, etc.) triggers full page refresh instead of client-side navigation.","createdAt":"2025-12-17T22:14:34Z","closedAt":"2025-12-19T09:09:13Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7e9n2T","title":"Investigate slow image loading in gallery","author":"borisudovicic","number":6255,"repository":"elizaos/eliza","body":"Images taking 7+ seconds to load for 45KB files; investigate Vercel blob or other bottlenecks.","createdAt":"2025-12-17T22:14:22Z","closedAt":"2025-12-19T09:09:14Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7e9nvn","title":"Fix sidebar hover effect","author":"borisudovicic","number":6254,"repository":"elizaos/eliza","body":"Hover effect on sidebar items pushes text and icon off screen; use non-displacement hover style.","createdAt":"2025-12-17T22:14:10Z","closedAt":"2025-12-19T09:09:13Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7e9ncJ","title":"Remove login screen flash","author":"borisudovicic","number":6253,"repository":"elizaos/eliza","body":"White flash occurs during login transition; implement smoother loading state.","createdAt":"2025-12-17T22:13:43Z","closedAt":"2025-12-19T09:09:13Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7e9nO8","title":"Fix voices page layout on MacBook","author":"borisudovicic","number":6252,"repository":"elizaos/eliza","body":"Voices page doesn't fit on standard MacBook screen and requires scrolling to reach \"Create voice\" button; tighten UI to fit single viewport","createdAt":"2025-12-17T22:13:25Z","closedAt":"2025-12-19T09:09:13Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7e9nCR","title":"Remove redundant container list header","author":"borisudovicic","number":6251,"repository":"elizaos/eliza","body":"The duplicate containers/container list header pushes dashboard cards down unnecessarily; consolidate into single header to reclaim vertical space.","createdAt":"2025-12-17T22:13:01Z","closedAt":"2025-12-19T09:09:14Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7e9mVW","title":"Reduce Privy re-authentication calls","author":"borisudovicic","number":6249,"repository":"elizaos/eliza","body":"Privy authentication is being checked up to 12 times per page load across middleware calls; consolidate to single auth check per session.","createdAt":"2025-12-17T22:11:55Z","closedAt":"2025-12-19T22:06:09Z","state":"CLOSED","commentCount":0}],"topPullRequests":[{"id":"PR_kwDOOtXZkc61vxX1","title":"Slash command permissions","author":"odilitime","number":29,"body":"$17","repository":"elizaos-plugins/plugin-discord","createdAt":"2025-11-26T23:30:52Z","mergedAt":"2025-12-19T03:32:39Z","additions":959,"deletions":174},{"id":"PR_kwDONNAI986vPlUQ","title":"feat: add JSON leaderboard API endpoints","author":"standujar","number":164,"body":"$18","repository":"elizaos/elizaos.github.io","createdAt":"2025-10-23T11:22:38Z","mergedAt":null,"additions":715,"deletions":11},{"id":"PR_kwDOOtXZkc65vaKh","title":"feat(discord): add tiered permission system for bot invite URLs","author":"odilitime","number":33,"body":"$19","repository":"elizaos-plugins/plugin-discord","createdAt":"2025-12-19T03:50:48Z","mergedAt":"2025-12-19T05:00:10Z","additions":660,"deletions":107},{"id":"PR_kwDONNAI9865wKeK","title":"feat: add static JSON API for summaries","author":"madjin","number":186,"body":"$1a","repository":"elizaos/elizaos.github.io","createdAt":"2025-12-19T05:40:27Z","mergedAt":"2025-12-19T06:47:54Z","additions":616,"deletions":62},{"id":"PR_kwDONNAI9865tiq4","title":"feat: add static JSON leaderboard API endpoints","author":"madjin","number":184,"body":"$1b","repository":"elizaos/elizaos.github.io","createdAt":"2025-12-19T00:09:46Z","mergedAt":"2025-12-19T01:05:34Z","additions":402,"deletions":0},{"id":"PR_kwDOMT5cIs65gDZn","title":"fix: bootstrap action/provide format change fix + initPromise fix","author":"odilitime","number":6261,"body":"$1c","repository":"elizaos/eliza","createdAt":"2025-12-18T04:14:51Z","mergedAt":"2025-12-19T01:01:58Z","additions":96,"deletions":109},{"id":"PR_kwDONkg7v865yosm","title":"feat: detect version/core dependency mismatches and fix supports flags","author":"wtfsayo","number":244,"body":"$1d","repository":"elizaos-plugins/registry","createdAt":"2025-12-19T10:03:38Z","mergedAt":"2025-12-19T10:18:43Z","additions":31,"deletions":1}],"detailedContributorSummaries":{"madjin":"madjin: Focused on enhancing the `elizaos.github.io` repository by implementing new static JSON API endpoints for summaries and leaderboards, as evidenced by merged PRs #186 (+966/-412 lines) and #184 (+402/-0 lines), while also contributing to other work, bug fixes, and feature development across 35 files.","odilitime":"odilitime: Focused on feature development, successfully merging PR elizaos-plugins/plugin-discord#33 which added a tiered permission system for bot invite URLs, demonstrating a primary focus on bugfix work, other work, and feature work across 81 files.","wtfsayo":"wtfsayo: Focused on enhancing the registry's robustness by merging PR elizaos-plugins/registry#244, which introduced detection and fixes for version/core dependency mismatches, contributing to bugfix and other work across 2 files with 2 commits."}}}],"$L1e"]}]
+f:["$","div",null,{"className":"prose prose-sm mx-auto mt-8 dark:prose-invert sm:prose lg:prose-lg xl:prose-xl","children":[["$","p","p-0",{"children":["On Dec 19, 2025, the ElizaOS project significantly advanced its data infrastructure by implementing new static JSON API endpoints for both leaderboard and summary data across multiple repositories, streamlining data access and consistency. Concurrently, core platform stability and user experience were enhanced through critical bug fixes in the ",["$","code","code-0",{"children":"eliza"}]," repository and improved Discord bot permissions."]}],"\n",["$","h2","h2-0",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"✅ Completed Work","position":{"start":{"line":3,"column":4,"offset":407},"end":{"line":3,"column":20,"offset":423}}}],"position":{"start":{"line":3,"column":1,"offset":404},"end":{"line":3,"column":20,"offset":423}}},"children":"✅ Completed Work"}],"\n",["$","h3","h3-0",{"children":"API & Data Infrastructure Enhancements"}],"\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"elizaos/elizaos.github.io"}],": Enhanced the static JSON API to include summary endpoints, generating JSON alongside markdown for data consistency and simplifying the API structure by removing unnecessary pagination fields from the leaderboard API (",["$","a","a-0",{"href":"https://github.com/elizaos/elizaos.github.io/pull/186","children":"#186"}],")."]}],"\n",["$","li","li-1",{"children":[["$","strong","strong-0",{"children":"elizaos/elizaos.github.io"}],": Introduced new static JSON API endpoints for leaderboard data, including API versioning (v1.0) and pagination metadata (",["$","a","a-0",{"href":"https://github.com/elizaos/elizaos.github.io/pull/184","children":"#184"}],")."]}],"\n",["$","li","li-2",{"children":[["$","strong","strong-0",{"children":"elizaos-plugins/registry"}],": Improved the registry generation script to detect and warn about package version and core dependency mismatches, and correctly set ",["$","code","code-0",{"children":"supports"}]," flags based on actual core dependencies (",["$","a","a-0",{"href":"https://github.elizaos-plugins/registry/pull/244","children":"#244"}],")."]}],"\n"]}],"\n",["$","h3","h3-1",{"children":"Core Platform Stability & User Experience"}],"\n",["$","ul","ul-1",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"elizaos/eliza"}],": Fixed a significant bug in the ",["$","code","code-0",{"children":"plugin-bootstrap"}]," module, correcting action/provider format changes and resolving an ",["$","code","code-1",{"children":"initPromise"}]," bug across multiple packages (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/6261","children":"#6261"}],")."]}],"\n",["$","li","li-1",{"children":[["$","strong","strong-0",{"children":"elizaos-plugins/plugin-discord"}],": Implemented a new tiered permission system for Discord bot invite URLs, featuring a 3x2 matrix of role levels and voice options (",["$","a","a-0",{"href":"https://github.com/elizaos-plugins/plugin-discord/pull/33","children":"#33"}],")."]}],"\n",["$","li","li-2",{"children":[["$","strong","strong-0",{"children":"elizaos-plugins/plugin-discord"}],": Added hybrid slash-command permissions, incorporating Discord permissions, channel-whitelist bypass, and custom validators, along with a safer command registration pipeline and fixes for DM channel handling (",["$","a","a-0",{"href":"https://github.com/elizaos-plugins/plugin-discord/pull/29","children":"#29"}],")."]}],"\n"]}],"\n",["$","h2","h2-1",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"🏗️ Work in Progress","position":{"start":{"line":14,"column":4,"offset":2118},"end":{"line":14,"column":24,"offset":2138}}}],"position":{"start":{"line":14,"column":1,"offset":2115},"end":{"line":14,"column":24,"offset":2138}}},"children":"🏗️ Work in Progress"}],"\n",["$","h3","h3-2",{"children":"Active Discussions"}],"\n","$L1f","\n","$L20","\n","$L21","\n","$L22"]}]
+10:["$","script","script-0",{"src":"/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","async":true}]
+11:["$","script","script-1",{"src":"/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","async":true}]
+12:["$","script","script-2",{"src":"/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js","async":true}]
+13:["$","$L23",null,{"children":["$","$24",null,{"name":"Next.MetadataOutlet","children":"$@25"}]}]
+1e:["$","div",null,{"className":"rounded-lg border bg-card text-card-foreground shadow-sm","children":[["$","div",null,{"className":"flex flex-col space-y-1.5 p-6 py-4","children":["$","div",null,{"className":"tracking-tight text-sm font-medium","children":["$undefined","Code Changes"]}]}],["$","div",null,{"className":"p-6 pt-0","children":["$","div",null,{"className":"grid grid-cols-2 gap-4 md:grid-cols-4","children":[["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-git-commit-vertical h-5 w-5","aria-hidden":"true","children":[["$","path","1holv5",{"d":"M12 3v6"}],["$","circle","1v7zrd",{"cx":"12","cy":"12","r":"3"}],["$","path","a9ows0",{"d":"M12 15v6"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":58}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Commits"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-file-code h-5 w-5","aria-hidden":"true","children":[["$","path","1oefj6",{"d":"M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"}],["$","path","wfsgrz",{"d":"M14 2v5a1 1 0 0 0 1 1h5"}],["$","path","1tg20x",{"d":"M10 12.5 8 15l2 2.5"}],["$","path","yinavb",{"d":"m14 12.5 2 2.5-2 2.5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":33}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Files Changed"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-green-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-up h-5 w-5 text-green-500","aria-hidden":"true","children":[["$","path","hav0vg",{"d":"m5 12 7-7 7 7"}],["$","path","x0mq9r",{"d":"M12 19V5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-green-500","children":"+2,764"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Added"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-red-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-down h-5 w-5 text-red-500","aria-hidden":"true","children":[["$","path","s699le",{"d":"M12 5v14"}],["$","path","1idqje",{"d":"m19 12-7 7-7-7"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-red-500","children":"-453"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Deleted"}]]}]]}]]}]}]]}]
+1f:["$","ul","ul-2",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"elizaos-plugins/plugin-discord"}],": Issue ",["$","a","a-0",{"href":"https://github.com/elizaos-plugins/plugin-discord/issues/185","children":"#185"}]," discusses extending the static JSON API for summaries, with a refined approach to generate JSON alongside markdown during summarization and proposed ",["$","code","code-0",{"children":"SummaryAPIResponse"}]," shape."]}],"\n"]}]
+20:["$","h2","h2-2",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"🐞 Issue Triage","position":{"start":{"line":18,"column":4,"offset":2458},"end":{"line":18,"column":19,"offset":2473}}}],"position":{"start":{"line":18,"column":1,"offset":2455},"end":{"line":18,"column":19,"offset":2473}}},"children":"🐞 Issue Triage"}]
+21:["$","h3","h3-3",{"children":"Closed Issues"}]
+22:["$","ul","ul-3",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"elizaos/elizaos.github.io"}],": Implemented JSON API Endpoints for Summaries, extending the static JSON API to include summary endpoints with a refined approach to \"piggyback\" JSON generation alongside markdown (",["$","a","a-0",{"href":"https://github.com/elizaos/elizaos.github.io/issues/185","children":"#185"}],")."]}],"\n",["$","li","li-1",{"children":[["$","strong","strong-0",{"children":"elizaos-plugins/registry"}],": Closed a feature request to extend the static JSON API to include summary endpoints, with discussions on refining the approach to piggyback JSON generation alongside markdown and enhancing the response shape (",["$","a","a-0",{"href":"https://github.com/elizaos-plugins/registry/issues/185","children":"#185"}],")."]}],"\n",["$","li","li-2",{"children":[["$","strong","strong-0",{"children":"elizaos/eliza"}],": Resolved multiple UI/UX and performance enhancements, including fixing the voices page layout (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/6252","children":"#6252"}],"), removing a redundant container list header (",["$","a","a-1",{"href":"https://github.com/elizaos/eliza/issues/6251","children":"#6251"}],"), addressing a white flash during login (",["$","a","a-2",{"href":"https://github.com/elizaos/eliza/issues/6253","children":"#6253"}],"), fixing sidebar hover effects (",["$","a","a-3",{"href":"https://github.com/elizaos/eliza/issues/6254","children":"#6254"}],"), and gallery tab refresh behavior (",["$","a","a-4",{"href":"https://github.com/elizaos/eliza/issues/6256","children":"#6256"}],")."]}],"\n",["$","li","li-3",{"children":[["$","strong","strong-0",{"children":"elizaos/eliza"}],": Investigated and resolved slow image loading in the gallery (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/6255","children":"#6255"}],")."]}],"\n",["$","li","li-4",{"children":[["$","strong","strong-0",{"children":"elizaos/eliza"}],": Optimized model selection in Agent Builder to use faster models for initial configuration (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/6185","children":"#6185"}],")."]}],"\n",["$","li","li-5",{"children":[["$","strong","strong-0",{"children":"elizaos/eliza"}],": Renamed the chat assistant to \"Agent Builder\" to avoid user confusion (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/6258","children":"#6258"}],")."]}],"\n",["$","li","li-6",{"children":[["$","strong","strong-0",{"children":"elizaos/eliza"}],": Added the ability to export JSON without deploying (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/6259","children":"#6259"}],")."]}],"\n",["$","li","li-7",{"children":[["$","strong","strong-0",{"children":"elizaos/eliza"}],": Fixed markdown rendering for bullet points in the agent builder chat (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/6257","children":"#6257"}],")."]}],"\n",["$","li","li-8",{"children":[["$","strong","strong-0",{"children":"elizaos/eliza"}],": Addressed redundant Privy re-authentication calls, consolidating multiple checks into a single authentication check per session (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/6249","children":"#6249"}],")."]}],"\n",["$","li","li-9",{"children":[["$","strong","strong-0",{"children":"elizaos/eliza"}],": Closed issue ",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/185","children":"#185"}]," after merging the implementation of JSON API endpoints for summaries, which involved generating JSON alongside markdown and defining an enhanced API response shape."]}],"\n"]}]
+25:null

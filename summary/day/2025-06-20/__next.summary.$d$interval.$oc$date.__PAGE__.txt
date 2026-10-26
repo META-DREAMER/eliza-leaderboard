@@ -1,0 +1,1461 @@
+1:"$Sreact.fragment"
+2:I[4817319,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"IntervalSelector"]
+3:I[6998365,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"LlmCopyButton"]
+16:I[3642796,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],""]
+17:I[3238488,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"StatCardsDisplay"]
+2f:I[4261541,["/eliza-leaderboard/_next/static/chunks/b33bcbdcb3f88354.js","/eliza-leaderboard/_next/static/chunks/8ba59154b6704904.js"],"OutletBoundary"]
+30:"$Sreact.suspense"
+4:T126b,## Problem
+
+Currently, `bun run test` does not work consistently across all packages in the ElizaOS monorepo. This creates several issues:
+
+1. **Inconsistent Developer Experience**: Developers cannot reliably run tests in individual packages
+2. **CI/CD Fragility**: The root `bun test` command fails, making it difficult to validate changes
+3. **Low Test Coverage**: Only 28% of source files have tests (excluding dist files)
+4. **Missing Test Infrastructure**: 29% of packages have no test scripts defined
+
+### Current State Analysis
+
+**Test Coverage by Package:**
+- ✅ **10/14 packages (71%)** have test scripts defined
+- ❌ **4/14 packages (29%)** have no test infrastructure
+- 🔴 Root `bun test` fails due to `@elizaos/plugin-bootstrap` mock initialization errors
+
+**Packages with Issues:**
+1. **No Tests At All:**
+   - `@elizaos/app` - Tauri application
+   - `@elizaos/autodoc` - Documentation generator
+   - `create-eliza` - Scaffolding tool
+   - `@elizaos/docs` - Docusaurus site (expected)
+
+2. **Failing Tests:**
+   - `@elizaos/plugin-bootstrap` - Mock initialization errors
+   - `@elizaos/project-tee-starter` - Environment setup issues
+
+3. **Excluded from Root Tests:**
+   - `@elizaos/plugin-starter` (template)
+   - `@elizaos/docs` (documentation)
+   - `@elizaos/plugin-sql` (has tests but excluded)
+
+## Proposed Solution
+
+Implement a phased approach to ensure all packages have working tests:
+
+### Phase 1: Fix Failing Tests (Priority: High)
+- [ ] Fix `@elizaos/plugin-bootstrap` mock initialization errors
+- [ ] Fix `@elizaos/project-tee-starter` environment setup issues
+- [ ] Ensure root `bun test` command passes
+
+### Phase 2: Add Missing Test Infrastructure (Priority: High)
+- [ ] Add test setup to `@elizaos/app` (Tauri app testing)
+- [ ] Add test setup to `@elizaos/autodoc`
+- [ ] Add test setup to `create-eliza`
+- [ ] Create minimal test files to validate setup
+
+### Phase 3: Standardize Test Configuration (Priority: Medium)
+- [ ] Create shared test configuration for consistency
+- [ ] Standardize coverage reporting (exclude dist/, build/, node_modules/)
+- [ ] Add coverage thresholds per package
+- [ ] Ensure all packages use Bun test runner consistently
+
+### Phase 4: Documentation & CI Updates (Priority: Medium)
+- [ ] Update contributing guide with testing requirements
+- [ ] Add pre-commit hooks for test validation
+- [ ] Update CI workflows to run package-specific tests
+- [ ] Create testing best practices documentation
+
+## Implementation Details
+
+### 1. Shared Test Configuration
+Create a base test configuration that all packages can extend:
+
+```typescript
+// packages/test-config/base.config.ts
+export default {
+  testMatch: ["**/*.test.ts", "**/*.spec.ts"],
+  coverage: {
+    exclude: [
+      "**/dist/**",
+      "**/build/**",
+      "**/node_modules/**",
+      "**/*.d.ts",
+      "**/coverage/**"
+    ],
+    threshold: {
+      statements: 60,
+      branches: 60,
+      functions: 60,
+      lines: 60
+    }
+  }
+}
+```
+
+### 2. Package Test Script Standardization
+Ensure every package.json has:
+```json
+{
+  "scripts": {
+    "test": "bun test",
+    "test:coverage": "bun test --coverage"
+  }
+}
+```
+
+### 3. Fix Root Test Command
+Update root package.json to handle package-specific test requirements:
+```json
+{
+  "scripts": {
+    "test": "turbo run test --filter=\!@elizaos/docs --filter=\!@elizaos/plugin-starter"
+  }
+}
+```
+
+## Success Criteria
+
+- [ ] `bun run test` works in every package directory
+- [ ] Root `bun test` command passes without errors
+- [ ] All packages have at least minimal test coverage
+- [ ] Test coverage reporting excludes dist/build artifacts
+- [ ] CI/CD pipeline runs all tests successfully
+- [ ] Developer documentation updated with testing guidelines
+
+## Benefits
+
+1. **Improved Developer Experience**: Consistent testing commands across all packages
+2. **Better Code Quality**: Increased test coverage from 28% to target 60%+
+3. **Reliable CI/CD**: All PRs validated with comprehensive test suite
+4. **Easier Onboarding**: New contributors can confidently run tests
+5. **Reduced Bugs**: Catch issues early with standardized testing
+
+## Alternatives Considered
+
+1. **Using Different Test Runners**: Considered Jest/Vitest but Bun test is already established
+2. **Monorepo-level Testing Only**: Would miss package-specific issues
+3. **Excluding Packages from Testing**: Would leave gaps in coverage
+
+## Additional Context
+
+- Current test coverage is ~28% (excluding dist files)
+- The monorepo uses Turbo for orchestration
+- Bun test runner is the standard across the project
+- Some packages have E2E tests (client) that need special handling
+
+This improvement will significantly enhance the development workflow and code quality across the ElizaOS project.5:Tbf7,## Problem
+
+The knowledge plugin was experiencing consistent `"Unexpected end of form"` errors during file uploads, caused by **double parsing** of multipart form data:
+
+1. **Global middleware**: The main server (`eliza/packages/server/src/index.ts`) already applies a global `express-fileupload` middleware to all routes
+2. **Plugin middleware**: The knowledge plugin was applying its own middleware on top
+3. **Result**: Attempting to re-parse an already consumed stream → busboy error
+
+### Error logs
+```
+ERROR: [KNOWLEDGE UPLOAD] Upload error:
+    message: "Unexpected end of form"
+    stack: "Error: Unexpected end of form
+    at Multipart._final (/workspaces/node_modules/busboy/lib/types/multipart.js:588:17)"
+```
+
+## Solution
+
+**Remove duplicate middleware and use files already parsed by the global middleware.**
+
+### Changes Made
+
+#### 1. Removed duplicate express-fileupload / Multer configuration
+- ❌ Deleted `createUploadMiddleware()` function
+- ❌ Removed import
+- ❌ Eliminated custom middleware application logic
+- ✅ Simplified upload handler
+
+#### 3. Fixed file reading logic
+Updated to prioritize temporary files (used by global middleware) over in-memory buffers:
+
+```typescript
+// BEFORE: Assumed in-memory buffers
+if (file.data) { fileBuffer = file.data; }
+
+// AFTER: Prioritize temp files from global middleware
+if (filePath && fs.existsSync(filePath)) {
+  fileBuffer = await fs.promises.readFile(filePath);
+} else if (file.data && Buffer.isBuffer(file.data)) {
+  fileBuffer = file.data; // fallback
+}
+```
+
+## Testing
+
+- ✅ File uploads now work without "Unexpected end of form" errors
+- ✅ Both single and multiple file uploads tested
+- ✅ Large files (130KB+) upload successfully
+- ✅ Logging confirms files are read from temp files as expected
+
+## Breaking Changes
+
+**None** - This is purely a bug fix that removes unnecessary duplicate processing.
+
+## Performance Impact
+
+- ⚡ **Faster uploads**: Eliminates duplicate parsing overhead
+- 🛡️ **More reliable**: Removes race conditions and connection issues
+- 🧹 **Cleaner code**: 80% reduction in middleware complexity
+
+## Files Changed
+
+- `plugin-knowledge/src/routes.ts`: Removed duplicate middleware, simplified upload handler
+
+## Migration Notes
+
+No migration needed. The plugin now correctly uses the existing global `express-fileupload` middleware instead of creating its own conflicting instance.
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+- **Documentation**
+  - Added a new section explaining file upload configuration, supported file types, and MIME type handling to the troubleshooting guide.
+
+- **Chores**
+  - Removed unused dependencies related to file upload handling.
+
+- **Refactor**
+  - Replaced the previous file upload middleware with a global approach, improved file validation and error handling, and updated the upload process for better reliability.
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->6:T414,
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+- **Documentation**
+  - Added comprehensive documentation for GitHub Actions workflows, data pipeline architecture, and development workflow in `.github/README.md` and expanded `CLAUDE.md` with detailed operational guides and architecture overviews.
+
+- **Bug Fixes**
+  - Improved reliability and error handling in GitHub Actions for data synchronization and deployment workflows.
+  - Simplified and clarified the database restore process in GitHub Actions and CLI scripts.
+
+- **Refactor**
+  - Streamlined migration logic to support partial migrations and removed unnecessary worktree handling.
+  - Refactored migration scripts to enable targeted migration execution and improved metadata handling.
+
+- **Chores**
+  - Updated workflow triggers and job conditions to ensure accurate deployment and checks.
+  - Removed redundant initialization steps in PR check workflows.
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->7:T8fa,<!-- Use this template by filling in information and copying and pasting relevant items out of the HTML comments. -->
+
+# Relates to
+
+<!-- LINK TO ISSUE OR TICKET -->
+
+<!-- This risks section must be filled out before the final review and merge. -->
+
+# Risks
+
+<!--
+Low, medium, large. List what kind of risks and what could be affected.
+-->
+
+# Background
+
+## What does this PR do?
+
+## What kind of change is this?
+
+<!--
+Bug fixes (non-breaking change which fixes an issue)
+Improvements (misc. changes to existing features)
+Features (non-breaking change which adds functionality)
+Updates (new versions of included code)
+-->
+
+<!-- This "Why" section is most relevant if there are no linked issues explaining why. If there is a related issue, it might make sense to skip this why section. -->
+<!--
+## Why are we doing this? Any context or related work?
+-->
+
+# Documentation changes needed?
+
+<!--
+My changes do not require a change to the project documentation.
+My changes require a change to the project documentation.
+If documentation change is needed: I have updated the documentation accordingly.
+-->
+
+<!-- Please show how you tested the PR. This will really help if the PR needs to be retested and probably help the PR get merged quicker. -->
+
+# Testing
+
+## Where should a reviewer start?
+
+## Detailed testing steps
+
+<!--
+None: Automated tests are acceptable.
+-->
+
+<!--
+- As [anon/admin], go to [link]
+  - [do action]
+  - verify [result]
+-->
+
+<!-- If there is a UI change, please include before and after screenshots or videos. This will speed up PRs being merged. It is extra nice to annotate screenshots with arrows or boxes pointing out the differences. -->
+<!--
+## Screenshots
+### Before
+### After
+-->
+
+<!-- If there is anything about the deployment, please make a note. -->
+<!--
+# Deploy Notes
+-->
+
+<!--  Copy and paste command line output. -->
+<!--
+## Database changes
+-->
+
+<!--  Please specify deploy instructions if there is something more than the automated steps. -->
+<!--
+## Deployment instructions
+-->
+
+<!-- If you are on Discord, please join https://discord.gg/ai16z and state your Discord username here for the contributor role and join us in #development-feed -->
+<!--
+## Discord username
+
+-->
+8:T6d9,## Summary
+- Added Google Generative AI (Gemini) support to the ElizaOS CLI
+- Simplified AI model and database selection descriptions for better clarity
+- Created a generic provider configuration prompt function to reduce code duplication
+- Refactored all provider configuration prompts to use shared logic
+
+## Changes
+
+### Google Generative AI Support
+- **Model Selection**: Added "Google Generative AI" option with "Gemini models" description
+- **API Key Validation**: Implemented validation for 39-character alphanumeric Google API keys
+- **Configuration**: Added `promptAndStoreGoogleKey` function following the same pattern as other providers
+- **Setup Integration**: Updated CLI create command to handle 'google' model selection
+- **Environment Variable**: Stores API key as `GOOGLE_GENERATIVE_AI_API_KEY`
+
+### Prompt Improvements
+- **Shorter Descriptions**: Made all AI model and database descriptions more concise
+- **Generic Configuration**: Introduced `promptAndStoreProviderConfig` generic function
+- **Code Deduplication**: Refactored OpenAI, Anthropic, Ollama, and Google prompts to use shared logic
+- **Consistent UX**: Maintained consistent user experience across all provider setups
+
+## Test plan
+- [ ] Test `bun create eliza` flow with AI model selection
+- [ ] Test Google Generative AI selection and API key configuration
+- [ ] Test database selection prompts
+- [ ] Verify OpenAI API key configuration works
+- [ ] Verify Anthropic API key configuration works
+- [ ] Verify Ollama configuration works
+- [ ] Verify Google API key configuration works
+- [ ] Ensure all prompts display correctly and validation works as expected
+- [ ] Test both interactive and non-interactive modes
+
+🤖 Generated with [Claude Code](https://claude.ai/code)9:T10ec,# Relates to
+
+Agent configuration and user experience improvements for ElizaOS platform
+
+# Risks
+
+**Medium Risk**
+- UI changes may affect existing workflows
+- Potential integration issues with current configuration system
+- Database schema changes (if applicable) require careful migration
+
+# Background
+
+## What does this PR do?
+
+This PR introduces a comprehensive **agent settings feature** that provides a user-friendly interface for configuring AI agents within the ElizaOS platform. Instead of manually editing JSON configuration files, users can now manage their agent settings through an intuitive web interface.
+
+Key additions include:
+- **Visual Configuration Interface**: Settings panels and forms for agent parameters
+- **Real-time Configuration**: Live updates to agent settings without requiring restarts
+- **Enhanced User Experience**: Streamlined setup process for both technical and non-technical users
+- **Validation & Error Handling**: Built-in validation for configuration options
+
+## What kind of change is this?
+
+**Features** (non-breaking change which adds functionality)
+
+This is a major feature enhancement that makes ElizaOS more accessible by providing a modern UI for agent configuration, reducing the technical barrier for users who want to create and customize AI agents.
+
+# Documentation changes needed?
+
+**My changes require a change to the project documentation.**
+
+- User guide updates for the new settings interface
+- Configuration documentation updates
+- Possible API documentation if new endpoints were added
+
+# Testing
+
+## Where should a reviewer start?
+
+1. **UI Components**: Review the new settings interface components and their styling
+2. **Integration Points**: Check how the settings integrate with existing agent runtime system
+3. **Data Flow**: Verify settings persistence and retrieval mechanisms
+4. **Validation Logic**: Test input validation and error handling
+
+## Detailed testing steps
+
+### Functional Testing
+- **Settings Creation**: Create a new agent and configure settings through the UI
+  - Verify all configuration options are available and functional
+  - Test form validation with invalid inputs
+  - Confirm settings are properly saved and persisted
+
+- **Settings Modification**: Modify existing agent settings
+  - Test real-time updates (if applicable)
+  - Verify changes are reflected in agent behavior
+  - Check for proper rollback on invalid configurations
+
+- **Cross-Platform Consistency**: Test settings across different platforms
+  - Verify settings work with Discord, Telegram, and other connectors
+  - Check that personality and behavior remain consistent
+
+### UI/UX Testing
+- **Responsive Design**: Test interface across different screen sizes
+- **Accessibility**: Verify keyboard navigation and screen reader compatibility
+- **Performance**: Check for smooth interactions and fast loading times
+
+### Integration Testing
+- **Backward Compatibility**: Ensure existing JSON configurations still work
+- **API Integration**: Test any new endpoints for settings management
+- **Database Operations**: Verify proper CRUD operations for settings data
+
+## Screenshots
+
+*Screenshots would be helpful here to show before/after states of the configuration interface*
+
+# Deploy Notes
+
+## Database changes
+
+If this PR includes database schema changes for storing agent settings, ensure:
+- Migration scripts are included and tested
+- Backward compatibility is maintained
+- Data validation is properly implemented
+
+## Deployment instructions
+
+1. Standard deployment process should suffice if no breaking changes
+2. If database migrations are required, run them during deployment
+3. Monitor for any configuration-related errors post-deployment
+4. Verify existing agents continue to function with their current settings
+
+# Additional Notes
+
+This feature significantly enhances the ElizaOS user experience by:
+- **Democratizing Agent Creation**: Making AI agent development accessible to non-developers
+- **Improving Developer Experience**: Faster iteration and testing cycles
+- **Standardizing Configuration**: Consistent interface across all agent types
+- **Future-Proofing**: Foundation for advanced configuration features
+
+The implementation aligns with ElizaOS's goal of being "Autonomous agents for everyone" by removing technical barriers to agent customization and deployment.a:T6fb,## Summary
+- Removes Cypress test dependencies and Discord plugin from default installation in starter templates
+- Adds on-demand installation when test commands are run
+- Reduces initial project size and speeds up `elizaos create` command
+
+## Changes
+
+### project-starter template:
+1. **Removed from default installation:**
+   - `@elizaos/plugin-discord`
+   - `@cypress/react`
+   - `@cypress/vite-dev-server`
+   - `@testing-library/cypress`
+   - `cypress`
+
+2. **Created `scripts/install-test-deps.js`** that checks for and installs test dependencies only when needed
+
+3. **Updated all test scripts** to run `test:install` first
+
+### plugin-starter template:
+1. **Removed from default installation:**
+   - `@cypress/react`
+   - `@testing-library/cypress`
+   - `cypress`
+
+2. **Created `scripts/install-test-deps.js`** for on-demand installation
+
+3. **Updated all test scripts** to run `test:install` first
+
+### project-tee-starter template:
+- No changes needed (doesn't include Cypress dependencies)
+
+## Impact
+When users run `elizaos create`, new projects and plugins won't include Cypress or Discord plugin by default. The test dependencies will only be installed the first time they run any test command. This improves the initial developer experience by:
+- Faster project/plugin creation
+- Smaller initial download size (no Cypress binary download)
+- Dependencies installed only when actually needed
+- Discord plugin not forced on users who may not need it
+
+## Test plan
+- [x] Run `bun run build` - passes
+- [x] Run `bun run lint` - passes
+- [ ] Create new project with `elizaos create` and verify Cypress/Discord are not installed
+- [ ] Create new plugin and verify Cypress is not installed
+- [ ] Run test command in new project/plugin and verify dependencies are installed on demandb:Tea6,```
+NotFoundError: Not Found
+    at createHttpError (/Users/cjft/.nvm/versions/node/v22.16.0/lib/node_modules/@elizaos/cli/node_modules/send/index.js:861:12)
+    at SendStream.error (/Users/cjft/.nvm/versions/node/v22.16.0/lib/node_modules/@elizaos/cli/node_modules/send/index.js:168:31)
+    at SendStream.pipe (/Users/cjft/.nvm/versions/node/v22.16.0/lib/node_modules/@elizaos/cli/node_modules/send/index.js:468:14)
+    at sendfile (/Users/cjft/.nvm/versions/node/v22.16.0/lib/node_modules/@elizaos/cli/node_modules/express/lib/response.js:1000:8)
+    at ServerResponse.sendFile (/Users/cjft/.nvm/versions/node/v22.16.0/lib/node_modules/@elizaos/cli/node_modules/express/lib/response.js:409:3)
+    at file:///Users/cjft/.nvm/versions/node/v22.16.0/lib/node_modules/@elizaos/cli/node_modules/@elizaos/server/dist/index.js:5971:13
+    at Layer.handleRequest (/Users/cjft/.nvm/versions/node/v22.16.0/lib/node_modules/@elizaos/cli/node_modules/router/lib/layer.js:152:17)
+    at trimPrefix (/Users/cjft/.nvm/versions/node/v22.16.0/lib/node_modules/@elizaos/cli/node_modules/router/index.js:342:13)
+    at /Users/cjft/.nvm/versions/node/v22.16.0/lib/node_modules/@elizaos/cli/node_modules/router/index.js:297:9
+    at processParams (/Users/cjft/.nvm/versions/node/v22.16.0/lib/node_modules/@elizaos/cli/node_modules/router/index.js:582:12)
+    at next (/Users/cjft/.nvm/versions/node/v22.16.0/lib/node_modules/@elizaos/cli/node_modules/router/index.js:291:5)
+    at file:///Users/cjft/.nvm/versions/node/v22.16.0/lib/node_modules/@elizaos/cli/node_modules/@elizaos/server/dist/index.js:5962:11
+    at Layer.handleRequest (/Users/cjft/.nvm/versions/node/v22.16.0/lib/node_modules/@elizaos/cli/node_modules/router/lib/layer.js:152:17)
+    at trimPrefix (/Users/cjft/.nvm/versions/node/v22.16.0/lib/node_modules/@elizaos/cli/node_modules/router/index.js:342:13)
+    at /Users/cjft/.nvm/versions/node/v22.16.0/lib/node_modules/@elizaos/cli/node_modules/router/index.js:297:9
+    at processParams (/Users/cjft/.nvm/versions/node/v22.16.0/lib/node_modules/@elizaos/cli/node_modules/router/index.js:582:12)
+    at next (/Users/cjft/.nvm/versions/node/v22.16.0/lib/node_modules/@elizaos/cli/node_modules/router/index.js:291:5)
+    at file:///Users/cjft/.nvm/versions/node/v22.16.0/lib/node_modules/@elizaos/cli/node_modules/@elizaos/server/dist/index.js:4570:5
+    at Layer.handleRequest (/Users/cjft/.nvm/versions/node/v22.16.0/lib/node_modules/@elizaos/cli/node_modules/router/lib/layer.js:152:17)
+    at trimPrefix (/Users/cjft/.nvm/versions/node/v22.16.0/lib/node_modules/@elizaos/cli/node_modules/router/index.js:342:13)
+    at /Users/cjft/.nvm/versions/node/v22.16.0/lib/node_modules/@elizaos/cli/node_modules/router/index.js:297:9
+    at processParams (/Users/cjft/.nvm/versions/node/v22.16.0/lib/node_modules/@elizaos/cli/node_modules/router/index.js:582:12)
+    at next (/Users/cjft/.nvm/versions/node/v22.16.0/lib/node_modules/@elizaos/cli/node_modules/router/index.js:291:5)
+    at SendStream.error (/Users/cjft/.nvm/versions/node/v22.16.0/lib/node_modules/@elizaos/cli/node_modules/serve-static/index.js:120:7)
+    at SendStream.emit (node:events:518:28)
+    at SendStream.error (/Users/cjft/.nvm/versions/node/v22.16.0/lib/node_modules/@elizaos/cli/node_modules/send/index.js:168:17)
+    at SendStream.onStatError (/Users/cjft/.nvm/versions/node/v22.16.0/lib/node_modules/@elizaos/cli/node_modules/send/index.js:315:12)
+    at next (/Users/cjft/.nvm/versions/node/v22.16.0/lib/node_modules/@elizaos/cli/node_modules/send/index.js:649:28)
+    at /Users/cjft/.nvm/versions/node/v22.16.0/lib/node_modules/@elizaos/cli/node_modules/send/index.js:657:23
+    at FSReqCallback.oncomplete (node:fs:198:21)
+```
+
+404 when do `elizaos create` outside monorepo.c:Ta53,# Registry Update Checklist
+
+Registry:
+- [x] I've made the left side of the colon of JSON entry in index.json match the potential NPM package name
+- [x] I've used github not github.com
+- [x] There is no .git extension
+- [x] It's placed it alphabetically in the list
+- [x] I've dealt with commas properly so the list is still valid JSON
+
+If not an eliza-plugins official repo, i.e. new plugin: 
+
+The plugin repo has:
+- [x] is publically accessible (not a private repo)
+- [x] uses main as it's default branch
+- [x] I have include `elizaos-plugins` in the topics in the GitHub repo settings. If the plugin is related to `AI` or `crypto`, please add those as topics as well.
+- [x] add simple description in github repo
+- [x] follows this convention
+```
+plugin-name/
+├── images/
+│   ├── logo.jpg        # Plugin branding logo
+│   ├── banner.jpg      # Plugin banner image
+├── src/
+│   ├── index.ts        # Main plugin entry point
+│   ├── actions/        # Plugin-specific actions
+│   ├── clients/        # Client implementations
+│   ├── adapters/       # Adapter implementations
+│   └── types.ts        # Type definitions
+│   └── environment.ts  # runtime.getSetting, zod validation
+├── package.json        # Plugin dependencies
+└── README.md          # Plugin documentation
+```
+- [x] an `images/banner.jpg` and `images/logo.jpg` and they
+  - Use clear, high-resolution images
+  - Keep file sizes optimized (< 500KB for logos, < 1MB for banners)
+  - Follow the [elizaOS Brand Guidelines](https://github.com/elizaOS/brandkit)
+  - Include alt text for accessibility
+- [x] package.json has a agentConfig like the following
+```json
+{
+  "name": "@myNpmOrg/plugin-example",
+  "version": "1.0.0",
+  "agentConfig": {
+    "pluginType": "elizaos:plugin:1.0.0",
+    "pluginParameters": {
+      "API_KEY": {
+        "type": "string",
+        "description": "API key for the service"
+      }
+    }
+  }
+}
+```
+
+<!-- If you are on Discord, please join https://discord.gg/elizaOS and state your Discord username here for the contributor role and join us in #development-feed -->
+<!--
+## Discord username
+
+-->
+
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+## Summary by CodeRabbit
+
+- **New Features**
+  - Added new plugins: @elizaos-plugins/plugin-cardano (v1 support) and @kudo-dev/plugin-kudo (v0 support).
+- **Updates**
+  - Updated plugin registry with branch information and version details for existing plugins.
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->d:T9b4,- Update FooterLink component to detect external URLs
+- Add target='_blank' and rel='noopener noreferrer' for external links
+- Documentation link now opens in new tab for better UX
+
+<!-- Use this template by filling in information and copying and pasting relevant items out of the HTML comments. -->
+
+# Relates to
+
+<!-- LINK TO ISSUE OR TICKET -->
+
+<!-- This risks section must be filled out before the final review and merge. -->
+
+# Risks
+
+<!--
+Low, medium, large. List what kind of risks and what could be affected.
+-->
+
+# Background
+
+## What does this PR do?
+
+## What kind of change is this?
+
+<!--
+Bug fixes (non-breaking change which fixes an issue)
+Improvements (misc. changes to existing features)
+Features (non-breaking change which adds functionality)
+Updates (new versions of included code)
+-->
+
+<!-- This "Why" section is most relevant if there are no linked issues explaining why. If there is a related issue, it might make sense to skip this why section. -->
+<!--
+## Why are we doing this? Any context or related work?
+-->
+
+# Documentation changes needed?
+
+<!--
+My changes do not require a change to the project documentation.
+My changes require a change to the project documentation.
+If documentation change is needed: I have updated the documentation accordingly.
+-->
+
+<!-- Please show how you tested the PR. This will really help if the PR needs to be retested and probably help the PR get merged quicker. -->
+
+# Testing
+
+## Where should a reviewer start?
+
+## Detailed testing steps
+
+<!--
+None: Automated tests are acceptable.
+-->
+
+<!--
+- As [anon/admin], go to [link]
+  - [do action]
+  - verify [result]
+-->
+
+<!-- If there is a UI change, please include before and after screenshots or videos. This will speed up PRs being merged. It is extra nice to annotate screenshots with arrows or boxes pointing out the differences. -->
+<!--
+## Screenshots
+### Before
+### After
+-->
+
+<!-- If there is anything about the deployment, please make a note. -->
+<!--
+# Deploy Notes
+-->
+
+<!--  Copy and paste command line output. -->
+<!--
+## Database changes
+-->
+
+<!--  Please specify deploy instructions if there is something more than the automated steps. -->
+<!--
+## Deployment instructions
+-->
+
+<!-- If you are on Discord, please join https://discord.gg/ai16z and state your Discord username here for the contributor role and join us in #development-feed -->
+<!--
+## Discord username
+
+-->
+e:T1559,Today, ElizaOS significantly expanded its AI capabilities by integrating Google Generative AI and improved CLI performance through lazy loading. The client UI received substantial enhancements for agent settings and responsiveness, while core system stability was boosted with extensive bug fixes and code cleanup. A new "kudo" plugin was added to the registry, and critical guidance was provided for the `elizaos update` command.
+
+## 🚨 Needs Attention
+- **Urgent Discussions**:
+    - [elizaos/eliza#4924](https://github.com/elizaos/eliza/issues/4924) The web client continues to display an incorrect version number, triggering update banners and causing confusion, despite previous attempts to resolve it.
+    - [elizaos/eliza#5216](https://github.com/elizaos/eliza/issues/5216) The `sendAgentResponseToBus` function is not emitting the `EventType.MESSAGE_SENT` event, which could impact central server API communication.
+    - [elizaos/eliza#5218](https://github.com/elizaos/eliza/issues/5218) Inconsistent `bun run test` behavior across packages is leading to unreliable test execution and an inconsistent developer experience.
+
+## ✅ Completed Work
+- **AI and CLI Enhancements**:
+    - Integrated Google Generative AI (Gemini) support into the ElizaOS CLI and refactored CLI prompts for clarity. ([elizaos/eliza#5217](https://github.com/elizaos/eliza/pull/5217), [elizaos/eliza#5215](https://github.com/elizaos/eliza/pull/5215))
+    - Implemented lazy loading for test dependencies and the Discord plugin in starter templates, reducing initial project size and speeding up `elizaos create`. ([elizaos/eliza#5214](https://github.com/elizaos/eliza/pull/5214))
+- **UI/UX Improvements and Agent Management**:
+    - Added new agent settings to the client for better configuration and user experience. ([elizaos/eliza#5202](https://github.com/elizaos/eliza/pull/5202))
+    - Ensured documentation links open in new tabs for improved navigation. ([elizaos/eliza#5213](https://github.com/elizaos/eliza/pull/5213))
+    - Addressed UI bugs including responsive issues with agent cards, saving environment settings, and editing/adding new secrets in the secret panel. ([elizaos/eliza#5223](https://github.com/elizaos/eliza/pull/5223), [elizaos/eliza#5212](https://github.com/elizaos/eliza/pull/5212), [elizaos/eliza#5210](https://github.com/elizaos/eliza/pull/5210), [elizaos/eliza#5209](https://github.com/elizaos/eliza/pull/5209))
+- **Core System Stability and Maintenance**:
+    - Removed all CI caching to prevent issues and corrected incorrectly scoped plugin names. ([elizaos/eliza#5225](https://github.com/elizaos/eliza/pull/5225), [elizaos/eliza#5220](https://github.com/elizaos/eliza/pull/5220))
+    - Resolved the `__dirname` issue for ES modules in the copy-template utility and updated CLI create option tests. ([elizaos/eliza#5219](https://github.com/elizaos/eliza/pull/5219), [elizaos/eliza#5206](https://github.com/elizaos/eliza/pull/5206))
+    - Performed significant code cleanup in the `core` and `plugin-sql` packages and removed CLI tests from integration tests to avoid duplication. ([elizaos/eliza#5224](https://github.com/elizaos/eliza/pull/5224), [elizaos/eliza#5222](https://github.com/elizaos/eliza/pull/5222), [elizaos/eliza#5226](https://github.com/elizaos/eliza/pull/5226))
+- **Documentation and Plugin Registry Updates**:
+    - Added comprehensive documentation for GitHub Actions workflows, data pipeline architecture, and development work. ([elizaos/elizaos.github.io#129](https://github.com/elizaos/elizaos.github.io/pull/129))
+    - Expanded the plugin registry by adding a new "kudo" plugin. ([elizaos-plugins/registry#179](https://github.com/elizaos-plugins/registry/pull/179))
+
+## 🏗️ Work in Progress
+- **New Pull Requests**:
+    - **elizaos/eliza**:
+        - [elizaos/eliza#5221](https://github.com/elizaos/eliza/pull/5221) fix: look for client/dist in multiple locations
+        - [elizaos/eliza#5205](https://github.com/elizaos/eliza/pull/5205) fix: unit and integration tests
+- **Active Discussions**:
+    - [elizaos/eliza#4931](https://github.com/elizaos/eliza/issues/4931) Users are seeking a method to verify currently loaded plugins when an agent is running via `elizaos start`.
+
+## 🐞 Issue Triage
+- **New Issues**:
+    - **elizaos/eliza**:
+        - [elizaos/eliza#5216](https://github.com/elizaos/eliza/issues/5216) Message Event Not Emitting
+        - [elizaos/eliza#5218](https://github.com/elizaos/eliza/issues/5218) Inconsistent Test Execution
+- **Closed Issues**:
+    - **elizaos/eliza**:
+        - [elizaos/eliza#5198](https://github.com/elizaos/eliza/issues/5198) CLI Update Mechanism Resolved (Users advised to use `bun install -g @elizaos/cli@latest` for initial global updates)
+    - **elizaos-plugins/plugin-knowledge**:
+        - [elizaos-plugins/plugin-knowledge#5198](https://github.com/elizaos-plugins/plugin-knowledge/issues/5198) CLI Update Command Resolution
+    - **elizaos/elizaos.github.io**:
+        - [elizaos/elizaos.github.io#5198](https://github.com/elizaos/elizaos.github.io/issues/5198) CLI Update Functionality
+    - **elizaos-plugins/registry**:
+        - [elizaos-plugins/registry#5198](https://github.com/elizaos-plugins/registry/issues/5198) CLI Update Mechanism Resolution
+
+## ✨ Contributor Spotlight
+- **standujar**: Provided crucial guidance on how to check currently loaded plugins in the agent's log output, assisting users with debugging and understanding agent behavior.0:{"buildId":"US8XLB_zHXYj_PVAECGcd","rsc":["$","$1","c",{"children":[["$","div",null,{"className":"container mx-auto px-6 py-8 md:px-8","children":["$","div",null,{"className":"mx-auto max-w-4xl","children":[["$","div",null,{"className":"mb-4 flex flex-col justify-between sm:flex-row","children":[["$","$L2",null,{"currentInterval":"day","currentDate":"2025-06-20"}],["$","$L3",null,{"metrics":{"date":"2025-06-20","interval":{"intervalStart":"$D2025-06-20T00:00:00.000Z","intervalEnd":"$D2025-06-21T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":23,"merged":22,"total":25},"issues":{"new":2,"closed":1,"total":3},"activeContributors":14,"codeChanges":{"additions":6235,"deletions":4073,"files":190,"commitCount":94},"topContributors":[{"username":"wtfsayo","avatarUrl":"https://avatars.githubusercontent.com/u/82053242?u=98209a1f10456f42d4d2fa71db4d5bf4a672cbc3&v=4","totalScore":348.9044829098688,"prScore":344.8044829098688,"issueScore":4.1,"reviewScore":0,"commentScore":0,"summary":"wtfsayo: Merged 10 PRs, including significant feature additions like Google Generative AI support (PR #5217, +291/-148 lines) and a major release (PR #5207, +866/-407 lines), while also creating 1 new issue (#5218). Overall, modified 144 files with a focus on feature work (42%) and refactoring (11%), demonstrating consistent daily activity."},{"username":"ChristopherTrimboli","avatarUrl":"https://avatars.githubusercontent.com/u/27584221?u=de148a498b5af814e037c2975112fadd09df743f&v=4","totalScore":192.17240753486274,"prScore":186.97240753486275,"issueScore":0,"reviewScore":5,"commentScore":0.2,"summary":"ChristopherTrimboli: Merged 4 PRs, including significant refactoring efforts in PR #5222 (+262/-788 lines) and PR #5224 (+392/-1519 lines), while also opening PR #5221. Modified 155 files with a total of +765/-2676 lines across 11 commits, maintaining a consistent work pattern."},{"username":"tcm390","avatarUrl":"https://avatars.githubusercontent.com/u/60634884?u=c6c41679b8322eaa0c81f72e0b4ed95e80f0ac16&v=4","totalScore":88.27699349241571,"prScore":88.27699349241571,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"tcm390: Merged 4 PRs focused on bug fixes, including #5223 \"fix: env settings saving\" (+26/-3 lines) and #5209 \"fix: secrets undefined issue\" (+515/-372 lines), contributing to a total of 556 lines added and 380 lines removed across 41 modified files. Maintained a consistent activity pattern with 6 commits today, primarily addressing issues in the codebase."},{"username":"0xbbjoker","avatarUrl":"https://avatars.githubusercontent.com/u/54844437?u=90fe1762420de6ad493a1c1582f1f70c0d87d8e2&v=4","totalScore":57.306530052639374,"prScore":42.306530052639374,"issueScore":0,"reviewScore":15,"commentScore":0,"summary":"0xbbjoker: Opened 1 PR (#5205) focused on fixing unit and integration tests, while making significant code changes by modifying 27 files (+1069/-393 lines) with a strong emphasis on bugfix work (86%). Actively contributed with 3 reviews, all of which were approvals, demonstrating consistent engagement in the project."},{"username":"META-DREAMER","avatarUrl":"https://avatars.githubusercontent.com/u/7143583?u=96f63f10e066a06d5ad592c8efc659e2b84a68fc&v=4","totalScore":50.43407743842489,"prScore":50.09407743842489,"issueScore":0,"reviewScore":0,"commentScore":0.33999999999999997,"summary":null},{"username":"standujar","avatarUrl":"https://avatars.githubusercontent.com/u/16385918?u=718bdcd1585be8447bdfffb8c11ce249baa7532d&v=4","totalScore":38.36650955863044,"prScore":37.92850955863044,"issueScore":0,"reviewScore":0,"commentScore":0.43799999999999994,"summary":"standujar: Engaged in significant refactoring work, modifying 26 files with a total of +1343/-678 lines across 4 commits, while also commenting on 2 issues and providing 1 comment on a pull request. Maintained a consistent activity pattern, being active every day."},{"username":"Kudo-Dev-tech","avatarUrl":"https://avatars.githubusercontent.com/u/198208019?v=4","totalScore":31.53620101090789,"prScore":31.53620101090789,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":null},{"username":"alexjalonso7777","avatarUrl":"https://avatars.githubusercontent.com/u/179897636?v=4","totalScore":4.5,"prScore":0,"issueScore":0,"reviewScore":4.5,"commentScore":0,"summary":"alexjalonso7777: Engaged with the community by providing 1 review comment but did not merge or open any pull requests or issues today. Activity remains sporadic with no code changes made."},{"username":"Srenonno","avatarUrl":"https://avatars.githubusercontent.com/u/91727428?v=4","totalScore":2,"prScore":0,"issueScore":2,"reviewScore":0,"commentScore":0,"summary":"Srenonno: Created 1 issue (#5216 \"EVENT MESSAGE SENT not working\" (OPEN)) today, showing sporadic activity with no merged pull requests or code changes."}],"focusAreas":[{"area":"cli","count":63},{"area":"plugin-sql","count":48},{"area":"docs","count":36},{"area":"client","count":31},{"area":"core","count":22},{"area":".github/workflows","count":21},{"area":"plugin-bootstrap","count":6},{"area":"autodoc","count":2},{"area":".github/actions","count":2},{"area":"plugin-starter","count":1}],"topIssues":[{"id":"I_kwDOMT5cIs68Zjh4","title":"elizaos update not working","author":"urosognjenovic","number":5198,"repository":"elizaos/eliza","body":"I run `elizaos update` to update from 1.0.6 to 1.0.9, and the CLI outputs a successful update, but the version doesn't change. I've attached a screenshot of this behaviour.\n\n<img width=\"538\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/c4d286c4-6eb3-4e1e-add0-0995afc78645\" />\n\nI'm working on MacOS.\n","createdAt":"2025-06-19T16:07:04Z","closedAt":"2025-06-20T14:52:16Z","state":"CLOSED","commentCount":1},{"id":"I_kwDOMT5cIs68jIbD","title":"fix: ensure `bun run test` works consistently across all packages","author":"wtfsayo","number":5218,"repository":"elizaos/eliza","body":"$4","createdAt":"2025-06-20T13:18:54Z","closedAt":"2025-07-02T11:54:24Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs68iWIi","title":"EVENT MESSAGE SENT not working","author":"Srenonno","number":5216,"repository":"elizaos/eliza","body":"**Describe the bug**\n\nthe sendAgentResponseToBus doens't emit event EventType.MESSAGE_SENT when Sending payload to central server API endpoint (/api/messaging/submit).\n \n**To Reproduce**\n\nCreate a plugin with Message_sent event and it worn't get triggred\n**Expected behavior**\nthe vent need to be emmitted for every message submitted to the central channel\n","createdAt":"2025-06-20T12:13:56Z","closedAt":"2026-02-04T19:22:01Z","state":"CLOSED","commentCount":0}],"topPullRequests":[{"id":"PR_kwDOMT5cIs6azVR3","title":"chore: v1.0.10","author":"ChristopherTrimboli","number":5150,"body":"","repository":"elizaos/eliza","createdAt":"2025-06-16T23:22:29Z","mergedAt":"2025-06-20T03:23:56Z","additions":48113,"deletions":11390},{"id":"PR_kwDOOu4gVs6bb8qs","title":"fix: removing duplicate middleware and update file upload handling","author":"standujar","number":25,"body":"$5","repository":"elizaos-plugins/plugin-knowledge","createdAt":"2025-06-20T15:12:51Z","mergedAt":"2025-06-22T17:00:59Z","additions":1500,"deletions":86},{"id":"PR_kwDOMT5cIs6bXD48","title":"chore: release 1.0.11","author":"wtfsayo","number":5207,"body":"","repository":"elizaos/eliza","createdAt":"2025-06-20T07:42:28Z","mergedAt":"2025-06-20T08:10:50Z","additions":663,"deletions":362},{"id":"PR_kwDOMT5cIs6bXHCs","title":"chore: lint files","author":"wtfsayo","number":5208,"body":"","repository":"elizaos/eliza","createdAt":"2025-06-20T07:48:04Z","mergedAt":"2025-06-20T07:48:30Z","additions":513,"deletions":371},{"id":"PR_kwDONNAI986be5L3","title":"Improve data syncing setup to properly handle migrations","author":"META-DREAMER","number":129,"body":"$6","repository":"elizaos/elizaos.github.io","createdAt":"2025-06-20T23:21:36Z","mergedAt":"2025-06-20T23:34:45Z","additions":513,"deletions":332},{"id":"PR_kwDOMT5cIs6bU071","title":"fix: unit and integration tests","author":"0xbbjoker","number":5205,"body":"$7","repository":"elizaos/eliza","createdAt":"2025-06-20T00:17:59Z","mergedAt":null,"additions":308,"deletions":46},{"id":"PR_kwDOMT5cIs6baPA8","title":"feat: add Google Generative AI support and refactor CLI prompts","author":"wtfsayo","number":5217,"body":"$8","repository":"elizaos/eliza","createdAt":"2025-06-20T12:29:25Z","mergedAt":"2025-06-20T12:57:55Z","additions":280,"deletions":137},{"id":"PR_kwDOMT5cIs6bcs1X","title":"chore: cleanup plugin-sql","author":"ChristopherTrimboli","number":5222,"body":"","repository":"elizaos/eliza","createdAt":"2025-06-20T16:50:59Z","mergedAt":"2025-06-20T19:49:22Z","additions":259,"deletions":785},{"id":"PR_kwDOMT5cIs6bUPSO","title":"feat: add agent settings","author":"0xbbjoker","number":5202,"body":"$9","repository":"elizaos/eliza","createdAt":"2025-06-19T21:57:56Z","mergedAt":"2025-06-20T07:21:11Z","additions":170,"deletions":17},{"id":"PR_kwDOMT5cIs6bZ6t7","title":"feat: lazy load test dependencies and Discord plugin in starter templates","author":"wtfsayo","number":5215,"body":"$a","repository":"elizaos/eliza","createdAt":"2025-06-20T11:58:02Z","mergedAt":"2025-06-20T13:20:09Z","additions":161,"deletions":33},{"id":"PR_kwDOMT5cIs6bc9fy","title":"chore: clean core","author":"ChristopherTrimboli","number":5224,"body":"","repository":"elizaos/eliza","createdAt":"2025-06-20T17:21:03Z","mergedAt":"2025-06-20T19:52:08Z","additions":96,"deletions":720},{"id":"PR_kwDOMT5cIs6bcQzp","title":"fix: look for client/dist in multiple locations","author":"ChristopherTrimboli","number":5221,"body":"$b","repository":"elizaos/eliza","createdAt":"2025-06-20T15:49:07Z","mergedAt":null,"additions":79,"deletions":6},{"id":"PR_kwDOMT5cIs6bYVc7","title":"refactor: improve CLI config template formatting and organization","author":"wtfsayo","number":5214,"body":"## Summary\n- Simplified and reorganized .env template for better clarity\n- Removed redundant configuration sections\n- Improved comment formatting with consistent separators\n- Focused on essential configuration options\n- Removed multi-agent examples to reduce complexity\n\n## Changes\n- Reformatted comments with consistent separator lines\n- Removed duplicate and obsolete configuration sections\n- Simplified the template to focus on core requirements\n- Improved readability of the environment template","repository":"elizaos/eliza","createdAt":"2025-06-20T09:46:30Z","mergedAt":"2025-06-20T13:27:04Z","additions":56,"deletions":149},{"id":"PR_kwDONkg7v86bVR6G","title":"add kudo plugin","author":"Kudo-Dev-tech","number":179,"body":"$c","repository":"elizaos-plugins/registry","createdAt":"2025-06-20T02:20:58Z","mergedAt":"2025-06-20T02:33:53Z","additions":46,"deletions":1},{"id":"PR_kwDOMT5cIs6beHne","title":"fix: remove all CI caching","author":"ChristopherTrimboli","number":5225,"body":"","repository":"elizaos/eliza","createdAt":"2025-06-20T20:22:06Z","mergedAt":"2025-06-20T20:24:41Z","additions":30,"deletions":310},{"id":"PR_kwDOMT5cIs6bXxos","title":"feat: open documentation links in new tab","author":"wtfsayo","number":5213,"body":"$d","repository":"elizaos/eliza","createdAt":"2025-06-20T09:01:59Z","mergedAt":"2025-06-20T09:02:42Z","additions":27,"deletions":10},{"id":"PR_kwDOMT5cIs6bcwFE","title":"fix: env settings saving","author":"tcm390","number":5223,"body":"Previously, changes to environment settings could not be saved.\r\n\r\nThis PR adds the save handler to persist environment variable updates.","repository":"elizaos/eliza","createdAt":"2025-06-20T16:57:18Z","mergedAt":"2025-06-20T16:59:19Z","additions":26,"deletions":3},{"id":"PR_kwDOMT5cIs6bXXZa","title":"fix(secret-panel): allow editing and adding new secrets","author":"tcm390","number":5210,"body":"related: https://linear.app/eliza-labs/issue/ELIZA-452/unable-to-edit-agent-environment-variables-in-v109\r\n\r\nPreviously, adding or editing a secret would redirect to the main homepage without saving because it triggered the parent \"Save Agent\" button. This PR fixes the issue by adding preventDefault to prevent it\r\n\r\nissue:\r\n\r\n\r\nhttps://github.com/user-attachments/assets/2271d922-113d-49d6-b5eb-6ae403281f4f\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n","repository":"elizaos/eliza","createdAt":"2025-06-20T08:19:41Z","mergedAt":"2025-06-20T08:21:37Z","additions":11,"deletions":2},{"id":"PR_kwDOMT5cIs6bXq5l","title":"fix: add bootstrap plugin to agent templates","author":"wtfsayo","number":5211,"body":"## Summary\n- Added `@elizaos/plugin-bootstrap` to all agent templates in the client configuration\n- Ensures core functionality is available across all platform-specific templates (Discord, Telegram, Slack, Twitter, GitHub, Instagram)\n\n## Changes\n- Updated 6 agent templates to include the bootstrap plugin alongside existing plugins\n- No other functional changes made\n\n## Test plan\n- [ ] Verify agent templates load correctly with the bootstrap plugin\n- [ ] Confirm no conflicts with existing plugins\n- [ ] Test that core functionality from bootstrap plugin is available in each template","repository":"elizaos/eliza","createdAt":"2025-06-20T08:52:16Z","mergedAt":"2025-06-20T09:02:53Z","additions":6,"deletions":6},{"id":"PR_kwDOMT5cIs6bXCGO","title":"fix: add __dirname for ES modules in copy-template utility","author":"wtfsayo","number":5206,"body":"This PR fixes an issue where the `elizaos create` command was not properly copying templates due to missing `__dirname` in ES module context.\n\n## Changes\n- Added `fileURLToPath` import from `node:url`\n- Defined `__filename` and `__dirname` for ES module compatibility in `copy-template.ts`\n\n## Issue\nThe `elizaos create` command was failing to copy templates because `__dirname` is not available in ES modules by default.\n\n## Solution\nThis fix properly defines `__dirname` using the ES module-compatible approach with `import.meta.url`.","repository":"elizaos/eliza","createdAt":"2025-06-20T07:38:44Z","mergedAt":"2025-06-20T07:39:06Z","additions":5,"deletions":0},{"id":"PR_kwDOMT5cIs6bbunN","title":"fix: incorrecly scoped plugin name","author":"wtfsayo","number":5220,"body":"This pull request refines the `normalizePluginName` function in `packages/cli/src/utils/registry/index.ts` by removing duplicate and incorrect namespace formats from the list of generated plugin name variations.\r\n\r\nKey change:\r\n\r\n* [`normalizePluginName`](diffhunk://#diff-ab81a7f856a44c5b61c0792337ded8ecfcf3960da121c0fcfd7fdb913a0625e1L390-L399): Removed redundant entries (`@elizaos/${baseName}`, `@elizaos/plugin-${baseName}`, `@elizaos-plugins/plugin-${baseName}`) from the list of possible plugin name formats, ensuring no duplicates or incorrect namespaces are included.","repository":"elizaos/eliza","createdAt":"2025-06-20T14:51:32Z","mergedAt":"2025-06-20T16:34:21Z","additions":3,"deletions":6},{"id":"PR_kwDOMT5cIs6beNg7","title":"chore: remove CLI tests from integration tests","author":"ChristopherTrimboli","number":5226,"body":"CLI tests were running duplicate in both integration and cli workflows, not needed.","repository":"elizaos/eliza","createdAt":"2025-06-20T20:37:57Z","mergedAt":"2025-06-20T20:38:24Z","additions":2,"deletions":53},{"id":"PR_kwDOMT5cIs6bXsDA","title":"fix: agent card responsive issue","author":"tcm390","number":5212,"body":"Right now, the AgentCard is not fully responsive — if the agent name is too long, it causes the other elements (like settings and stop icons) to get squeezed or overflow outside the card.\r\n\r\nThis update allow the name to shorten gracefully while preserving the space for other UI elements.\r\n\r\nbefore:\r\n\r\n<img width=\"1102\" alt=\"Screenshot 2025-06-20 at 4 41 16 PM\" src=\"https://github.com/user-attachments/assets/31cc01f1-69c6-4885-acf6-df894406c485\" />\r\n\r\n\r\nafter:\r\n\r\n\r\nhttps://github.com/user-attachments/assets/77b994cc-b07d-4cb9-9ac0-a6f83f07891e\r\n\r\n","repository":"elizaos/eliza","createdAt":"2025-06-20T08:53:53Z","mergedAt":"2025-06-20T08:54:19Z","additions":2,"deletions":2},{"id":"PR_kwDOMT5cIs6bXK7T","title":"fix: secrets undefined issue","author":"tcm390","number":5209,"body":"Fixes an issue where secrets was undefined. This may be due to a oversight in [PR #5202](https://github.com/elizaOS/eliza/pull/5202)","repository":"elizaos/eliza","createdAt":"2025-06-20T07:56:11Z","mergedAt":"2025-06-20T08:01:22Z","additions":2,"deletions":1},{"id":"PR_kwDOMT5cIs6bblpk","title":"fix: create option test","author":"wtfsayo","number":5219,"body":"This pull request updates the test suite for `ElizaOS Create Commands` to reflect changes in the available AI models. Specifically, it adjusts the expected number of models and removes assertions related to the `ollama` model's title and description.\r\n\r\nKey changes to tests:\r\n\r\n* [`packages/cli/tests/commands/create.test.ts`](diffhunk://#diff-42f8ccf9512d443a84058d5afd8607fe283748d0c81369cff38fa28c24f4ea1aL271-L278): Updated the `getAvailableAIModels` test to expect 5 models instead of 4 and removed checks for the `ollama` model's title and description.","repository":"elizaos/eliza","createdAt":"2025-06-20T14:38:58Z","mergedAt":"2025-06-20T14:39:06Z","additions":1,"deletions":4}],"detailedContributorSummaries":{"0xbbjoker":"0xbbjoker: Opened 1 PR (#5205) focused on fixing unit and integration tests, while making significant code changes by modifying 27 files (+1069/-393 lines) with a strong emphasis on bugfix work (86%). Actively contributed with 3 reviews, all of which were approvals, demonstrating consistent engagement in the project.","ChristopherTrimboli":"ChristopherTrimboli: Merged 4 PRs, including significant refactoring efforts in PR #5222 (+262/-788 lines) and PR #5224 (+392/-1519 lines), while also opening PR #5221. Modified 155 files with a total of +765/-2676 lines across 11 commits, maintaining a consistent work pattern.","Srenonno":"Srenonno: Created 1 issue (#5216 \"EVENT MESSAGE SENT not working\" (OPEN)) today, showing sporadic activity with no merged pull requests or code changes.","alexjalonso7777":"alexjalonso7777: Engaged with the community by providing 1 review comment but did not merge or open any pull requests or issues today. Activity remains sporadic with no code changes made.","standujar":"standujar: Engaged in significant refactoring work, modifying 26 files with a total of +1343/-678 lines across 4 commits, while also commenting on 2 issues and providing 1 comment on a pull request. Maintained a consistent activity pattern, being active every day.","tcm390":"tcm390: Merged 4 PRs focused on bug fixes, including #5223 \"fix: env settings saving\" (+26/-3 lines) and #5209 \"fix: secrets undefined issue\" (+515/-372 lines), contributing to a total of 556 lines added and 380 lines removed across 41 modified files. Maintained a consistent activity pattern with 6 commits today, primarily addressing issues in the codebase.","wtfsayo":"wtfsayo: Merged 10 PRs, including significant feature additions like Google Generative AI support (PR #5217, +291/-148 lines) and a major release (PR #5207, +866/-407 lines), while also creating 1 new issue (#5218). Overall, modified 144 files with a focus on feature work (42%) and refactoring (11%), demonstrating consistent daily activity."}},"summaryContent":"$e","className":"self-end sm:self-start"}]]}],"$Lf","$L10","$L11"]}]}],["$L12","$L13","$L14"],"$L15"]}],"loading":null,"isPartial":false}
+f:["$","div",null,{"className":"mb-6","children":["$","div",null,{"className":"flex items-center justify-between","children":[[["$","$L16",null,{"href":"/summary/day/2025-06-19","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left mr-2 h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"children":"Previous"}],false],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$L16",null,{"href":"/summary/day/2025-06-19","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Previous"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]],["$","div",null,{"className":"flex flex-col items-center","children":[["$","div",null,{"className":"text-sm font-medium text-gray-500","children":["Daily"," Summary"]}],["$","time",null,{"dateTime":"2025-06-20","className":"text-md font-bold","children":"Jun 20, 2025"}]]}],[["$","$L16",null,{"href":"/summary/day/2025-06-21","children":[false,["$","span",null,{"children":"Next"}],["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right ml-2 h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}]],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$L16",null,{"href":"/summary/day/2025-06-21","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Next"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]]]}]}]
+18:T126b,## Problem
+
+Currently, `bun run test` does not work consistently across all packages in the ElizaOS monorepo. This creates several issues:
+
+1. **Inconsistent Developer Experience**: Developers cannot reliably run tests in individual packages
+2. **CI/CD Fragility**: The root `bun test` command fails, making it difficult to validate changes
+3. **Low Test Coverage**: Only 28% of source files have tests (excluding dist files)
+4. **Missing Test Infrastructure**: 29% of packages have no test scripts defined
+
+### Current State Analysis
+
+**Test Coverage by Package:**
+- ✅ **10/14 packages (71%)** have test scripts defined
+- ❌ **4/14 packages (29%)** have no test infrastructure
+- 🔴 Root `bun test` fails due to `@elizaos/plugin-bootstrap` mock initialization errors
+
+**Packages with Issues:**
+1. **No Tests At All:**
+   - `@elizaos/app` - Tauri application
+   - `@elizaos/autodoc` - Documentation generator
+   - `create-eliza` - Scaffolding tool
+   - `@elizaos/docs` - Docusaurus site (expected)
+
+2. **Failing Tests:**
+   - `@elizaos/plugin-bootstrap` - Mock initialization errors
+   - `@elizaos/project-tee-starter` - Environment setup issues
+
+3. **Excluded from Root Tests:**
+   - `@elizaos/plugin-starter` (template)
+   - `@elizaos/docs` (documentation)
+   - `@elizaos/plugin-sql` (has tests but excluded)
+
+## Proposed Solution
+
+Implement a phased approach to ensure all packages have working tests:
+
+### Phase 1: Fix Failing Tests (Priority: High)
+- [ ] Fix `@elizaos/plugin-bootstrap` mock initialization errors
+- [ ] Fix `@elizaos/project-tee-starter` environment setup issues
+- [ ] Ensure root `bun test` command passes
+
+### Phase 2: Add Missing Test Infrastructure (Priority: High)
+- [ ] Add test setup to `@elizaos/app` (Tauri app testing)
+- [ ] Add test setup to `@elizaos/autodoc`
+- [ ] Add test setup to `create-eliza`
+- [ ] Create minimal test files to validate setup
+
+### Phase 3: Standardize Test Configuration (Priority: Medium)
+- [ ] Create shared test configuration for consistency
+- [ ] Standardize coverage reporting (exclude dist/, build/, node_modules/)
+- [ ] Add coverage thresholds per package
+- [ ] Ensure all packages use Bun test runner consistently
+
+### Phase 4: Documentation & CI Updates (Priority: Medium)
+- [ ] Update contributing guide with testing requirements
+- [ ] Add pre-commit hooks for test validation
+- [ ] Update CI workflows to run package-specific tests
+- [ ] Create testing best practices documentation
+
+## Implementation Details
+
+### 1. Shared Test Configuration
+Create a base test configuration that all packages can extend:
+
+```typescript
+// packages/test-config/base.config.ts
+export default {
+  testMatch: ["**/*.test.ts", "**/*.spec.ts"],
+  coverage: {
+    exclude: [
+      "**/dist/**",
+      "**/build/**",
+      "**/node_modules/**",
+      "**/*.d.ts",
+      "**/coverage/**"
+    ],
+    threshold: {
+      statements: 60,
+      branches: 60,
+      functions: 60,
+      lines: 60
+    }
+  }
+}
+```
+
+### 2. Package Test Script Standardization
+Ensure every package.json has:
+```json
+{
+  "scripts": {
+    "test": "bun test",
+    "test:coverage": "bun test --coverage"
+  }
+}
+```
+
+### 3. Fix Root Test Command
+Update root package.json to handle package-specific test requirements:
+```json
+{
+  "scripts": {
+    "test": "turbo run test --filter=\!@elizaos/docs --filter=\!@elizaos/plugin-starter"
+  }
+}
+```
+
+## Success Criteria
+
+- [ ] `bun run test` works in every package directory
+- [ ] Root `bun test` command passes without errors
+- [ ] All packages have at least minimal test coverage
+- [ ] Test coverage reporting excludes dist/build artifacts
+- [ ] CI/CD pipeline runs all tests successfully
+- [ ] Developer documentation updated with testing guidelines
+
+## Benefits
+
+1. **Improved Developer Experience**: Consistent testing commands across all packages
+2. **Better Code Quality**: Increased test coverage from 28% to target 60%+
+3. **Reliable CI/CD**: All PRs validated with comprehensive test suite
+4. **Easier Onboarding**: New contributors can confidently run tests
+5. **Reduced Bugs**: Catch issues early with standardized testing
+
+## Alternatives Considered
+
+1. **Using Different Test Runners**: Considered Jest/Vitest but Bun test is already established
+2. **Monorepo-level Testing Only**: Would miss package-specific issues
+3. **Excluding Packages from Testing**: Would leave gaps in coverage
+
+## Additional Context
+
+- Current test coverage is ~28% (excluding dist files)
+- The monorepo uses Turbo for orchestration
+- Bun test runner is the standard across the project
+- Some packages have E2E tests (client) that need special handling
+
+This improvement will significantly enhance the development workflow and code quality across the ElizaOS project.19:Tbf7,## Problem
+
+The knowledge plugin was experiencing consistent `"Unexpected end of form"` errors during file uploads, caused by **double parsing** of multipart form data:
+
+1. **Global middleware**: The main server (`eliza/packages/server/src/index.ts`) already applies a global `express-fileupload` middleware to all routes
+2. **Plugin middleware**: The knowledge plugin was applying its own middleware on top
+3. **Result**: Attempting to re-parse an already consumed stream → busboy error
+
+### Error logs
+```
+ERROR: [KNOWLEDGE UPLOAD] Upload error:
+    message: "Unexpected end of form"
+    stack: "Error: Unexpected end of form
+    at Multipart._final (/workspaces/node_modules/busboy/lib/types/multipart.js:588:17)"
+```
+
+## Solution
+
+**Remove duplicate middleware and use files already parsed by the global middleware.**
+
+### Changes Made
+
+#### 1. Removed duplicate express-fileupload / Multer configuration
+- ❌ Deleted `createUploadMiddleware()` function
+- ❌ Removed import
+- ❌ Eliminated custom middleware application logic
+- ✅ Simplified upload handler
+
+#### 3. Fixed file reading logic
+Updated to prioritize temporary files (used by global middleware) over in-memory buffers:
+
+```typescript
+// BEFORE: Assumed in-memory buffers
+if (file.data) { fileBuffer = file.data; }
+
+// AFTER: Prioritize temp files from global middleware
+if (filePath && fs.existsSync(filePath)) {
+  fileBuffer = await fs.promises.readFile(filePath);
+} else if (file.data && Buffer.isBuffer(file.data)) {
+  fileBuffer = file.data; // fallback
+}
+```
+
+## Testing
+
+- ✅ File uploads now work without "Unexpected end of form" errors
+- ✅ Both single and multiple file uploads tested
+- ✅ Large files (130KB+) upload successfully
+- ✅ Logging confirms files are read from temp files as expected
+
+## Breaking Changes
+
+**None** - This is purely a bug fix that removes unnecessary duplicate processing.
+
+## Performance Impact
+
+- ⚡ **Faster uploads**: Eliminates duplicate parsing overhead
+- 🛡️ **More reliable**: Removes race conditions and connection issues
+- 🧹 **Cleaner code**: 80% reduction in middleware complexity
+
+## Files Changed
+
+- `plugin-knowledge/src/routes.ts`: Removed duplicate middleware, simplified upload handler
+
+## Migration Notes
+
+No migration needed. The plugin now correctly uses the existing global `express-fileupload` middleware instead of creating its own conflicting instance.
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+- **Documentation**
+  - Added a new section explaining file upload configuration, supported file types, and MIME type handling to the troubleshooting guide.
+
+- **Chores**
+  - Removed unused dependencies related to file upload handling.
+
+- **Refactor**
+  - Replaced the previous file upload middleware with a global approach, improved file validation and error handling, and updated the upload process for better reliability.
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->1a:T414,
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+- **Documentation**
+  - Added comprehensive documentation for GitHub Actions workflows, data pipeline architecture, and development workflow in `.github/README.md` and expanded `CLAUDE.md` with detailed operational guides and architecture overviews.
+
+- **Bug Fixes**
+  - Improved reliability and error handling in GitHub Actions for data synchronization and deployment workflows.
+  - Simplified and clarified the database restore process in GitHub Actions and CLI scripts.
+
+- **Refactor**
+  - Streamlined migration logic to support partial migrations and removed unnecessary worktree handling.
+  - Refactored migration scripts to enable targeted migration execution and improved metadata handling.
+
+- **Chores**
+  - Updated workflow triggers and job conditions to ensure accurate deployment and checks.
+  - Removed redundant initialization steps in PR check workflows.
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->1b:T8fa,<!-- Use this template by filling in information and copying and pasting relevant items out of the HTML comments. -->
+
+# Relates to
+
+<!-- LINK TO ISSUE OR TICKET -->
+
+<!-- This risks section must be filled out before the final review and merge. -->
+
+# Risks
+
+<!--
+Low, medium, large. List what kind of risks and what could be affected.
+-->
+
+# Background
+
+## What does this PR do?
+
+## What kind of change is this?
+
+<!--
+Bug fixes (non-breaking change which fixes an issue)
+Improvements (misc. changes to existing features)
+Features (non-breaking change which adds functionality)
+Updates (new versions of included code)
+-->
+
+<!-- This "Why" section is most relevant if there are no linked issues explaining why. If there is a related issue, it might make sense to skip this why section. -->
+<!--
+## Why are we doing this? Any context or related work?
+-->
+
+# Documentation changes needed?
+
+<!--
+My changes do not require a change to the project documentation.
+My changes require a change to the project documentation.
+If documentation change is needed: I have updated the documentation accordingly.
+-->
+
+<!-- Please show how you tested the PR. This will really help if the PR needs to be retested and probably help the PR get merged quicker. -->
+
+# Testing
+
+## Where should a reviewer start?
+
+## Detailed testing steps
+
+<!--
+None: Automated tests are acceptable.
+-->
+
+<!--
+- As [anon/admin], go to [link]
+  - [do action]
+  - verify [result]
+-->
+
+<!-- If there is a UI change, please include before and after screenshots or videos. This will speed up PRs being merged. It is extra nice to annotate screenshots with arrows or boxes pointing out the differences. -->
+<!--
+## Screenshots
+### Before
+### After
+-->
+
+<!-- If there is anything about the deployment, please make a note. -->
+<!--
+# Deploy Notes
+-->
+
+<!--  Copy and paste command line output. -->
+<!--
+## Database changes
+-->
+
+<!--  Please specify deploy instructions if there is something more than the automated steps. -->
+<!--
+## Deployment instructions
+-->
+
+<!-- If you are on Discord, please join https://discord.gg/ai16z and state your Discord username here for the contributor role and join us in #development-feed -->
+<!--
+## Discord username
+
+-->
+1c:T6d9,## Summary
+- Added Google Generative AI (Gemini) support to the ElizaOS CLI
+- Simplified AI model and database selection descriptions for better clarity
+- Created a generic provider configuration prompt function to reduce code duplication
+- Refactored all provider configuration prompts to use shared logic
+
+## Changes
+
+### Google Generative AI Support
+- **Model Selection**: Added "Google Generative AI" option with "Gemini models" description
+- **API Key Validation**: Implemented validation for 39-character alphanumeric Google API keys
+- **Configuration**: Added `promptAndStoreGoogleKey` function following the same pattern as other providers
+- **Setup Integration**: Updated CLI create command to handle 'google' model selection
+- **Environment Variable**: Stores API key as `GOOGLE_GENERATIVE_AI_API_KEY`
+
+### Prompt Improvements
+- **Shorter Descriptions**: Made all AI model and database descriptions more concise
+- **Generic Configuration**: Introduced `promptAndStoreProviderConfig` generic function
+- **Code Deduplication**: Refactored OpenAI, Anthropic, Ollama, and Google prompts to use shared logic
+- **Consistent UX**: Maintained consistent user experience across all provider setups
+
+## Test plan
+- [ ] Test `bun create eliza` flow with AI model selection
+- [ ] Test Google Generative AI selection and API key configuration
+- [ ] Test database selection prompts
+- [ ] Verify OpenAI API key configuration works
+- [ ] Verify Anthropic API key configuration works
+- [ ] Verify Ollama configuration works
+- [ ] Verify Google API key configuration works
+- [ ] Ensure all prompts display correctly and validation works as expected
+- [ ] Test both interactive and non-interactive modes
+
+🤖 Generated with [Claude Code](https://claude.ai/code)1d:T10ec,# Relates to
+
+Agent configuration and user experience improvements for ElizaOS platform
+
+# Risks
+
+**Medium Risk**
+- UI changes may affect existing workflows
+- Potential integration issues with current configuration system
+- Database schema changes (if applicable) require careful migration
+
+# Background
+
+## What does this PR do?
+
+This PR introduces a comprehensive **agent settings feature** that provides a user-friendly interface for configuring AI agents within the ElizaOS platform. Instead of manually editing JSON configuration files, users can now manage their agent settings through an intuitive web interface.
+
+Key additions include:
+- **Visual Configuration Interface**: Settings panels and forms for agent parameters
+- **Real-time Configuration**: Live updates to agent settings without requiring restarts
+- **Enhanced User Experience**: Streamlined setup process for both technical and non-technical users
+- **Validation & Error Handling**: Built-in validation for configuration options
+
+## What kind of change is this?
+
+**Features** (non-breaking change which adds functionality)
+
+This is a major feature enhancement that makes ElizaOS more accessible by providing a modern UI for agent configuration, reducing the technical barrier for users who want to create and customize AI agents.
+
+# Documentation changes needed?
+
+**My changes require a change to the project documentation.**
+
+- User guide updates for the new settings interface
+- Configuration documentation updates
+- Possible API documentation if new endpoints were added
+
+# Testing
+
+## Where should a reviewer start?
+
+1. **UI Components**: Review the new settings interface components and their styling
+2. **Integration Points**: Check how the settings integrate with existing agent runtime system
+3. **Data Flow**: Verify settings persistence and retrieval mechanisms
+4. **Validation Logic**: Test input validation and error handling
+
+## Detailed testing steps
+
+### Functional Testing
+- **Settings Creation**: Create a new agent and configure settings through the UI
+  - Verify all configuration options are available and functional
+  - Test form validation with invalid inputs
+  - Confirm settings are properly saved and persisted
+
+- **Settings Modification**: Modify existing agent settings
+  - Test real-time updates (if applicable)
+  - Verify changes are reflected in agent behavior
+  - Check for proper rollback on invalid configurations
+
+- **Cross-Platform Consistency**: Test settings across different platforms
+  - Verify settings work with Discord, Telegram, and other connectors
+  - Check that personality and behavior remain consistent
+
+### UI/UX Testing
+- **Responsive Design**: Test interface across different screen sizes
+- **Accessibility**: Verify keyboard navigation and screen reader compatibility
+- **Performance**: Check for smooth interactions and fast loading times
+
+### Integration Testing
+- **Backward Compatibility**: Ensure existing JSON configurations still work
+- **API Integration**: Test any new endpoints for settings management
+- **Database Operations**: Verify proper CRUD operations for settings data
+
+## Screenshots
+
+*Screenshots would be helpful here to show before/after states of the configuration interface*
+
+# Deploy Notes
+
+## Database changes
+
+If this PR includes database schema changes for storing agent settings, ensure:
+- Migration scripts are included and tested
+- Backward compatibility is maintained
+- Data validation is properly implemented
+
+## Deployment instructions
+
+1. Standard deployment process should suffice if no breaking changes
+2. If database migrations are required, run them during deployment
+3. Monitor for any configuration-related errors post-deployment
+4. Verify existing agents continue to function with their current settings
+
+# Additional Notes
+
+This feature significantly enhances the ElizaOS user experience by:
+- **Democratizing Agent Creation**: Making AI agent development accessible to non-developers
+- **Improving Developer Experience**: Faster iteration and testing cycles
+- **Standardizing Configuration**: Consistent interface across all agent types
+- **Future-Proofing**: Foundation for advanced configuration features
+
+The implementation aligns with ElizaOS's goal of being "Autonomous agents for everyone" by removing technical barriers to agent customization and deployment.1e:T6fb,## Summary
+- Removes Cypress test dependencies and Discord plugin from default installation in starter templates
+- Adds on-demand installation when test commands are run
+- Reduces initial project size and speeds up `elizaos create` command
+
+## Changes
+
+### project-starter template:
+1. **Removed from default installation:**
+   - `@elizaos/plugin-discord`
+   - `@cypress/react`
+   - `@cypress/vite-dev-server`
+   - `@testing-library/cypress`
+   - `cypress`
+
+2. **Created `scripts/install-test-deps.js`** that checks for and installs test dependencies only when needed
+
+3. **Updated all test scripts** to run `test:install` first
+
+### plugin-starter template:
+1. **Removed from default installation:**
+   - `@cypress/react`
+   - `@testing-library/cypress`
+   - `cypress`
+
+2. **Created `scripts/install-test-deps.js`** for on-demand installation
+
+3. **Updated all test scripts** to run `test:install` first
+
+### project-tee-starter template:
+- No changes needed (doesn't include Cypress dependencies)
+
+## Impact
+When users run `elizaos create`, new projects and plugins won't include Cypress or Discord plugin by default. The test dependencies will only be installed the first time they run any test command. This improves the initial developer experience by:
+- Faster project/plugin creation
+- Smaller initial download size (no Cypress binary download)
+- Dependencies installed only when actually needed
+- Discord plugin not forced on users who may not need it
+
+## Test plan
+- [x] Run `bun run build` - passes
+- [x] Run `bun run lint` - passes
+- [ ] Create new project with `elizaos create` and verify Cypress/Discord are not installed
+- [ ] Create new plugin and verify Cypress is not installed
+- [ ] Run test command in new project/plugin and verify dependencies are installed on demand1f:Tea6,```
+NotFoundError: Not Found
+    at createHttpError (/Users/cjft/.nvm/versions/node/v22.16.0/lib/node_modules/@elizaos/cli/node_modules/send/index.js:861:12)
+    at SendStream.error (/Users/cjft/.nvm/versions/node/v22.16.0/lib/node_modules/@elizaos/cli/node_modules/send/index.js:168:31)
+    at SendStream.pipe (/Users/cjft/.nvm/versions/node/v22.16.0/lib/node_modules/@elizaos/cli/node_modules/send/index.js:468:14)
+    at sendfile (/Users/cjft/.nvm/versions/node/v22.16.0/lib/node_modules/@elizaos/cli/node_modules/express/lib/response.js:1000:8)
+    at ServerResponse.sendFile (/Users/cjft/.nvm/versions/node/v22.16.0/lib/node_modules/@elizaos/cli/node_modules/express/lib/response.js:409:3)
+    at file:///Users/cjft/.nvm/versions/node/v22.16.0/lib/node_modules/@elizaos/cli/node_modules/@elizaos/server/dist/index.js:5971:13
+    at Layer.handleRequest (/Users/cjft/.nvm/versions/node/v22.16.0/lib/node_modules/@elizaos/cli/node_modules/router/lib/layer.js:152:17)
+    at trimPrefix (/Users/cjft/.nvm/versions/node/v22.16.0/lib/node_modules/@elizaos/cli/node_modules/router/index.js:342:13)
+    at /Users/cjft/.nvm/versions/node/v22.16.0/lib/node_modules/@elizaos/cli/node_modules/router/index.js:297:9
+    at processParams (/Users/cjft/.nvm/versions/node/v22.16.0/lib/node_modules/@elizaos/cli/node_modules/router/index.js:582:12)
+    at next (/Users/cjft/.nvm/versions/node/v22.16.0/lib/node_modules/@elizaos/cli/node_modules/router/index.js:291:5)
+    at file:///Users/cjft/.nvm/versions/node/v22.16.0/lib/node_modules/@elizaos/cli/node_modules/@elizaos/server/dist/index.js:5962:11
+    at Layer.handleRequest (/Users/cjft/.nvm/versions/node/v22.16.0/lib/node_modules/@elizaos/cli/node_modules/router/lib/layer.js:152:17)
+    at trimPrefix (/Users/cjft/.nvm/versions/node/v22.16.0/lib/node_modules/@elizaos/cli/node_modules/router/index.js:342:13)
+    at /Users/cjft/.nvm/versions/node/v22.16.0/lib/node_modules/@elizaos/cli/node_modules/router/index.js:297:9
+    at processParams (/Users/cjft/.nvm/versions/node/v22.16.0/lib/node_modules/@elizaos/cli/node_modules/router/index.js:582:12)
+    at next (/Users/cjft/.nvm/versions/node/v22.16.0/lib/node_modules/@elizaos/cli/node_modules/router/index.js:291:5)
+    at file:///Users/cjft/.nvm/versions/node/v22.16.0/lib/node_modules/@elizaos/cli/node_modules/@elizaos/server/dist/index.js:4570:5
+    at Layer.handleRequest (/Users/cjft/.nvm/versions/node/v22.16.0/lib/node_modules/@elizaos/cli/node_modules/router/lib/layer.js:152:17)
+    at trimPrefix (/Users/cjft/.nvm/versions/node/v22.16.0/lib/node_modules/@elizaos/cli/node_modules/router/index.js:342:13)
+    at /Users/cjft/.nvm/versions/node/v22.16.0/lib/node_modules/@elizaos/cli/node_modules/router/index.js:297:9
+    at processParams (/Users/cjft/.nvm/versions/node/v22.16.0/lib/node_modules/@elizaos/cli/node_modules/router/index.js:582:12)
+    at next (/Users/cjft/.nvm/versions/node/v22.16.0/lib/node_modules/@elizaos/cli/node_modules/router/index.js:291:5)
+    at SendStream.error (/Users/cjft/.nvm/versions/node/v22.16.0/lib/node_modules/@elizaos/cli/node_modules/serve-static/index.js:120:7)
+    at SendStream.emit (node:events:518:28)
+    at SendStream.error (/Users/cjft/.nvm/versions/node/v22.16.0/lib/node_modules/@elizaos/cli/node_modules/send/index.js:168:17)
+    at SendStream.onStatError (/Users/cjft/.nvm/versions/node/v22.16.0/lib/node_modules/@elizaos/cli/node_modules/send/index.js:315:12)
+    at next (/Users/cjft/.nvm/versions/node/v22.16.0/lib/node_modules/@elizaos/cli/node_modules/send/index.js:649:28)
+    at /Users/cjft/.nvm/versions/node/v22.16.0/lib/node_modules/@elizaos/cli/node_modules/send/index.js:657:23
+    at FSReqCallback.oncomplete (node:fs:198:21)
+```
+
+404 when do `elizaos create` outside monorepo.20:Ta53,# Registry Update Checklist
+
+Registry:
+- [x] I've made the left side of the colon of JSON entry in index.json match the potential NPM package name
+- [x] I've used github not github.com
+- [x] There is no .git extension
+- [x] It's placed it alphabetically in the list
+- [x] I've dealt with commas properly so the list is still valid JSON
+
+If not an eliza-plugins official repo, i.e. new plugin: 
+
+The plugin repo has:
+- [x] is publically accessible (not a private repo)
+- [x] uses main as it's default branch
+- [x] I have include `elizaos-plugins` in the topics in the GitHub repo settings. If the plugin is related to `AI` or `crypto`, please add those as topics as well.
+- [x] add simple description in github repo
+- [x] follows this convention
+```
+plugin-name/
+├── images/
+│   ├── logo.jpg        # Plugin branding logo
+│   ├── banner.jpg      # Plugin banner image
+├── src/
+│   ├── index.ts        # Main plugin entry point
+│   ├── actions/        # Plugin-specific actions
+│   ├── clients/        # Client implementations
+│   ├── adapters/       # Adapter implementations
+│   └── types.ts        # Type definitions
+│   └── environment.ts  # runtime.getSetting, zod validation
+├── package.json        # Plugin dependencies
+└── README.md          # Plugin documentation
+```
+- [x] an `images/banner.jpg` and `images/logo.jpg` and they
+  - Use clear, high-resolution images
+  - Keep file sizes optimized (< 500KB for logos, < 1MB for banners)
+  - Follow the [elizaOS Brand Guidelines](https://github.com/elizaOS/brandkit)
+  - Include alt text for accessibility
+- [x] package.json has a agentConfig like the following
+```json
+{
+  "name": "@myNpmOrg/plugin-example",
+  "version": "1.0.0",
+  "agentConfig": {
+    "pluginType": "elizaos:plugin:1.0.0",
+    "pluginParameters": {
+      "API_KEY": {
+        "type": "string",
+        "description": "API key for the service"
+      }
+    }
+  }
+}
+```
+
+<!-- If you are on Discord, please join https://discord.gg/elizaOS and state your Discord username here for the contributor role and join us in #development-feed -->
+<!--
+## Discord username
+
+-->
+
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+## Summary by CodeRabbit
+
+- **New Features**
+  - Added new plugins: @elizaos-plugins/plugin-cardano (v1 support) and @kudo-dev/plugin-kudo (v0 support).
+- **Updates**
+  - Updated plugin registry with branch information and version details for existing plugins.
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->21:T9b4,- Update FooterLink component to detect external URLs
+- Add target='_blank' and rel='noopener noreferrer' for external links
+- Documentation link now opens in new tab for better UX
+
+<!-- Use this template by filling in information and copying and pasting relevant items out of the HTML comments. -->
+
+# Relates to
+
+<!-- LINK TO ISSUE OR TICKET -->
+
+<!-- This risks section must be filled out before the final review and merge. -->
+
+# Risks
+
+<!--
+Low, medium, large. List what kind of risks and what could be affected.
+-->
+
+# Background
+
+## What does this PR do?
+
+## What kind of change is this?
+
+<!--
+Bug fixes (non-breaking change which fixes an issue)
+Improvements (misc. changes to existing features)
+Features (non-breaking change which adds functionality)
+Updates (new versions of included code)
+-->
+
+<!-- This "Why" section is most relevant if there are no linked issues explaining why. If there is a related issue, it might make sense to skip this why section. -->
+<!--
+## Why are we doing this? Any context or related work?
+-->
+
+# Documentation changes needed?
+
+<!--
+My changes do not require a change to the project documentation.
+My changes require a change to the project documentation.
+If documentation change is needed: I have updated the documentation accordingly.
+-->
+
+<!-- Please show how you tested the PR. This will really help if the PR needs to be retested and probably help the PR get merged quicker. -->
+
+# Testing
+
+## Where should a reviewer start?
+
+## Detailed testing steps
+
+<!--
+None: Automated tests are acceptable.
+-->
+
+<!--
+- As [anon/admin], go to [link]
+  - [do action]
+  - verify [result]
+-->
+
+<!-- If there is a UI change, please include before and after screenshots or videos. This will speed up PRs being merged. It is extra nice to annotate screenshots with arrows or boxes pointing out the differences. -->
+<!--
+## Screenshots
+### Before
+### After
+-->
+
+<!-- If there is anything about the deployment, please make a note. -->
+<!--
+# Deploy Notes
+-->
+
+<!--  Copy and paste command line output. -->
+<!--
+## Database changes
+-->
+
+<!--  Please specify deploy instructions if there is something more than the automated steps. -->
+<!--
+## Deployment instructions
+-->
+
+<!-- If you are on Discord, please join https://discord.gg/ai16z and state your Discord username here for the contributor role and join us in #development-feed -->
+<!--
+## Discord username
+
+-->
+10:["$","div",null,{"className":"mb-8 space-y-6","children":[["$","$L17",null,{"metrics":{"date":"2025-06-20","interval":{"intervalStart":"$D2025-06-20T00:00:00.000Z","intervalEnd":"$D2025-06-21T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":23,"merged":22,"total":25},"issues":{"new":2,"closed":1,"total":3},"activeContributors":14,"codeChanges":{"additions":6235,"deletions":4073,"files":190,"commitCount":94},"topContributors":[{"username":"wtfsayo","avatarUrl":"https://avatars.githubusercontent.com/u/82053242?u=98209a1f10456f42d4d2fa71db4d5bf4a672cbc3&v=4","totalScore":348.9044829098688,"prScore":344.8044829098688,"issueScore":4.1,"reviewScore":0,"commentScore":0,"summary":"wtfsayo: Merged 10 PRs, including significant feature additions like Google Generative AI support (PR #5217, +291/-148 lines) and a major release (PR #5207, +866/-407 lines), while also creating 1 new issue (#5218). Overall, modified 144 files with a focus on feature work (42%) and refactoring (11%), demonstrating consistent daily activity."},{"username":"ChristopherTrimboli","avatarUrl":"https://avatars.githubusercontent.com/u/27584221?u=de148a498b5af814e037c2975112fadd09df743f&v=4","totalScore":192.17240753486274,"prScore":186.97240753486275,"issueScore":0,"reviewScore":5,"commentScore":0.2,"summary":"ChristopherTrimboli: Merged 4 PRs, including significant refactoring efforts in PR #5222 (+262/-788 lines) and PR #5224 (+392/-1519 lines), while also opening PR #5221. Modified 155 files with a total of +765/-2676 lines across 11 commits, maintaining a consistent work pattern."},{"username":"tcm390","avatarUrl":"https://avatars.githubusercontent.com/u/60634884?u=c6c41679b8322eaa0c81f72e0b4ed95e80f0ac16&v=4","totalScore":88.27699349241571,"prScore":88.27699349241571,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"tcm390: Merged 4 PRs focused on bug fixes, including #5223 \"fix: env settings saving\" (+26/-3 lines) and #5209 \"fix: secrets undefined issue\" (+515/-372 lines), contributing to a total of 556 lines added and 380 lines removed across 41 modified files. Maintained a consistent activity pattern with 6 commits today, primarily addressing issues in the codebase."},{"username":"0xbbjoker","avatarUrl":"https://avatars.githubusercontent.com/u/54844437?u=90fe1762420de6ad493a1c1582f1f70c0d87d8e2&v=4","totalScore":57.306530052639374,"prScore":42.306530052639374,"issueScore":0,"reviewScore":15,"commentScore":0,"summary":"0xbbjoker: Opened 1 PR (#5205) focused on fixing unit and integration tests, while making significant code changes by modifying 27 files (+1069/-393 lines) with a strong emphasis on bugfix work (86%). Actively contributed with 3 reviews, all of which were approvals, demonstrating consistent engagement in the project."},{"username":"META-DREAMER","avatarUrl":"https://avatars.githubusercontent.com/u/7143583?u=96f63f10e066a06d5ad592c8efc659e2b84a68fc&v=4","totalScore":50.43407743842489,"prScore":50.09407743842489,"issueScore":0,"reviewScore":0,"commentScore":0.33999999999999997,"summary":null},{"username":"standujar","avatarUrl":"https://avatars.githubusercontent.com/u/16385918?u=718bdcd1585be8447bdfffb8c11ce249baa7532d&v=4","totalScore":38.36650955863044,"prScore":37.92850955863044,"issueScore":0,"reviewScore":0,"commentScore":0.43799999999999994,"summary":"standujar: Engaged in significant refactoring work, modifying 26 files with a total of +1343/-678 lines across 4 commits, while also commenting on 2 issues and providing 1 comment on a pull request. Maintained a consistent activity pattern, being active every day."},{"username":"Kudo-Dev-tech","avatarUrl":"https://avatars.githubusercontent.com/u/198208019?v=4","totalScore":31.53620101090789,"prScore":31.53620101090789,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":null},{"username":"alexjalonso7777","avatarUrl":"https://avatars.githubusercontent.com/u/179897636?v=4","totalScore":4.5,"prScore":0,"issueScore":0,"reviewScore":4.5,"commentScore":0,"summary":"alexjalonso7777: Engaged with the community by providing 1 review comment but did not merge or open any pull requests or issues today. Activity remains sporadic with no code changes made."},{"username":"Srenonno","avatarUrl":"https://avatars.githubusercontent.com/u/91727428?v=4","totalScore":2,"prScore":0,"issueScore":2,"reviewScore":0,"commentScore":0,"summary":"Srenonno: Created 1 issue (#5216 \"EVENT MESSAGE SENT not working\" (OPEN)) today, showing sporadic activity with no merged pull requests or code changes."}],"focusAreas":[{"area":"cli","count":63},{"area":"plugin-sql","count":48},{"area":"docs","count":36},{"area":"client","count":31},{"area":"core","count":22},{"area":".github/workflows","count":21},{"area":"plugin-bootstrap","count":6},{"area":"autodoc","count":2},{"area":".github/actions","count":2},{"area":"plugin-starter","count":1}],"topIssues":[{"id":"I_kwDOMT5cIs68Zjh4","title":"elizaos update not working","author":"urosognjenovic","number":5198,"repository":"elizaos/eliza","body":"I run `elizaos update` to update from 1.0.6 to 1.0.9, and the CLI outputs a successful update, but the version doesn't change. I've attached a screenshot of this behaviour.\n\n<img width=\"538\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/c4d286c4-6eb3-4e1e-add0-0995afc78645\" />\n\nI'm working on MacOS.\n","createdAt":"2025-06-19T16:07:04Z","closedAt":"2025-06-20T14:52:16Z","state":"CLOSED","commentCount":1},{"id":"I_kwDOMT5cIs68jIbD","title":"fix: ensure `bun run test` works consistently across all packages","author":"wtfsayo","number":5218,"repository":"elizaos/eliza","body":"$18","createdAt":"2025-06-20T13:18:54Z","closedAt":"2025-07-02T11:54:24Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs68iWIi","title":"EVENT MESSAGE SENT not working","author":"Srenonno","number":5216,"repository":"elizaos/eliza","body":"**Describe the bug**\n\nthe sendAgentResponseToBus doens't emit event EventType.MESSAGE_SENT when Sending payload to central server API endpoint (/api/messaging/submit).\n \n**To Reproduce**\n\nCreate a plugin with Message_sent event and it worn't get triggred\n**Expected behavior**\nthe vent need to be emmitted for every message submitted to the central channel\n","createdAt":"2025-06-20T12:13:56Z","closedAt":"2026-02-04T19:22:01Z","state":"CLOSED","commentCount":0}],"topPullRequests":[{"id":"PR_kwDOMT5cIs6azVR3","title":"chore: v1.0.10","author":"ChristopherTrimboli","number":5150,"body":"","repository":"elizaos/eliza","createdAt":"2025-06-16T23:22:29Z","mergedAt":"2025-06-20T03:23:56Z","additions":48113,"deletions":11390},{"id":"PR_kwDOOu4gVs6bb8qs","title":"fix: removing duplicate middleware and update file upload handling","author":"standujar","number":25,"body":"$19","repository":"elizaos-plugins/plugin-knowledge","createdAt":"2025-06-20T15:12:51Z","mergedAt":"2025-06-22T17:00:59Z","additions":1500,"deletions":86},{"id":"PR_kwDOMT5cIs6bXD48","title":"chore: release 1.0.11","author":"wtfsayo","number":5207,"body":"","repository":"elizaos/eliza","createdAt":"2025-06-20T07:42:28Z","mergedAt":"2025-06-20T08:10:50Z","additions":663,"deletions":362},{"id":"PR_kwDOMT5cIs6bXHCs","title":"chore: lint files","author":"wtfsayo","number":5208,"body":"","repository":"elizaos/eliza","createdAt":"2025-06-20T07:48:04Z","mergedAt":"2025-06-20T07:48:30Z","additions":513,"deletions":371},{"id":"PR_kwDONNAI986be5L3","title":"Improve data syncing setup to properly handle migrations","author":"META-DREAMER","number":129,"body":"$1a","repository":"elizaos/elizaos.github.io","createdAt":"2025-06-20T23:21:36Z","mergedAt":"2025-06-20T23:34:45Z","additions":513,"deletions":332},{"id":"PR_kwDOMT5cIs6bU071","title":"fix: unit and integration tests","author":"0xbbjoker","number":5205,"body":"$1b","repository":"elizaos/eliza","createdAt":"2025-06-20T00:17:59Z","mergedAt":null,"additions":308,"deletions":46},{"id":"PR_kwDOMT5cIs6baPA8","title":"feat: add Google Generative AI support and refactor CLI prompts","author":"wtfsayo","number":5217,"body":"$1c","repository":"elizaos/eliza","createdAt":"2025-06-20T12:29:25Z","mergedAt":"2025-06-20T12:57:55Z","additions":280,"deletions":137},{"id":"PR_kwDOMT5cIs6bcs1X","title":"chore: cleanup plugin-sql","author":"ChristopherTrimboli","number":5222,"body":"","repository":"elizaos/eliza","createdAt":"2025-06-20T16:50:59Z","mergedAt":"2025-06-20T19:49:22Z","additions":259,"deletions":785},{"id":"PR_kwDOMT5cIs6bUPSO","title":"feat: add agent settings","author":"0xbbjoker","number":5202,"body":"$1d","repository":"elizaos/eliza","createdAt":"2025-06-19T21:57:56Z","mergedAt":"2025-06-20T07:21:11Z","additions":170,"deletions":17},{"id":"PR_kwDOMT5cIs6bZ6t7","title":"feat: lazy load test dependencies and Discord plugin in starter templates","author":"wtfsayo","number":5215,"body":"$1e","repository":"elizaos/eliza","createdAt":"2025-06-20T11:58:02Z","mergedAt":"2025-06-20T13:20:09Z","additions":161,"deletions":33},{"id":"PR_kwDOMT5cIs6bc9fy","title":"chore: clean core","author":"ChristopherTrimboli","number":5224,"body":"","repository":"elizaos/eliza","createdAt":"2025-06-20T17:21:03Z","mergedAt":"2025-06-20T19:52:08Z","additions":96,"deletions":720},{"id":"PR_kwDOMT5cIs6bcQzp","title":"fix: look for client/dist in multiple locations","author":"ChristopherTrimboli","number":5221,"body":"$1f","repository":"elizaos/eliza","createdAt":"2025-06-20T15:49:07Z","mergedAt":null,"additions":79,"deletions":6},{"id":"PR_kwDOMT5cIs6bYVc7","title":"refactor: improve CLI config template formatting and organization","author":"wtfsayo","number":5214,"body":"## Summary\n- Simplified and reorganized .env template for better clarity\n- Removed redundant configuration sections\n- Improved comment formatting with consistent separators\n- Focused on essential configuration options\n- Removed multi-agent examples to reduce complexity\n\n## Changes\n- Reformatted comments with consistent separator lines\n- Removed duplicate and obsolete configuration sections\n- Simplified the template to focus on core requirements\n- Improved readability of the environment template","repository":"elizaos/eliza","createdAt":"2025-06-20T09:46:30Z","mergedAt":"2025-06-20T13:27:04Z","additions":56,"deletions":149},{"id":"PR_kwDONkg7v86bVR6G","title":"add kudo plugin","author":"Kudo-Dev-tech","number":179,"body":"$20","repository":"elizaos-plugins/registry","createdAt":"2025-06-20T02:20:58Z","mergedAt":"2025-06-20T02:33:53Z","additions":46,"deletions":1},{"id":"PR_kwDOMT5cIs6beHne","title":"fix: remove all CI caching","author":"ChristopherTrimboli","number":5225,"body":"","repository":"elizaos/eliza","createdAt":"2025-06-20T20:22:06Z","mergedAt":"2025-06-20T20:24:41Z","additions":30,"deletions":310},{"id":"PR_kwDOMT5cIs6bXxos","title":"feat: open documentation links in new tab","author":"wtfsayo","number":5213,"body":"$21","repository":"elizaos/eliza","createdAt":"2025-06-20T09:01:59Z","mergedAt":"2025-06-20T09:02:42Z","additions":27,"deletions":10},{"id":"PR_kwDOMT5cIs6bcwFE","title":"fix: env settings saving","author":"tcm390","number":5223,"body":"Previously, changes to environment settings could not be saved.\r\n\r\nThis PR adds the save handler to persist environment variable updates.","repository":"elizaos/eliza","createdAt":"2025-06-20T16:57:18Z","mergedAt":"2025-06-20T16:59:19Z","additions":26,"deletions":3},{"id":"PR_kwDOMT5cIs6bXXZa","title":"fix(secret-panel): allow editing and adding new secrets","author":"tcm390","number":5210,"body":"related: https://linear.app/eliza-labs/issue/ELIZA-452/unable-to-edit-agent-environment-variables-in-v109\r\n\r\nPreviously, adding or editing a secret would redirect to the main homepage without saving because it triggered the parent \"Save Agent\" button. This PR fixes the issue by adding preventDefault to prevent it\r\n\r\nissue:\r\n\r\n\r\nhttps://github.com/user-attachments/assets/2271d922-113d-49d6-b5eb-6ae403281f4f\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n","repository":"elizaos/eliza","createdAt":"2025-06-20T08:19:41Z","mergedAt":"2025-06-20T08:21:37Z","additions":11,"deletions":2},{"id":"PR_kwDOMT5cIs6bXq5l","title":"fix: add bootstrap plugin to agent templates","author":"wtfsayo","number":5211,"body":"## Summary\n- Added `@elizaos/plugin-bootstrap` to all agent templates in the client configuration\n- Ensures core functionality is available across all platform-specific templates (Discord, Telegram, Slack, Twitter, GitHub, Instagram)\n\n## Changes\n- Updated 6 agent templates to include the bootstrap plugin alongside existing plugins\n- No other functional changes made\n\n## Test plan\n- [ ] Verify agent templates load correctly with the bootstrap plugin\n- [ ] Confirm no conflicts with existing plugins\n- [ ] Test that core functionality from bootstrap plugin is available in each template","repository":"elizaos/eliza","createdAt":"2025-06-20T08:52:16Z","mergedAt":"2025-06-20T09:02:53Z","additions":6,"deletions":6},{"id":"PR_kwDOMT5cIs6bXCGO","title":"fix: add __dirname for ES modules in copy-template utility","author":"wtfsayo","number":5206,"body":"This PR fixes an issue where the `elizaos create` command was not properly copying templates due to missing `__dirname` in ES module context.\n\n## Changes\n- Added `fileURLToPath` import from `node:url`\n- Defined `__filename` and `__dirname` for ES module compatibility in `copy-template.ts`\n\n## Issue\nThe `elizaos create` command was failing to copy templates because `__dirname` is not available in ES modules by default.\n\n## Solution\nThis fix properly defines `__dirname` using the ES module-compatible approach with `import.meta.url`.","repository":"elizaos/eliza","createdAt":"2025-06-20T07:38:44Z","mergedAt":"2025-06-20T07:39:06Z","additions":5,"deletions":0},{"id":"PR_kwDOMT5cIs6bbunN","title":"fix: incorrecly scoped plugin name","author":"wtfsayo","number":5220,"body":"This pull request refines the `normalizePluginName` function in `packages/cli/src/utils/registry/index.ts` by removing duplicate and incorrect namespace formats from the list of generated plugin name variations.\r\n\r\nKey change:\r\n\r\n* [`normalizePluginName`](diffhunk://#diff-ab81a7f856a44c5b61c0792337ded8ecfcf3960da121c0fcfd7fdb913a0625e1L390-L399): Removed redundant entries (`@elizaos/${baseName}`, `@elizaos/plugin-${baseName}`, `@elizaos-plugins/plugin-${baseName}`) from the list of possible plugin name formats, ensuring no duplicates or incorrect namespaces are included.","repository":"elizaos/eliza","createdAt":"2025-06-20T14:51:32Z","mergedAt":"2025-06-20T16:34:21Z","additions":3,"deletions":6},{"id":"PR_kwDOMT5cIs6beNg7","title":"chore: remove CLI tests from integration tests","author":"ChristopherTrimboli","number":5226,"body":"CLI tests were running duplicate in both integration and cli workflows, not needed.","repository":"elizaos/eliza","createdAt":"2025-06-20T20:37:57Z","mergedAt":"2025-06-20T20:38:24Z","additions":2,"deletions":53},{"id":"PR_kwDOMT5cIs6bXsDA","title":"fix: agent card responsive issue","author":"tcm390","number":5212,"body":"Right now, the AgentCard is not fully responsive — if the agent name is too long, it causes the other elements (like settings and stop icons) to get squeezed or overflow outside the card.\r\n\r\nThis update allow the name to shorten gracefully while preserving the space for other UI elements.\r\n\r\nbefore:\r\n\r\n<img width=\"1102\" alt=\"Screenshot 2025-06-20 at 4 41 16 PM\" src=\"https://github.com/user-attachments/assets/31cc01f1-69c6-4885-acf6-df894406c485\" />\r\n\r\n\r\nafter:\r\n\r\n\r\nhttps://github.com/user-attachments/assets/77b994cc-b07d-4cb9-9ac0-a6f83f07891e\r\n\r\n","repository":"elizaos/eliza","createdAt":"2025-06-20T08:53:53Z","mergedAt":"2025-06-20T08:54:19Z","additions":2,"deletions":2},{"id":"PR_kwDOMT5cIs6bXK7T","title":"fix: secrets undefined issue","author":"tcm390","number":5209,"body":"Fixes an issue where secrets was undefined. This may be due to a oversight in [PR #5202](https://github.com/elizaOS/eliza/pull/5202)","repository":"elizaos/eliza","createdAt":"2025-06-20T07:56:11Z","mergedAt":"2025-06-20T08:01:22Z","additions":2,"deletions":1},{"id":"PR_kwDOMT5cIs6bblpk","title":"fix: create option test","author":"wtfsayo","number":5219,"body":"This pull request updates the test suite for `ElizaOS Create Commands` to reflect changes in the available AI models. Specifically, it adjusts the expected number of models and removes assertions related to the `ollama` model's title and description.\r\n\r\nKey changes to tests:\r\n\r\n* [`packages/cli/tests/commands/create.test.ts`](diffhunk://#diff-42f8ccf9512d443a84058d5afd8607fe283748d0c81369cff38fa28c24f4ea1aL271-L278): Updated the `getAvailableAIModels` test to expect 5 models instead of 4 and removed checks for the `ollama` model's title and description.","repository":"elizaos/eliza","createdAt":"2025-06-20T14:38:58Z","mergedAt":"2025-06-20T14:39:06Z","additions":1,"deletions":4}],"detailedContributorSummaries":{"0xbbjoker":"0xbbjoker: Opened 1 PR (#5205) focused on fixing unit and integration tests, while making significant code changes by modifying 27 files (+1069/-393 lines) with a strong emphasis on bugfix work (86%). Actively contributed with 3 reviews, all of which were approvals, demonstrating consistent engagement in the project.","ChristopherTrimboli":"ChristopherTrimboli: Merged 4 PRs, including significant refactoring efforts in PR #5222 (+262/-788 lines) and PR #5224 (+392/-1519 lines), while also opening PR #5221. Modified 155 files with a total of +765/-2676 lines across 11 commits, maintaining a consistent work pattern.","Srenonno":"Srenonno: Created 1 issue (#5216 \"EVENT MESSAGE SENT not working\" (OPEN)) today, showing sporadic activity with no merged pull requests or code changes.","alexjalonso7777":"alexjalonso7777: Engaged with the community by providing 1 review comment but did not merge or open any pull requests or issues today. Activity remains sporadic with no code changes made.","standujar":"standujar: Engaged in significant refactoring work, modifying 26 files with a total of +1343/-678 lines across 4 commits, while also commenting on 2 issues and providing 1 comment on a pull request. Maintained a consistent activity pattern, being active every day.","tcm390":"tcm390: Merged 4 PRs focused on bug fixes, including #5223 \"fix: env settings saving\" (+26/-3 lines) and #5209 \"fix: secrets undefined issue\" (+515/-372 lines), contributing to a total of 556 lines added and 380 lines removed across 41 modified files. Maintained a consistent activity pattern with 6 commits today, primarily addressing issues in the codebase.","wtfsayo":"wtfsayo: Merged 10 PRs, including significant feature additions like Google Generative AI support (PR #5217, +291/-148 lines) and a major release (PR #5207, +866/-407 lines), while also creating 1 new issue (#5218). Overall, modified 144 files with a focus on feature work (42%) and refactoring (11%), demonstrating consistent daily activity."}}}],"$L22"]}]
+11:["$","div",null,{"className":"prose prose-sm mx-auto mt-8 dark:prose-invert sm:prose lg:prose-lg xl:prose-xl","children":[["$","p","p-0",{"children":["Today, ElizaOS significantly expanded its AI capabilities by integrating Google Generative AI and improved CLI performance through lazy loading. The client UI received substantial enhancements for agent settings and responsiveness, while core system stability was boosted with extensive bug fixes and code cleanup. A new \"kudo\" plugin was added to the registry, and critical guidance was provided for the ",["$","code","code-0",{"children":"elizaos update"}]," command."]}],"\n",["$","h2","h2-0",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"🚨 Needs Attention","position":{"start":{"line":3,"column":4,"offset":435},"end":{"line":3,"column":22,"offset":453}}}],"position":{"start":{"line":3,"column":1,"offset":432},"end":{"line":3,"column":22,"offset":453}}},"children":"🚨 Needs Attention"}],"\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"Urgent Discussions"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/4924","children":"elizaos/eliza#4924"}]," The web client continues to display an incorrect version number, triggering update banners and causing confusion, despite previous attempts to resolve it."]}],"\n",["$","li","li-1",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/5216","children":"elizaos/eliza#5216"}]," The ",["$","code","code-0",{"children":"sendAgentResponseToBus"}]," function is not emitting the ",["$","code","code-1",{"children":"EventType.MESSAGE_SENT"}]," event, which could impact central server API communication."]}],"\n",["$","li","li-2",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/5218","children":"elizaos/eliza#5218"}]," Inconsistent ",["$","code","code-0",{"children":"bun run test"}]," behavior across packages is leading to unreliable test execution and an inconsistent developer experience."]}],"\n"]}],"\n"]}],"\n"]}],"\n",["$","h2","h2-1",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"✅ Completed Work","position":{"start":{"line":9,"column":4,"offset":1136},"end":{"line":9,"column":20,"offset":1152}}}],"position":{"start":{"line":9,"column":1,"offset":1133},"end":{"line":9,"column":20,"offset":1152}}},"children":"✅ Completed Work"}],"\n",["$","ul","ul-1",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"AI and CLI Enhancements"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["Integrated Google Generative AI (Gemini) support into the ElizaOS CLI and refactored CLI prompts for clarity. (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5217","children":"elizaos/eliza#5217"}],", ",["$","a","a-1",{"href":"https://github.com/elizaos/eliza/pull/5215","children":"elizaos/eliza#5215"}],")"]}],"\n",["$","li","li-1",{"children":["Implemented lazy loading for test dependencies and the Discord plugin in starter templates, reducing initial project size and speeding up ",["$","code","code-0",{"children":"elizaos create"}],". (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5214","children":"elizaos/eliza#5214"}],")"]}],"\n"]}],"\n"]}],"\n",["$","li","li-1",{"children":[["$","strong","strong-0",{"children":"UI/UX Improvements and Agent Management"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["Added new agent settings to the client for better configuration and user experience. (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5202","children":"elizaos/eliza#5202"}],")"]}],"\n",["$","li","li-1",{"children":["Ensured documentation links open in new tabs for improved navigation. (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5213","children":"elizaos/eliza#5213"}],")"]}],"\n",["$","li","li-2",{"children":["Addressed UI bugs including responsive issues with agent cards, saving environment settings, and editing/adding new secrets in the secret panel. (","$L23",", ","$L24",", ","$L25",", ","$L26",")"]}],"\n"]}],"\n"]}],"\n","$L27","\n","$L28","\n"]}],"\n","$L29","\n","$L2a","\n","$L2b","\n","$L2c","\n","$L2d","\n","$L2e"]}]
+12:["$","script","script-0",{"src":"/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","async":true}]
+13:["$","script","script-1",{"src":"/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","async":true}]
+14:["$","script","script-2",{"src":"/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js","async":true}]
+15:["$","$L2f",null,{"children":["$","$30",null,{"name":"Next.MetadataOutlet","children":"$@31"}]}]
+22:["$","div",null,{"className":"rounded-lg border bg-card text-card-foreground shadow-sm","children":[["$","div",null,{"className":"flex flex-col space-y-1.5 p-6 py-4","children":["$","div",null,{"className":"tracking-tight text-sm font-medium","children":["$undefined","Code Changes"]}]}],["$","div",null,{"className":"p-6 pt-0","children":["$","div",null,{"className":"grid grid-cols-2 gap-4 md:grid-cols-4","children":[["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-git-commit-vertical h-5 w-5","aria-hidden":"true","children":[["$","path","1holv5",{"d":"M12 3v6"}],["$","circle","1v7zrd",{"cx":"12","cy":"12","r":"3"}],["$","path","a9ows0",{"d":"M12 15v6"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":94}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Commits"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-file-code h-5 w-5","aria-hidden":"true","children":[["$","path","1oefj6",{"d":"M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"}],["$","path","wfsgrz",{"d":"M14 2v5a1 1 0 0 0 1 1h5"}],["$","path","1tg20x",{"d":"M10 12.5 8 15l2 2.5"}],["$","path","yinavb",{"d":"m14 12.5 2 2.5-2 2.5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":190}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Files Changed"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-green-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-up h-5 w-5 text-green-500","aria-hidden":"true","children":[["$","path","hav0vg",{"d":"m5 12 7-7 7 7"}],["$","path","x0mq9r",{"d":"M12 19V5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-green-500","children":"+6,235"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Added"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-red-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-down h-5 w-5 text-red-500","aria-hidden":"true","children":[["$","path","s699le",{"d":"M12 5v14"}],["$","path","1idqje",{"d":"m19 12-7 7-7-7"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-red-500","children":"-4,073"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Deleted"}]]}]]}]]}]}]]}]
+23:["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5223","children":"elizaos/eliza#5223"}]
+24:["$","a","a-1",{"href":"https://github.com/elizaos/eliza/pull/5212","children":"elizaos/eliza#5212"}]
+25:["$","a","a-2",{"href":"https://github.com/elizaos/eliza/pull/5210","children":"elizaos/eliza#5210"}]
+26:["$","a","a-3",{"href":"https://github.com/elizaos/eliza/pull/5209","children":"elizaos/eliza#5209"}]
+27:["$","li","li-2",{"children":[["$","strong","strong-0",{"children":"Core System Stability and Maintenance"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["Removed all CI caching to prevent issues and corrected incorrectly scoped plugin names. (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5225","children":"elizaos/eliza#5225"}],", ",["$","a","a-1",{"href":"https://github.com/elizaos/eliza/pull/5220","children":"elizaos/eliza#5220"}],")"]}],"\n",["$","li","li-1",{"children":["Resolved the ",["$","code","code-0",{"children":"__dirname"}]," issue for ES modules in the copy-template utility and updated CLI create option tests. (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5219","children":"elizaos/eliza#5219"}],", ",["$","a","a-1",{"href":"https://github.com/elizaos/eliza/pull/5206","children":"elizaos/eliza#5206"}],")"]}],"\n",["$","li","li-2",{"children":["Performed significant code cleanup in the ",["$","code","code-0",{"children":"core"}]," and ",["$","code","code-1",{"children":"plugin-sql"}]," packages and removed CLI tests from integration tests to avoid duplication. (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5224","children":"elizaos/eliza#5224"}],", ",["$","a","a-1",{"href":"https://github.com/elizaos/eliza/pull/5222","children":"elizaos/eliza#5222"}],", ",["$","a","a-2",{"href":"https://github.com/elizaos/eliza/pull/5226","children":"elizaos/eliza#5226"}],")"]}],"\n"]}],"\n"]}]
+28:["$","li","li-3",{"children":[["$","strong","strong-0",{"children":"Documentation and Plugin Registry Updates"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["Added comprehensive documentation for GitHub Actions workflows, data pipeline architecture, and development work. (",["$","a","a-0",{"href":"https://github.com/elizaos/elizaos.github.io/pull/129","children":"elizaos/elizaos.github.io#129"}],")"]}],"\n",["$","li","li-1",{"children":["Expanded the plugin registry by adding a new \"kudo\" plugin. (",["$","a","a-0",{"href":"https://github.com/elizaos-plugins/registry/pull/179","children":"elizaos-plugins/registry#179"}],")"]}],"\n"]}],"\n"]}]
+29:["$","h2","h2-2",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"🏗️ Work in Progress","position":{"start":{"line":25,"column":4,"offset":3711},"end":{"line":25,"column":24,"offset":3731}}}],"position":{"start":{"line":25,"column":1,"offset":3708},"end":{"line":25,"column":24,"offset":3731}}},"children":"🏗️ Work in Progress"}]
+2a:["$","ul","ul-2",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"New Pull Requests"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"elizaos/eliza"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5221","children":"elizaos/eliza#5221"}]," fix: look for client/dist in multiple locations"]}],"\n",["$","li","li-1",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5205","children":"elizaos/eliza#5205"}]," fix: unit and integration tests"]}],"\n"]}],"\n"]}],"\n"]}],"\n"]}],"\n",["$","li","li-1",{"children":[["$","strong","strong-0",{"children":"Active Discussions"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/4931","children":"elizaos/eliza#4931"}]," Users are seeking a method to verify currently loaded plugins when an agent is running via ",["$","code","code-0",{"children":"elizaos start"}],"."]}],"\n"]}],"\n"]}],"\n"]}]
+2b:["$","h2","h2-3",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"🐞 Issue Triage","position":{"start":{"line":33,"column":4,"offset":4223},"end":{"line":33,"column":19,"offset":4238}}}],"position":{"start":{"line":33,"column":1,"offset":4220},"end":{"line":33,"column":19,"offset":4238}}},"children":"🐞 Issue Triage"}]
+2c:["$","ul","ul-3",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"New Issues"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"elizaos/eliza"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/5216","children":"elizaos/eliza#5216"}]," Message Event Not Emitting"]}],"\n",["$","li","li-1",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/5218","children":"elizaos/eliza#5218"}]," Inconsistent Test Execution"]}],"\n"]}],"\n"]}],"\n"]}],"\n"]}],"\n",["$","li","li-1",{"children":[["$","strong","strong-0",{"children":"Closed Issues"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"elizaos/eliza"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/5198","children":"elizaos/eliza#5198"}]," CLI Update Mechanism Resolved (Users advised to use ",["$","code","code-0",{"children":"bun install -g @elizaos/cli@latest"}]," for initial global updates)"]}],"\n"]}],"\n"]}],"\n",["$","li","li-1",{"children":[["$","strong","strong-0",{"children":"elizaos-plugins/plugin-knowledge"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos-plugins/plugin-knowledge/issues/5198","children":"elizaos-plugins/plugin-knowledge#5198"}]," CLI Update Command Resolution"]}],"\n"]}],"\n"]}],"\n",["$","li","li-2",{"children":[["$","strong","strong-0",{"children":"elizaos/elizaos.github.io"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/elizaos.github.io/issues/5198","children":"elizaos/elizaos.github.io#5198"}]," CLI Update Functionality"]}],"\n"]}],"\n"]}],"\n",["$","li","li-3",{"children":[["$","strong","strong-0",{"children":"elizaos-plugins/registry"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos-plugins/registry/issues/5198","children":"elizaos-plugins/registry#5198"}]," CLI Update Mechanism Resolution"]}],"\n"]}],"\n"]}],"\n"]}],"\n"]}],"\n"]}]
+2d:["$","h2","h2-4",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"✨ Contributor Spotlight","position":{"start":{"line":48,"column":4,"offset":5254},"end":{"line":48,"column":27,"offset":5277}}}],"position":{"start":{"line":48,"column":1,"offset":5251},"end":{"line":48,"column":27,"offset":5277}}},"children":"✨ Contributor Spotlight"}]
+2e:["$","ul","ul-4",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"standujar"}],": Provided crucial guidance on how to check currently loaded plugins in the agent's log output, assisting users with debugging and understanding agent behavior."]}],"\n"]}]
+31:null

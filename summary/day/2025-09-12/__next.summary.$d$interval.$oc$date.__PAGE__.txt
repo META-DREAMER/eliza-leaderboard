@@ -1,0 +1,174 @@
+1:"$Sreact.fragment"
+2:I[4817319,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"IntervalSelector"]
+3:I[6998365,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"LlmCopyButton"]
+e:I[3642796,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],""]
+f:I[3238488,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"StatCardsDisplay"]
+14:I[4261541,["/eliza-leaderboard/_next/static/chunks/b33bcbdcb3f88354.js","/eliza-leaderboard/_next/static/chunks/8ba59154b6704904.js"],"OutletBoundary"]
+15:"$Sreact.suspense"
+4:T6c4,### Summary
+- Add browser-safe build for `@elizaos/plugin-sql` using PGlite WASM.
+- Dual entrypoints: `src/index.browser.ts` (PGlite-only) and `src/index.node.ts` (Postgres/PGlite).
+- Conditional exports in `package.json` route browser to `dist/browser` and node to `dist/node`.
+- Replace `global` with `globalThis` in `src/index.ts`.
+
+### Why
+Fix Next.js app-client bundling failure caused by Node builtins and server drivers leaking into the client bundle (“the chunking context does not support external modules (request: node:module)”). Enable in-browser Eliza with PGlite and embeddings.
+
+### What changed
+- `packages/plugin-sql/src/index.browser.ts`: PGlite-only plugin entry.
+- `packages/plugin-sql/src/index.node.ts`: Node entry with Postgres/PGlite.
+- `packages/plugin-sql/src/utils.browser.ts`: No-op, browser-safe utils.
+- `packages/plugin-sql/src/utils.node.ts`: Node utils (dotenv/fs/path).
+- `packages/plugin-sql/src/index.ts`: `global` → `globalThis`.
+- `packages/plugin-sql/package.json`: Conditional `exports`, `sideEffects:false`.
+- `packages/plugin-sql/build.ts`: Dual build (dist/node, dist/browser).
+
+### How to test
+- Import `@elizaos/plugin-sql` in a Client Component; it should now bundle via the browser build.
+- DB operations route to in-memory PGlite on the client.
+
+### Notes
+- Embeddings are supported via PGlite vector extension in WASM.
+- Short-term: exposing client keys is accepted for Phase 1; document and rotate accordingly.
+- Server environments still use the Node entry (Postgres/PGlite).
+
+### Follow-ups (Phase 2)
+- Docs: browser security caveats and key management.
+- Optional: feature flag for browser/Node selection and persistent IndexedDB-backed PGlite.5:T5e4,### PR: Add `elizaos` npm alias for `@elizaos/cli`
+
+- Adds new alias package `packages/elizaos` that delegates to `@elizaos/cli`.
+- Keeps the simple npm name `elizaos`; improves discoverability while remaining identical to the CLI.
+
+### What changed
+- New package: `packages/elizaos`
+  - `package.json`: `"type": "module"`, `bin/elizaos.js`, `publishConfig.access=public`, depends on `@elizaos/cli` (workspace).
+  - `bin/elizaos.js`: ESM shim that imports `@elizaos/cli/dist/index.js`.
+  - `README.md`: Installation/use docs.
+- No changes needed to release workflow; Lerna will version/publish it with the CLI.
+
+### Why
+- Allow `npm i -g elizaos` as a simple alias to `@elizaos/cli` without forking logic.
+
+### Release and CI
+- CI uses the existing `NPM_TOKEN`. Ensure the token’s npm account has publish rights to BOTH the scoped `@elizaos/*` packages and the unscoped `elizaos`.
+- If the `elizaos` package is currently owned outside the org, transfer/add org/team as maintainer in npm Settings → Access, then remove old owner if desired.
+
+### How to verify
+```bash
+# Local install (from built repo)
+bun run build
+bun add ./packages/elizaos
+npx elizaos --version
+elizaos create --help
+
+# From npm after publish
+bun i -g elizaos
+elizaos --version
+```
+
+### Impact
+- No breaking changes.
+- Alias package is publish-ready (ESM, bin, files, public access).
+- Lint/build pass for new files.
+
+Please review ownership on npm for `elizaos` and confirm the CI token can publish both scoped and unscoped packages.
+6:T67b,On September 12, 2025, ElizaOS significantly expanded its core capabilities by introducing an alias package and adding browser build support for PGlite WASM, enhancing compatibility for web-based applications. Concurrently, the team is addressing user experience with alpha version update notifications and actively discussing release automation improvements.
+
+## 🚨 Needs Attention 
+- **Urgent Discussions**:
+    - [elizaos/eliza#5937](https://github.com/elizaos/eliza/issues/5937): Feedback is needed on release automation, specifically regarding the role of Product in defining release notes clarity and the scope of "versioned documentation."
+
+## ✅ Completed Work
+- **Core System Enhancements**:
+    - The issue related to the `plugin-rofl` repository was closed, indicating resolution of a plugin integration matter [elizaos/eliza#5949](https://github.com/elizaos/eliza/issues/5949).
+
+## 🏗️ Work in Progress
+- **New Pull Requests**:
+    - **elizaos/eliza**:
+        - [elizaos/eliza#5972](https://github.com/elizaos/eliza/pull/5972): Introduces an `elizaos` alias package.
+        - [elizaos/eliza#5970](https://github.com/elizaos/eliza/pull/5970): Adds browser build support with PGlite WASM.
+
+## 🐞 Issue Triage
+- **New Issues**:
+    - **elizaos/eliza**:
+        - [elizaos/eliza#5971](https://github.com/elizaos/eliza/issues/5971): Addresses the display of "update available" notifications for alpha versions when users are not on the alpha distribution.
+- **Closed Issues**:
+    - **elizaos/eliza**:
+        - [elizaos/eliza#5949](https://github.com/elizaos/eliza/issues/5949): Plugin integration issue related to `plugin-rofl` repository.0:{"buildId":"US8XLB_zHXYj_PVAECGcd","rsc":["$","$1","c",{"children":[["$","div",null,{"className":"container mx-auto px-6 py-8 md:px-8","children":["$","div",null,{"className":"mx-auto max-w-4xl","children":[["$","div",null,{"className":"mb-4 flex flex-col justify-between sm:flex-row","children":[["$","$L2",null,{"currentInterval":"day","currentDate":"2025-09-12"}],["$","$L3",null,{"metrics":{"date":"2025-09-12","interval":{"intervalStart":"$D2025-09-12T00:00:00.000Z","intervalEnd":"$D2025-09-13T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":2,"merged":1,"total":2},"issues":{"new":1,"closed":0,"total":1},"activeContributors":3,"codeChanges":{"additions":137,"deletions":39,"files":4,"commitCount":5},"topContributors":[{"username":"ChristopherTrimboli","avatarUrl":"https://avatars.githubusercontent.com/u/27584221?u=de148a498b5af814e037c2975112fadd09df743f&v=4","totalScore":97.51862724483271,"prScore":97.51862724483271,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"ChristopherTrimboli: Focused on significant feature development, successfully merging two substantial pull requests in `elizaos/eliza`: PR #5972, which created an elizaos alias package, and PR #5970, which added browser build with PGlite WASM support, demonstrating a primary focus on feature work and code contributions across various file types."},{"username":"linear","avatarUrl":"https://avatars.githubusercontent.com/in/20150?v=4","totalScore":4.2,"prScore":0,"issueScore":4,"reviewScore":0,"commentScore":0.2,"summary":"linear: Focused on issue management today, creating two issues including one to address an update display problem in elizaos/eliza (#5971) and closing one issue."}],"focusAreas":[{"area":"elizaos","count":1}],"topIssues":[{"id":"I_kwDOMT5cIs7LRVBR","title":"dont show update available for alpha versions if user is not on alpha dist","author":"linear","number":5971,"repository":"elizaos/eliza","body":"<img src=\"https://uploads.linear.app/186bdefa-3633-464a-80cd-6e86fe765a5c/0af2decf-dd33-469a-aab1-779f4bd0a107/5e076123-c41d-4e75-a0b2-108e59225fb7?signature=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJwYXRoIjoiLzE4NmJkZWZhLTM2MzMtNDY0YS04MGNkLTZlODZmZTc2NWE1Yy8wYWYyZGVjZi1kZDMzLTQ2OWEtYWFiMS03NzlmNGJkMGExMDcvNWUwNzYxMjMtYzQxZC00ZTc1LWEwYjItMTA4ZTU5MjI1ZmI3IiwiaWF0IjoxNzU3NjgwNTY4LCJleHAiOjMzMzI4MjQwNTY4fQ.1dmB2U08TnPOzd53R8Pfc4NZZH86lZfc6s91PToMlR0 \" alt=\"image.png\" width=\"742\" data-linear-height=\"115\" />","createdAt":"2025-09-12T12:36:08Z","closedAt":"2025-09-18T12:01:04Z","state":"CLOSED","commentCount":0}],"topPullRequests":[{"id":"PR_kwDOMT5cIs6oKZup","title":"feat: Adds browser build with PGlite WASM support","author":"ChristopherTrimboli","number":5970,"body":"$4","repository":"elizaos/eliza","createdAt":"2025-09-12T05:23:18Z","mergedAt":"2025-09-13T23:49:53Z","additions":552,"deletions":109},{"id":"PR_kwDOMT5cIs6oUG8l","title":"feat: Creates elizaos alias package","author":"ChristopherTrimboli","number":5972,"body":"$5","repository":"elizaos/eliza","createdAt":"2025-09-12T19:34:39Z","mergedAt":"2025-09-12T23:12:22Z","additions":137,"deletions":39}],"detailedContributorSummaries":{"ChristopherTrimboli":"ChristopherTrimboli: Focused on significant feature development, successfully merging two substantial pull requests in `elizaos/eliza`: PR #5972, which created an elizaos alias package, and PR #5970, which added browser build with PGlite WASM support, demonstrating a primary focus on feature work and code contributions across various file types.","linear":"linear: Focused on issue management today, creating two issues including one to address an update display problem in elizaos/eliza (#5971) and closing one issue."}},"summaryContent":"$6","className":"self-end sm:self-start"}]]}],"$L7","$L8","$L9"]}]}],["$La","$Lb","$Lc"],"$Ld"]}],"loading":null,"isPartial":false}
+7:["$","div",null,{"className":"mb-6","children":["$","div",null,{"className":"flex items-center justify-between","children":[[["$","$Le",null,{"href":"/summary/day/2025-09-11","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left mr-2 h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"children":"Previous"}],false],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$Le",null,{"href":"/summary/day/2025-09-11","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Previous"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]],["$","div",null,{"className":"flex flex-col items-center","children":[["$","div",null,{"className":"text-sm font-medium text-gray-500","children":["Daily"," Summary"]}],["$","time",null,{"dateTime":"2025-09-12","className":"text-md font-bold","children":"Sep 12, 2025"}]]}],[["$","$Le",null,{"href":"/summary/day/2025-09-13","children":[false,["$","span",null,{"children":"Next"}],["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right ml-2 h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}]],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$Le",null,{"href":"/summary/day/2025-09-13","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Next"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]]]}]}]
+10:T6c4,### Summary
+- Add browser-safe build for `@elizaos/plugin-sql` using PGlite WASM.
+- Dual entrypoints: `src/index.browser.ts` (PGlite-only) and `src/index.node.ts` (Postgres/PGlite).
+- Conditional exports in `package.json` route browser to `dist/browser` and node to `dist/node`.
+- Replace `global` with `globalThis` in `src/index.ts`.
+
+### Why
+Fix Next.js app-client bundling failure caused by Node builtins and server drivers leaking into the client bundle (“the chunking context does not support external modules (request: node:module)”). Enable in-browser Eliza with PGlite and embeddings.
+
+### What changed
+- `packages/plugin-sql/src/index.browser.ts`: PGlite-only plugin entry.
+- `packages/plugin-sql/src/index.node.ts`: Node entry with Postgres/PGlite.
+- `packages/plugin-sql/src/utils.browser.ts`: No-op, browser-safe utils.
+- `packages/plugin-sql/src/utils.node.ts`: Node utils (dotenv/fs/path).
+- `packages/plugin-sql/src/index.ts`: `global` → `globalThis`.
+- `packages/plugin-sql/package.json`: Conditional `exports`, `sideEffects:false`.
+- `packages/plugin-sql/build.ts`: Dual build (dist/node, dist/browser).
+
+### How to test
+- Import `@elizaos/plugin-sql` in a Client Component; it should now bundle via the browser build.
+- DB operations route to in-memory PGlite on the client.
+
+### Notes
+- Embeddings are supported via PGlite vector extension in WASM.
+- Short-term: exposing client keys is accepted for Phase 1; document and rotate accordingly.
+- Server environments still use the Node entry (Postgres/PGlite).
+
+### Follow-ups (Phase 2)
+- Docs: browser security caveats and key management.
+- Optional: feature flag for browser/Node selection and persistent IndexedDB-backed PGlite.11:T5e4,### PR: Add `elizaos` npm alias for `@elizaos/cli`
+
+- Adds new alias package `packages/elizaos` that delegates to `@elizaos/cli`.
+- Keeps the simple npm name `elizaos`; improves discoverability while remaining identical to the CLI.
+
+### What changed
+- New package: `packages/elizaos`
+  - `package.json`: `"type": "module"`, `bin/elizaos.js`, `publishConfig.access=public`, depends on `@elizaos/cli` (workspace).
+  - `bin/elizaos.js`: ESM shim that imports `@elizaos/cli/dist/index.js`.
+  - `README.md`: Installation/use docs.
+- No changes needed to release workflow; Lerna will version/publish it with the CLI.
+
+### Why
+- Allow `npm i -g elizaos` as a simple alias to `@elizaos/cli` without forking logic.
+
+### Release and CI
+- CI uses the existing `NPM_TOKEN`. Ensure the token’s npm account has publish rights to BOTH the scoped `@elizaos/*` packages and the unscoped `elizaos`.
+- If the `elizaos` package is currently owned outside the org, transfer/add org/team as maintainer in npm Settings → Access, then remove old owner if desired.
+
+### How to verify
+```bash
+# Local install (from built repo)
+bun run build
+bun add ./packages/elizaos
+npx elizaos --version
+elizaos create --help
+
+# From npm after publish
+bun i -g elizaos
+elizaos --version
+```
+
+### Impact
+- No breaking changes.
+- Alias package is publish-ready (ESM, bin, files, public access).
+- Lint/build pass for new files.
+
+Please review ownership on npm for `elizaos` and confirm the CI token can publish both scoped and unscoped packages.
+8:["$","div",null,{"className":"mb-8 space-y-6","children":[["$","$Lf",null,{"metrics":{"date":"2025-09-12","interval":{"intervalStart":"$D2025-09-12T00:00:00.000Z","intervalEnd":"$D2025-09-13T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":2,"merged":1,"total":2},"issues":{"new":1,"closed":0,"total":1},"activeContributors":3,"codeChanges":{"additions":137,"deletions":39,"files":4,"commitCount":5},"topContributors":[{"username":"ChristopherTrimboli","avatarUrl":"https://avatars.githubusercontent.com/u/27584221?u=de148a498b5af814e037c2975112fadd09df743f&v=4","totalScore":97.51862724483271,"prScore":97.51862724483271,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"ChristopherTrimboli: Focused on significant feature development, successfully merging two substantial pull requests in `elizaos/eliza`: PR #5972, which created an elizaos alias package, and PR #5970, which added browser build with PGlite WASM support, demonstrating a primary focus on feature work and code contributions across various file types."},{"username":"linear","avatarUrl":"https://avatars.githubusercontent.com/in/20150?v=4","totalScore":4.2,"prScore":0,"issueScore":4,"reviewScore":0,"commentScore":0.2,"summary":"linear: Focused on issue management today, creating two issues including one to address an update display problem in elizaos/eliza (#5971) and closing one issue."}],"focusAreas":[{"area":"elizaos","count":1}],"topIssues":[{"id":"I_kwDOMT5cIs7LRVBR","title":"dont show update available for alpha versions if user is not on alpha dist","author":"linear","number":5971,"repository":"elizaos/eliza","body":"<img src=\"https://uploads.linear.app/186bdefa-3633-464a-80cd-6e86fe765a5c/0af2decf-dd33-469a-aab1-779f4bd0a107/5e076123-c41d-4e75-a0b2-108e59225fb7?signature=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJwYXRoIjoiLzE4NmJkZWZhLTM2MzMtNDY0YS04MGNkLTZlODZmZTc2NWE1Yy8wYWYyZGVjZi1kZDMzLTQ2OWEtYWFiMS03NzlmNGJkMGExMDcvNWUwNzYxMjMtYzQxZC00ZTc1LWEwYjItMTA4ZTU5MjI1ZmI3IiwiaWF0IjoxNzU3NjgwNTY4LCJleHAiOjMzMzI4MjQwNTY4fQ.1dmB2U08TnPOzd53R8Pfc4NZZH86lZfc6s91PToMlR0 \" alt=\"image.png\" width=\"742\" data-linear-height=\"115\" />","createdAt":"2025-09-12T12:36:08Z","closedAt":"2025-09-18T12:01:04Z","state":"CLOSED","commentCount":0}],"topPullRequests":[{"id":"PR_kwDOMT5cIs6oKZup","title":"feat: Adds browser build with PGlite WASM support","author":"ChristopherTrimboli","number":5970,"body":"$10","repository":"elizaos/eliza","createdAt":"2025-09-12T05:23:18Z","mergedAt":"2025-09-13T23:49:53Z","additions":552,"deletions":109},{"id":"PR_kwDOMT5cIs6oUG8l","title":"feat: Creates elizaos alias package","author":"ChristopherTrimboli","number":5972,"body":"$11","repository":"elizaos/eliza","createdAt":"2025-09-12T19:34:39Z","mergedAt":"2025-09-12T23:12:22Z","additions":137,"deletions":39}],"detailedContributorSummaries":{"ChristopherTrimboli":"ChristopherTrimboli: Focused on significant feature development, successfully merging two substantial pull requests in `elizaos/eliza`: PR #5972, which created an elizaos alias package, and PR #5970, which added browser build with PGlite WASM support, demonstrating a primary focus on feature work and code contributions across various file types.","linear":"linear: Focused on issue management today, creating two issues including one to address an update display problem in elizaos/eliza (#5971) and closing one issue."}}}],"$L12"]}]
+9:["$","div",null,{"className":"prose prose-sm mx-auto mt-8 dark:prose-invert sm:prose lg:prose-lg xl:prose-xl","children":[["$","p","p-0",{"children":"On September 12, 2025, ElizaOS significantly expanded its core capabilities by introducing an alias package and adding browser build support for PGlite WASM, enhancing compatibility for web-based applications. Concurrently, the team is addressing user experience with alpha version update notifications and actively discussing release automation improvements."}],"\n",["$","h2","h2-0",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"🚨 Needs Attention","position":{"start":{"line":3,"column":4,"offset":364},"end":{"line":3,"column":22,"offset":382}}}],"position":{"start":{"line":3,"column":1,"offset":361},"end":{"line":3,"column":23,"offset":383}}},"children":"🚨 Needs Attention"}],"\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"Urgent Discussions"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/5937","children":"elizaos/eliza#5937"}],": Feedback is needed on release automation, specifically regarding the role of Product in defining release notes clarity and the scope of \"versioned documentation.\""]}],"\n"]}],"\n"]}],"\n"]}],"\n",["$","h2","h2-1",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"✅ Completed Work","position":{"start":{"line":7,"column":4,"offset":651},"end":{"line":7,"column":20,"offset":667}}}],"position":{"start":{"line":7,"column":1,"offset":648},"end":{"line":7,"column":20,"offset":667}}},"children":"✅ Completed Work"}],"\n",["$","ul","ul-1",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"Core System Enhancements"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["The issue related to the ",["$","code","code-0",{"children":"plugin-rofl"}]," repository was closed, indicating resolution of a plugin integration matter ",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/5949","children":"elizaos/eliza#5949"}],"."]}],"\n"]}],"\n"]}],"\n"]}],"\n",["$","h2","h2-2",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"🏗️ Work in Progress","position":{"start":{"line":11,"column":4,"offset":893},"end":{"line":11,"column":24,"offset":913}}}],"position":{"start":{"line":11,"column":1,"offset":890},"end":{"line":11,"column":24,"offset":913}}},"children":"🏗️ Work in Progress"}],"\n",["$","ul","ul-2",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"New Pull Requests"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"elizaos/eliza"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5972","children":"elizaos/eliza#5972"}],": Introduces an ",["$","code","code-0",{"children":"elizaos"}]," alias package."]}],"\n",["$","li","li-1",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5970","children":"elizaos/eliza#5970"}],": Adds browser build support with PGlite WASM."]}],"\n"]}],"\n"]}],"\n"]}],"\n"]}],"\n"]}],"\n",["$","h2","h2-3",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"🐞 Issue Triage","position":{"start":{"line":17,"column":4,"offset":1204},"end":{"line":17,"column":19,"offset":1219}}}],"position":{"start":{"line":17,"column":1,"offset":1201},"end":{"line":17,"column":19,"offset":1219}}},"children":"🐞 Issue Triage"}],"\n",["$","ul","ul-3",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"New Issues"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"elizaos/eliza"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/5971","children":"elizaos/eliza#5971"}],": Addresses the display of \"update available\" notifications for alpha versions when users are not on the alpha distribution."]}],"\n"]}],"\n"]}],"\n"]}],"\n"]}],"\n",["$","li","li-1",{"children":[["$","strong","strong-0",{"children":"Closed Issues"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"elizaos/eliza"}],":","\n","$L13","\n"]}],"\n"]}],"\n"]}],"\n"]}]]}]
+a:["$","script","script-0",{"src":"/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","async":true}]
+b:["$","script","script-1",{"src":"/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","async":true}]
+c:["$","script","script-2",{"src":"/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js","async":true}]
+d:["$","$L14",null,{"children":["$","$15",null,{"name":"Next.MetadataOutlet","children":"$@16"}]}]
+12:["$","div",null,{"className":"rounded-lg border bg-card text-card-foreground shadow-sm","children":[["$","div",null,{"className":"flex flex-col space-y-1.5 p-6 py-4","children":["$","div",null,{"className":"tracking-tight text-sm font-medium","children":["$undefined","Code Changes"]}]}],["$","div",null,{"className":"p-6 pt-0","children":["$","div",null,{"className":"grid grid-cols-2 gap-4 md:grid-cols-4","children":[["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-git-commit-vertical h-5 w-5","aria-hidden":"true","children":[["$","path","1holv5",{"d":"M12 3v6"}],["$","circle","1v7zrd",{"cx":"12","cy":"12","r":"3"}],["$","path","a9ows0",{"d":"M12 15v6"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":5}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Commits"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-file-code h-5 w-5","aria-hidden":"true","children":[["$","path","1oefj6",{"d":"M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"}],["$","path","wfsgrz",{"d":"M14 2v5a1 1 0 0 0 1 1h5"}],["$","path","1tg20x",{"d":"M10 12.5 8 15l2 2.5"}],["$","path","yinavb",{"d":"m14 12.5 2 2.5-2 2.5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":4}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Files Changed"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-green-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-up h-5 w-5 text-green-500","aria-hidden":"true","children":[["$","path","hav0vg",{"d":"m5 12 7-7 7 7"}],["$","path","x0mq9r",{"d":"M12 19V5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-green-500","children":"+137"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Added"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-red-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-down h-5 w-5 text-red-500","aria-hidden":"true","children":[["$","path","s699le",{"d":"M12 5v14"}],["$","path","1idqje",{"d":"m19 12-7 7-7-7"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-red-500","children":"-39"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Deleted"}]]}]]}]]}]}]]}]
+13:["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/5949","children":"elizaos/eliza#5949"}],": Plugin integration issue related to ",["$","code","code-0",{"children":"plugin-rofl"}]," repository."]}],"\n"]}]
+16:null

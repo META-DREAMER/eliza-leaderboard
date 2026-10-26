@@ -1,0 +1,499 @@
+1:"$Sreact.fragment"
+2:I[4817319,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"IntervalSelector"]
+3:I[6998365,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"LlmCopyButton"]
+11:I[3642796,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],""]
+12:I[3238488,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"StatCardsDisplay"]
+19:I[4261541,["/eliza-leaderboard/_next/static/chunks/b33bcbdcb3f88354.js","/eliza-leaderboard/_next/static/chunks/8ba59154b6704904.js"],"OutletBoundary"]
+1a:"$Sreact.suspense"
+4:Ta60,# Error when sending message without `ANTHROPIC_API_KEY`: "x-api-key header is required"
+
+## Description
+When installing Eliza from source and running `bun start`, attempts to send a message to the agent fail with an `AI_APICallError: x-api-key header is required` error if the `ANTHROPIC_API_KEY` environment variable is not set. This occurs regardless of whether an `OPENAI_API_KEY` is present.
+
+## Steps to Reproduce
+1. Clone the Eliza repository and install dependencies.
+2. Ensure only the `OPENAI_API_KEY` (or no API keys) is set in your environment; do not set `ANTHROPIC_API_KEY`.
+3. From the project root, run:
+   ```bash
+   bun start
+   ```
+4. Attempt to send a message to the “Eliza” agent (e.g., via an HTTP request or CLI).
+5. Observe the error in logs.
+
+## Expected Behavior
+- If `ANTHROPIC_API_KEY` is unset, Eliza should either:
+  - Fall back to OpenAI if `OPENAI_API_KEY` is provided, or
+  - Emit a warning about missing Anthropic functionality without throwing an error when handling messages.
+
+## Actual Behavior
+Eliza logs warnings about missing instrumentation and missing `ANTHROPIC_API_KEY`, then errors out on any message send with:
+```text
+(AI_APICallError) x-api-key header is required
+at new _AISDKError (/eliza/node_modules/@ai-sdk/provider/dist/index.mjs:19:5)
+...
+```
+
+## Relevant Logs
+```text
+[2025-04-23 22:20:42] WARN: ANTHROPIC_API_KEY is not set in environment - Anthropic functionality will be limited
+[2025-04-23 22:20:47] WARN: Service instrumentation not found
+    agentName: "Eliza"
+    agentId: "b850bc30-45f8-0041-a00a-83df46d8555d"
+[2025-04-23 22:20:47] WARN: [getTracer] Service instrumentation not found in runtime.
+[2025-04-23 22:20:48] ERROR: Error during emitEvent for MESSAGE_RECEIVED (handler execution):
+    agentName: "Eliza"
+    agentId: "b850bc30-45f8-0041-a00a-83df46d8555d"
+    message: "(AI_APICallError) x-api-key header is required"
+    stack: [
+      "AI_APICallError: x-api-key header is required",
+      "at new _AISDKError (/eliza/node_modules/@ai-sdk/provider/dist/index.mjs:19:5)",
+      "at new APICallError (/eliza/node_modules/@ai-sdk/provider/dist/index.mjs:61:5)",
+      "at <anonymous> (/eliza/node_modules/@ai-sdk/provider-utils/dist/index.mjs:667:18)",
+      "at processTicksAndRejections (native:7:39)"
+    ]
+```
+
+## Environment
+- OS: Ubuntu 22.04 LTS
+- Runtime: Bun v0.x
+- Eliza Version: Source checkout as of April 23, 2025
+- Env Vars:
+  - `OPENAI_API_KEY`: set or unset
+  - `ANTHROPIC_API_KEY`: **not** set
+
+## Additional Context
+This issue blocks users who wish to run Eliza exclusively with OpenAI credentials. A fallback or clearer error message would improve usability.
+
+5:T611,**Describe the bug**
+In `v2-develop` branch, 
+```
+cxp@R9000P:~/ai_agent_learn/eliza$ elizaos project add-plugin @elizaos/plugin-solana
+Attempting to install @elizaos/plugin-solana@beta from npm registry...
+[2025-04-23 10:03:23] INFO: Installing plugin: @elizaos/plugin-solana
+[2025-04-23 10:03:23] INFO: Prioritizing npm install for @elizaos/plugin-solana@beta
+[2025-04-23 10:03:23] INFO: Attempting to install plugin :...
+[2025-04-23 10:03:23] INFO: Attempting to install package: @elizaos/plugin-solana using bun
+[0.12ms] ".env"
+bun add v1.1.29 (6d43b366)
+error: Package "@elizaos/plugin-solana@1.0.0-beta.34" has a dependency loop
+  Resolution: "@elizaos/plugin-solana@workspace:packages/plugin-solana"
+  Dependency: "@elizaos/plugin-solana@beta"
+error: An internal error occurred (DependencyLoop)
+[2025-04-23 10:04:02] WARN: Failed to install from npm registry: @elizaos/plugin-solana
+Failed to install @elizaos/plugin-solana@beta directly from npm. Trying registry lookup...
+[2025-04-23 10:04:02] ERROR: All installation methods (npm, GitHub, monorepo) failed.
+[2025-04-23 10:04:02] WARN: Installation failed for plugin :
+[2025-04-23 10:04:02] ERROR: All installation attempts failed for plugin @elizaos/plugin-solana
+```
+
+**To Reproduce**
+
+<!-- Steps to reproduce the behavior. -->
+
+**Expected behavior**
+
+<!-- A clear and concise description of what you expected to happen. -->
+
+**Screenshots**
+
+<!-- If applicable, add screenshots to help explain your problem. -->
+
+**Additional context**
+
+<!-- Add any other context about the problem here. -->
+6:T716,**Describe the bug**
+I use the `elizaos` to create a plugin project, and use `elizaos dev` to run it.
+```
+[2025-04-23 08:22:47] INFO: Model already exists at: /home/cxp/.eliza/models/bge-small-en-v1.5.Q4_K_M.gguf
+[node-llama-cpp] load: special_eos_id is not in special_eog_ids - the tokenizer config may be incorrect
+[node-llama-cpp] Using this model ("~/.eliza/models/bge-small-en-v1.5.Q4_K_M.gguf") to tokenize text and then detokenize it resulted in a different text. There might be an issue with the model or the tokenizer implementation. Using this model may not work as intended
+[2025-04-23 08:22:48] INFO: Embedding model initialized successfully
+[2025-04-23 08:22:48] INFO: Generating embedding for text
+    textLength: 18
+[2025-04-23 08:22:48] INFO: Embedding generation complete
+    dimensions: 384
+{"level":40,"time":1745396568237,"pid":166664,"hostname":"R9000P","msg":"Could not parse text as JSON, returning null"}
+[2025-04-23 08:22:48] WARN: *** Missing required fields, retrying... ***
+[2025-04-23 08:22:48] WARN: *** Missing required fields, retrying... ***
+[2025-04-23 08:22:48] WARN: *** Missing required fields, retrying... ***
+{"level":40,"time":1745396568277,"pid":166664,"hostname":"R9000P","msg":"Could not parse text as JSON, returning null"}
+{"level":40,"time":1745396568278,"pid":166664,"hostname":"R9000P","msg":"Could not parse text as JSON, returning null"}
+{"level":40,"time":1745396568278,"pid":166664,"hostname":"R9000P","msg":"Could not parse text as JSON, returning null"}
+```
+
+**To Reproduce**
+
+In localhost:3001 and send some text to agent on chat area.
+
+**Expected behavior**
+
+should generate answer content
+
+**Screenshots**
+
+<!-- If applicable, add screenshots to help explain your problem. -->
+
+**Additional context**
+
+<!-- Add any other context about the problem here. -->
+7:Tbc8,<!-- Use this template by filling in information and copying and pasting relevant items out of the HTML comments. -->
+
+# Relates to
+Closes elizaOS/eliza#42
+
+# Risks
+Medium — if the GAIMIN model endpoint changes format, text generation may break.
+
+# Background
+We want to add a new model provider (Gaimin) so Eliza can talk to the cloud.gaimin.io LLM API.  
+See the full integration spec here:  
+https://drive.google.com/file/d/1neYXA6xjMWUVqwxx5yRxHKdUVGwVq1jd/view?usp=sharing
+
+## Overview
+This document outlines the process of integrating the Gaimin Model Provider into the ElizaOS project. It provides a step-by-step guide, code examples, and key considerations to help developers quickly understand and implement the integration.
+
+## Purpose and Scope
+- **Purpose:** Demonstrate a baseline integration of the Gaimin Model Provider.  
+- **Scope:** Provide example code snippets, configuration instructions, and a directory structure overview. Note that the implementation is a starting point and requires further customization and testing for production use.
+
+# Prerequisites
+## Environment Setup
+Ensure you have the following prerequisites before proceeding:  
+- API key for the Gaimin Model Provider.
+
+# Key Considerations
+## Testing and Optimization
+The current implementation has not undergone comprehensive testing or performance optimization. Users should perform rigorous testing, including unit tests and integration tests, and refine the code as necessary before deploying it in production environments.
+
+## Security Considerations
+As this is a preliminary integration example, it has not been fully audited for security vulnerabilities. A thorough security review is recommended to ensure that the integration adheres to your organization’s security policies and industry best practices.
+
+## Future Enhancements and Contributions
+This baseline implementation is open for enhancements. Developers are encouraged to contribute improvements, including code optimization, additional features, and broader testing coverage, in line with the ElizaOS project’s contribution guidelines.
+
+# What does this PR do?
+- Adds `ModelProviderName.GAIMIN` to `packages/core/src/types.ts`
+- Implements the GAIMIN fetch logic in `packages/core/src/generation.ts`
+- Exposes the Gaimin models in `packages/core/src/models.ts`
+- Updates agent key lookup in `agent/src/index.ts`
+- Bundles a new `@ai-sdk/gaimin` package under `packages/gaimin`
+
+## What kind of change is this?
+**Features** (non-breaking): adds a new model provider.
+
+# Documentation of changes
+- ✔ External integration spec:  
+  https://drive.google.com/file/d/1neYXA6xjMWUVqwxx5yRxHKdUVGwVq1jd/view?usp=sharing
+
+# Testing
+## Where should a reviewer start?
+
+1. Create or update your `.env` with:
+   ```bash
+   GAIMIN_API_KEY=<your key>
+   GAIMIN_API_URL=
+  GAIMIN_MODEL="llama3.2:3b"
+   ```
+2. Run Eliza Character with `gaimin` specified as its model provider in the character.json file.
+   
+8:T4e5,Discord for better coordination: @michavie
+
+# Relates to
+
+TypeScript type resolution issues in `@elizaos/core` package
+
+Fixes: https://github.com/elizaOS/eliza/issues/3191
+
+# Risks
+
+Low - This is a build configuration change that only affects type generation, not runtime behavior.
+
+# Background
+
+## What does this PR do?
+
+Fixes TypeScript type resolution by properly generating declaration files in the correct format. The package was generating CommonJS type declarations while using ESM for JavaScript code, causing TypeScript to fail to resolve types through ESM exports.
+
+This issue affects any TypeScript project that:
+- Uses ESM imports
+- Has strict TypeScript configurations
+- Relies on proper type resolution from dependencies
+
+## What kind of change is this?
+
+Improvements (misc. changes to existing features)
+
+# Documentation changes needed?
+
+My changes do not require a change to the project documentation.
+
+# Testing
+
+## Where should a reviewer start?
+
+Verify type resolution in a consuming project
+
+## Detailed testing steps
+
+1. Build the package with the new configuration
+2. Install the built package in a test project
+3. Verify that TypeScript can properly resolve all types from `@elizaos/core`9:T667,Apr 23, 2025 - Daily Project Summary
+
+Today's development focused on critical bug fixes within the ElizaOS framework, specifically resolving an agent not found error after GUI creation. Several new issues emerged, highlighting challenges with plugin installations and API key requirements, which will require immediate attention.
+
+## 🚨 Needs Attention
+- **Urgent Discussions**:
+    - [elizaos/eliza#4346](https://github.com/elizaos/eliza/issues/4346): An `x-api-key header is required` error occurs when sending messages without `ANTHROPIC_API_KEY`.
+    - [elizaos/eliza#4342](https://github.com/elizaos/eliza/issues/4342): Users are experiencing failures when installing the `@elizaos/plugin-solana` plugin.
+    - [elizaos/eliza#4339](https://github.com/elizaos/eliza/issues/4339): The local model is not working on the plugin development environment.
+
+## ✅ Completed Work
+- **Core Framework Stability**:
+    - Resolved an issue where starting a GUI-created agent with the same name resulted in an "Agent does not exist in database" error after the `ensureAgentExists` call, improving agent management reliability. [elizaos/eliza#4337](https://github.com/elizaos/eliza/pull/4337)
+
+## 🐞 Issue Triage
+- **New Issues**:
+    - [elizaos/eliza#4346](https://github.com/elizaos/eliza/issues/4346): Error "x-api-key header is required" when sending messages without `ANTHROPIC_API_KEY`.
+    - [elizaos/eliza#4342](https://github.com/elizaos/eliza/issues/4342): Failure to install `@elizaos/plugin-solana`.
+    - [elizaos/eliza#4339](https://github.com/elizaos/eliza/issues/4339): Local model not working on plugin development environment.0:{"buildId":"US8XLB_zHXYj_PVAECGcd","rsc":["$","$1","c",{"children":[["$","div",null,{"className":"container mx-auto px-6 py-8 md:px-8","children":["$","div",null,{"className":"mx-auto max-w-4xl","children":[["$","div",null,{"className":"mb-4 flex flex-col justify-between sm:flex-row","children":[["$","$L2",null,{"currentInterval":"day","currentDate":"2025-04-23"}],["$","$L3",null,{"metrics":{"date":"2025-04-23","interval":{"intervalStart":"$D2025-04-23T00:00:00.000Z","intervalEnd":"$D2025-04-24T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":7,"merged":1,"total":7},"issues":{"new":3,"closed":0,"total":3},"activeContributors":14,"codeChanges":{"additions":11,"deletions":4,"files":2,"commitCount":32},"topContributors":[{"username":"ShahafGaimin","avatarUrl":"https://avatars.githubusercontent.com/u/194211912?v=4","totalScore":44.58267404576458,"prScore":44.58267404576458,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"ShahafGaimin: Opened 1 pull request (#4343) titled \"GAIMIN branch - Added AI Model Provider Gaimin AI,\" but did not merge any PRs today. Activity remains sporadic with no other contributions noted."},{"username":"snobbee","avatarUrl":"https://avatars.githubusercontent.com/u/125891987?u=ba9ca14b922f8fb73f38ba0981d157247af3dd03&v=4","totalScore":36,"prScore":0,"issueScore":0,"reviewScore":36,"commentScore":0,"summary":"snobbee: Made significant code changes by modifying 17 files (+135/-73 lines) with a primary focus on other work (76%) and documentation (18%), while also providing 8 comments during reviews. Maintained a consistent activity pattern, being active every day."},{"username":"michavie","avatarUrl":"https://avatars.githubusercontent.com/u/39144548?u=3496eb82a60d2a8e88bf5e22c3ffe5eb2b37d816&v=4","totalScore":28.395563680037476,"prScore":28.395563680037476,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"michavie: Merged 1 PR (#4341) focused on fixing ESM type declarations in Core, resulting in a net change of +6/-15 lines across 3 modified files. Maintained a consistent activity pattern, dedicating efforts entirely to bugfix work today."},{"username":"tcm390","avatarUrl":"https://avatars.githubusercontent.com/u/60634884?u=c6c41679b8322eaa0c81f72e0b4ed95e80f0ac16&v=4","totalScore":25.04858872223978,"prScore":24.848588722239782,"issueScore":0,"reviewScore":0,"commentScore":0.2,"summary":"tcm390: Merged 1 PR (#4337) addressing the agent not found error after GUI creation, with a net change of +11/-4 lines. Made significant code modifications across 1276 files, totaling +52149/-24096 lines, with a primary focus on other work (75%) and bugfix efforts (25%)."},{"username":"yungalgo","avatarUrl":"https://avatars.githubusercontent.com/u/113615973?u=92e0f29f7e2fbb8ce46ed13c51f692ca803de02d&v=4","totalScore":21.36072077083992,"prScore":21.36072077083992,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"yungalgo: Merged 1 PR (#4345) with significant changes (+477/-179 lines), demonstrating consistent activity with a focus on other work. Active today, maintaining a steady contribution pattern."},{"username":"wtfsayo","avatarUrl":"https://avatars.githubusercontent.com/u/82053242?u=98209a1f10456f42d4d2fa71db4d5bf4a672cbc3&v=4","totalScore":21.319528664807628,"prScore":21.319528664807628,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"wtfsayo: Merged 1 pull request (#4344 \"feat: skip display banner if not utf-8\") with a net change of +35/-22 lines, while modifying 6 files across 4 commits (+79/-33 lines). Maintained a consistent activity pattern, focusing primarily on other work (75%) and contributing to feature development (25%)."},{"username":"matevz","avatarUrl":"https://avatars.githubusercontent.com/u/83672?v=4","totalScore":9.5,"prScore":0,"issueScore":0,"reviewScore":9.5,"commentScore":0,"summary":"matevz: Engaged in code reviews with a total of 2 reviews, including 1 approval and 1 comment, but did not merge or open any pull requests or issues today. Activity was sporadic, being active on only 0 out of 1 days this period."},{"username":"cxp-13","avatarUrl":"https://avatars.githubusercontent.com/u/84974164?u=3b5b5c18f44af73f1e2f9921381fe2e800f474d1&v=4","totalScore":8.1,"prScore":0,"issueScore":8.1,"reviewScore":0,"commentScore":0,"summary":"cxp-13: Created 2 new issues today, #4342 \"All installation attempts failed for plugin @elizaos/plugin-s...\" and #4339 \"the local model on plugin dev not work,\" both currently open. Activity remains sporadic with no merged pull requests or code changes."},{"username":"NeoByteXx","avatarUrl":"https://avatars.githubusercontent.com/u/160131789?u=fd1554d805a4282c7164e67d7dfaeb1e92377ffa&v=4","totalScore":5.248306144334054,"prScore":5.248306144334054,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"NeoByteXx: Opened 1 pull request (#4340) to \"Fix Grammar\" and made modifications to 1 file, resulting in a net change of +1/-1 lines, focusing entirely on documentation. Active today, maintaining a consistent work pattern."},{"username":"PixelPil0t1","avatarUrl":"https://avatars.githubusercontent.com/u/161360836?u=cb7120a58d61284a5b7a23ed184b773043ec5123&v=4","totalScore":4.516,"prScore":4.516,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"PixelPil0t1: Opened 1 pull request (#4338) to fix a typo in constructor documentation and modified 1 file with a net change of 0 lines (+2/-2). Maintained a consistent activity pattern, being active every day."},{"username":"UD1sto","avatarUrl":"https://avatars.githubusercontent.com/u/76160388?u=99e39f3503250fd313d8b69a6e0c36a6b91f8520&v=4","totalScore":4.2,"prScore":0,"issueScore":4,"reviewScore":0,"commentScore":0.2,"summary":"UD1sto: Created 1 issue today (#4346 \"Error when sending message without `ANTHROPIC_API_KEY`: \"x-ap...\"), demonstrating sporadic activity with no merged pull requests or code changes."}],"focusAreas":[{"area":"core","count":1},{"area":"plugin-sql","count":1}],"topIssues":[{"id":"I_kwDOMT5cIs6zu3lP","title":"Error when sending message without `ANTHROPIC_API_KEY`: \"x-api-key header is required\"","author":"UD1sto","number":4346,"repository":"elizaos/eliza","body":"$4","createdAt":"2025-04-23T22:48:30Z","closedAt":"2025-07-18T13:58:13Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs6znbNm","title":"All installation attempts failed for plugin @elizaos/plugin-solana","author":"cxp-13","number":4342,"repository":"elizaos/eliza","body":"$5","createdAt":"2025-04-23T10:06:05Z","closedAt":"2025-06-02T15:52:27Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs6zmLBG","title":"the local model on plugin dev not work","author":"cxp-13","number":4339,"repository":"elizaos/eliza","body":"$6","createdAt":"2025-04-23T08:25:43Z","closedAt":"2025-06-02T12:34:58Z","state":"CLOSED","commentCount":0}],"topPullRequests":[{"id":"PR_kwDOMT5cIs6TkUtY","title":"GAIMIN branch - Added AI Model Provider Gaimin AI","author":"ShahafGaimin","number":4343,"body":"$7","repository":"elizaos/eliza","createdAt":"2025-04-23T10:23:13Z","mergedAt":null,"additions":546,"deletions":4},{"id":"PR_kwDOMT5cIs6Tn4W0","title":"feat: skip display banner if not utf-8","author":"wtfsayo","number":4344,"body":"","repository":"elizaos/eliza","createdAt":"2025-04-23T16:10:28Z","mergedAt":"2025-04-24T04:53:50Z","additions":13,"deletions":0},{"id":"PR_kwDOMT5cIs6TiMAZ","title":"fix: agent not found error after GUI creation and resolve merge conflict","author":"tcm390","number":4337,"body":"This PR fixes an issue where starting an agent created via the GUI using the same agent name would result in an error: Agent does not exist in database after ensureAgentExists call.\r\n\r\nThe issue occurred because multiple agents with the same name but different IDs existed in the database. The ensureAgentExists call would return an agent (based on name), but subsequent logic that expected a specific agentId would fail to find it, causing the error.\r\n\r\nThis PR ensures the correct agentId is used, resolving the mismatch.\r\n\r\nAdditionally, this PR resolves merge conflicts between the following PRs:\r\n\r\nhttps://github.com/elizaOS/eliza/pull/4223\r\n\r\nhttps://github.com/elizaOS/eliza/pull/4261","repository":"elizaos/eliza","createdAt":"2025-04-23T06:49:42Z","mergedAt":"2025-04-23T06:50:13Z","additions":11,"deletions":4},{"id":"PR_kwDOMT5cIs6TORhL","title":"fix: gpu recognition on docker containers","author":"UD1sto","number":4325,"body":"### PR Description: Add pciutils to Dockerfile for GPU detection\r\n**Changes**\r\nAdded pciutils package installation to the Dockerfile\r\nFixes GPU detection issue when running the container\r\n**Problem**\r\nThe container was failing to detect GPU capabilities because the lspci command was missing. This resulted in the error:\r\n`[ERROR: Linux GPU detection failed\r\n  cmd: \"lspci | grep -i vga\",\r\n  stderr: \"/bin/sh: 1: lspci: not found\\n\"`\r\n**Solution**\r\nAdded pciutils package to the Dockerfile which provides the lspci command needed for GPU detection. This enables proper hardware capability detection when the container starts.\r\n","repository":"elizaos/eliza","createdAt":"2025-04-20T10:24:23Z","mergedAt":null,"additions":10,"deletions":1},{"id":"PR_kwDOMT5cIs6TqxCy","title":"added bc .gitignore wasnt getting copied from plugin-starter","author":"yungalgo","number":4345,"body":"added this small change because .gitignore wasnt getting copied over on plugin-starter copying via the cli.","repository":"elizaos/eliza","createdAt":"2025-04-23T22:43:14Z","mergedAt":"2025-04-24T08:14:51Z","additions":7,"deletions":0},{"id":"PR_kwDOMT5cIs6Tjggw","title":"Fix ESM type declarations in Core","author":"michavie","number":4341,"body":"$8","repository":"elizaos/eliza","createdAt":"2025-04-23T09:18:57Z","mergedAt":"2025-04-28T02:24:21Z","additions":6,"deletions":15},{"id":"PR_kwDOMT5cIs6Ti-gN","title":"Fix Grammar ","author":"NeoByteXx","number":4340,"body":"Proper grammar ensures clarity and professionalism in documentation. Using the correct preposition (“with” instead of “to”) avoids confusion and aligns the language with technical writing standards expected in open-source communities","repository":"elizaos/eliza","createdAt":"2025-04-23T08:26:16Z","mergedAt":null,"additions":1,"deletions":1},{"id":"PR_kwDOMT5cIs6TiNoN","title":" Fix typo in constructor documentation","author":"PixelPil0t1","number":4338,"body":"\r\nOld: initalData\r\nNew: initialData\r\n\r\nThe parameter name initalData contained a typo. It was missing the second \"i\", which should be part of the correct word: initialData.","repository":"elizaos/eliza","createdAt":"2025-04-23T06:52:48Z","mergedAt":null,"additions":0,"deletions":0}],"detailedContributorSummaries":{"NeoByteXx":"NeoByteXx: Opened 1 pull request (#4340) to \"Fix Grammar\" and made modifications to 1 file, resulting in a net change of +1/-1 lines, focusing entirely on documentation. Active today, maintaining a consistent work pattern.","PixelPil0t1":"PixelPil0t1: Opened 1 pull request (#4338) to fix a typo in constructor documentation and modified 1 file with a net change of 0 lines (+2/-2). Maintained a consistent activity pattern, being active every day.","ShahafGaimin":"ShahafGaimin: Opened 1 pull request (#4343) titled \"GAIMIN branch - Added AI Model Provider Gaimin AI,\" but did not merge any PRs today. Activity remains sporadic with no other contributions noted.","UD1sto":"UD1sto: Created 1 issue today (#4346 \"Error when sending message without `ANTHROPIC_API_KEY`: \"x-ap...\"), demonstrating sporadic activity with no merged pull requests or code changes.","cxp-13":"cxp-13: Created 2 new issues today, #4342 \"All installation attempts failed for plugin @elizaos/plugin-s...\" and #4339 \"the local model on plugin dev not work,\" both currently open. Activity remains sporadic with no merged pull requests or code changes.","matevz":"matevz: Engaged in code reviews with a total of 2 reviews, including 1 approval and 1 comment, but did not merge or open any pull requests or issues today. Activity was sporadic, being active on only 0 out of 1 days this period.","michavie":"michavie: Merged 1 PR (#4341) focused on fixing ESM type declarations in Core, resulting in a net change of +6/-15 lines across 3 modified files. Maintained a consistent activity pattern, dedicating efforts entirely to bugfix work today.","snobbee":"snobbee: Made significant code changes by modifying 17 files (+135/-73 lines) with a primary focus on other work (76%) and documentation (18%), while also providing 8 comments during reviews. Maintained a consistent activity pattern, being active every day.","tcm390":"tcm390: Merged 1 PR (#4337) addressing the agent not found error after GUI creation, with a net change of +11/-4 lines. Made significant code modifications across 1276 files, totaling +52149/-24096 lines, with a primary focus on other work (75%) and bugfix efforts (25%).","wtfsayo":"wtfsayo: Merged 1 pull request (#4344 \"feat: skip display banner if not utf-8\") with a net change of +35/-22 lines, while modifying 6 files across 4 commits (+79/-33 lines). Maintained a consistent activity pattern, focusing primarily on other work (75%) and contributing to feature development (25%).","yungalgo":"yungalgo: Merged 1 PR (#4345) with significant changes (+477/-179 lines), demonstrating consistent activity with a focus on other work. Active today, maintaining a steady contribution pattern."}},"summaryContent":"$9","className":"self-end sm:self-start"}]]}],"$La","$Lb","$Lc"]}]}],["$Ld","$Le","$Lf"],"$L10"]}],"loading":null,"isPartial":false}
+a:["$","div",null,{"className":"mb-6","children":["$","div",null,{"className":"flex items-center justify-between","children":[[["$","$L11",null,{"href":"/summary/day/2025-04-22","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left mr-2 h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"children":"Previous"}],false],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$L11",null,{"href":"/summary/day/2025-04-22","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Previous"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]],["$","div",null,{"className":"flex flex-col items-center","children":[["$","div",null,{"className":"text-sm font-medium text-gray-500","children":["Daily"," Summary"]}],["$","time",null,{"dateTime":"2025-04-23","className":"text-md font-bold","children":"Apr 23, 2025"}]]}],[["$","$L11",null,{"href":"/summary/day/2025-04-24","children":[false,["$","span",null,{"children":"Next"}],["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right ml-2 h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}]],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$L11",null,{"href":"/summary/day/2025-04-24","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Next"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]]]}]}]
+13:Ta60,# Error when sending message without `ANTHROPIC_API_KEY`: "x-api-key header is required"
+
+## Description
+When installing Eliza from source and running `bun start`, attempts to send a message to the agent fail with an `AI_APICallError: x-api-key header is required` error if the `ANTHROPIC_API_KEY` environment variable is not set. This occurs regardless of whether an `OPENAI_API_KEY` is present.
+
+## Steps to Reproduce
+1. Clone the Eliza repository and install dependencies.
+2. Ensure only the `OPENAI_API_KEY` (or no API keys) is set in your environment; do not set `ANTHROPIC_API_KEY`.
+3. From the project root, run:
+   ```bash
+   bun start
+   ```
+4. Attempt to send a message to the “Eliza” agent (e.g., via an HTTP request or CLI).
+5. Observe the error in logs.
+
+## Expected Behavior
+- If `ANTHROPIC_API_KEY` is unset, Eliza should either:
+  - Fall back to OpenAI if `OPENAI_API_KEY` is provided, or
+  - Emit a warning about missing Anthropic functionality without throwing an error when handling messages.
+
+## Actual Behavior
+Eliza logs warnings about missing instrumentation and missing `ANTHROPIC_API_KEY`, then errors out on any message send with:
+```text
+(AI_APICallError) x-api-key header is required
+at new _AISDKError (/eliza/node_modules/@ai-sdk/provider/dist/index.mjs:19:5)
+...
+```
+
+## Relevant Logs
+```text
+[2025-04-23 22:20:42] WARN: ANTHROPIC_API_KEY is not set in environment - Anthropic functionality will be limited
+[2025-04-23 22:20:47] WARN: Service instrumentation not found
+    agentName: "Eliza"
+    agentId: "b850bc30-45f8-0041-a00a-83df46d8555d"
+[2025-04-23 22:20:47] WARN: [getTracer] Service instrumentation not found in runtime.
+[2025-04-23 22:20:48] ERROR: Error during emitEvent for MESSAGE_RECEIVED (handler execution):
+    agentName: "Eliza"
+    agentId: "b850bc30-45f8-0041-a00a-83df46d8555d"
+    message: "(AI_APICallError) x-api-key header is required"
+    stack: [
+      "AI_APICallError: x-api-key header is required",
+      "at new _AISDKError (/eliza/node_modules/@ai-sdk/provider/dist/index.mjs:19:5)",
+      "at new APICallError (/eliza/node_modules/@ai-sdk/provider/dist/index.mjs:61:5)",
+      "at <anonymous> (/eliza/node_modules/@ai-sdk/provider-utils/dist/index.mjs:667:18)",
+      "at processTicksAndRejections (native:7:39)"
+    ]
+```
+
+## Environment
+- OS: Ubuntu 22.04 LTS
+- Runtime: Bun v0.x
+- Eliza Version: Source checkout as of April 23, 2025
+- Env Vars:
+  - `OPENAI_API_KEY`: set or unset
+  - `ANTHROPIC_API_KEY`: **not** set
+
+## Additional Context
+This issue blocks users who wish to run Eliza exclusively with OpenAI credentials. A fallback or clearer error message would improve usability.
+
+14:T611,**Describe the bug**
+In `v2-develop` branch, 
+```
+cxp@R9000P:~/ai_agent_learn/eliza$ elizaos project add-plugin @elizaos/plugin-solana
+Attempting to install @elizaos/plugin-solana@beta from npm registry...
+[2025-04-23 10:03:23] INFO: Installing plugin: @elizaos/plugin-solana
+[2025-04-23 10:03:23] INFO: Prioritizing npm install for @elizaos/plugin-solana@beta
+[2025-04-23 10:03:23] INFO: Attempting to install plugin :...
+[2025-04-23 10:03:23] INFO: Attempting to install package: @elizaos/plugin-solana using bun
+[0.12ms] ".env"
+bun add v1.1.29 (6d43b366)
+error: Package "@elizaos/plugin-solana@1.0.0-beta.34" has a dependency loop
+  Resolution: "@elizaos/plugin-solana@workspace:packages/plugin-solana"
+  Dependency: "@elizaos/plugin-solana@beta"
+error: An internal error occurred (DependencyLoop)
+[2025-04-23 10:04:02] WARN: Failed to install from npm registry: @elizaos/plugin-solana
+Failed to install @elizaos/plugin-solana@beta directly from npm. Trying registry lookup...
+[2025-04-23 10:04:02] ERROR: All installation methods (npm, GitHub, monorepo) failed.
+[2025-04-23 10:04:02] WARN: Installation failed for plugin :
+[2025-04-23 10:04:02] ERROR: All installation attempts failed for plugin @elizaos/plugin-solana
+```
+
+**To Reproduce**
+
+<!-- Steps to reproduce the behavior. -->
+
+**Expected behavior**
+
+<!-- A clear and concise description of what you expected to happen. -->
+
+**Screenshots**
+
+<!-- If applicable, add screenshots to help explain your problem. -->
+
+**Additional context**
+
+<!-- Add any other context about the problem here. -->
+15:T716,**Describe the bug**
+I use the `elizaos` to create a plugin project, and use `elizaos dev` to run it.
+```
+[2025-04-23 08:22:47] INFO: Model already exists at: /home/cxp/.eliza/models/bge-small-en-v1.5.Q4_K_M.gguf
+[node-llama-cpp] load: special_eos_id is not in special_eog_ids - the tokenizer config may be incorrect
+[node-llama-cpp] Using this model ("~/.eliza/models/bge-small-en-v1.5.Q4_K_M.gguf") to tokenize text and then detokenize it resulted in a different text. There might be an issue with the model or the tokenizer implementation. Using this model may not work as intended
+[2025-04-23 08:22:48] INFO: Embedding model initialized successfully
+[2025-04-23 08:22:48] INFO: Generating embedding for text
+    textLength: 18
+[2025-04-23 08:22:48] INFO: Embedding generation complete
+    dimensions: 384
+{"level":40,"time":1745396568237,"pid":166664,"hostname":"R9000P","msg":"Could not parse text as JSON, returning null"}
+[2025-04-23 08:22:48] WARN: *** Missing required fields, retrying... ***
+[2025-04-23 08:22:48] WARN: *** Missing required fields, retrying... ***
+[2025-04-23 08:22:48] WARN: *** Missing required fields, retrying... ***
+{"level":40,"time":1745396568277,"pid":166664,"hostname":"R9000P","msg":"Could not parse text as JSON, returning null"}
+{"level":40,"time":1745396568278,"pid":166664,"hostname":"R9000P","msg":"Could not parse text as JSON, returning null"}
+{"level":40,"time":1745396568278,"pid":166664,"hostname":"R9000P","msg":"Could not parse text as JSON, returning null"}
+```
+
+**To Reproduce**
+
+In localhost:3001 and send some text to agent on chat area.
+
+**Expected behavior**
+
+should generate answer content
+
+**Screenshots**
+
+<!-- If applicable, add screenshots to help explain your problem. -->
+
+**Additional context**
+
+<!-- Add any other context about the problem here. -->
+16:Tbc8,<!-- Use this template by filling in information and copying and pasting relevant items out of the HTML comments. -->
+
+# Relates to
+Closes elizaOS/eliza#42
+
+# Risks
+Medium — if the GAIMIN model endpoint changes format, text generation may break.
+
+# Background
+We want to add a new model provider (Gaimin) so Eliza can talk to the cloud.gaimin.io LLM API.  
+See the full integration spec here:  
+https://drive.google.com/file/d/1neYXA6xjMWUVqwxx5yRxHKdUVGwVq1jd/view?usp=sharing
+
+## Overview
+This document outlines the process of integrating the Gaimin Model Provider into the ElizaOS project. It provides a step-by-step guide, code examples, and key considerations to help developers quickly understand and implement the integration.
+
+## Purpose and Scope
+- **Purpose:** Demonstrate a baseline integration of the Gaimin Model Provider.  
+- **Scope:** Provide example code snippets, configuration instructions, and a directory structure overview. Note that the implementation is a starting point and requires further customization and testing for production use.
+
+# Prerequisites
+## Environment Setup
+Ensure you have the following prerequisites before proceeding:  
+- API key for the Gaimin Model Provider.
+
+# Key Considerations
+## Testing and Optimization
+The current implementation has not undergone comprehensive testing or performance optimization. Users should perform rigorous testing, including unit tests and integration tests, and refine the code as necessary before deploying it in production environments.
+
+## Security Considerations
+As this is a preliminary integration example, it has not been fully audited for security vulnerabilities. A thorough security review is recommended to ensure that the integration adheres to your organization’s security policies and industry best practices.
+
+## Future Enhancements and Contributions
+This baseline implementation is open for enhancements. Developers are encouraged to contribute improvements, including code optimization, additional features, and broader testing coverage, in line with the ElizaOS project’s contribution guidelines.
+
+# What does this PR do?
+- Adds `ModelProviderName.GAIMIN` to `packages/core/src/types.ts`
+- Implements the GAIMIN fetch logic in `packages/core/src/generation.ts`
+- Exposes the Gaimin models in `packages/core/src/models.ts`
+- Updates agent key lookup in `agent/src/index.ts`
+- Bundles a new `@ai-sdk/gaimin` package under `packages/gaimin`
+
+## What kind of change is this?
+**Features** (non-breaking): adds a new model provider.
+
+# Documentation of changes
+- ✔ External integration spec:  
+  https://drive.google.com/file/d/1neYXA6xjMWUVqwxx5yRxHKdUVGwVq1jd/view?usp=sharing
+
+# Testing
+## Where should a reviewer start?
+
+1. Create or update your `.env` with:
+   ```bash
+   GAIMIN_API_KEY=<your key>
+   GAIMIN_API_URL=
+  GAIMIN_MODEL="llama3.2:3b"
+   ```
+2. Run Eliza Character with `gaimin` specified as its model provider in the character.json file.
+   
+17:T4e5,Discord for better coordination: @michavie
+
+# Relates to
+
+TypeScript type resolution issues in `@elizaos/core` package
+
+Fixes: https://github.com/elizaOS/eliza/issues/3191
+
+# Risks
+
+Low - This is a build configuration change that only affects type generation, not runtime behavior.
+
+# Background
+
+## What does this PR do?
+
+Fixes TypeScript type resolution by properly generating declaration files in the correct format. The package was generating CommonJS type declarations while using ESM for JavaScript code, causing TypeScript to fail to resolve types through ESM exports.
+
+This issue affects any TypeScript project that:
+- Uses ESM imports
+- Has strict TypeScript configurations
+- Relies on proper type resolution from dependencies
+
+## What kind of change is this?
+
+Improvements (misc. changes to existing features)
+
+# Documentation changes needed?
+
+My changes do not require a change to the project documentation.
+
+# Testing
+
+## Where should a reviewer start?
+
+Verify type resolution in a consuming project
+
+## Detailed testing steps
+
+1. Build the package with the new configuration
+2. Install the built package in a test project
+3. Verify that TypeScript can properly resolve all types from `@elizaos/core`b:["$","div",null,{"className":"mb-8 space-y-6","children":[["$","$L12",null,{"metrics":{"date":"2025-04-23","interval":{"intervalStart":"$D2025-04-23T00:00:00.000Z","intervalEnd":"$D2025-04-24T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":7,"merged":1,"total":7},"issues":{"new":3,"closed":0,"total":3},"activeContributors":14,"codeChanges":{"additions":11,"deletions":4,"files":2,"commitCount":32},"topContributors":[{"username":"ShahafGaimin","avatarUrl":"https://avatars.githubusercontent.com/u/194211912?v=4","totalScore":44.58267404576458,"prScore":44.58267404576458,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"ShahafGaimin: Opened 1 pull request (#4343) titled \"GAIMIN branch - Added AI Model Provider Gaimin AI,\" but did not merge any PRs today. Activity remains sporadic with no other contributions noted."},{"username":"snobbee","avatarUrl":"https://avatars.githubusercontent.com/u/125891987?u=ba9ca14b922f8fb73f38ba0981d157247af3dd03&v=4","totalScore":36,"prScore":0,"issueScore":0,"reviewScore":36,"commentScore":0,"summary":"snobbee: Made significant code changes by modifying 17 files (+135/-73 lines) with a primary focus on other work (76%) and documentation (18%), while also providing 8 comments during reviews. Maintained a consistent activity pattern, being active every day."},{"username":"michavie","avatarUrl":"https://avatars.githubusercontent.com/u/39144548?u=3496eb82a60d2a8e88bf5e22c3ffe5eb2b37d816&v=4","totalScore":28.395563680037476,"prScore":28.395563680037476,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"michavie: Merged 1 PR (#4341) focused on fixing ESM type declarations in Core, resulting in a net change of +6/-15 lines across 3 modified files. Maintained a consistent activity pattern, dedicating efforts entirely to bugfix work today."},{"username":"tcm390","avatarUrl":"https://avatars.githubusercontent.com/u/60634884?u=c6c41679b8322eaa0c81f72e0b4ed95e80f0ac16&v=4","totalScore":25.04858872223978,"prScore":24.848588722239782,"issueScore":0,"reviewScore":0,"commentScore":0.2,"summary":"tcm390: Merged 1 PR (#4337) addressing the agent not found error after GUI creation, with a net change of +11/-4 lines. Made significant code modifications across 1276 files, totaling +52149/-24096 lines, with a primary focus on other work (75%) and bugfix efforts (25%)."},{"username":"yungalgo","avatarUrl":"https://avatars.githubusercontent.com/u/113615973?u=92e0f29f7e2fbb8ce46ed13c51f692ca803de02d&v=4","totalScore":21.36072077083992,"prScore":21.36072077083992,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"yungalgo: Merged 1 PR (#4345) with significant changes (+477/-179 lines), demonstrating consistent activity with a focus on other work. Active today, maintaining a steady contribution pattern."},{"username":"wtfsayo","avatarUrl":"https://avatars.githubusercontent.com/u/82053242?u=98209a1f10456f42d4d2fa71db4d5bf4a672cbc3&v=4","totalScore":21.319528664807628,"prScore":21.319528664807628,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"wtfsayo: Merged 1 pull request (#4344 \"feat: skip display banner if not utf-8\") with a net change of +35/-22 lines, while modifying 6 files across 4 commits (+79/-33 lines). Maintained a consistent activity pattern, focusing primarily on other work (75%) and contributing to feature development (25%)."},{"username":"matevz","avatarUrl":"https://avatars.githubusercontent.com/u/83672?v=4","totalScore":9.5,"prScore":0,"issueScore":0,"reviewScore":9.5,"commentScore":0,"summary":"matevz: Engaged in code reviews with a total of 2 reviews, including 1 approval and 1 comment, but did not merge or open any pull requests or issues today. Activity was sporadic, being active on only 0 out of 1 days this period."},{"username":"cxp-13","avatarUrl":"https://avatars.githubusercontent.com/u/84974164?u=3b5b5c18f44af73f1e2f9921381fe2e800f474d1&v=4","totalScore":8.1,"prScore":0,"issueScore":8.1,"reviewScore":0,"commentScore":0,"summary":"cxp-13: Created 2 new issues today, #4342 \"All installation attempts failed for plugin @elizaos/plugin-s...\" and #4339 \"the local model on plugin dev not work,\" both currently open. Activity remains sporadic with no merged pull requests or code changes."},{"username":"NeoByteXx","avatarUrl":"https://avatars.githubusercontent.com/u/160131789?u=fd1554d805a4282c7164e67d7dfaeb1e92377ffa&v=4","totalScore":5.248306144334054,"prScore":5.248306144334054,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"NeoByteXx: Opened 1 pull request (#4340) to \"Fix Grammar\" and made modifications to 1 file, resulting in a net change of +1/-1 lines, focusing entirely on documentation. Active today, maintaining a consistent work pattern."},{"username":"PixelPil0t1","avatarUrl":"https://avatars.githubusercontent.com/u/161360836?u=cb7120a58d61284a5b7a23ed184b773043ec5123&v=4","totalScore":4.516,"prScore":4.516,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"PixelPil0t1: Opened 1 pull request (#4338) to fix a typo in constructor documentation and modified 1 file with a net change of 0 lines (+2/-2). Maintained a consistent activity pattern, being active every day."},{"username":"UD1sto","avatarUrl":"https://avatars.githubusercontent.com/u/76160388?u=99e39f3503250fd313d8b69a6e0c36a6b91f8520&v=4","totalScore":4.2,"prScore":0,"issueScore":4,"reviewScore":0,"commentScore":0.2,"summary":"UD1sto: Created 1 issue today (#4346 \"Error when sending message without `ANTHROPIC_API_KEY`: \"x-ap...\"), demonstrating sporadic activity with no merged pull requests or code changes."}],"focusAreas":[{"area":"core","count":1},{"area":"plugin-sql","count":1}],"topIssues":[{"id":"I_kwDOMT5cIs6zu3lP","title":"Error when sending message without `ANTHROPIC_API_KEY`: \"x-api-key header is required\"","author":"UD1sto","number":4346,"repository":"elizaos/eliza","body":"$13","createdAt":"2025-04-23T22:48:30Z","closedAt":"2025-07-18T13:58:13Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs6znbNm","title":"All installation attempts failed for plugin @elizaos/plugin-solana","author":"cxp-13","number":4342,"repository":"elizaos/eliza","body":"$14","createdAt":"2025-04-23T10:06:05Z","closedAt":"2025-06-02T15:52:27Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs6zmLBG","title":"the local model on plugin dev not work","author":"cxp-13","number":4339,"repository":"elizaos/eliza","body":"$15","createdAt":"2025-04-23T08:25:43Z","closedAt":"2025-06-02T12:34:58Z","state":"CLOSED","commentCount":0}],"topPullRequests":[{"id":"PR_kwDOMT5cIs6TkUtY","title":"GAIMIN branch - Added AI Model Provider Gaimin AI","author":"ShahafGaimin","number":4343,"body":"$16","repository":"elizaos/eliza","createdAt":"2025-04-23T10:23:13Z","mergedAt":null,"additions":546,"deletions":4},{"id":"PR_kwDOMT5cIs6Tn4W0","title":"feat: skip display banner if not utf-8","author":"wtfsayo","number":4344,"body":"","repository":"elizaos/eliza","createdAt":"2025-04-23T16:10:28Z","mergedAt":"2025-04-24T04:53:50Z","additions":13,"deletions":0},{"id":"PR_kwDOMT5cIs6TiMAZ","title":"fix: agent not found error after GUI creation and resolve merge conflict","author":"tcm390","number":4337,"body":"This PR fixes an issue where starting an agent created via the GUI using the same agent name would result in an error: Agent does not exist in database after ensureAgentExists call.\r\n\r\nThe issue occurred because multiple agents with the same name but different IDs existed in the database. The ensureAgentExists call would return an agent (based on name), but subsequent logic that expected a specific agentId would fail to find it, causing the error.\r\n\r\nThis PR ensures the correct agentId is used, resolving the mismatch.\r\n\r\nAdditionally, this PR resolves merge conflicts between the following PRs:\r\n\r\nhttps://github.com/elizaOS/eliza/pull/4223\r\n\r\nhttps://github.com/elizaOS/eliza/pull/4261","repository":"elizaos/eliza","createdAt":"2025-04-23T06:49:42Z","mergedAt":"2025-04-23T06:50:13Z","additions":11,"deletions":4},{"id":"PR_kwDOMT5cIs6TORhL","title":"fix: gpu recognition on docker containers","author":"UD1sto","number":4325,"body":"### PR Description: Add pciutils to Dockerfile for GPU detection\r\n**Changes**\r\nAdded pciutils package installation to the Dockerfile\r\nFixes GPU detection issue when running the container\r\n**Problem**\r\nThe container was failing to detect GPU capabilities because the lspci command was missing. This resulted in the error:\r\n`[ERROR: Linux GPU detection failed\r\n  cmd: \"lspci | grep -i vga\",\r\n  stderr: \"/bin/sh: 1: lspci: not found\\n\"`\r\n**Solution**\r\nAdded pciutils package to the Dockerfile which provides the lspci command needed for GPU detection. This enables proper hardware capability detection when the container starts.\r\n","repository":"elizaos/eliza","createdAt":"2025-04-20T10:24:23Z","mergedAt":null,"additions":10,"deletions":1},{"id":"PR_kwDOMT5cIs6TqxCy","title":"added bc .gitignore wasnt getting copied from plugin-starter","author":"yungalgo","number":4345,"body":"added this small change because .gitignore wasnt getting copied over on plugin-starter copying via the cli.","repository":"elizaos/eliza","createdAt":"2025-04-23T22:43:14Z","mergedAt":"2025-04-24T08:14:51Z","additions":7,"deletions":0},{"id":"PR_kwDOMT5cIs6Tjggw","title":"Fix ESM type declarations in Core","author":"michavie","number":4341,"body":"$17","repository":"elizaos/eliza","createdAt":"2025-04-23T09:18:57Z","mergedAt":"2025-04-28T02:24:21Z","additions":6,"deletions":15},{"id":"PR_kwDOMT5cIs6Ti-gN","title":"Fix Grammar ","author":"NeoByteXx","number":4340,"body":"Proper grammar ensures clarity and professionalism in documentation. Using the correct preposition (“with” instead of “to”) avoids confusion and aligns the language with technical writing standards expected in open-source communities","repository":"elizaos/eliza","createdAt":"2025-04-23T08:26:16Z","mergedAt":null,"additions":1,"deletions":1},{"id":"PR_kwDOMT5cIs6TiNoN","title":" Fix typo in constructor documentation","author":"PixelPil0t1","number":4338,"body":"\r\nOld: initalData\r\nNew: initialData\r\n\r\nThe parameter name initalData contained a typo. It was missing the second \"i\", which should be part of the correct word: initialData.","repository":"elizaos/eliza","createdAt":"2025-04-23T06:52:48Z","mergedAt":null,"additions":0,"deletions":0}],"detailedContributorSummaries":{"NeoByteXx":"NeoByteXx: Opened 1 pull request (#4340) to \"Fix Grammar\" and made modifications to 1 file, resulting in a net change of +1/-1 lines, focusing entirely on documentation. Active today, maintaining a consistent work pattern.","PixelPil0t1":"PixelPil0t1: Opened 1 pull request (#4338) to fix a typo in constructor documentation and modified 1 file with a net change of 0 lines (+2/-2). Maintained a consistent activity pattern, being active every day.","ShahafGaimin":"ShahafGaimin: Opened 1 pull request (#4343) titled \"GAIMIN branch - Added AI Model Provider Gaimin AI,\" but did not merge any PRs today. Activity remains sporadic with no other contributions noted.","UD1sto":"UD1sto: Created 1 issue today (#4346 \"Error when sending message without `ANTHROPIC_API_KEY`: \"x-ap...\"), demonstrating sporadic activity with no merged pull requests or code changes.","cxp-13":"cxp-13: Created 2 new issues today, #4342 \"All installation attempts failed for plugin @elizaos/plugin-s...\" and #4339 \"the local model on plugin dev not work,\" both currently open. Activity remains sporadic with no merged pull requests or code changes.","matevz":"matevz: Engaged in code reviews with a total of 2 reviews, including 1 approval and 1 comment, but did not merge or open any pull requests or issues today. Activity was sporadic, being active on only 0 out of 1 days this period.","michavie":"michavie: Merged 1 PR (#4341) focused on fixing ESM type declarations in Core, resulting in a net change of +6/-15 lines across 3 modified files. Maintained a consistent activity pattern, dedicating efforts entirely to bugfix work today.","snobbee":"snobbee: Made significant code changes by modifying 17 files (+135/-73 lines) with a primary focus on other work (76%) and documentation (18%), while also providing 8 comments during reviews. Maintained a consistent activity pattern, being active every day.","tcm390":"tcm390: Merged 1 PR (#4337) addressing the agent not found error after GUI creation, with a net change of +11/-4 lines. Made significant code modifications across 1276 files, totaling +52149/-24096 lines, with a primary focus on other work (75%) and bugfix efforts (25%).","wtfsayo":"wtfsayo: Merged 1 pull request (#4344 \"feat: skip display banner if not utf-8\") with a net change of +35/-22 lines, while modifying 6 files across 4 commits (+79/-33 lines). Maintained a consistent activity pattern, focusing primarily on other work (75%) and contributing to feature development (25%).","yungalgo":"yungalgo: Merged 1 PR (#4345) with significant changes (+477/-179 lines), demonstrating consistent activity with a focus on other work. Active today, maintaining a steady contribution pattern."}}}],"$L18"]}]
+c:["$","div",null,{"className":"prose prose-sm mx-auto mt-8 dark:prose-invert sm:prose lg:prose-lg xl:prose-xl","children":[["$","p","p-0",{"children":"Apr 23, 2025 - Daily Project Summary"}],"\n",["$","p","p-1",{"children":"Today's development focused on critical bug fixes within the ElizaOS framework, specifically resolving an agent not found error after GUI creation. Several new issues emerged, highlighting challenges with plugin installations and API key requirements, which will require immediate attention."}],"\n",["$","h2","h2-0",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"🚨 Needs Attention","position":{"start":{"line":5,"column":4,"offset":334},"end":{"line":5,"column":22,"offset":352}}}],"position":{"start":{"line":5,"column":1,"offset":331},"end":{"line":5,"column":22,"offset":352}}},"children":"🚨 Needs Attention"}],"\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"Urgent Discussions"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/4346","children":"elizaos/eliza#4346"}],": An ",["$","code","code-0",{"children":"x-api-key header is required"}]," error occurs when sending messages without ",["$","code","code-1",{"children":"ANTHROPIC_API_KEY"}],"."]}],"\n",["$","li","li-1",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/4342","children":"elizaos/eliza#4342"}],": Users are experiencing failures when installing the ",["$","code","code-0",{"children":"@elizaos/plugin-solana"}]," plugin."]}],"\n",["$","li","li-2",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/4339","children":"elizaos/eliza#4339"}],": The local model is not working on the plugin development environment."]}],"\n"]}],"\n"]}],"\n"]}],"\n",["$","h2","h2-1",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"✅ Completed Work","position":{"start":{"line":11,"column":4,"offset":858},"end":{"line":11,"column":20,"offset":874}}}],"position":{"start":{"line":11,"column":1,"offset":855},"end":{"line":11,"column":20,"offset":874}}},"children":"✅ Completed Work"}],"\n",["$","ul","ul-1",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"Core Framework Stability"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["Resolved an issue where starting a GUI-created agent with the same name resulted in an \"Agent does not exist in database\" error after the ",["$","code","code-0",{"children":"ensureAgentExists"}]," call, improving agent management reliability. ",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/4337","children":"elizaos/eliza#4337"}]]}],"\n"]}],"\n"]}],"\n"]}],"\n",["$","h2","h2-2",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"🐞 Issue Triage","position":{"start":{"line":15,"column":4,"offset":1186},"end":{"line":15,"column":19,"offset":1201}}}],"position":{"start":{"line":15,"column":1,"offset":1183},"end":{"line":15,"column":19,"offset":1201}}},"children":"🐞 Issue Triage"}],"\n",["$","ul","ul-2",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"New Issues"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/4346","children":"elizaos/eliza#4346"}],": Error \"x-api-key header is required\" when sending messages without ",["$","code","code-0",{"children":"ANTHROPIC_API_KEY"}],"."]}],"\n",["$","li","li-1",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/4342","children":"elizaos/eliza#4342"}],": Failure to install ",["$","code","code-0",{"children":"@elizaos/plugin-solana"}],"."]}],"\n",["$","li","li-2",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/4339","children":"elizaos/eliza#4339"}],": Local model not working on plugin development environment."]}],"\n"]}],"\n"]}],"\n"]}]]}]
+d:["$","script","script-0",{"src":"/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","async":true}]
+e:["$","script","script-1",{"src":"/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","async":true}]
+f:["$","script","script-2",{"src":"/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js","async":true}]
+10:["$","$L19",null,{"children":["$","$1a",null,{"name":"Next.MetadataOutlet","children":"$@1b"}]}]
+18:["$","div",null,{"className":"rounded-lg border bg-card text-card-foreground shadow-sm","children":[["$","div",null,{"className":"flex flex-col space-y-1.5 p-6 py-4","children":["$","div",null,{"className":"tracking-tight text-sm font-medium","children":["$undefined","Code Changes"]}]}],["$","div",null,{"className":"p-6 pt-0","children":["$","div",null,{"className":"grid grid-cols-2 gap-4 md:grid-cols-4","children":[["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-git-commit-vertical h-5 w-5","aria-hidden":"true","children":[["$","path","1holv5",{"d":"M12 3v6"}],["$","circle","1v7zrd",{"cx":"12","cy":"12","r":"3"}],["$","path","a9ows0",{"d":"M12 15v6"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":32}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Commits"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-file-code h-5 w-5","aria-hidden":"true","children":[["$","path","1oefj6",{"d":"M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"}],["$","path","wfsgrz",{"d":"M14 2v5a1 1 0 0 0 1 1h5"}],["$","path","1tg20x",{"d":"M10 12.5 8 15l2 2.5"}],["$","path","yinavb",{"d":"m14 12.5 2 2.5-2 2.5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":2}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Files Changed"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-green-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-up h-5 w-5 text-green-500","aria-hidden":"true","children":[["$","path","hav0vg",{"d":"m5 12 7-7 7 7"}],["$","path","x0mq9r",{"d":"M12 19V5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-green-500","children":"+11"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Added"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-red-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-down h-5 w-5 text-red-500","aria-hidden":"true","children":[["$","path","s699le",{"d":"M12 5v14"}],["$","path","1idqje",{"d":"m19 12-7 7-7-7"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-red-500","children":"-4"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Deleted"}]]}]]}]]}]}]]}]
+1b:null

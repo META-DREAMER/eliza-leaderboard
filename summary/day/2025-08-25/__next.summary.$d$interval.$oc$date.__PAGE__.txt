@@ -1,0 +1,471 @@
+1:"$Sreact.fragment"
+2:I[4817319,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"IntervalSelector"]
+3:I[6998365,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"LlmCopyButton"]
+d:I[3642796,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],""]
+e:I[3238488,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"StatCardsDisplay"]
+12:I[4261541,["/eliza-leaderboard/_next/static/chunks/b33bcbdcb3f88354.js","/eliza-leaderboard/_next/static/chunks/8ba59154b6704904.js"],"OutletBoundary"]
+13:"$Sreact.suspense"
+4:T1b4d,# Dynamic Prompting Implementation for ElizaOS Scenarios
+
+## Overview
+
+Implement **Dynamic Prompting** (multi-turn conversations) in ElizaOS scenarios to enable sophisticated testing of agent behavior through extended conversations where an LLM simulates realistic user responses.
+
+## Problem Statement
+
+Current ElizaOS scenarios are limited to single-turn interactions, making it impossible to test:
+
+* Multi-step problem solving
+* Context retention across conversation turns
+* Clarification and follow-up question handling
+* Natural conversation flow assessment
+* Error recovery and correction flows
+
+## Solution
+
+Extend the existing scenario framework to support multi-turn conversations where:
+
+1. **Agent** receives initial user input
+2. **Agent** responds with thoughts, actions, and replies
+3. **LLM Simulator** generates realistic user follow-up based on agent response
+4. **Agent** continues the conversation based on simulated user input
+5. Process repeats for specified number of turns or until conditions are met
+
+## Key Requirements
+
+### 1\. Backward Compatibility
+
+* **100% backward compatible** - all existing scenarios must work unchanged
+* Gradual adoption path for teams to enhance existing scenarios
+* No breaking changes to existing APIs or CLI commands
+
+### 2\. Core Components
+
+#### Schema Extensions
+
+* Extend `RunStepSchema` with optional `conversation` field
+* Add new evaluation types: `conversation_length`, `conversation_flow`, `user_satisfaction`, `context_retention`
+* Support conversation configuration with user simulator settings
+
+#### User Simulator
+
+* LLM-based response generation with persona-driven prompts
+* Configurable personality, objectives, constraints, and knowledge level
+* Realistic conversation progression based on agent responses
+
+#### Conversation Manager
+
+* Multi-turn execution orchestration
+* Termination condition checking (satisfaction, solution provided, escalation needed)
+* Turn-level and final evaluation support
+* Conversation transcript generation
+
+#### New Evaluators
+
+* **Conversation Length**: Validate optimal conversation duration
+* **Conversation Flow**: Detect required conversation patterns
+* **User Satisfaction**: Measure user satisfaction through sentiment analysis
+* **Context Retention**: Verify agent memory across conversation turns
+
+### 3\. Configuration Examples
+
+#### Basic Multi-Turn Conversation
+
+```yaml
+run:
+  - input: "I need help with something"
+    conversation:
+      max_turns: 4
+      user_simulator:
+        persona: "polite customer with a billing question"
+        objective: "find out why charged twice this month"
+        temperature: 0.6
+      final_evaluations:
+        - type: "llm_judge"
+          prompt: "Did the agent successfully help resolve the billing issue?"
+          expected: "yes"
+```
+
+#### Advanced Persona-Driven Conversation
+
+```yaml
+run:
+  - input: "This is ridiculous! Your product doesn't work!"
+    conversation:
+      max_turns: 6
+      user_simulator:
+        persona: "angry customer who had bad experience"
+        objective: "vent frustration but eventually want help"
+        style: "initially hostile, gradually becomes cooperative if handled well"
+        constraints:
+          - "Start with complaints and criticism"
+          - "Don't accept first solution immediately"
+          - "Become more cooperative if agent shows empathy"
+      termination_conditions:
+        - type: "user_expresses_satisfaction"
+        - type: "agent_escalates_to_human"
+```
+
+## Implementation Plan
+
+### Phase 1: Core Infrastructure (Weeks 1-2)
+
+- [ ] Schema extensions and type definitions
+- [ ] User Simulator implementation
+- [ ] Basic conversation flow testing
+
+### Phase 2: Conversation Management (Weeks 3-4)
+
+- [ ] ConversationManager class implementation
+- [ ] Provider integration (LocalEnvironmentProvider, E2BEnvironmentProvider)
+- [ ] Termination condition logic
+
+### Phase 3: Evaluation System (Weeks 5-6)
+
+- [ ] New conversation evaluators implementation
+- [ ] EvaluationEngine integration
+- [ ] End-to-end testing
+
+### Phase 4: Polish and Documentation (Week 7)
+
+- [ ] Example scenarios creation
+- [ ] Documentation updates
+- [ ] Performance optimizations
+
+## Technical Specifications
+
+### File Structure
+
+```
+packages/cli/src/commands/scenario/src/
+├── schema.ts (extend)
+├── conversation-types.ts (new)
+├── UserSimulator.ts (new)
+├── ConversationManager.ts (new)
+├── ConversationEvaluators.ts (new)
+├── LocalEnvironmentProvider.ts (modify)
+├── E2BEnvironmentProvider.ts (modify)
+└── __tests__/
+    ├── UserSimulator.test.ts (new)
+    ├── ConversationManager.test.ts (new)
+    ├── ConversationEvaluators.test.ts (new)
+    └── integration/ (new tests)
+```
+
+### Key Interfaces
+
+```typescript
+interface ConversationConfig {
+  max_turns: number;
+  user_simulator: UserSimulatorConfig;
+  termination_conditions: TerminationCondition[];
+  turn_evaluations: EvaluationSchema[];
+  final_evaluations: EvaluationSchema[];
+}
+
+interface UserSimulatorConfig {
+  persona: string;
+  objective: string;
+  style?: string;
+  constraints: string[];
+  knowledge_level: 'beginner' | 'intermediate' | 'expert';
+}
+```
+
+## Success Criteria
+
+### Functional Requirements
+
+- [ ] Single-turn scenarios continue to work unchanged
+- [ ] Multi-turn conversations execute successfully
+- [ ] User simulator generates realistic, persona-consistent responses
+- [ ] Termination conditions work correctly
+- [ ] All new evaluation types function properly
+- [ ] Matrix testing supports conversation parameters
+
+### Performance Requirements
+
+- [ ] Conversation scenarios complete within reasonable time limits
+- [ ] Memory usage remains within acceptable bounds
+- [ ] LLM API usage is optimized and rate-limited appropriately
+
+### Quality Requirements
+
+- [ ] Comprehensive test coverage (unit, integration, e2e)
+- [ ] Clear error handling and debugging capabilities
+- [ ] Well-documented examples and migration guide
+
+## Risk Mitigation
+
+### Technical Risks
+
+* **LLM API failures**: Implement retry logic and graceful degradation
+* **Infinite loops**: Hard max_turns limit and timeout mechanisms
+* **Memory leaks**: Turn-based cleanup and conversation archiving
+
+### Integration Risks
+
+* **Breaking existing scenarios**: Comprehensive backward compatibility testing
+* **Performance impact**: Resource monitoring and optimization
+
+## Dependencies
+
+* Existing `askAgentViaApi` infrastructure
+* Current evaluation engine and trajectory reconstruction
+* LLM provider integration for user simulation
+* Database schema (no changes required)
+
+## Acceptance Criteria
+
+1. **Backward Compatibility**: All existing scenarios pass without modification
+2. **New Functionality**: Multi-turn conversation scenarios execute successfully
+3. **Evaluation Quality**: New evaluators provide meaningful insights
+4. **Performance**: No significant impact on existing scenario execution time
+5. **Documentation**: Clear examples and migration path provided5:T856,On August 25, 2025, the ElizaOS project focused heavily on stabilizing the core `eliza` runtime with critical bug fixes and refining prompt logic for improved agent behavior. A significant new initiative was launched to enable dynamic prompting for multi-turn conversations, aiming to enhance the sophistication of agent testing and interaction.
+
+## 🚨 Needs Attention
+- **Urgent Discussions**:
+    - [elizaos/eliza#5819](https://github.com/elizaos/eliza/issues/5819): Discussion has begun with a detailed proposal for implementing dynamic prompting for multi-turn conversations, including schema extensions, termination conditions, and evaluation schemas. Input is needed to move forward with this significant feature.
+
+## ✅ Completed Work
+- **Core Runtime Stability and Prompt Logic Refinements**:
+    - Fixed core runtime stability issues by reverting a `processActions` change and correcting a typo. [elizaos/eliza#5817](https://github.com/elizaos/eliza/pull/5817)
+    - Refined prompt logic to enforce user ID requirements for authenticated actions. [elizaos/eliza#5815](https://github.com/elizaos/eliza/pull/5815)
+    - Streamlined prompt generation by removing a duplicate block from the message handler template. [elizaos/eliza#5812](https://github.com/elizaos/eliza/pull/5812)
+    - Improved the summary generation for the `exchangeDeliveredOrderItems` action for clearer descriptions. [elizaos/eliza#5818](https://github.com/elizaos/eliza/pull/5818)
+
+## 🏗️ Work in Progress
+- **Active Discussions**:
+    - [elizaos/eliza#5819](https://github.com/elizaos/eliza/issues/5819): Detailed proposal for dynamic prompting in multi-turn conversations is under discussion, outlining schema extensions and implementation details.
+
+## 🐞 Issue Triage
+- **New Issues**:
+    - [elizaos/eliza#5819](https://github.com/elizaos/eliza/issues/5819): Implement dynamic prompting for multi-turn conversations.
+    - [elizaos/eliza#5813](https://github.com/elizaos/eliza/issues/5813): Plugin visibility after publishing.
+    - [elizaos/eliza#5814](https://github.com/elizaos/eliza/issues/5814): Analysis of options for the MCP Gateway.0:{"buildId":"US8XLB_zHXYj_PVAECGcd","rsc":["$","$1","c",{"children":[["$","div",null,{"className":"container mx-auto px-6 py-8 md:px-8","children":["$","div",null,{"className":"mx-auto max-w-4xl","children":[["$","div",null,{"className":"mb-4 flex flex-col justify-between sm:flex-row","children":[["$","$L2",null,{"currentInterval":"day","currentDate":"2025-08-25"}],["$","$L3",null,{"metrics":{"date":"2025-08-25","interval":{"intervalStart":"$D2025-08-25T00:00:00.000Z","intervalEnd":"$D2025-08-26T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":5,"merged":5,"total":5},"issues":{"new":3,"closed":0,"total":3},"activeContributors":10,"codeChanges":{"additions":69,"deletions":33,"files":6,"commitCount":33},"topContributors":[{"username":"tcm390","avatarUrl":"https://avatars.githubusercontent.com/u/60634884?u=c6c41679b8322eaa0c81f72e0b4ed95e80f0ac16&v=4","totalScore":92.37288149385333,"prScore":92.37288149385333,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"tcm390: Focused on refining prompt logic and addressing issues within the `elizaos/eliza` repository, merging four PRs including a fix for duplicate action names in #5817 and a refinement to enforce user ID requirements in #5816, primarily contributing to bug fixes."},{"username":"prestoalvarez","avatarUrl":"https://avatars.githubusercontent.com/u/140459501?u=b843478cdfec2bca070ff99ebb65f8f6a8161aba&v=4","totalScore":21.419306144334055,"prScore":21.419306144334055,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"prestoalvarez: Focused on code quality, merging a small but impactful PR in elizaos/eliza (#5812) that corrected a typo in a comment. This contribution primarily focused on other work within the codebase."},{"username":"1BDO","avatarUrl":"https://avatars.githubusercontent.com/u/210645034?v=4","totalScore":4.3,"prScore":0,"issueScore":4.3,"reviewScore":0,"commentScore":0,"summary":"1BDO: Focused on identifying and reporting a potential issue with plugin visibility by creating elizaos/eliza#5813."},{"username":"linear","avatarUrl":"https://avatars.githubusercontent.com/in/20150?v=4","totalScore":4,"prScore":0,"issueScore":4,"reviewScore":0,"commentScore":0,"summary":"linear: Focused on foundational work for multi-turn conversations, opening issue elizaos/eliza#5819 to implement dynamic prompting."},{"username":"borisudovicic","avatarUrl":"https://avatars.githubusercontent.com/u/31806472?u=c0478c34097551ba98aaa71edb33af0885a72d69&v=4","totalScore":4,"prScore":0,"issueScore":4,"reviewScore":0,"commentScore":0,"summary":"borisudovicic: Focused on strategic planning for infrastructure, evidenced by the creation of issue elizaos/eliza#5814 to analyze options for MCP Gateway and add MCP servers."},{"username":"ChristopherTrimboli","avatarUrl":"https://avatars.githubusercontent.com/u/27584221?u=de148a498b5af814e037c2975112fadd09df743f&v=4","totalScore":0.33999999999999997,"prScore":0,"issueScore":0,"reviewScore":0,"commentScore":0.33999999999999997,"summary":"ChristopherTrimboli: Focused on significant refactor work, modifying 93 files with 13 commits, demonstrating a primary focus on refactoring (69%) and other work (31%)."},{"username":"monilpat","avatarUrl":"https://avatars.githubusercontent.com/u/15067321?v=4","totalScore":0.2,"prScore":0,"issueScore":0,"reviewScore":0,"commentScore":0.2,"summary":"monilpat: Focused on other work, making a single commit that modified one file with 608 additions and no deletions, and also commented on one issue."}],"focusAreas":[{"area":"core","count":5},{"area":"plugin-bootstrap","count":2},{"area":"plugin-action-bench","count":1}],"topIssues":[{"id":"I_kwDOMT5cIs7H3Obz","title":"Implement Dynamic Prompting (Multi-Turn Conversations) in ElizaOS Scenarios","author":"linear","number":5819,"repository":"elizaos/eliza","body":"$4","createdAt":"2025-08-25T20:36:17Z","closedAt":"2025-09-03T22:39:53Z","state":"CLOSED","commentCount":1},{"id":"I_kwDOMT5cIs7HyidA","title":"Analyze options for MCP Gateway, Add some MCP servers, add x402 layer","author":"borisudovicic","number":5814,"repository":"elizaos/eliza","body":"[https://hackmd.io/aM2pd2NbSmOMzD0X9GPYiQ](https://hackmd.io/aM2pd2NbSmOMzD0X9GPYiQ)","createdAt":"2025-08-25T13:40:42Z","closedAt":"2025-10-07T05:52:32Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7Hx_mQ","title":"i Successfully Publish a Plugin in  23AUG but it's not visible in PR","author":"1BDO","number":5813,"repository":"elizaos/eliza","body":"plugin-delta-0.1.0","createdAt":"2025-08-25T13:01:43Z","closedAt":"2025-09-09T11:43:31Z","state":"CLOSED","commentCount":0}],"topPullRequests":[{"id":"PR_kwDOMT5cIs6lPozi","title":"improve summary","author":"tcm390","number":5818,"body":"","repository":"elizaos/eliza","createdAt":"2025-08-25T16:12:51Z","mergedAt":"2025-08-25T16:12:57Z","additions":40,"deletions":5},{"id":"PR_kwDOMT5cIs6lN-r7","title":"Revert processActions change: use cacheState to retrieve action result instead; minor auth prompt fix","author":"tcm390","number":5815,"body":"","repository":"elizaos/eliza","createdAt":"2025-08-25T13:45:13Z","mergedAt":"2025-08-25T13:45:19Z","additions":19,"deletions":21},{"id":"PR_kwDOMT5cIs6lOOXW","title":"Refine prompt logic to enforce user ID requirement for actions needing authentication","author":"tcm390","number":5816,"body":"","repository":"elizaos/eliza","createdAt":"2025-08-25T14:05:18Z","mergedAt":"2025-08-25T14:05:25Z","additions":9,"deletions":0},{"id":"PR_kwDOMT5cIs6lMYJc","title":"Fix typo in runtime.ts comment: \"initalized\" → \"initialized\"","author":"prestoalvarez","number":5812,"body":"\r\n\r\nFixes a typo in the comment on line 1615 of `packages/core/src/runtime.ts`.\r\n\r\n### Changes\r\n- **Before:** `// not initalized or registered yet, registerPlugin is already smart enough to`\r\n- **After:** `// not initialized or registered yet, registerPlugin is already smart enough to`\r\n\r\n","repository":"elizaos/eliza","createdAt":"2025-08-25T11:25:13Z","mergedAt":"2025-08-25T13:52:17Z","additions":1,"deletions":1},{"id":"PR_kwDOMT5cIs6lO2kQ","title":"fix: Remove duplicate actionNames block from message handler template","author":"tcm390","number":5817,"body":"The actionNames block was appearing twice in the messageHandlerTemplate: once correctly inside the <providers> section and once redundantly after it. This PR removes the duplicated block after the </providers> tag to streamline the template and prevent confusion.\r\n\r\n<img width=\"576\" height=\"602\" alt=\"Screenshot 2025-08-25 at 11 07 54 PM\" src=\"https://github.com/user-attachments/assets/5d699b17-7740-4aab-8d8c-0bbc5a8aa0aa\" />\r\n\r\n\r\n<img width=\"576\" height=\"429\" alt=\"Screenshot 2025-08-25 at 11 08 24 PM\" src=\"https://github.com/user-attachments/assets/81aea391-f0c0-4644-92c3-a552d96ac4ff\" />\r\n","repository":"elizaos/eliza","createdAt":"2025-08-25T14:57:11Z","mergedAt":"2025-08-25T21:13:58Z","additions":0,"deletions":6}],"detailedContributorSummaries":{"1BDO":"1BDO: Focused on identifying and reporting a potential issue with plugin visibility by creating elizaos/eliza#5813.","ChristopherTrimboli":"ChristopherTrimboli: Focused on significant refactor work, modifying 93 files with 13 commits, demonstrating a primary focus on refactoring (69%) and other work (31%).","borisudovicic":"borisudovicic: Focused on strategic planning for infrastructure, evidenced by the creation of issue elizaos/eliza#5814 to analyze options for MCP Gateway and add MCP servers.","linear":"linear: Focused on foundational work for multi-turn conversations, opening issue elizaos/eliza#5819 to implement dynamic prompting.","monilpat":"monilpat: Focused on other work, making a single commit that modified one file with 608 additions and no deletions, and also commented on one issue.","prestoalvarez":"prestoalvarez: Focused on code quality, merging a small but impactful PR in elizaos/eliza (#5812) that corrected a typo in a comment. This contribution primarily focused on other work within the codebase.","tcm390":"tcm390: Focused on refining prompt logic and addressing issues within the `elizaos/eliza` repository, merging four PRs including a fix for duplicate action names in #5817 and a refinement to enforce user ID requirements in #5816, primarily contributing to bug fixes."}},"summaryContent":"$5","className":"self-end sm:self-start"}]]}],"$L6","$L7","$L8"]}]}],["$L9","$La","$Lb"],"$Lc"]}],"loading":null,"isPartial":false}
+6:["$","div",null,{"className":"mb-6","children":["$","div",null,{"className":"flex items-center justify-between","children":[[["$","$Ld",null,{"href":"/summary/day/2025-08-24","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left mr-2 h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"children":"Previous"}],false],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$Ld",null,{"href":"/summary/day/2025-08-24","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Previous"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]],["$","div",null,{"className":"flex flex-col items-center","children":[["$","div",null,{"className":"text-sm font-medium text-gray-500","children":["Daily"," Summary"]}],["$","time",null,{"dateTime":"2025-08-25","className":"text-md font-bold","children":"Aug 25, 2025"}]]}],[["$","$Ld",null,{"href":"/summary/day/2025-08-26","children":[false,["$","span",null,{"children":"Next"}],["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right ml-2 h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}]],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$Ld",null,{"href":"/summary/day/2025-08-26","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Next"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]]]}]}]
+f:T1b4d,# Dynamic Prompting Implementation for ElizaOS Scenarios
+
+## Overview
+
+Implement **Dynamic Prompting** (multi-turn conversations) in ElizaOS scenarios to enable sophisticated testing of agent behavior through extended conversations where an LLM simulates realistic user responses.
+
+## Problem Statement
+
+Current ElizaOS scenarios are limited to single-turn interactions, making it impossible to test:
+
+* Multi-step problem solving
+* Context retention across conversation turns
+* Clarification and follow-up question handling
+* Natural conversation flow assessment
+* Error recovery and correction flows
+
+## Solution
+
+Extend the existing scenario framework to support multi-turn conversations where:
+
+1. **Agent** receives initial user input
+2. **Agent** responds with thoughts, actions, and replies
+3. **LLM Simulator** generates realistic user follow-up based on agent response
+4. **Agent** continues the conversation based on simulated user input
+5. Process repeats for specified number of turns or until conditions are met
+
+## Key Requirements
+
+### 1\. Backward Compatibility
+
+* **100% backward compatible** - all existing scenarios must work unchanged
+* Gradual adoption path for teams to enhance existing scenarios
+* No breaking changes to existing APIs or CLI commands
+
+### 2\. Core Components
+
+#### Schema Extensions
+
+* Extend `RunStepSchema` with optional `conversation` field
+* Add new evaluation types: `conversation_length`, `conversation_flow`, `user_satisfaction`, `context_retention`
+* Support conversation configuration with user simulator settings
+
+#### User Simulator
+
+* LLM-based response generation with persona-driven prompts
+* Configurable personality, objectives, constraints, and knowledge level
+* Realistic conversation progression based on agent responses
+
+#### Conversation Manager
+
+* Multi-turn execution orchestration
+* Termination condition checking (satisfaction, solution provided, escalation needed)
+* Turn-level and final evaluation support
+* Conversation transcript generation
+
+#### New Evaluators
+
+* **Conversation Length**: Validate optimal conversation duration
+* **Conversation Flow**: Detect required conversation patterns
+* **User Satisfaction**: Measure user satisfaction through sentiment analysis
+* **Context Retention**: Verify agent memory across conversation turns
+
+### 3\. Configuration Examples
+
+#### Basic Multi-Turn Conversation
+
+```yaml
+run:
+  - input: "I need help with something"
+    conversation:
+      max_turns: 4
+      user_simulator:
+        persona: "polite customer with a billing question"
+        objective: "find out why charged twice this month"
+        temperature: 0.6
+      final_evaluations:
+        - type: "llm_judge"
+          prompt: "Did the agent successfully help resolve the billing issue?"
+          expected: "yes"
+```
+
+#### Advanced Persona-Driven Conversation
+
+```yaml
+run:
+  - input: "This is ridiculous! Your product doesn't work!"
+    conversation:
+      max_turns: 6
+      user_simulator:
+        persona: "angry customer who had bad experience"
+        objective: "vent frustration but eventually want help"
+        style: "initially hostile, gradually becomes cooperative if handled well"
+        constraints:
+          - "Start with complaints and criticism"
+          - "Don't accept first solution immediately"
+          - "Become more cooperative if agent shows empathy"
+      termination_conditions:
+        - type: "user_expresses_satisfaction"
+        - type: "agent_escalates_to_human"
+```
+
+## Implementation Plan
+
+### Phase 1: Core Infrastructure (Weeks 1-2)
+
+- [ ] Schema extensions and type definitions
+- [ ] User Simulator implementation
+- [ ] Basic conversation flow testing
+
+### Phase 2: Conversation Management (Weeks 3-4)
+
+- [ ] ConversationManager class implementation
+- [ ] Provider integration (LocalEnvironmentProvider, E2BEnvironmentProvider)
+- [ ] Termination condition logic
+
+### Phase 3: Evaluation System (Weeks 5-6)
+
+- [ ] New conversation evaluators implementation
+- [ ] EvaluationEngine integration
+- [ ] End-to-end testing
+
+### Phase 4: Polish and Documentation (Week 7)
+
+- [ ] Example scenarios creation
+- [ ] Documentation updates
+- [ ] Performance optimizations
+
+## Technical Specifications
+
+### File Structure
+
+```
+packages/cli/src/commands/scenario/src/
+├── schema.ts (extend)
+├── conversation-types.ts (new)
+├── UserSimulator.ts (new)
+├── ConversationManager.ts (new)
+├── ConversationEvaluators.ts (new)
+├── LocalEnvironmentProvider.ts (modify)
+├── E2BEnvironmentProvider.ts (modify)
+└── __tests__/
+    ├── UserSimulator.test.ts (new)
+    ├── ConversationManager.test.ts (new)
+    ├── ConversationEvaluators.test.ts (new)
+    └── integration/ (new tests)
+```
+
+### Key Interfaces
+
+```typescript
+interface ConversationConfig {
+  max_turns: number;
+  user_simulator: UserSimulatorConfig;
+  termination_conditions: TerminationCondition[];
+  turn_evaluations: EvaluationSchema[];
+  final_evaluations: EvaluationSchema[];
+}
+
+interface UserSimulatorConfig {
+  persona: string;
+  objective: string;
+  style?: string;
+  constraints: string[];
+  knowledge_level: 'beginner' | 'intermediate' | 'expert';
+}
+```
+
+## Success Criteria
+
+### Functional Requirements
+
+- [ ] Single-turn scenarios continue to work unchanged
+- [ ] Multi-turn conversations execute successfully
+- [ ] User simulator generates realistic, persona-consistent responses
+- [ ] Termination conditions work correctly
+- [ ] All new evaluation types function properly
+- [ ] Matrix testing supports conversation parameters
+
+### Performance Requirements
+
+- [ ] Conversation scenarios complete within reasonable time limits
+- [ ] Memory usage remains within acceptable bounds
+- [ ] LLM API usage is optimized and rate-limited appropriately
+
+### Quality Requirements
+
+- [ ] Comprehensive test coverage (unit, integration, e2e)
+- [ ] Clear error handling and debugging capabilities
+- [ ] Well-documented examples and migration guide
+
+## Risk Mitigation
+
+### Technical Risks
+
+* **LLM API failures**: Implement retry logic and graceful degradation
+* **Infinite loops**: Hard max_turns limit and timeout mechanisms
+* **Memory leaks**: Turn-based cleanup and conversation archiving
+
+### Integration Risks
+
+* **Breaking existing scenarios**: Comprehensive backward compatibility testing
+* **Performance impact**: Resource monitoring and optimization
+
+## Dependencies
+
+* Existing `askAgentViaApi` infrastructure
+* Current evaluation engine and trajectory reconstruction
+* LLM provider integration for user simulation
+* Database schema (no changes required)
+
+## Acceptance Criteria
+
+1. **Backward Compatibility**: All existing scenarios pass without modification
+2. **New Functionality**: Multi-turn conversation scenarios execute successfully
+3. **Evaluation Quality**: New evaluators provide meaningful insights
+4. **Performance**: No significant impact on existing scenario execution time
+5. **Documentation**: Clear examples and migration path provided7:["$","div",null,{"className":"mb-8 space-y-6","children":[["$","$Le",null,{"metrics":{"date":"2025-08-25","interval":{"intervalStart":"$D2025-08-25T00:00:00.000Z","intervalEnd":"$D2025-08-26T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":5,"merged":5,"total":5},"issues":{"new":3,"closed":0,"total":3},"activeContributors":10,"codeChanges":{"additions":69,"deletions":33,"files":6,"commitCount":33},"topContributors":[{"username":"tcm390","avatarUrl":"https://avatars.githubusercontent.com/u/60634884?u=c6c41679b8322eaa0c81f72e0b4ed95e80f0ac16&v=4","totalScore":92.37288149385333,"prScore":92.37288149385333,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"tcm390: Focused on refining prompt logic and addressing issues within the `elizaos/eliza` repository, merging four PRs including a fix for duplicate action names in #5817 and a refinement to enforce user ID requirements in #5816, primarily contributing to bug fixes."},{"username":"prestoalvarez","avatarUrl":"https://avatars.githubusercontent.com/u/140459501?u=b843478cdfec2bca070ff99ebb65f8f6a8161aba&v=4","totalScore":21.419306144334055,"prScore":21.419306144334055,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"prestoalvarez: Focused on code quality, merging a small but impactful PR in elizaos/eliza (#5812) that corrected a typo in a comment. This contribution primarily focused on other work within the codebase."},{"username":"1BDO","avatarUrl":"https://avatars.githubusercontent.com/u/210645034?v=4","totalScore":4.3,"prScore":0,"issueScore":4.3,"reviewScore":0,"commentScore":0,"summary":"1BDO: Focused on identifying and reporting a potential issue with plugin visibility by creating elizaos/eliza#5813."},{"username":"linear","avatarUrl":"https://avatars.githubusercontent.com/in/20150?v=4","totalScore":4,"prScore":0,"issueScore":4,"reviewScore":0,"commentScore":0,"summary":"linear: Focused on foundational work for multi-turn conversations, opening issue elizaos/eliza#5819 to implement dynamic prompting."},{"username":"borisudovicic","avatarUrl":"https://avatars.githubusercontent.com/u/31806472?u=c0478c34097551ba98aaa71edb33af0885a72d69&v=4","totalScore":4,"prScore":0,"issueScore":4,"reviewScore":0,"commentScore":0,"summary":"borisudovicic: Focused on strategic planning for infrastructure, evidenced by the creation of issue elizaos/eliza#5814 to analyze options for MCP Gateway and add MCP servers."},{"username":"ChristopherTrimboli","avatarUrl":"https://avatars.githubusercontent.com/u/27584221?u=de148a498b5af814e037c2975112fadd09df743f&v=4","totalScore":0.33999999999999997,"prScore":0,"issueScore":0,"reviewScore":0,"commentScore":0.33999999999999997,"summary":"ChristopherTrimboli: Focused on significant refactor work, modifying 93 files with 13 commits, demonstrating a primary focus on refactoring (69%) and other work (31%)."},{"username":"monilpat","avatarUrl":"https://avatars.githubusercontent.com/u/15067321?v=4","totalScore":0.2,"prScore":0,"issueScore":0,"reviewScore":0,"commentScore":0.2,"summary":"monilpat: Focused on other work, making a single commit that modified one file with 608 additions and no deletions, and also commented on one issue."}],"focusAreas":[{"area":"core","count":5},{"area":"plugin-bootstrap","count":2},{"area":"plugin-action-bench","count":1}],"topIssues":[{"id":"I_kwDOMT5cIs7H3Obz","title":"Implement Dynamic Prompting (Multi-Turn Conversations) in ElizaOS Scenarios","author":"linear","number":5819,"repository":"elizaos/eliza","body":"$f","createdAt":"2025-08-25T20:36:17Z","closedAt":"2025-09-03T22:39:53Z","state":"CLOSED","commentCount":1},{"id":"I_kwDOMT5cIs7HyidA","title":"Analyze options for MCP Gateway, Add some MCP servers, add x402 layer","author":"borisudovicic","number":5814,"repository":"elizaos/eliza","body":"[https://hackmd.io/aM2pd2NbSmOMzD0X9GPYiQ](https://hackmd.io/aM2pd2NbSmOMzD0X9GPYiQ)","createdAt":"2025-08-25T13:40:42Z","closedAt":"2025-10-07T05:52:32Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7Hx_mQ","title":"i Successfully Publish a Plugin in  23AUG but it's not visible in PR","author":"1BDO","number":5813,"repository":"elizaos/eliza","body":"plugin-delta-0.1.0","createdAt":"2025-08-25T13:01:43Z","closedAt":"2025-09-09T11:43:31Z","state":"CLOSED","commentCount":0}],"topPullRequests":[{"id":"PR_kwDOMT5cIs6lPozi","title":"improve summary","author":"tcm390","number":5818,"body":"","repository":"elizaos/eliza","createdAt":"2025-08-25T16:12:51Z","mergedAt":"2025-08-25T16:12:57Z","additions":40,"deletions":5},{"id":"PR_kwDOMT5cIs6lN-r7","title":"Revert processActions change: use cacheState to retrieve action result instead; minor auth prompt fix","author":"tcm390","number":5815,"body":"","repository":"elizaos/eliza","createdAt":"2025-08-25T13:45:13Z","mergedAt":"2025-08-25T13:45:19Z","additions":19,"deletions":21},{"id":"PR_kwDOMT5cIs6lOOXW","title":"Refine prompt logic to enforce user ID requirement for actions needing authentication","author":"tcm390","number":5816,"body":"","repository":"elizaos/eliza","createdAt":"2025-08-25T14:05:18Z","mergedAt":"2025-08-25T14:05:25Z","additions":9,"deletions":0},{"id":"PR_kwDOMT5cIs6lMYJc","title":"Fix typo in runtime.ts comment: \"initalized\" → \"initialized\"","author":"prestoalvarez","number":5812,"body":"\r\n\r\nFixes a typo in the comment on line 1615 of `packages/core/src/runtime.ts`.\r\n\r\n### Changes\r\n- **Before:** `// not initalized or registered yet, registerPlugin is already smart enough to`\r\n- **After:** `// not initialized or registered yet, registerPlugin is already smart enough to`\r\n\r\n","repository":"elizaos/eliza","createdAt":"2025-08-25T11:25:13Z","mergedAt":"2025-08-25T13:52:17Z","additions":1,"deletions":1},{"id":"PR_kwDOMT5cIs6lO2kQ","title":"fix: Remove duplicate actionNames block from message handler template","author":"tcm390","number":5817,"body":"The actionNames block was appearing twice in the messageHandlerTemplate: once correctly inside the <providers> section and once redundantly after it. This PR removes the duplicated block after the </providers> tag to streamline the template and prevent confusion.\r\n\r\n<img width=\"576\" height=\"602\" alt=\"Screenshot 2025-08-25 at 11 07 54 PM\" src=\"https://github.com/user-attachments/assets/5d699b17-7740-4aab-8d8c-0bbc5a8aa0aa\" />\r\n\r\n\r\n<img width=\"576\" height=\"429\" alt=\"Screenshot 2025-08-25 at 11 08 24 PM\" src=\"https://github.com/user-attachments/assets/81aea391-f0c0-4644-92c3-a552d96ac4ff\" />\r\n","repository":"elizaos/eliza","createdAt":"2025-08-25T14:57:11Z","mergedAt":"2025-08-25T21:13:58Z","additions":0,"deletions":6}],"detailedContributorSummaries":{"1BDO":"1BDO: Focused on identifying and reporting a potential issue with plugin visibility by creating elizaos/eliza#5813.","ChristopherTrimboli":"ChristopherTrimboli: Focused on significant refactor work, modifying 93 files with 13 commits, demonstrating a primary focus on refactoring (69%) and other work (31%).","borisudovicic":"borisudovicic: Focused on strategic planning for infrastructure, evidenced by the creation of issue elizaos/eliza#5814 to analyze options for MCP Gateway and add MCP servers.","linear":"linear: Focused on foundational work for multi-turn conversations, opening issue elizaos/eliza#5819 to implement dynamic prompting.","monilpat":"monilpat: Focused on other work, making a single commit that modified one file with 608 additions and no deletions, and also commented on one issue.","prestoalvarez":"prestoalvarez: Focused on code quality, merging a small but impactful PR in elizaos/eliza (#5812) that corrected a typo in a comment. This contribution primarily focused on other work within the codebase.","tcm390":"tcm390: Focused on refining prompt logic and addressing issues within the `elizaos/eliza` repository, merging four PRs including a fix for duplicate action names in #5817 and a refinement to enforce user ID requirements in #5816, primarily contributing to bug fixes."}}}],"$L10"]}]
+8:["$","div",null,{"className":"prose prose-sm mx-auto mt-8 dark:prose-invert sm:prose lg:prose-lg xl:prose-xl","children":[["$","p","p-0",{"children":["On August 25, 2025, the ElizaOS project focused heavily on stabilizing the core ",["$","code","code-0",{"children":"eliza"}]," runtime with critical bug fixes and refining prompt logic for improved agent behavior. A significant new initiative was launched to enable dynamic prompting for multi-turn conversations, aiming to enhance the sophistication of agent testing and interaction."]}],"\n",["$","h2","h2-0",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"🚨 Needs Attention","position":{"start":{"line":3,"column":4,"offset":350},"end":{"line":3,"column":22,"offset":368}}}],"position":{"start":{"line":3,"column":1,"offset":347},"end":{"line":3,"column":22,"offset":368}}},"children":"🚨 Needs Attention"}],"\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"Urgent Discussions"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/5819","children":"elizaos/eliza#5819"}],": Discussion has begun with a detailed proposal for implementing dynamic prompting for multi-turn conversations, including schema extensions, termination conditions, and evaluation schemas. Input is needed to move forward with this significant feature."]}],"\n"]}],"\n"]}],"\n"]}],"\n",["$","h2","h2-1",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"✅ Completed Work","position":{"start":{"line":7,"column":4,"offset":724},"end":{"line":7,"column":20,"offset":740}}}],"position":{"start":{"line":7,"column":1,"offset":721},"end":{"line":7,"column":20,"offset":740}}},"children":"✅ Completed Work"}],"\n",["$","ul","ul-1",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"Core Runtime Stability and Prompt Logic Refinements"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["Fixed core runtime stability issues by reverting a ",["$","code","code-0",{"children":"processActions"}]," change and correcting a typo. ",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5817","children":"elizaos/eliza#5817"}]]}],"\n",["$","li","li-1",{"children":["Refined prompt logic to enforce user ID requirements for authenticated actions. ",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5815","children":"elizaos/eliza#5815"}]]}],"\n",["$","li","li-2",{"children":["Streamlined prompt generation by removing a duplicate block from the message handler template. ",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5812","children":"elizaos/eliza#5812"}]]}],"\n",["$","li","li-3",{"children":["Improved the summary generation for the ",["$","code","code-0",{"children":"exchangeDeliveredOrderItems"}]," action for clearer descriptions. ",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5818","children":"elizaos/eliza#5818"}]]}],"\n"]}],"\n"]}],"\n"]}],"\n",["$","h2","h2-2",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"🏗️ Work in Progress","position":{"start":{"line":14,"column":4,"offset":1464},"end":{"line":14,"column":24,"offset":1484}}}],"position":{"start":{"line":14,"column":1,"offset":1461},"end":{"line":14,"column":24,"offset":1484}}},"children":"🏗️ Work in Progress"}],"\n",["$","ul","ul-2",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"Active Discussions"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/5819","children":"elizaos/eliza#5819"}],": Detailed proposal for dynamic prompting in multi-turn conversations is under discussion, outlining schema extensions and implementation details."]}],"\n"]}],"\n"]}],"\n"]}],"\n",["$","h2","h2-3",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"🐞 Issue Triage","position":{"start":{"line":18,"column":4,"offset":1734},"end":{"line":18,"column":19,"offset":1749}}}],"position":{"start":{"line":18,"column":1,"offset":1731},"end":{"line":18,"column":19,"offset":1749}}},"children":"🐞 Issue Triage"}],"\n","$L11"]}]
+9:["$","script","script-0",{"src":"/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","async":true}]
+a:["$","script","script-1",{"src":"/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","async":true}]
+b:["$","script","script-2",{"src":"/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js","async":true}]
+c:["$","$L12",null,{"children":["$","$13",null,{"name":"Next.MetadataOutlet","children":"$@14"}]}]
+10:["$","div",null,{"className":"rounded-lg border bg-card text-card-foreground shadow-sm","children":[["$","div",null,{"className":"flex flex-col space-y-1.5 p-6 py-4","children":["$","div",null,{"className":"tracking-tight text-sm font-medium","children":["$undefined","Code Changes"]}]}],["$","div",null,{"className":"p-6 pt-0","children":["$","div",null,{"className":"grid grid-cols-2 gap-4 md:grid-cols-4","children":[["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-git-commit-vertical h-5 w-5","aria-hidden":"true","children":[["$","path","1holv5",{"d":"M12 3v6"}],["$","circle","1v7zrd",{"cx":"12","cy":"12","r":"3"}],["$","path","a9ows0",{"d":"M12 15v6"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":33}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Commits"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-file-code h-5 w-5","aria-hidden":"true","children":[["$","path","1oefj6",{"d":"M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"}],["$","path","wfsgrz",{"d":"M14 2v5a1 1 0 0 0 1 1h5"}],["$","path","1tg20x",{"d":"M10 12.5 8 15l2 2.5"}],["$","path","yinavb",{"d":"m14 12.5 2 2.5-2 2.5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":6}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Files Changed"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-green-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-up h-5 w-5 text-green-500","aria-hidden":"true","children":[["$","path","hav0vg",{"d":"m5 12 7-7 7 7"}],["$","path","x0mq9r",{"d":"M12 19V5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-green-500","children":"+69"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Added"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-red-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-down h-5 w-5 text-red-500","aria-hidden":"true","children":[["$","path","s699le",{"d":"M12 5v14"}],["$","path","1idqje",{"d":"m19 12-7 7-7-7"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-red-500","children":"-33"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Deleted"}]]}]]}]]}]}]]}]
+11:["$","ul","ul-3",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"New Issues"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/5819","children":"elizaos/eliza#5819"}],": Implement dynamic prompting for multi-turn conversations."]}],"\n",["$","li","li-1",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/5813","children":"elizaos/eliza#5813"}],": Plugin visibility after publishing."]}],"\n",["$","li","li-2",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/5814","children":"elizaos/eliza#5814"}],": Analysis of options for the MCP Gateway."]}],"\n"]}],"\n"]}],"\n"]}]
+14:null

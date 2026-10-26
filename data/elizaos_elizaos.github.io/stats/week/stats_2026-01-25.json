@@ -1,0 +1,400 @@
+{
+  "interval": {
+    "intervalStart": "2026-01-25T00:00:00.000Z",
+    "intervalEnd": "2026-02-01T00:00:00.000Z",
+    "intervalType": "week"
+  },
+  "repository": "elizaos/elizaos.github.io",
+  "overview": "From 2026-01-25 to 2026-02-01, elizaos/elizaos.github.io had 6 new PRs (13 merged), 2 new issues, and 5 active contributors.",
+  "topIssues": [
+    {
+      "id": "I_kwDONNAI987lN7MJ",
+      "title": "Untracked repositories table has 2x more columns than tracked repositories",
+      "author": "madjin",
+      "number": 230,
+      "repository": "elizaos/elizaos.github.io",
+      "body": "# Untracked repositories table has 2x more columns than tracked repositories\n\n## Current State\n\n**Tracked repos (8 columns):**\n- Core: `repoId`, `owner`, `name`, `description`\n- Metrics: `stars`, `forks`\n- Timestamps: `lastFetchedAt`, `lastUpdated`\n\n**Untracked repos (18 columns):**\n- Core: `repoId`, `owner`, `name`, `description`\n- Metrics: `stars`, `forks`, `watchers`\n- Metadata: `isArchived`, `primaryLanguage`\n- Timestamps: `lastUpdatedAt`, `lastPushedAt`, `lastFetchedAt`\n- Activity: `openPrCount`, `mergedPrCount`, `closedUnmergedPrCount`, `openIssueCount`, `closedIssueCount`\n- Score: `activityScore`\n\n## Issue\n\nThe \"lightweight\" untracked repos table has **18 columns** vs **8 columns** in tracked repos (2.25x more).\n\n## Why It Happened\n\n**Tracked repos**: Normalized architecture\n- Minimal `repositories` table\n- Separate `rawPullRequests`, `rawIssues`, `rawCommits` tables with full details\n\n**Untracked repos**: Denormalized architecture  \n- Everything in one table (no separate PR/issue tables)\n- Stores counts and scores directly\n\n## Potential Optimization\n\nCould reduce to **9 essential columns**:\n```sql\nrepoId, owner, name, description,\nstars, forks,\nlastUpdatedAt,  -- for delta detection\nactivityScore,  -- pre-computed\nlastFetchedAt\n```\n\n**Trade-offs:**\n- ✅ Simpler schema (9 vs 18 columns)\n- ✅ Matches tracked repos complexity\n- ❌ Lose tri-split PR/issue counts in DB (would need to recompute for UI)\n- ❌ Lose metadata (language, archived status)\n\n## Questions\n\n1. Do we need tri-split counts stored, or can we compute on-the-fly?\n2. Is `primaryLanguage` valuable for filtering/display?\n3. Is `isArchived` needed or already filtered during ingestion?\n\n## Non-Goal\n\nThis is not urgent - the denormalized approach works fine. Just documenting for future consideration.\n\n## References\n\n- Schema: `src/lib/data/schema.ts` lines 859-896\n- Discovery: `src/lib/pipelines/discoverUntrackedRepos.ts`\n",
+      "createdAt": "2026-01-23T03:17:50Z",
+      "closedAt": "2026-01-25T20:37:35Z",
+      "state": "CLOSED",
+      "commentCount": 0
+    },
+    {
+      "id": "I_kwDONNAI987lsCzq",
+      "title": "feat: Automated repository tracking config management",
+      "author": "madjin",
+      "number": 232,
+      "repository": "elizaos/elizaos.github.io",
+      "body": "## Problem Statement\n\nWe currently have 43 tracked repositories and 286 untracked repositories across the `elizaos` and `elizaos-plugins` organizations. The `config/example.json` file that determines which repos get full tracking (PRs, issues, commits, contributors, scoring) is manually maintained.\n\n**Challenges:**\n- Some tracked repos haven't been updated in months (low activity)\n- Active untracked repos could benefit from full contributor analytics\n- Manual config updates are time-consuming and error-prone\n- No systematic way to identify promotion/demotion candidates\n\n## Research Summary\n\nComprehensive research explored 6 strategies for automating config management. Full details in plan document: `/home/jin/.claude/plans/ticklish-finding-kitten.md`\n\n### Strategy Comparison\n\n| Strategy | Automation | Risk | Complexity | Effort | API Impact |\n|----------|-----------|------|------------|--------|------------|\n| 1. Threshold Auto | High | Medium | Medium | 8-12h | Reduces tracked |\n| 2. Manual Review Dashboard | Low | None | Low | 8-11h | None |\n| 3. Tiered Tracking | High | Medium | High | 21-27h | Reduces overall |\n| 4. Adaptive Refresh | Medium | Low | Low | 6-9h | Reduces refresh |\n| **5. CI/CD PR** ⭐ | Medium | Low | Medium | **9-13h** | Reduces tracked |\n| 6. Hybrid Auto/Manual | Medium | Low | Medium | 10-14h | Reduces tracked |\n\n### Recommended Approach\n\n**Short-term (Quick Win):** Strategy 2 - Manual Review Dashboard\n- Generate weekly report of stale tracked repos and active untracked repos\n- Dashboard UI for human review\n- Low risk, immediate value\n- **Effort: 8-11 hours**\n\n**Long-term (Automation):** Strategy 5 - CI/CD Automated Config PRs\n- Weekly GitHub Actions workflow evaluates repos\n- Auto-generates PRs with promotion/demotion recommendations\n- Rich context for human review (activity trends, contributor counts, recent commits)\n- Requires approval before merging\n- **Effort: 9-13 hours**\n\n### Key Technical Findings\n\n**Reusable Code Identified:**\n- ✅ `calculateActivityScore()` - Already exists in `src/lib/pipelines/untracked/mutations.ts`\n- ✅ Activity score formula: log-scale stars/watchers, weighted PRs/issues, recency bonus\n- ✅ Database batch operations pattern\n- ✅ Time interval filtering utilities\n- ✅ GitHub CLI PR creation patterns\n- ✅ Config schema validation (Zod)\n\n**Activity Score Formula:**\n```typescript\nactivityScore = baseScore * archivePenalty\n\nbaseScore =\n  log(stars + 1) * 1.0 +          // Log-scaled popularity\n  log(watchers + 1) * 1.5 +       // Stronger engagement\n  openPrCount * 3 +               // Active development (highest weight)\n  mergedPrCount * 2 +             // Productive activity\n  closedUnmergedPrCount * 1 +     // Engagement\n  openIssueCount * 2 +            // Active discussions\n  closedIssueCount * 1 +          // Maintenance\n  recencyBonus                    // Max 14 points, decays over 14 days\n\narchivePenalty = 0.5 if archived, else 1.0\n```\n\n### Implementation Outline (Strategy 5)\n\n**Phase 1: Core Evaluation**\n- Calculate activity scores for tracked repos (reuse existing formula)\n- Build evaluation logic with hysteresis thresholds\n- CLI command for testing: `bun run pipeline evaluate-tracking`\n\n**Phase 2: PR Automation**\n- Config update logic (read/modify `config/example.json`)\n- Rich markdown PR description with activity details\n- Preview comments showing recent contributor activity\n- GitHub Actions workflow (weekly schedule + manual trigger)\n\n**Phase 3: Refinement**\n- Threshold tuning based on initial recommendations\n- Testing with various scenarios\n- Documentation and runbook for reviewing PRs\n\n**Proposed Config:**\n```json\n{\n  \"PIPELINE_AUTO_CONFIG_PR\": {\n    \"enabled\": true,\n    \"schedule\": \"0 0 * * 0\",\n    \"promoteThreshold\": 45.0,\n    \"demoteThreshold\": 12.0,\n    \"minimumTrackedDays\": 60,\n    \"maxPromotionsPerPR\": 5,\n    \"maxDemotionsPerPR\": 3,\n    \"excludeFromDemotion\": [\"elizaos/eliza\", \"elizaos/docs\"],\n    \"prLabels\": [\"automated\", \"config-management\"],\n    \"requireApprovals\": 1\n  }\n}\n```\n\n**Files to Create/Modify:**\n- `src/lib/pipelines/tracking/calculateTrackedActivity.ts` - Activity score for tracked repos\n- `src/lib/pipelines/tracking/evaluateRepos.ts` - Evaluation logic\n- `cli/commands/evaluateTracking.ts` - CLI command\n- `cli/commands/generateConfigPR.ts` - PR generation\n- `.github/workflows/auto-config-pr.yml` - GitHub Actions workflow\n- `src/lib/pipelines/pipelineConfig.ts` - Add AutoConfigPRSchema\n- `config/example.json` - Add configuration\n\n### Success Metrics\n\n- Tracked repo count stabilizes or decreases\n- High-activity untracked repos promoted within 1-2 weeks\n- Low-activity tracked repos demoted within 1 month\n- PR reviews take < 10 minutes\n- No false positives (demoting active repos)\n\n## Next Steps\n\n1. Decide on implementation timeline\n2. Set activity score thresholds\n3. Identify exclude list (critical repos that should never be demoted)\n4. Implement and test chosen strategy\n\n## Related\n\n- Current tracked repos: 43 (6 elizaos, 37 elizaos-plugins)\n- Current untracked repos: 286 (49 elizaos, 237 elizaos-plugins)\n- Activity-based UI coloring: #231 (merged)\n- Untracked repos pipeline: #229 (merged)",
+      "createdAt": "2026-01-25T16:47:06Z",
+      "closedAt": null,
+      "state": "OPEN",
+      "commentCount": 0
+    },
+    {
+      "id": "I_kwDONNAI987mQ9Jv",
+      "title": "feat(mcp): add tool for untracked repositories",
+      "author": "madjin",
+      "number": 239,
+      "repository": "elizaos/elizaos.github.io",
+      "body": "## Summary\n\nAdd visibility into repositories in the org that aren't being scored by the analytics pipeline.\n\n## Two Parts\n\n### 1. MCP Tool (simple, do now)\nAdd `list_untracked_repos` tool - just expose what's in `untracked_repositories` table.\n\n### 2. Pipeline Enhancement (future)\nRun light analytics on ALL org repos periodically (monthly?):\n- Last commit/activity date\n- Stars, forks\n- Open issues/PRs count\n- Recent contributor count\n\nThis enables data-driven decisions:\n```\n\"Show untracked repos with activity in the last 30 days\"\n→ Found 2: experiment (15 commits), new-plugin (8 PRs)  \n→ Recommend: add to full tracking\n\n\"Show stale untracked repos\"\n→ 12 repos with no activity in 6+ months\n→ No action needed\n```\n\n## Use Cases\n\n- Audit coverage: \"What % of org repos are we tracking?\"\n- Find active repos: \"Any untracked repos with recent PRs?\"\n- Cross-reference: Issues/PRs in tracked repos might reference untracked repos\n- Data-driven tracking decisions without external API calls\n\n## Context\n\n- Related to PR #238 (MCP server implementation)\n- Table exists: `untracked_repositories`\n- Keeps analytics self-contained",
+      "createdAt": "2026-01-28T02:09:05Z",
+      "closedAt": "2026-01-28T05:21:35Z",
+      "state": "CLOSED",
+      "commentCount": 0
+    }
+  ],
+  "topPRs": [
+    {
+      "id": "PR_kwDONNAI986-1m7c",
+      "title": "Consolidate untracked repos pipeline and fix DRY violations",
+      "author": "madjin",
+      "number": 231,
+      "body": "## Problem\n\nUsers have no visibility into repositories in their organizations that aren't being tracked for contributor analytics. With 35 tracked repos but 286 total repos across `elizaos` and `elizaos-plugins` orgs, there's a lot of \"dark matter\" - repos that exist but aren't on the radar.\n\n## Solution\n\nAdds **untracked repository discovery** feature that:\n\n- Discovers all repos in configured organizations\n- Shows basic stats: stars, forks, recent PR/issue activity\n- Calculates activity scores to surface active repos\n- Helps identify which repos might be worth adding to full tracking\n- Provides 360-degree view of org activity\n\n**UI:** New collapsible section on `/repos` page showing untracked repos with:\n- Repository metadata (description, language, stars)\n- Recent activity counts (PRs, issues in last 30 days)\n- Activity score ranking\n- Links to GitHub\n\n**Pipeline:** `bun run pipeline ingest-untracked`\n- Delta detection: only updates repos with changes\n- Efficient batch operations\n- Configurable org list and exclusion patterns\n\n## Configuration\n\n```json\n{\n  \"PIPELINE_UNTRACKED_REPOS\": {\n    \"enabled\": true,\n    \"organizations\": [\"elizaos\", \"elizaos-plugins\"],\n    \"excludeArchived\": true,\n    \"excludePatterns\": [\"deprecated-*\", \"test-*\"]\n  }\n}\n```\n\n## Implementation\n\nSingle-file pipeline (`discoverUntrackedRepos.ts`) using:\n- Log-scale activity scoring (prevents big repos from dominating)\n- Delta detection via `lastUpdatedAt` (skips unchanged repos)\n- Batch database operations\n- Existing codebase patterns and utilities\n\nCloses #230\n\n\n<!-- This is an auto-generated comment: release notes by coderabbit.ai -->\n\n## Summary by CodeRabbit\n\n* **New Features**\n  * Added untracked repository discovery to identify repositories from configured GitHub organizations not currently in the system\n  * New UI section displaying discovered untracked repositories with activity metrics, stats, and recent activity breakdown\n  * Repository stats button showing tracked vs untracked counts with quick navigation to untracked section\n  * Manual trigger option for discovering untracked repositories via workflow dispatch\n\n* **Chores**\n  * Added database storage for untracked repository data and metadata\n\n<sub>✏️ Tip: You can customize this high-level summary in your review settings.</sub>\n\n<!-- end of auto-generated comment: release notes by coderabbit.ai -->",
+      "repository": "elizaos/elizaos.github.io",
+      "createdAt": "2026-01-23T03:21:17Z",
+      "mergedAt": "2026-01-25T20:37:34Z",
+      "additions": 4629,
+      "deletions": 158
+    },
+    {
+      "id": "PR_kwDONNAI986guiwB",
+      "title": "Feature/mcp server",
+      "author": "xR0am",
+      "number": 148,
+      "body": "# 🚀 Add MCP ElizaOS Data Server - Real-time Plugin & Repository Analytics\r\n\r\n## Overview\r\nThis PR introduces a complete MCP (Model Context Protocol) server that exposes ElizaOS ecosystem data through real-time API endpoints. The server is distributable via `npx` and provides structured access to plugin statistics, repository metadata, and ecosystem analytics.\r\n\r\n## 🎯 Key Features\r\n\r\n**Real Data Integration**\r\n- ✅ Fetches live data from `https://elizaos.github.io/data/`\r\n- ✅ Dynamic plugin discovery through HTML parsing\r\n- ✅ Real-time statistics from daily stats JSON files\r\n- ✅ Zero mock data - all endpoints use actual ElizaOS data\r\n- ✅ Graceful error handling for network issues\r\n\r\n**MCP Framework Implementation**\r\n- ✅ Built with `mcp-framework` for automatic tool discovery\r\n- ✅ STDIO transport (default) for seamless client integration\r\n- ✅ Standalone tool files in `src/tools/` directory\r\n- ✅ Zod schemas with comprehensive descriptions\r\n- ✅ Type-safe with `MCPInput<this>` pattern\r\n\r\n**NPX Distribution Ready**\r\n- ✅ Packaged for `npx mcp-elizaos-data` installation\r\n- ✅ TypeScript build process with validation\r\n- ✅ Works with MCP clients (Cursor, Claude Desktop, etc.)\r\n- ✅ Simple configuration via `mcp-config-example.json`\r\n\r\n## 🛠️ Core Tools Implemented\r\n\r\n| Tool | Description | Real Data Source |\r\n|------|-------------|------------------|\r\n| `list_available_plugins` | List all plugins with filtering & sorting | `elizaos-plugins_plugin-*` directories |\r\n| `get_plugin_stats` | Fetch plugin statistics & activity | Daily stats JSON files |\r\n| `get_repository_data` | Repository metadata & contributors | Repository directories |\r\n| `get_summary_data` | Ecosystem overview & trends | Summary/dump directories |\r\n\r\n## 📊 Example Usage\r\n\r\n**List Blockchain Plugins:**\r\n```json\r\n{\r\n  \"total_plugins\": 2,\r\n  \"plugins\": [\r\n    {\r\n      \"name\": \"plugin-evm\",\r\n      \"directory\": \"elizaos-plugins_plugin-evm\", \r\n      \"status\": \"active\"\r\n    },\r\n    {\r\n      \"name\": \"plugin-solana\",\r\n      \"directory\": \"elizaos-plugins_plugin-solana\",\r\n      \"status\": \"active\"\r\n    }\r\n  ],\r\n  \"categories\": [\"blockchain\", \"social\", \"ai\", \"automation\", \"integration\", \"data\"],\r\n  \"filter_applied\": \"blockchain\",\r\n  \"source\": \"Real data from ElizaOS GitHub Pages\"\r\n}",
+      "repository": "elizaos/elizaos.github.io",
+      "createdAt": "2025-07-26T04:00:43Z",
+      "mergedAt": null,
+      "additions": 2887,
+      "deletions": 0
+    },
+    {
+      "id": "PR_kwDONNAI986_urD3",
+      "title": "feat: add MCP server for GitHub Analytics API",
+      "author": "madjin",
+      "number": 238,
+      "body": "## Summary\n\nMCP server for GitHub contributor analytics that queries the SQLite database directly. Includes **quality validation** and **coverage discovery** tools.\n\nBased on [PR #148](https://github.com/elizaOS/elizaos.github.io/pull/148) by @xR0am, reimplemented with:\n- Official MCP SDK (instead of mcp-framework)\n- DB-direct mode for full query flexibility\n- 14 tools following MCP naming conventions\n\n## Tools (14)\n\n### Core Analytics (9)\n\n| Tool | Description |\n|------|-------------|\n| `get_stats` | Project overview |\n| `list_repos` | Tracked repositories |\n| `list_contributors` | Top contributors by period |\n| `get_contributor` | Full profile with scores |\n| `get_summary` | AI summaries |\n| `find_contributors` | Search by tier/focus |\n| `list_prs` | Query PRs |\n| `list_issues` | Query issues |\n| `get_activity` | Recent activity feed |\n\n### Quality Validation (4)\n\n| Tool | Detects |\n|------|---------|\n| `list_reviews` | Rubber-stamping, low-effort approvals |\n| `list_comments` | Duplicate/short comments |\n| `get_file_changes` | Docs-only contributors, PR padding |\n| `get_reactions` | Community sentiment, collusion |\n\n### Coverage & Discovery (1)\n\n| Tool | Description |\n|------|-------------|\n| `list_untracked_repos` | 286 repos in org not being scored |\n\n## Setup\n\n```bash\nexport MCP_DB_PATH=/path/to/db.sqlite\nnpx mcp-github-analytics\n```\n\n## Test plan\n- [x] Build passes\n- [x] All 14 tools tested against real database\n- [x] Quality metrics return useful data\n- [x] Untracked repos tool finds 286 repos, 31 with recent activity\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\n<!-- This is an auto-generated comment: release notes by coderabbit.ai -->\n\n## Summary by CodeRabbit\n\n* **New Features**\n  * Introduced GitHub Analytics MCP package with 14+ tools for querying repository, contributor, and activity data\n  * Added analytics capabilities: repository statistics, contributor profiles, pull requests/issues tracking, code review metrics, file change analysis, and reaction summaries\n  * Implemented contributor search and filtering by performance tier and expertise areas\n\n* **Documentation**\n  * Added comprehensive setup and configuration documentation for the analytics package\n\n<sub>✏️ Tip: You can customize this high-level summary in your review settings.</sub>\n\n<!-- end of auto-generated comment: release notes by coderabbit.ai -->",
+      "repository": "elizaos/elizaos.github.io",
+      "createdAt": "2026-01-28T00:20:13Z",
+      "mergedAt": "2026-01-28T05:21:34Z",
+      "additions": 1891,
+      "deletions": 0
+    },
+    {
+      "id": "PR_kwDONNAI986_aldw",
+      "title": "chore(deps-dev): bump eslint-config-next from 15.1.4 to 16.1.4",
+      "author": "dependabot",
+      "number": 235,
+      "body": "Bumps [eslint-config-next](https://github.com/vercel/next.js/tree/HEAD/packages/eslint-config-next) from 15.1.4 to 16.1.4.\n<details>\n<summary>Release notes</summary>\n<p><em>Sourced from <a href=\"https://github.com/vercel/next.js/releases\">eslint-config-next's releases</a>.</em></p>\n<blockquote>\n<h2>v16.1.4</h2>\n<blockquote>\n<p>[!NOTE]\nThis release is backporting bug fixes. It does <strong>not</strong> include all pending features/changes on canary.</p>\n</blockquote>\n<h3>Core Changes</h3>\n<ul>\n<li>Only filter next config if experimental flag is enabled (<a href=\"https://github.com/vercel/next.js/tree/HEAD/packages/eslint-config-next/issues/88733\">#88733</a>)</li>\n</ul>\n<h3>Credits</h3>\n<p>Huge thanks to <a href=\"https://github.com/mischnic\"><code>@​mischnic</code></a> for helping!</p>\n<h2>v16.1.3</h2>\n<blockquote>\n<p>[!NOTE]\nThis release is backporting bug fixes. It does <strong>not</strong> include all pending features/changes on canary.</p>\n</blockquote>\n<h3>Core Changes</h3>\n<ul>\n<li>Fix linked list bug in LRU deleteFromLru (<a href=\"https://github.com/vercel/next.js/tree/HEAD/packages/eslint-config-next/issues/88652\">#88652</a>)</li>\n<li>Fix relative same host redirects in node middleware (<a href=\"https://github.com/vercel/next.js/tree/HEAD/packages/eslint-config-next/issues/88253\">#88253</a>)</li>\n</ul>\n<h3>Credits</h3>\n<p>Huge thanks to <a href=\"https://github.com/acdlite\"><code>@​acdlite</code></a> and <a href=\"https://github.com/ijjk\"><code>@​ijjk</code></a> for helping!</p>\n<h2>v16.1.2</h2>\n<blockquote>\n<p>[!NOTE]\nThis release is backporting bug fixes. It does <strong>not</strong> include all pending features/changes on canary.</p>\n</blockquote>\n<h3>Core Changes</h3>\n<ul>\n<li>Turbopack: Update to swc_core v50.2.3 (<a href=\"https://github.com/vercel/next.js/tree/HEAD/packages/eslint-config-next/issues/87841\">#87841</a>) (<a href=\"https://github.com/vercel/next.js/tree/HEAD/packages/eslint-config-next/issues/88296\">#88296</a>)\n<ul>\n<li>Fixes a crash when processing mdx files with multibyte characters. (<a href=\"https://github.com/vercel/next.js/tree/HEAD/packages/eslint-config-next/issues/87713\">#87713</a>)</li>\n</ul>\n</li>\n<li>Turbopack: <a href=\"https://microsoft.github.io/mimalloc/\">mimalloc</a> upgrade and enabling it on musl (<a href=\"https://github.com/vercel/next.js/tree/HEAD/packages/eslint-config-next/issues/88503\">#88503</a>) (<a href=\"https://github.com/vercel/next.js/tree/HEAD/packages/eslint-config-next/issues/87815\">#87815</a>) (<a href=\"https://github.com/vercel/next.js/tree/HEAD/packages/eslint-config-next/issues/88426\">#88426</a>)\n<ul>\n<li>Fixes <a href=\"https://redirect.github.com/vercel/next.js/pull/88426\">a significant performance issue</a> on musl-based Linux distributions (e.g. Alpine in Docker) related to musl's allocator.</li>\n<li>Other platforms have always used mimalloc, but we previously did not use mimalloc on musl because of compilation issues that have since been resolved.</li>\n</ul>\n</li>\n</ul>\n<h3>Credits</h3>\n<p>Huge thanks to <a href=\"https://github.com/mischnic\"><code>@​mischnic</code></a> for helping!</p>\n<h2>v16.1.1</h2>\n<blockquote>\n<p>[!NOTE]\nThis release is backporting bug fixes. It does <strong>not</strong> include all pending features/changes on canary.</p>\n</blockquote>\n<h3>Core Changes</h3>\n<ul>\n<li>Turbopack: Create junction points instead of symlinks on Windows (<a href=\"https://github.com/vercel/next.js/tree/HEAD/packages/eslint-config-next/issues/87606\">#87606</a>)</li>\n</ul>\n<h3>Credits</h3>\n<!-- raw HTML omitted -->\n</blockquote>\n<p>... (truncated)</p>\n</details>\n<details>\n<summary>Commits</summary>\n<ul>\n<li><a href=\"https://github.com/vercel/next.js/commit/60de6c21144a78622eb8c4763f364fcb59f7aa59\"><code>60de6c2</code></a> v16.1.4</li>\n<li><a href=\"https://github.com/vercel/next.js/commit/f01cf07ab12a37259de42baa4bdae310b4328c72\"><code>f01cf07</code></a> v16.1.3</li>\n<li><a href=\"https://github.com/vercel/next.js/commit/cb436b3613edb3f741a39fa00ac31d103a5a1518\"><code>cb436b3</code></a> v16.1.2</li>\n<li><a href=\"https://github.com/vercel/next.js/commit/3aa53984e9d6bc4b5860c76e90cccfd6780989af\"><code>3aa5398</code></a> v16.1.1</li>\n<li><a href=\"https://github.com/vercel/next.js/commit/34916762cdff14f27c7e3273d74af60eb6c23cb6\"><code>3491676</code></a> v16.1.0</li>\n<li><a href=\"https://github.com/vercel/next.js/commit/58e8f8c7e541cbfa0764e582b0c1068bfdef32b2\"><code>58e8f8c</code></a> v16.1.0-canary.34</li>\n<li><a href=\"https://github.com/vercel/next.js/commit/3284587f8ebeab67aa4659ef4873723654098916\"><code>3284587</code></a> v16.1.0-canary.33</li>\n<li><a href=\"https://github.com/vercel/next.js/commit/04290ab7c4e48c7d903a68051e688a1238e4041d\"><code>04290ab</code></a> v16.1.0-canary.32</li>\n<li><a href=\"https://github.com/vercel/next.js/commit/d36c03ed1bde059ddc81a31e44a4483aca6a33c6\"><code>d36c03e</code></a> v16.1.0-canary.31</li>\n<li><a href=\"https://github.com/vercel/next.js/commit/b174155e8b4863e18805ca29aaa98a240667e2a9\"><code>b174155</code></a> v16.1.0-canary.30</li>\n<li>Additional commits viewable in <a href=\"https://github.com/vercel/next.js/commits/v16.1.4/packages/eslint-config-next\">compare view</a></li>\n</ul>\n</details>\n<br />\n\n\n[![Dependabot compatibility score](https://dependabot-badges.githubapp.com/badges/compatibility_score?dependency-name=eslint-config-next&package-manager=npm_and_yarn&previous-version=15.1.4&new-version=16.1.4)](https://docs.github.com/en/github/managing-security-vulnerabilities/about-dependabot-security-updates#about-compatibility-scores)\n\nDependabot will resolve any conflicts with this PR as long as you don't alter it yourself. You can also trigger a rebase manually by commenting `@dependabot rebase`.\n\n[//]: # (dependabot-automerge-start)\n[//]: # (dependabot-automerge-end)\n\n---\n\n<details>\n<summary>Dependabot commands and options</summary>\n<br />\n\nYou can trigger Dependabot actions by commenting on this PR:\n- `@dependabot rebase` will rebase this PR\n- `@dependabot recreate` will recreate this PR, overwriting any edits that have been made to it\n- `@dependabot merge` will merge this PR after your CI passes on it\n- `@dependabot squash and merge` will squash and merge this PR after your CI passes on it\n- `@dependabot cancel merge` will cancel a previously requested merge and block automerging\n- `@dependabot reopen` will reopen this PR if it is closed\n- `@dependabot close` will close this PR and stop Dependabot recreating it. You can achieve the same result by closing it manually\n- `@dependabot show <dependency name> ignore conditions` will show all of the ignore conditions of the specified dependency\n- `@dependabot ignore this major version` will close this PR and stop Dependabot creating any more for this major version (unless you reopen the PR or upgrade to it yourself)\n- `@dependabot ignore this minor version` will close this PR and stop Dependabot creating any more for this minor version (unless you reopen the PR or upgrade to it yourself)\n- `@dependabot ignore this dependency` will close this PR and stop Dependabot creating any more for this dependency (unless you reopen the PR or upgrade to it yourself)\n\n\n</details>\n\n<!-- greptile_comment -->\n\n<h2>Greptile Overview</h2>\n\n<h3>Greptile Summary</h3>\n\nBumped `eslint-config-next` from 15.1.4 to 16.1.4. This is a routine dependency update that brings bug fixes and improvements from the Next.js ecosystem.\n\n**Changes:**\n- Updated `eslint-config-next` dependency version\n\n**Compatibility:**\n- The current Next.js version (15.4.10) is compatible with this ESLint config version\n- The project uses ESLint v9 with flat config format, which is fully supported\n- No breaking changes expected based on the release notes (primarily bug fixes for LRU cache, middleware redirects, and Turbopack improvements)\n\n<h3>Confidence Score: 5/5</h3>\n\n- Safe to merge - routine dev dependency update with no breaking changes\n- This is a straightforward dependency bump of a dev-only package. The version jump (15.1.4 → 16.1.4) contains only bug fixes according to release notes. The project's Next.js version (15.4.10) is compatible, and ESLint config uses standard Next.js presets that remain unchanged.\n- No files require special attention\n\n<h3>Important Files Changed</h3>\n\n\n\n\n| Filename | Overview |\n|----------|----------|\n| package.json | Bumped `eslint-config-next` from 15.1.4 to 16.1.4, compatible with Next.js 15.4.10 |\n\n</details>\n\n\n\n<h3>Sequence Diagram</h3>\n\n```mermaid\nsequenceDiagram\n    participant Dep as Dependabot\n    participant PR as Pull Request\n    participant CI as CI/CD Pipeline\n    participant ESLint as ESLint Config\n    participant Next as Next.js App\n\n    Dep->>PR: Create PR to bump eslint-config-next\n    PR->>CI: Trigger pr-checks.yml workflow\n    CI->>ESLint: Install eslint-config-next@16.1.4\n    ESLint->>ESLint: Load next/core-web-vitals preset\n    ESLint->>ESLint: Load next/typescript preset\n    ESLint->>Next: Validate code against rules\n    Next-->>CI: Validation complete\n    CI->>CI: Run lint, typecheck, build\n    CI-->>PR: All checks pass ✓\n```\n\n<!-- greptile_other_comments_section -->\n\n<!-- /greptile_comment -->",
+      "repository": "elizaos/elizaos.github.io",
+      "createdAt": "2026-01-26T17:35:08Z",
+      "mergedAt": null,
+      "additions": 503,
+      "deletions": 55
+    },
+    {
+      "id": "PR_kwDONNAI9868xpVE",
+      "title": "chore(deps): bump recharts from 2.15.4 to 3.6.0",
+      "author": "dependabot",
+      "number": 204,
+      "body": "Bumps [recharts](https://github.com/recharts/recharts) from 2.15.4 to 3.6.0.\n<details>\n<summary>Release notes</summary>\n<p><em>Sourced from <a href=\"https://github.com/recharts/recharts/releases\">recharts's releases</a>.</em></p>\n<blockquote>\n<h2>v3.6.0</h2>\n<h2>What's Changed</h2>\n<p>3.6 🚀 - check out <a href=\"https://recharts.github.io/en-US/guide/roundedBars/\"><code>BarStack</code></a> and <a href=\"https://recharts.github.io/en-US/examples/RangedStackedBarChart/\">ranged stacked bars</a> 📊</p>\n<h3>Feat</h3>\n<ul>\n<li><code>BarStack</code>: new component <code>BarStack</code> by <a href=\"https://github.com/PavelVanecek\"><code>@​PavelVanecek</code></a> in <a href=\"https://redirect.github.com/recharts/recharts/pull/6746\">recharts/recharts#6746</a>\n<ul>\n<li>allows configuring settings for the whole stack of bars such as <code>radius</code></li>\n</ul>\n</li>\n<li><code>Bar</code>: enable ranged stacked bars by <a href=\"https://github.com/PavelVanecek\"><code>@​PavelVanecek</code></a> in <a href=\"https://redirect.github.com/recharts/recharts/pull/6722\">recharts/recharts#6722</a></li>\n<li><code>Pie/Typescript</code>: Export <code>PieSectorShapeProps</code> type for <code>shape</code> function by <a href=\"https://github.com/ramanverse\"><code>@​ramanverse</code></a> in <a href=\"https://redirect.github.com/recharts/recharts/pull/6706\">recharts/recharts#6706</a>\n<code>XAxis/YAxis</code>: Implement 'equidistantPreserveEnd' interval option for XAxis and YAxis (<a href=\"https://redirect.github.com/recharts/recharts/issues/6642\">#6642</a>) by <a href=\"https://github.com/Om-Mishra09\"><code>@​Om-Mishra09</code></a> in <a href=\"https://redirect.github.com/recharts/recharts/pull/6661\">recharts/recharts#6661</a></li>\n<li><code>Tooltip</code>: Add <code>graphicalItemId</code> to tooltip payload object by <a href=\"https://github.com/PavelVanecek\"><code>@​PavelVanecek</code></a> in <a href=\"https://redirect.github.com/recharts/recharts/pull/6765\">recharts/recharts#6765</a></li>\n<li><code>TypeScript</code>: Export <code>TooltipIndex</code>, <code>BarRectangleItem</code>, <code>TreemapNode</code>, <code>DataKey</code>, <code>AxisInterval</code> from public API by <a href=\"https://github.com/Copilot\"><code>@​Copilot</code></a> in <a href=\"https://redirect.github.com/recharts/recharts/pull/6676\">recharts/recharts#6676</a></li>\n</ul>\n<h3>Fix</h3>\n<ul>\n<li><code>Scatter</code>: fix bug where Tooltip payload data was duplicated or contained unrelated items when using multiple <code>Scatter</code> elements in one <code>ScatterChart</code> by <a href=\"https://github.com/PavelVanecek\"><code>@​PavelVanecek</code></a> in <a href=\"https://redirect.github.com/recharts/recharts/pull/6773\">recharts/recharts#6773</a></li>\n<li><code>Label/LabelList: </code>Fix crash when <code>Label</code> is passed as content to <code>LabelList</code> by <a href=\"https://github.com/Harikrushn9118\"><code>@​Harikrushn9118</code></a> in <a href=\"https://redirect.github.com/recharts/recharts/pull/6732\">recharts/recharts#6732</a></li>\n<li><code>General</code>: Round numbers before putting them to DOM by <a href=\"https://github.com/PavelVanecek\"><code>@​PavelVanecek</code></a> in <a href=\"https://redirect.github.com/recharts/recharts/pull/6707\">recharts/recharts#6707</a></li>\n<li><code>General</code>: Store refs instead of IDs to unblock shadow DOM usecases by <a href=\"https://github.com/PavelVanecek\"><code>@​PavelVanecek</code></a> in <a href=\"https://redirect.github.com/recharts/recharts/pull/6753\">recharts/recharts#6753</a></li>\n</ul>\n<h3>Chore</h3>\n<ul>\n<li><code>CartesianAxis</code>: Deprecate <code>CartesianAxis</code> <a href=\"https://github.com/PavelVanecek\"><code>@​PavelVanecek</code></a> in <a href=\"https://redirect.github.com/recharts/recharts/pull/6774\">recharts/recharts#6774</a></li>\n<li>Bump to Node 24</li>\n<li>Lots of <code>undefined</code> checks for progress towards TS <code>strict</code> mode</li>\n</ul>\n<h3>Docs</h3>\n<ul>\n<li>Docs should be improving on the daily - comments in code + storybook + the website should all be coming closer to in sync thanks to <a href=\"https://github.com/PavelVanecek\"><code>@​PavelVanecek</code></a> pretty much writing his own documentation generator 🤖 🚀</li>\n</ul>\n<h2>New Contributors</h2>\n<ul>\n<li><a href=\"https://github.com/Om-Mishra09\"><code>@​Om-Mishra09</code></a> made their first contribution in <a href=\"https://redirect.github.com/recharts/recharts/pull/6661\">recharts/recharts#6661</a></li>\n<li><a href=\"https://github.com/taro-yanagiya\"><code>@​taro-yanagiya</code></a> made their first contribution in <a href=\"https://redirect.github.com/recharts/recharts/pull/6708\">recharts/recharts#6708</a></li>\n<li><a href=\"https://github.com/ramanverse\"><code>@​ramanverse</code></a> made their first contribution in <a href=\"https://redirect.github.com/recharts/recharts/pull/6706\">recharts/recharts#6706</a></li>\n<li><a href=\"https://github.com/Advikkhandelwal\"><code>@​Advikkhandelwal</code></a> made their first contribution in <a href=\"https://redirect.github.com/recharts/recharts/pull/6714\">recharts/recharts#6714</a></li>\n<li><a href=\"https://github.com/Harikrushn9118\"><code>@​Harikrushn9118</code></a> made their first contribution in <a href=\"https://redirect.github.com/recharts/recharts/pull/6732\">recharts/recharts#6732</a></li>\n<li><a href=\"https://github.com/milanchahar\"><code>@​milanchahar</code></a> made their first contribution in <a href=\"https://redirect.github.com/recharts/recharts/pull/6739\">recharts/recharts#6739</a></li>\n</ul>\n<p><strong>Full Changelog</strong>: <a href=\"https://github.com/recharts/recharts/compare/v3.5.1...v3.6.0\">https://github.com/recharts/recharts/compare/v3.5.1...v3.6.0</a></p>\n<h2>v3.5.1</h2>\n<h2>What's Changed</h2>\n<h3>Fix</h3>\n<ul>\n<li><code>Pie</code>: add missing <code>Sector</code> index to <code>Pie</code> <code>shape</code> prop by <a href=\"https://github.com/ckifer\"><code>@​ckifer</code></a> in <a href=\"https://redirect.github.com/recharts/recharts/pull/6683\">recharts/recharts#6683</a>\n<ul>\n<li>This enables customization of specific slices of the <code>Pie</code> similar to <code>activeIndex</code> in 2.x</li>\n</ul>\n</li>\n<li><code>Pie</code>: prevent cross-Pie highlighting in multi-Pie <code>PieChart</code>s with shared dataKeys by <a href=\"https://github.com/shreedharbhat98\"><code>@​shreedharbhat98</code></a> in <a href=\"https://redirect.github.com/recharts/recharts/pull/6678\">recharts/recharts#6678</a></li>\n</ul>\n<!-- raw HTML omitted -->\n</blockquote>\n<p>... (truncated)</p>\n</details>\n<details>\n<summary>Commits</summary>\n<ul>\n<li><a href=\"https://github.com/recharts/recharts/commit/71670d31e115eac4b5afed992f85f62cc9db4235\"><code>71670d3</code></a> Deprecate CartesianAxis, stop passing scale (<a href=\"https://redirect.github.com/recharts/recharts/issues/6774\">#6774</a>)</li>\n<li><a href=\"https://github.com/recharts/recharts/commit/2d419c4203b94d1e982df699c49df5ade64a0e2b\"><code>2d419c4</code></a> [Omnidoc] [bugfix] Scatter and ErrorBar doc comments, and fix Scatter lineJoi...</li>\n<li><a href=\"https://github.com/recharts/recharts/commit/9e2b5f72c41a3a6750c4862943de91cc58c00157\"><code>9e2b5f7</code></a> Fix: Tooltip payload data include unrelated items (<a href=\"https://redirect.github.com/recharts/recharts/issues/6773\">#6773</a>)</li>\n<li><a href=\"https://github.com/recharts/recharts/commit/25e24bb68fd6a4fc3549a7afaa3ca0a1a3794983\"><code>25e24bb</code></a> chore(deps): bump es-toolkit from 1.42.0 to 1.43.0 (<a href=\"https://redirect.github.com/recharts/recharts/issues/6767\">#6767</a>)</li>\n<li><a href=\"https://github.com/recharts/recharts/commit/ba95b4754f690d142255129386a9991e916e9d35\"><code>ba95b47</code></a> chore(deps-dev): bump terser-webpack-plugin from 5.3.15 to 5.3.16 (<a href=\"https://redirect.github.com/recharts/recharts/issues/6768\">#6768</a>)</li>\n<li><a href=\"https://github.com/recharts/recharts/commit/e88fc3b335386f0e8401657f1071c40846dc13c3\"><code>e88fc3b</code></a> chore(deps): bump <code>@​codemirror/view</code> from 6.39.3 to 6.39.4 (<a href=\"https://redirect.github.com/recharts/recharts/issues/6769\">#6769</a>)</li>\n<li><a href=\"https://github.com/recharts/recharts/commit/b239d60f13853561c079bcb8332409daf4751db9\"><code>b239d60</code></a> chore(deps-dev): bump <code>@​recharts/devtools</code> from 0.0.2 to 0.0.3 (<a href=\"https://redirect.github.com/recharts/recharts/issues/6770\">#6770</a>)</li>\n<li><a href=\"https://github.com/recharts/recharts/commit/c979b37019cbe72249fdbea132fa59adda74e618\"><code>c979b37</code></a> [Omnidoc] Add links and prop sorting, generate Area doc (<a href=\"https://redirect.github.com/recharts/recharts/issues/6762\">#6762</a>)</li>\n<li><a href=\"https://github.com/recharts/recharts/commit/b7637b613c2b3d75708f7024d60aa1f1d46ae1ba\"><code>b7637b6</code></a> Replace internal helpers with <code>@​recharts/devtools</code> import (<a href=\"https://redirect.github.com/recharts/recharts/issues/6766\">#6766</a>)</li>\n<li><a href=\"https://github.com/recharts/recharts/commit/d85fdde4dfdd3111af6115ebfe32dd5e23fa4dfe\"><code>d85fdde</code></a> Add graphicalItemId to tooltip payload object (<a href=\"https://redirect.github.com/recharts/recharts/issues/6765\">#6765</a>)</li>\n<li>Additional commits viewable in <a href=\"https://github.com/recharts/recharts/compare/v2.15.4...v3.6.0\">compare view</a></li>\n</ul>\n</details>\n<br />\n\n\n[![Dependabot compatibility score](https://dependabot-badges.githubapp.com/badges/compatibility_score?dependency-name=recharts&package-manager=npm_and_yarn&previous-version=2.15.4&new-version=3.6.0)](https://docs.github.com/en/github/managing-security-vulnerabilities/about-dependabot-security-updates#about-compatibility-scores)\n\nDependabot will resolve any conflicts with this PR as long as you don't alter it yourself. You can also trigger a rebase manually by commenting `@dependabot rebase`.\n\n[//]: # (dependabot-automerge-start)\n[//]: # (dependabot-automerge-end)\n\n---\n\n<details>\n<summary>Dependabot commands and options</summary>\n<br />\n\nYou can trigger Dependabot actions by commenting on this PR:\n- `@dependabot rebase` will rebase this PR\n- `@dependabot recreate` will recreate this PR, overwriting any edits that have been made to it\n- `@dependabot merge` will merge this PR after your CI passes on it\n- `@dependabot squash and merge` will squash and merge this PR after your CI passes on it\n- `@dependabot cancel merge` will cancel a previously requested merge and block automerging\n- `@dependabot reopen` will reopen this PR if it is closed\n- `@dependabot close` will close this PR and stop Dependabot recreating it. You can achieve the same result by closing it manually\n- `@dependabot show <dependency name> ignore conditions` will show all of the ignore conditions of the specified dependency\n- `@dependabot ignore this major version` will close this PR and stop Dependabot creating any more for this major version (unless you reopen the PR or upgrade to it yourself)\n- `@dependabot ignore this minor version` will close this PR and stop Dependabot creating any more for this minor version (unless you reopen the PR or upgrade to it yourself)\n- `@dependabot ignore this dependency` will close this PR and stop Dependabot creating any more for this dependency (unless you reopen the PR or upgrade to it yourself)\n\n\n</details>\n\n<!-- greptile_comment -->\n\n<h2>Greptile Overview</h2>\n\n### Greptile Summary\n\nThis PR upgrades recharts from version 2.15.2 to 3.6.0, a major version bump that brings new features, bug fixes, and deprecations.\n\n## Key Changes in recharts 3.6.0\n\n**New Features:**\n- New `BarStack` component for configuring stacked bar settings\n- Support for ranged stacked bars\n- New `equidistantPreserveEnd` interval option for XAxis/YAxis\n- Additional TypeScript exports (`TooltipIndex`, `BarRectangleItem`, `DataKey`, etc.)\n- `graphicalItemId` added to tooltip payload\n\n**Bug Fixes:**\n- Fixed Scatter tooltip payload duplication (not applicable - no Scatter usage)\n- Fixed Label/LabelList crash\n- Numbers are now rounded before DOM insertion\n- Improved shadow DOM support with refs instead of IDs\n\n**Deprecations:**\n- `CartesianAxis` is deprecated (not used in this codebase)\n\n## Codebase Impact Assessment\n\nThe codebase uses recharts in 3 files:\n1. **src/components/ui/chart.tsx** - Wrapper component using `ResponsiveContainer`, `Tooltip`, `Legend`\n2. **src/components/daily-activity.tsx** - Stacked bar chart with `Bar`, `BarChart`, `CartesianGrid`, `XAxis`, `YAxis`\n3. **src/app/repos/components/RepositoryCard.tsx** - Line chart with `Line`, `LineChart`, `XAxis`\n\n## Potential Concerns\n\n1. **React 19 Compatibility**: This codebase uses React 19.0.0. Recharts v3.6.0 may not have been explicitly tested with React 19, as React 19 is very recent. This could potentially cause peer dependency warnings or runtime issues.\n\n2. **Major Version Bump**: Moving from 2.x to 3.x typically indicates breaking changes. While the release notes provided don't show obvious breaking changes that affect the current usage patterns, there may be subtle behavioral differences.\n\n3. **XAxis interval prop**: The code uses `interval=\"preserveStartEnd\"` in daily-activity.tsx. The release notes mention a new `equidistantPreserveEnd` option, but it's unclear if `preserveStartEnd` is still valid or if its behavior has changed.\n\n4. **Stacked Bar Radius**: The code uses `radius={[0, 0, 0, 0]}` on individual `Bar` components within a stack. The new `BarStack` component allows configuring radius for the entire stack, which might change how radius is interpreted.\n\n## Recommendations\n\n- The PR checks will run build, lint, and typecheck which should catch most TypeScript incompatibilities\n- Consider manual testing of the charts to ensure visual consistency\n- Monitor for peer dependency warnings during installation\n- If issues arise, the new `BarStack` component could be explored as an alternative to the current stacked bar implementation\n\n### Confidence Score: 3/5\n\n- This PR carries moderate risk due to the major version bump and React 19 compatibility uncertainty\n- Score of 3 reflects: (1) Major version upgrade (2.x→3.x) which typically includes breaking changes, (2) Limited but clear documentation of what changed in v3.6.0, (3) Potential React 19 compatibility concerns since React 19 is very recent, (4) Usage is limited to basic chart components (Bar, Line, XAxis, YAxis) which reduces risk surface area, (5) PR checks will validate build and typecheck, (6) No deprecated features are used except possibly uncertainty around interval=\"preserveStartEnd\"\n- Pay close attention to src/components/daily-activity.tsx and src/app/repos/components/RepositoryCard.tsx during testing, as these contain the actual chart implementations that may be affected by behavioral changes\n\n<h3>Important Files Changed</h3>\n\n\n\nFile Analysis\n\n\n\n| Filename | Score | Overview |\n|----------|-------|----------|\n| package.json | 3/5 | Major version upgrade of recharts from 2.15.2 to 3.6.0; requires testing for React 19 compatibility and potential breaking changes |\n\n</details>\n\n\n\n<h3>Sequence Diagram</h3>\n\n```mermaid\nsequenceDiagram\n    participant Dev as Developer\n    participant PM as Package Manager\n    participant RC as Recharts Library\n    participant App as Application\n    participant UI as UI Components\n    participant Chart as Chart Components\n    \n    Dev->>PM: Update package.json (recharts: ^2.15.2 → ^3.6.0)\n    PM->>RC: Install recharts@3.6.0\n    RC-->>PM: New version with features & deprecations\n    PM-->>App: Dependencies resolved\n    \n    App->>UI: Import chart.tsx wrapper\n    UI->>RC: Import ResponsiveContainer, Tooltip, Legend\n    RC-->>UI: Return v3.6.0 components\n    \n    App->>Chart: Render daily-activity.tsx\n    Chart->>RC: Use BarChart, Bar (stacked), XAxis, YAxis\n    Note over Chart,RC: Uses interval=\"preserveStartEnd\"<br/>& radius on stacked bars\n    RC-->>Chart: Render stacked bar chart\n    \n    App->>Chart: Render RepositoryCard.tsx\n    Chart->>RC: Use LineChart, Line, XAxis\n    RC-->>Chart: Render line chart\n    \n    Note over App,RC: Potential concerns:<br/>- React 19 compatibility<br/>- Major version breaking changes<br/>- Behavioral changes in intervals/radius\n```\n\n<!-- greptile_other_comments_section -->\n\n<!-- /greptile_comment -->",
+      "repository": "elizaos/elizaos.github.io",
+      "createdAt": "2026-01-12T19:49:12Z",
+      "mergedAt": "2026-01-27T01:47:50Z",
+      "additions": 85,
+      "deletions": 47
+    }
+  ],
+  "codeChanges": {
+    "additions": 6966,
+    "deletions": 289,
+    "files": 31,
+    "commitCount": 71
+  },
+  "completedItems": [
+    {
+      "title": "chore(deps): bump recharts from 2.15.4 to 3.6.0",
+      "prNumber": 204,
+      "type": "other",
+      "body": "Bumps [recharts](https://github.com/recharts/recharts) from 2.15.4 to 3.6.0.\n<details>\n<summary>Release notes</summary>\n<p><em>Sourced from <a href=\"https://github.com/recharts/recharts/releases\">recharts's releases</a>.</em></p>\n<blockquot",
+      "files": [
+        "package.json",
+        "bun.lock",
+        "src/app/repos/components/RepositoryCard.tsx",
+        "src/components/ui/chart.tsx"
+      ]
+    },
+    {
+      "title": "chore(deps): bump dotenv from 16.6.1 to 17.2.3",
+      "prNumber": 224,
+      "type": "other",
+      "body": "Bumps [dotenv](https://github.com/motdotla/dotenv) from 16.6.1 to 17.2.3.\n<details>\n<summary>Changelog</summary>\n<p><em>Sourced from <a href=\"https://github.com/motdotla/dotenv/blob/master/CHANGELOG.md\">dotenv's changelog</a>.</em></p>\n<blo",
+      "files": [
+        "package.json",
+        "bun.lock"
+      ]
+    },
+    {
+      "title": "chore(deps): bump better-sqlite3 from 11.10.0 to 12.6.2",
+      "prNumber": 222,
+      "type": "other",
+      "body": "Bumps [better-sqlite3](https://github.com/WiseLibs/better-sqlite3) from 11.10.0 to 12.6.2.\n<details>\n<summary>Release notes</summary>\n<p><em>Sourced from <a href=\"https://github.com/WiseLibs/better-sqlite3/releases\">better-sqlite3's release",
+      "files": [
+        "package.json",
+        "bun.lock"
+      ]
+    },
+    {
+      "title": "chore(deps): bump @commander-js/extra-typings from 12.1.0 to 14.0.0",
+      "prNumber": 220,
+      "type": "other",
+      "body": "Bumps [@commander-js/extra-typings](https://github.com/commander-js/extra-typings) from 12.1.0 to 14.0.0.\n<details>\n<summary>Release notes</summary>\n<p><em>Sourced from <a href=\"https://github.com/commander-js/extra-typings/releases\"><code>",
+      "files": [
+        "package.json",
+        "bun.lock"
+      ]
+    },
+    {
+      "title": "chore(deps-dev): bump @faker-js/faker from 9.9.0 to 10.2.0",
+      "prNumber": 219,
+      "type": "other",
+      "body": "Bumps [@faker-js/faker](https://github.com/faker-js/faker) from 9.9.0 to 10.2.0.\n<details>\n<summary>Release notes</summary>\n<p><em>Sourced from <a href=\"https://github.com/faker-js/faker/releases\"><code>@​faker-js/faker</code>'s releases</a",
+      "files": [
+        "package.json",
+        "bun.lock"
+      ]
+    },
+    {
+      "title": "chore(deps): bump ora from 7.0.1 to 9.0.0",
+      "prNumber": 218,
+      "type": "other",
+      "body": "Bumps [ora](https://github.com/sindresorhus/ora) from 7.0.1 to 9.0.0.\n<details>\n<summary>Release notes</summary>\n<p><em>Sourced from <a href=\"https://github.com/sindresorhus/ora/releases\">ora's releases</a>.</em></p>\n<blockquote>\n<h2>v9.0.0",
+      "files": [
+        "package.json",
+        "bun.lock"
+      ]
+    },
+    {
+      "title": "chore(deps): bump date-fns from 3.6.0 to 4.1.0",
+      "prNumber": 217,
+      "type": "other",
+      "body": "Bumps [date-fns](https://github.com/date-fns/date-fns) from 3.6.0 to 4.1.0.\n<details>\n<summary>Release notes</summary>\n<p><em>Sourced from <a href=\"https://github.com/date-fns/date-fns/releases\">date-fns's releases</a>.</em></p>\n<blockquote",
+      "files": [
+        "package.json",
+        "bun.lock"
+      ]
+    },
+    {
+      "title": "Consolidate untracked repos pipeline and fix DRY violations",
+      "prNumber": 231,
+      "type": "bugfix",
+      "body": "## Problem\n\nUsers have no visibility into repositories in their organizations that aren't being tracked for contributor analytics. With 35 tracked repos but 286 total repos across `elizaos` and `elizaos-plugins` orgs, there's a lot of \"dark",
+      "files": [
+        ".github/workflows/run-pipelines.yml",
+        "cli/analyze-pipeline.ts",
+        "config/example.json",
+        "config/pipeline.config.ts",
+        "drizzle/0015_add_untracked_repos.sql",
+        "drizzle/meta/0015_snapshot.json",
+        "drizzle/meta/_journal.json",
+        "src/app/repos/components/RepoStatsButton.tsx",
+        "src/app/repos/components/RepositoryCard.tsx",
+        "src/app/repos/components/UntrackedRepositoryCard.tsx",
+        "src/app/repos/components/UntrackedRepositoryList.tsx",
+        "src/app/repos/page.tsx",
+        "src/app/repos/queries.ts",
+        "src/lib/data/github.ts",
+        "src/lib/data/schema.ts",
+        "src/lib/pipelines/discoverUntrackedRepos.ts",
+        "src/lib/pipelines/pipelineConfig.ts",
+        ".gitignore",
+        "src/app/repos/components/RepositoryList.tsx",
+        "src/lib/data/types.ts",
+        "src/lib/pipelines/discoverUntrackedRepos.test.ts"
+      ]
+    },
+    {
+      "title": "chore(deps): bump commander from 12.1.0 to 14.0.2",
+      "prNumber": 237,
+      "type": "other",
+      "body": "Bumps [commander](https://github.com/tj/commander.js) from 12.1.0 to 14.0.2.\n<details>\n<summary>Release notes</summary>\n<p><em>Sourced from <a href=\"https://github.com/tj/commander.js/releases\">commander's releases</a>.</em></p>\n<blockquote",
+      "files": [
+        "package.json",
+        "bun.lock"
+      ]
+    },
+    {
+      "title": "chore(deps): bump next from 15.4.10 to 16.1.4",
+      "prNumber": 236,
+      "type": "other",
+      "body": "Bumps [next](https://github.com/vercel/next.js) from 15.4.10 to 16.1.4.\n<details>\n<summary>Release notes</summary>\n<p><em>Sourced from <a href=\"https://github.com/vercel/next.js/releases\">next's releases</a>.</em></p>\n<blockquote>\n<h2>v16.1",
+      "files": [
+        "package.json",
+        "bun.lock"
+      ]
+    },
+    {
+      "title": "chore(deps): bump glob from 11.1.0 to 13.0.0",
+      "prNumber": 234,
+      "type": "other",
+      "body": "Bumps [glob](https://github.com/isaacs/node-glob) from 11.1.0 to 13.0.0.\n<details>\n<summary>Changelog</summary>\n<p><em>Sourced from <a href=\"https://github.com/isaacs/node-glob/blob/main/changelog.md\">glob's changelog</a>.</em></p>\n<blockqu",
+      "files": [
+        "package.json",
+        "bun.lock"
+      ]
+    },
+    {
+      "title": "chore(deps): bump the minor-and-patch group with 2 updates",
+      "prNumber": 233,
+      "type": "other",
+      "body": "Bumps the minor-and-patch group with 2 updates: [lucide-react](https://github.com/lucide-icons/lucide/tree/HEAD/packages/lucide-react) and [prettier](https://github.com/prettier/prettier).\n\nUpdates `lucide-react` from 0.562.0 to 0.563.0\n<de",
+      "files": [
+        "package.json"
+      ]
+    },
+    {
+      "title": "feat: add MCP server for GitHub Analytics API",
+      "prNumber": 238,
+      "type": "feature",
+      "body": "## Summary\n\nMCP server for GitHub contributor analytics that queries the SQLite database directly. Includes **quality validation** and **coverage discovery** tools.\n\nBased on [PR #148](https://github.com/elizaOS/elizaos.github.io/pull/148) ",
+      "files": [
+        ".gitignore",
+        "mcp-github-analytics/.gitignore",
+        "mcp-github-analytics/README.md",
+        "mcp-github-analytics/package.json",
+        "mcp-github-analytics/src/db.ts",
+        "mcp-github-analytics/src/index.ts",
+        "mcp-github-analytics/src/tools.ts",
+        "mcp-github-analytics/tsconfig.json"
+      ]
+    }
+  ],
+  "topContributors": [
+    {
+      "username": "0xbbjoker",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/54844437?u=90fe1762420de6ad493a1c1582f1f70c0d87d8e2&v=4",
+      "totalScore": 145.67904680509304,
+      "prScore": 109.47904680509303,
+      "issueScore": 0,
+      "reviewScore": 36,
+      "commentScore": 0.2,
+      "summary": null
+    },
+    {
+      "username": "borisudovicic",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/31806472?u=8935f4d43fd7e4eb9bf5ff92d54d4d2f8ac8a786&v=4",
+      "totalScore": 112,
+      "prScore": 0,
+      "issueScore": 112,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": null
+    },
+    {
+      "username": "greptile-apps",
+      "avatarUrl": "https://avatars.githubusercontent.com/in/867647?v=4",
+      "totalScore": 58.7,
+      "prScore": 0,
+      "issueScore": 0,
+      "reviewScore": 58.5,
+      "commentScore": 0.2,
+      "summary": null
+    },
+    {
+      "username": "madjin",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/32600939?u=cdcf89f44c7a50906c7a80d889efa85023af2049&v=4",
+      "totalScore": 56.133019117260886,
+      "prScore": 49.79301911726088,
+      "issueScore": 6,
+      "reviewScore": 0,
+      "commentScore": 0.33999999999999997,
+      "summary": null
+    },
+    {
+      "username": "standujar",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/16385918?u=718bdcd1585be8447bdfffb8c11ce249baa7532d&v=4",
+      "totalScore": 47.63961228866811,
+      "prScore": 46.861612288668105,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0.7779999999999999,
+      "summary": null
+    },
+    {
+      "username": "vbkotecha",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/86377299?u=32a79d9adc10f2738dca41f4690de9ec944d8025&v=4",
+      "totalScore": 43.5437738965761,
+      "prScore": 43.5437738965761,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": null
+    },
+    {
+      "username": "augchan42",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/20424105?u=d1a74732b07564927928798346f07cd50935c529&v=4",
+      "totalScore": 22.553332238032112,
+      "prScore": 22.553332238032112,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": null
+    },
+    {
+      "username": "BaseGold",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/240206422?u=6eb4bd10d4ab502d36d022d95331370c5b76e055&v=4",
+      "totalScore": 16.833213344056215,
+      "prScore": 16.833213344056215,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": null
+    },
+    {
+      "username": "j4lambert",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/36552964?v=4",
+      "totalScore": 15.545521226679158,
+      "prScore": 15.545521226679158,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": null
+    },
+    {
+      "username": "timolein74",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/225394307?v=4",
+      "totalScore": 14.346573590279972,
+      "prScore": 14.346573590279972,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": null
+    },
+    {
+      "username": "CIII-glitch",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/256561388?v=4",
+      "totalScore": 14.346573590279972,
+      "prScore": 14.346573590279972,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": null
+    },
+    {
+      "username": "Abdulkader-Safi",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/53955839?u=840e43b472d25cb1a82c19b77124def52dfaa69c&v=4",
+      "totalScore": 4.54,
+      "prScore": 0,
+      "issueScore": 4.2,
+      "reviewScore": 0,
+      "commentScore": 0.33999999999999997,
+      "summary": null
+    }
+  ],
+  "newPRs": 6,
+  "mergedPRs": 13,
+  "newIssues": 2,
+  "closedIssues": 2,
+  "activeContributors": 5
+}

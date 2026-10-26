@@ -1,0 +1,2309 @@
+1:"$Sreact.fragment"
+2:I[4817319,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"IntervalSelector"]
+3:I[6998365,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"LlmCopyButton"]
+14:I[3642796,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],""]
+15:I[3238488,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"StatCardsDisplay"]
+20:I[4261541,["/eliza-leaderboard/_next/static/chunks/b33bcbdcb3f88354.js","/eliza-leaderboard/_next/static/chunks/8ba59154b6704904.js"],"OutletBoundary"]
+21:"$Sreact.suspense"
+4:T3782,i am getting the content from the prompt using llama_local model, but i don't want to use that content again in my future prompts based on {recentMessages}, e.g i said i want to swap 0.0001 Eth to USDT on Ethereum chain, the model give me content based on the swapTemplate but when i again prompt like just please swap it gives me the same content, from the recentMessages, how can i restrict the model so that it should not give content based on previous messages? here is the swapTemplate and action code:
+
+```
+export const swapTemplate = `Respond with a JSON markdown block containing only the extracted values
+- Use default | null for any values that cannot be determined.
+
+{{recentMessages}}
+
+{{walletInfo}}
+
+Given the recent messages and wallet info, extract the following information about the requested token swap in same chain:
+- Input token symbol.
+- Output token symbol.
+- Input token address. If the address is provided, it must be a valid Ethereum address starting with "0x" (the token being sold), default 0x0000000000000000000000000000000000000000.
+- Output token address. If the address is provided, it must be a valid Ethereum address starting with "0x" (the token being bought), default 0x0000000000000000000000000000000000000000.
+- Amount to swap: Must be a string representing the amount in ether (only number without coin symbol, e.g., "0.1")
+- Chain from chain to execute on swap
+- Slippage percentage value in numbers: default is 0.5
+
+Respond with a JSON markdown block containing only the extracted values. 
+If any field is not provided, use the default value. If no default value is specified, use null.
+ 
+\`\`\`json
+{   
+    "inputTokenSymbol": string,
+    "outputTokenSymbol": string,
+    "amount": string,
+    "chain": "ethereum" | "bsc" | "polygon" | "optimism" | "base" | "mode" | "zora" | "aurora" | "gnosis" | "mantle" | "avalanche" | "linea" | "blast" | "scroll" | "arbitrum" | "zksync era" | "polygon zkevm" | "moonriver" | "moonbeam" | "boba" | "fantom" | "metis" | "sei" | "taiko" | "fraxtal" | "celo" | "rootstock" | "gravity" | "klatyn" | "cronos" | "world chain" | "ink" | "lisk" | "abstract" | "unichain" | "b3" | "berachain" | "nirvana" | "sagaevm" | "maria chain";
+    "slippage": number
+}
+\`\`\`
+`;
+
+```
+
+```
+import {
+    composeContext,
+    elizaLogger,
+    type HandlerCallback,
+    ModelClass,
+    type IAgentRuntime,
+    type Memory,
+    type State,
+    generateObjectDeprecated,
+} from "@elizaos/core";
+import {
+    decodeFunctionData,
+    erc20Abi,
+    formatUnits,
+    parseUnits,
+    zeroAddress,
+    type Hex,
+} from "viem";
+
+import {
+    evmWalletProvider,
+    initWalletProvider,
+    type WalletProvider,
+} from "../providers/evmWallet";
+
+import { swapTemplate } from "../templates";
+import { QuotePayload, RoutePayload, SupportedChain, SwapParams, SwapResponse } from "../types";
+import { PonderAPIProvider } from "../providers/ponder";
+import { swapExamplesSingleToken } from "../utils/examples";
+export { swapTemplate };
+
+export class SwapAction {
+    constructor(private walletProvider: WalletProvider) {}
+
+    async swapSingle(params: SwapParams): Promise<SwapResponse | string> {
+        elizaLogger.info("Single swap params same chain:", params);
+        const fromAddress = this.walletProvider.getAddress();
+
+        const requiredFields = await this.checkRequiredParams(params);
+
+        if (requiredFields.length > 0) {
+            return requiredFields;
+        }
+
+        const requiredParams = await this.validateParams(params)
+
+        if (requiredParams.length > 0) {
+            return requiredParams;
+        }
+
+        const ponderProvider = new PonderAPIProvider();
+        const chains = await ponderProvider.getChains();
+
+        const blockExplorer = chains.find((chain) => chain.name.toLowerCase() === params.chain.toLowerCase())?.blockExplorer;
+
+        const inputChainId = String(await ponderProvider.getChainId(params.chain, chains));
+        const outputChainId = String(await ponderProvider.getChainId(params.chain, chains));
+
+        const resp: SwapResponse = {
+           fromChain: params.chain as SupportedChain,
+           toChain: params.chain as SupportedChain,
+           fromTokenSymbol: params.inputTokenSymbol,
+           toTokenSymbol: params.outputTokenSymbol,
+           fromToken: params.inputToken,
+           toToken: params.outputToken,
+           txHash: blockExplorer + "tx/",
+           recipient:fromAddress,
+           fromAmount: params.amount,
+           toAmount: ""
+        }
+
+        const publicClient = this.walletProvider.getPublicClient(
+            params.chain
+        );
+
+        let decimals;
+
+        if (params.inputToken === zeroAddress) {
+            decimals = 18;
+        } else {
+            decimals = await publicClient.readContract({
+                address: params.inputToken as `0x${string}`,
+                abi: erc20Abi,
+                functionName: "decimals",
+            });
+        }
+
+        params.amount = parseUnits(params.amount, decimals).toString();
+        
+        this.walletProvider.switchChain(params.chain);
+
+        const quotePayload: QuotePayload = {
+            fromChain: inputChainId,
+            toChain: outputChainId,
+            fromToken: [params.inputToken],
+            toToken: [params.outputToken],
+            fromAmount: [params.amount],
+            slippage: 0.5, //TODO: slippage fix now returning "null" in string form
+            fromAddress: fromAddress,
+            toAddress: fromAddress,
+            provider: ""
+        }
+
+        const quote = await ponderProvider.getQuote(quotePayload);
+        
+        if (!quote) {
+            throw new Error("No quote found for the given input");
+        }
+
+        const routePayload: RoutePayload = {
+            fromChain: inputChainId,
+            toChain: outputChainId,
+            fromToken: [params.inputToken],
+            toToken: [params.outputToken],
+            fromAmount: [params.amount],
+            slippage: params.slippage,
+            fromAddress: fromAddress,
+            provider: quote.protocol,
+            routeId: quote.routeId
+        }
+
+        let route = await ponderProvider.getRoute(routePayload);
+
+        if (!route) {
+            throw new Error("No route found for the given quote");
+        }
+
+        if (route.approvalTx) {
+            const approveAmount = BigInt(params.amount)
+            const token = await this.walletProvider.formatAddress(params.inputToken)
+
+            const { args } = decodeFunctionData({
+                abi: erc20Abi,
+                data: route.approvalTx[0].data
+              })
+
+            const spender = await this.walletProvider.formatAddress(args[0] as string)
+
+            const allowance = await this.walletProvider.checkERC20Allowance(
+                params.chain,
+                token,
+                fromAddress,
+                spender
+            );
+            if (allowance < approveAmount) {
+                elizaLogger.info(
+                    `Increasing ERC20 token ${params.inputTokenSymbol} allowance for ${route.protocol}. ${approveAmount - allowance} more needed`
+                );
+                const txHash = await this.walletProvider.approveERC20(
+                    params.chain,
+                    token,
+                    spender,
+                    approveAmount
+                );
+                await publicClient.waitForTransactionReceipt({
+                    hash: txHash,
+                });
+
+                elizaLogger.info(`successfully approved ${params.inputTokenSymbol} for swap`);
+            }
+        }
+
+        route = await ponderProvider.getRoute(routePayload);
+
+        if (!route.executionTx) {
+            throw new Error("No execution data found for the given route");
+        }
+
+        const options: { gas?: bigint; gasPrice?: bigint; data?: Hex } = {}
+        
+        options.gas = BigInt(route.executionTx.gasLimit);
+        options.gasPrice = BigInt(route.executionTx.gasPrice);
+        options.data = route.executionTx.data;
+
+        const txHash = await this.walletProvider.swapToken(params.chain, route.executionTx.to, BigInt(route.executionTx.value), options)
+
+        if (!txHash || txHash === "0x") {
+            throw new Error("Get transaction hash failed");
+        }
+
+        // wait for the transaction to be confirmed
+        await publicClient.waitForTransactionReceipt({
+            hash: txHash,
+        });
+
+        const toAmount = formatUnits(quote.transactionDetails[0].toToken[0].toAmount,  quote.transactionDetails[0].toToken[0].decimals);
+
+        resp.toAmount = toAmount.toString(); 
+        resp.txHash = resp.txHash + txHash;
+
+        return resp;
+
+    }
+
+    async checkRequiredParams(params: SwapParams): Promise<string> {
+
+        let requiredFieldsText = "";
+
+        if (!params.inputTokenSymbol) {
+            requiredFieldsText += `- inputTokenSymbol: Symbol of the input token, like ETH\n`
+        }
+
+        if (!params.outputTokenSymbol) {
+            requiredFieldsText += `- outputTokenSymbol: Symbol of the output token, like USDT\n`
+        }
+
+        if (!params.inputToken) {
+            requiredFieldsText += `- inputToken: Address of the input token\n`
+        }
+
+        if (!params.outputToken) {
+            requiredFieldsText += `- outputToken: Address of the output token\n`
+        }
+
+        if (!params.amount) {
+            requiredFieldsText += `- amount: Amount of input token to swap\n`
+        }
+
+        if (!params.chain) {
+            requiredFieldsText += `- chain: Chain to swap on\n`
+        }
+
+        return requiredFieldsText;
+
+    }
+
+    async validateParams(params: SwapParams): Promise<string> {
+
+        let notValidParamsText = ""; 
+
+        const nativeToken = this.walletProvider.chains[params.chain].nativeCurrency.symbol;
+
+        if (params.inputTokenSymbol.toLowerCase() === params.outputTokenSymbol.toLowerCase()) {
+            notValidParamsText = 'Cannot Swap Same Token, symbols are same'
+            return notValidParamsText;
+        }
+
+        if (params.inputTokenSymbol.toLowerCase() !== nativeToken.toLowerCase() && params.inputToken.toLowerCase() === zeroAddress) {
+            notValidParamsText = `- inputToken: Address of the input token\n`
+            return notValidParamsText;
+        }
+
+        if (params.outputTokenSymbol.toLowerCase() !== nativeToken.toLowerCase() && params.outputToken.toLowerCase() === zeroAddress) {
+            notValidParamsText = `- outputToken: Address of the output token\n`
+            return notValidParamsText;
+        }
+
+        return notValidParamsText;
+
+    }
+}
+
+export const swapSingleAction = {
+    name: "SWAP_SINGLE",
+    description: "Use this action when user swap from evm chain to evm chain, from chain and to chain should not be solana or movement chain.",
+    handler: async (
+        runtime: IAgentRuntime,
+        message: Memory,
+        state: State,
+        _options: Record<string, unknown>,
+        callback?: HandlerCallback
+    ) => {
+        elizaLogger.info("Starting swap action...");
+
+        if (message.content.source === "direct") {
+            // continue
+        } else {
+            callback?.({
+                text: "i can't do that for you.",
+                content: { error: "Swap single not allowed" },
+            });
+            return false;
+        }
+
+        
+        // Initialize or update state
+        let currentState = state;
+        if (!currentState) {
+            currentState = (await runtime.composeState(message)) as State;
+        } else {
+            currentState = await runtime.updateRecentMessageState(currentState);
+        }
+        state.walletInfo = await evmWalletProvider.get(
+            runtime,
+            message,
+            currentState
+        );
+
+        // Compose swap context
+        const swapContext = composeContext({
+            state: currentState,
+            template: swapTemplate,
+        });
+        const content = await generateObjectDeprecated({
+            runtime,
+            context: swapContext,
+            modelClass: ModelClass.LARGE,
+        });
+
+        elizaLogger.debug("Swap evm single token on same chain content:", content);
+
+        const slippage = (!content?.slippage || content.slippage === null || content.slippage === "null") ? 0.5 : Number(content.slippage);
+
+        const walletProvider = initWalletProvider(runtime);
+        const action = new SwapAction(walletProvider);
+        const swapParams: SwapParams = {
+            inputTokenSymbol: content.inputTokenSymbol,
+            outputTokenSymbol: content.outputTokenSymbol,
+            inputToken: content.inputToken,
+            outputToken: content.outputToken,
+            amount: content.amount,
+            chain: content.chain,
+            slippage: slippage,
+        };
+        try {
+            const swapResp = await action.swapSingle(swapParams);
+
+            if (typeof swapResp === "string") {
+                callback?.({
+                    text: `You are trying to do token swap on same evm chain, but following fields are missing or not correct:\n${swapResp}`,
+                    content: { error: swapResp }
+                });
+                return false;
+            }
+
+            callback?.({
+                text: `Successfully swapped ${swapResp.fromAmount} ${swapResp.fromTokenSymbol} to ${swapResp.toAmount} ${swapResp.toTokenSymbol} to receipent address ${swapResp.recipient} on ${swapResp.toChain} chain\nTransaction Hash: ${swapResp.txHash}`,
+                content: { ...swapResp },
+            });
+
+            return true;
+        } catch (error) {
+            elizaLogger.error("Error during single token swap:", error.message);
+            callback?.({
+                text: `Swap failed: ${error.message}`,
+                content: { error: error.message }
+            });
+            return false;
+        }
+    },
+    template: swapTemplate,
+    
+    validate: async (runtime: IAgentRuntime) => {
+        const privateKey = runtime.getSetting("WALLET_PRIVATE_KEY");
+        return typeof privateKey === "string" && privateKey.startsWith("0x");
+    },
+    examples: swapExamplesSingleToken,
+    similes: ["SWAP", "TOKEN_SWAP", "SWAP_TOKEN", "SWAP_FUND", "CONVERT", "EXCHANGE_TOKEN", "TOKEN_CONVERSION"]
+
+};
+
+
+```5:T4a0,**Describe the bug**
+
+<!-- A clear and concise description of what the bug is. -->
+The GOAT plugin https://github.com/elizaos-plugins/plugin-goat doesnt work after eliza separation of plugins .
+
+**To Reproduce**
+
+<!-- Steps to reproduce the behavior. -->
+```
+1. Install the goat plugin in current stable version of elizaos -> npx elizaos plugins install @elizaos-plugins/plugin-goat
+2. Add "plugins": ["@elizaos-plugins/plugin-goat"] to the characterfile and provide appropriate secrets.
+3. Run the eliza with the character file. Even though the plugin is activated, the actions are not triggered.
+
+```
+
+The reason i found was with GOAT plugin returning a async function instead of a json structure.
+https://github.com/elizaos-plugins/plugin-goat/blob/main/src/index.ts#L5.
+
+Because of this https://github.com/elizaOS/eliza/blob/main/agent/src/index.ts#L390 the current elizaos logic doesnt handle this plugin properly.
+This type of async exported plugins can work if in eliza, the code changes to 
+```
+await importedPlugin.default(secrets) instead of importedPlugin.default in above mentioned line L390
+```
+
+**Expected behavior**
+
+Plugins with Async exported functions has to work.
+
+6:T1991,i installed plugins: 
+    "@elizaos-plugins/client-twitter",
+    "@elizaos-plugins/plugin-ferePro",
+    "@elizaos-plugins/plugin-web-search",
+    "@elizaos-plugins/plugin-image"
+all worked perfectly until last launch, i also checked updates and my fork is up to date 
+no matter with enabled ragKnowledge or disabled, it failing to process twitter actions. 
+
+NODE_OPTIONS=--max-old-space-size=8192 pnpm start --character="characters/c3po.character.json"
+
+> eliza@ start /home/bottomtxt/jphdmain
+> pnpm --filter "@elizaos/agent" start --isRoot "--character=characters/c3po.character.json"
+
+
+> @elizaos/agent@0.25.9 start /home/bottomtxt/jphdmain/agent
+> node --loader ts-node/esm src/index.ts "--isRoot" "--character=characters/c3po.character.json"
+
+(node:9032) ExperimentalWarning: `--experimental-loader` may be removed in the future; instead use `register()`:
+--import 'data:text/javascript,import { register } from "node:module"; import { pathToFileURL } from "node:url"; register("ts-node/esm", pathToFileURL("./"));'
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:9032) [DEP0180] DeprecationWarning: fs.Stats constructor is deprecated.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+[2025-03-09 00:41:01] INFO: Loading embedding settings:
+    USE_OPENAI_EMBEDDING: ""
+    USE_OLLAMA_EMBEDDING: ""
+    OLLAMA_EMBEDDING_MODEL: "mxbai-embed-large"
+(node:9032) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+[2025-03-09 00:41:01] INFO: Parsed settings:
+    USE_OPENAI_EMBEDDING: ""
+    USE_OPENAI_EMBEDDING_TYPE: "string"
+    USE_OLLAMA_EMBEDDING: ""
+    USE_OLLAMA_EMBEDDING_TYPE: "string"
+    OLLAMA_EMBEDDING_MODEL: "mxbai-embed-large"
+Failed to import plugin: @elizaos-plugins/client-telegram Error: Cannot find package '@elizaos-plugins/client-telegram' imported from /home/bottomtxt/jphdmain/agent/src/index.ts
+    at packageResolve (/home/bottomtxt/jphdmain/node_modules/.pnpm/ts-node@10.9.2_@swc+core@1.11.4_@swc+helpers@0.5.15__@types+node@22.13.5_typescript@5.8.2/node_modules/ts-node/dist-raw/node-internal-modules-esm-resolve.js:757:9)
+    at moduleResolve (/home/bottomtxt/jphdmain/node_modules/.pnpm/ts-node@10.9.2_@swc+core@1.11.4_@swc+helpers@0.5.15__@types+node@22.13.5_typescript@5.8.2/node_modules/ts-node/dist-raw/node-internal-modules-esm-resolve.js:798:18)
+    at Object.defaultResolve (/home/bottomtxt/jphdmain/node_modules/.pnpm/ts-node@10.9.2_@swc+core@1.11.4_@swc+helpers@0.5.15__@types+node@22.13.5_typescript@5.8.2/node_modules/ts-node/dist-raw/node-internal-modules-esm-resolve.js:912:11)
+    at /home/bottomtxt/jphdmain/node_modules/.pnpm/ts-node@10.9.2_@swc+core@1.11.4_@swc+helpers@0.5.15__@types+node@22.13.5_typescript@5.8.2/node_modules/ts-node/src/esm.ts:218:35
+    at entrypointFallback (/home/bottomtxt/jphdmain/node_modules/.pnpm/ts-node@10.9.2_@swc+core@1.11.4_@swc+helpers@0.5.15__@types+node@22.13.5_typescript@5.8.2/node_modules/ts-node/src/esm.ts:168:34)
+    at /home/bottomtxt/jphdmain/node_modules/.pnpm/ts-node@10.9.2_@swc+core@1.11.4_@swc+helpers@0.5.15__@types+node@22.13.5_typescript@5.8.2/node_modules/ts-node/src/esm.ts:217:14
+    at addShortCircuitFlag (/home/bottomtxt/jphdmain/node_modules/.pnpm/ts-node@10.9.2_@swc+core@1.11.4_@swc+helpers@0.5.15__@types+node@22.13.5_typescript@5.8.2/node_modules/ts-node/src/esm.ts:409:21)
+    at resolve (/home/bottomtxt/jphdmain/node_modules/.pnpm/ts-node@10.9.2_@swc+core@1.11.4_@swc+helpers@0.5.15__@types+node@22.13.5_typescript@5.8.2/node_modules/ts-node/src/esm.ts:197:12)
+    at nextResolve (node:internal/modules/esm/hooks:748:28)
+    at Hooks.resolve (node:internal/modules/esm/hooks:240:30)
+[2025-03-09 00:41:02] INFO: C-3PO loaded plugins: [
+    "@elizaos-plugins/client-twitter",
+    "@elizaos-plugins/plugin-ferePro",
+    "@elizaos-plugins/plugin-web-search",
+    "@elizaos-plugins/plugin-image"
+]
+[2025-03-09 00:41:02] INFO: C-3PO(e61b079d-5226-06e9-9763-a33094aa8d82) - Initializing AgentRuntime with options:
+    character: "C-3PO"
+    modelProvider: "openai"
+    characterModelProvider: "openai"
+[2025-03-09 00:41:02] INFO: C-3PO(e61b079d-5226-06e9-9763-a33094aa8d82) - Setting Model Provider:
+    characterModelProvider: "openai"
+    optsModelProvider: "openai"
+    finalSelection: "openai"
+[2025-03-09 00:41:02] INFO: C-3PO(e61b079d-5226-06e9-9763-a33094aa8d82) - Selected model provider: openai
+[2025-03-09 00:41:02] INFO: C-3PO(e61b079d-5226-06e9-9763-a33094aa8d82) - Selected image model provider: openai
+[2025-03-09 00:41:02] INFO: C-3PO(e61b079d-5226-06e9-9763-a33094aa8d82) - Selected image vision model provider: openai
+[2025-03-09 00:41:02] INFO: Initializing SQLite database at /home/bottomtxt/jphdmain/agent/data/db.sqlite...
+[2025-03-09 00:41:02] INFO: Using Database Cache...
+[2025-03-09 00:41:03] INFO: Successfully logged in.
+[2025-03-09 00:41:03] INFO: Caching cookies
+[2025-03-09 00:41:08] INFO: Run `pnpm start:client` to start the client and visit the outputted URL (http://localhost:5173) to chat with your agents. When running multiple agents, use client with different port `SERVER_PORT=3001 pnpm start:client`
+[2025-03-09 00:41:08] WARN: Invalid embedding input:
+    input: ""
+    type: "string"
+    length: 0
+[2025-03-09 00:41:08] INFO: Generating text with options:
+    modelProvider: "openai"
+    model: "small"
+[2025-03-09 00:41:08] INFO: Selected model: gpt-4o-mini
+[2025-03-09 00:41:08] WARN: Invalid message for knowledge query:
+    message: {
+      "userId": "e61b079d-5226-06e9-9763-a33094aa8d82",
+      "roomId": "38153dbc-2563-0b10-9bdd-cdb1e080fca3",
+      "agentId": "e61b079d-5226-06e9-9763-a33094aa8d82",
+      "content": {
+        "text": "",
+        "action": ""
+      }
+    }
+    content: {
+      "text": "",
+      "action": ""
+    }
+    text: ""
+[2025-03-09 00:41:08] WARN: Invalid embedding input:
+    input: ""
+    type: "string"
+    length: 0
+[2025-03-09 00:41:08] INFO: Generating text with options:
+    modelProvider: "openai"
+    model: "small"
+[2025-03-09 00:41:08] INFO: Selected model: gpt-4o-mini
+Received response from OpenAI model.
+[2025-03-09 00:41:07] ERROR: Error processing tweet undefined:
+Received response from OpenAI model.
+
+**To Reproduce**
+
+<!-- Steps to reproduce the behavior. -->
+
+**Expected behavior**
+
+<!-- A clear and concise description of what you expected to happen. -->
+
+**Screenshots**
+
+<!-- If applicable, add screenshots to help explain your problem. -->
+
+**Additional context**
+
+<!-- Add any other context about the problem here. -->
+7:T332b,# Eliza CLI Shell Tests
+
+This directory contains Bash test scripts that verify the functionality of the `elizaos` CLI commands. These tests ensure that CLI commands work correctly in realistic user scenarios.
+
+## Test Coverage
+
+| Test File            | Command(s) Tested                                  | Test Cases                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| -------------------- | -------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `test_agent.sh`      | `elizaos agent`                                    | • **Test 1**: `agent --help` - Verifies help command displays usage info<br>• **Test 2**: `agent list` - Checks agent list with empty/default agents<br>• **Test 3**: `agent list` - Verifies server API endpoint works<br>• **Test 4**: `agent start --path <character_file>` - Tests character loading from file<br>• **Test 5**: `agent stop <agent_name>` - Tests agent stopping functionality<br>• **Test 6**: Agent lifecycle management                                                                                                  |
+| `test_create.sh`     | `elizaos create`                                   | • **Test 1**: `create --help` - Verifies help command displays usage info<br>• **Test 2**: `create <name> --yes` - Tests default project creation<br>• **Test 3**: `create <name> --yes --type plugin` - Tests plugin project creation<br>• **Test 4**: Tests handling duplicate project names<br>• **Test 5**: `create .` - Tests creation in current directory<br>• **Test 6**: Tests handling invalid project names with spaces<br>• **Test 7**: Tests handling non-existent project types<br>• **Test 8**: Verifies dependency installation |
+| `test_dev.sh`        | `elizaos dev`                                      | • **Test 1**: `dev --help` - Verifies help command displays usage info<br>• **Test 2**: `dev --port <port>` - Tests running dev server as background process<br>• **Test 3**: Tests server accessibility on specified port<br>• **Test 4**: Tests interacting with server API endpoints<br>• **Test 5**: Tests agent commands against dev server<br>• **Test 6**: Tests server process cleanup                                                                                                                                                  |
+| `test_env.sh`        | `elizaos env`                                      | • **Test 1**: `env --help` - Verifies help command displays usage info<br>• **Test 2**: `env list` - Tests listing environment variables from server API                                                                                                                                                                                                                                                                                                                                                                                        |
+| `test_install.sh`    | `elizaos install`                                  | • **Test 1**: `install --help` - Verifies help command displays usage info<br>• **Test 2**: Tests package dependency installation in projects<br>• **Test 3**: Tests package manager integration                                                                                                                                                                                                                                                                                                                                                |
+| `test_plugin.sh`     | `elizaos plugin` /<br>`elizaos project add-plugin` | • **Test 1**: `plugin --help` - Verifies help command displays usage info<br>• **Test 2**: `plugin publish --help` - Tests plugin publish help command<br>• **Test 3**: `project add-plugin <plugin-name> --no-env-prompt` - Tests adding official plugins<br>• **Test 4**: Tests adding multiple plugins at once<br>• **Test 5**: Tests plugin dependency detection in package.json<br>• **Test 6**: Tests custom plugin installation<br>• **Test 7**: Tests custom plugin via GitHub URL                                                      |
+| `test_project.sh`    | `elizaos project`                                  | • **Test 1**: `project --help` - Verifies help command displays usage info<br>• **Test 2**: `project create` - Tests project creation<br>• **Test 3**: `project installed-plugins` - Verifies listing installed plugins<br>• **Test 4**: `project add-plugin` - Tests adding plugins to existing projects<br>• **Test 5**: `project remove-plugin` - Tests removing plugins<br>• **Test 6**: Tests package.json modifications                                                                                                                   |
+| `test_publish.sh`    | `elizaos plugin publish`                           | • **Test 1**: `plugin publish --help` - Verifies help command displays usage info<br>• **Test 2**: Tests plugin validation logic<br>• **Test 3**: Tests plugin packaging<br>• **Test 4**: Tests publication workflow and authentication<br>• **Test 5**: Tests versioning logic                                                                                                                                                                                                                                                                 |
+| `test_start.sh`      | `elizaos start`                                    | • **Test 1**: `start --help` - Verifies help command displays usage info<br>• **Test 2**: Tests various runtime modes<br>• **Test 3**: Tests custom port configuration<br>• **Test 4**: Tests configuration validation<br>• **Test 5**: Tests character loading                                                                                                                                                                                                                                                                                 |
+| `test_test.sh`       | `elizaos test`                                     | • **Test 1**: `test --help` - Verifies help command displays usage info<br>• **Test 2**: Tests basic test suite execution<br>• **Test 3**: Tests test result validation<br>• **Test 4**: Tests different test filtering options<br>• **Test 5**: Tests error reporting                                                                                                                                                                                                                                                                          |
+| `test_update.sh`     | `elizaos update`                                   | • **Test 1**: `update --help` - Verifies help command displays usage info<br>• **Test 2**: Tests plugin update functionality<br>• **Test 3**: Tests project dependency updates<br>• **Test 4**: Tests update failure handling<br>• **Test 5**: Tests selective updating                                                                                                                                                                                                                                                                         |
+| `test_update-cli.sh` | `elizaos update-cli`                               | • **Test 1**: `update-cli --help` - Verifies help command displays usage info<br>• **Test 2**: Tests CLI self-update process<br>• **Test 3**: Tests version checking and comparison<br>• **Test 4**: Tests update cancellation                                                                                                                                                                                                                                                                                                                  |
+
+## Running Tests
+
+To run all tests, use the master test script:
+
+```bash
+./run_cli_tests.sh
+```
+
+To run a specific test:
+
+```bash
+./test_<command>.sh
+```
+
+## Test Environment and Architecture
+
+The testing system consists of several key components:
+
+### Main Runner Script (`run_cli_tests.sh`)
+
+This script orchestrates the entire test suite:
+
+1. **Server Management**:
+
+   - Starts a test server instance on a configurable port (default: 3000)
+   - Loads test character files from `test-characters/` directory
+   - Monitors server startup and availability
+   - Ensures server cleanup on test completion or failure
+
+2. **Test Execution**:
+
+   - Discovers and runs all `test_*.sh` scripts in sequence
+   - Uses timeouts to prevent hanging test scripts (60s default timeout)
+   - Captures exit codes and test results
+   - Provides detailed logging of each test's execution
+
+3. **Cleanup Operations**:
+   - Stops the test server
+   - Removes all temporary test directories
+   - Manages cleanup of individual test environments
+
+### Setup Script (`setup_test_env.sh`)
+
+This shared utility script provides common functionality for all test scripts:
+
+1. **Environment Preparation**:
+
+   - Creates isolated temporary directories for each test run
+   - Locates and validates the ElizaOS executable
+   - Sets up environment variables needed by tests
+   - Determines optimal command to run ElizaOS (`global` vs `local build`)
+
+2. **Test Utilities**:
+
+   - Logging functions (`log_info`, `log_error`, `log_warning`)
+   - Test assertion functions (`assert_success`, `assert_failure`)
+   - Output validation (`assert_stdout_contains`, `assert_stderr_contains`)
+   - File and directory checks (`assert_file_exists`, `assert_dir_exists`)
+   - Command execution wrapper (`run_elizaos`)
+
+3. **Cleanup Functions**:
+   - Trap-based cleanup to ensure test directories are removed
+   - Project-specific cleanup for node_modules and other large artifacts
+
+### Individual Test Scripts (`test_<command>.sh`)
+
+Each test script follows a consistent structure:
+
+1. **Setup Phase**:
+
+   - Sources `setup_test_env.sh` for common utilities
+   - Calls `prepare_test_environment` to create isolated test directory
+   - Sets up test-specific variables and requirements
+
+2. **Test Cases**:
+
+   - Each test is clearly labeled with descriptive log messages
+   - Commands are executed via `run_elizaos` wrapper
+   - Results are validated with various assertion functions
+   - Many tests track pass/fail counts for summary reporting
+
+3. **Cleanup and Reporting**:
+   - Cleans up test-specific artifacts
+   - Reports test summary (total, passed, failed)
+   - Returns appropriate exit code based on test results
+
+## Test Workflow
+
+When running the full test suite via `run_cli_tests.sh`:
+
+1. **Dependencies** are verified (bun, node)
+2. **Test server** is started in the background with isolated data directory
+3. **Server availability** is confirmed via health check endpoint
+4. **Test scripts** are executed sequentially with timeouts
+5. **Results** are captured and summarized
+6. **Cleanup** operations remove all temporary files and stop the server
+7. **Exit code** indicates overall test suite success or failure
+
+For individual test scripts:
+
+1. **Test environment** is prepared via `prepare_test_environment`
+2. **Test operations** are performed against either the global CLI or a local build
+3. **Assertions** verify expected behavior and outputs
+4. **Test-specific cleanup** removes artifacts before exit
+
+## Test Character Assets
+
+The `test-characters` directory contains JSON character definition files used by various tests:
+
+- `ada.json`: Ada character configuration
+- `max.json`: Max character configuration
+- `shaw.json`: Shaw character configuration
+
+These are loaded by the test server and used in agent-related tests.
+
+## Adding New Tests
+
+When adding new tests:
+
+1. Create a new `test_<command>.sh` file based on an existing test
+2. Include proper test tracking logic
+3. Ensure idempotent execution (clean up after yourself)
+4. Add comprehensive assertions
+5. Update this README with details about the new tests
+8:T1640,# Eliza CLI Shell Tests
+
+**Test Coverage Status: Up-to-date as of 2025-04-17**
+
+_All tests use isolated temporary environments and have descriptive names for clarity._
+
+This directory contains Bash test scripts that verify the functionality of the `elizaos` CLI commands in realistic user scenarios.
+
+## Test Coverage
+
+| Test File              | Command(s) Tested        | Test Cases Summary                                                                |
+| ---------------------- | ------------------------ | --------------------------------------------------------------------------------- |
+| `test_agent.bats`      | `elizaos agent`          | Help, list (default/API), start/stop agent, full agent lifecycle                  |
+| `test_create.bats`     | `elizaos create`         | Help, create (project/plugin), duplicate/invalid names/types, deps                |
+| `test_dev.bats`        | `elizaos dev`            | Help, dev server (port/background), server/API endpoints, agent commands, cleanup |
+| `test_env.bats`        | `elizaos env`            | Help, list environment variables from server API                                  |
+| `test_plugin.bats`     | `elizaos plugin`         | TBD (add summary when implemented)                                                |
+| `test_project.bats`    | `elizaos project`        | Help, create/list projects, plugins, add plugin                                   |
+| `test_publish.bats`    | `elizaos plugin publish` | Help, validate, pack, publish with auth, bump-version in plugin projects          |
+| `test_start.bats`      | `elizaos start`          | Help, (add more tests as implemented)                                             |
+| `test_test.bats`       | `elizaos test`           | Help, run simple test file, fail on error                                         |
+| `test_update.bats`     | `elizaos update`         | TBD (add summary when implemented)                                                |
+| `test_update-cli.bats` | `elizaos update-cli`     | TBD (add summary when implemented)                                                |
+
+_Note: Plugin installation is now tested via `test_project.bats` using `elizaos project add-plugin`. If any test file is present but not yet implemented, its test cases are marked as 'TBD.'_.\_
+
+---
+
+## Setup & Running Tests
+
+### Prerequisites
+
+- **Node.js** (v18+ recommended)
+- **bun** (for CLI and dependencies)
+- **bats-core** ([Install](https://github.com/bats-core/bats-core) or `brew install bats-core`)
+- **git** (for project/plugin tests)
+
+### Install & Build
+
+```bash
+bun install
+bun run build
+```
+
+### Running
+
+- **All tests:**
+  ```bash
+  ./run_all_bats.sh
+  ```
+- **Single test:**
+  ```bash
+  bats test_agent.bats
+  # or
+  bats test_publish.bats
+  ```
+
+### Env Variables
+
+- No special env vars needed. To override test server port, set `ELIZA_TEST_PORT`.
+
+### Troubleshooting
+
+- Ensure `bun`, `node`, and `bats-core` are installed and in `PATH`.
+- Make scripts executable: `chmod +x *.bats *.sh`.
+- If tests fail due to missing build, run `bun run build`.
+- For port conflicts, set `ELIZA_TEST_PORT` to a free port.
+- All tests run in isolated temp directories; avoid polluting the project root.
+
+---
+
+## How the Test Suite Works
+
+The Eliza CLI test suite is designed for reliability, reproducibility, and easy debugging. Here’s how the full flow works:
+
+1. **Test Runner Script (`run_all_bats.sh`)**
+
+   - This script is the entry point for running all CLI tests.
+   - It sets up the environment, verifies dependencies, and ensures a clean start.
+   - It starts a dedicated test server (in the background) on a configurable port and waits for it to become available via a health check.
+   - It then discovers and runs each `*.bats` test file in sequence, reporting progress and results for each.
+
+2. **Test Script Execution**
+
+   - Each test script runs in its own isolated temporary directory, created at the start and cleaned up at the end.
+   - The test scripts set up any required environment variables and use helper functions for assertions and logging.
+   - Each test case is named and described for clear reporting.
+   - All commands (e.g., `elizaos create`, `elizaos agent`, etc.) are run as if by a real user, simulating actual CLI usage.
+
+3. **Server and Asset Management**
+
+   - The test server loads character assets from the `test-characters` directory for agent-related tests.
+   - Server health is checked before tests begin to avoid race conditions.
+   - Server is stopped and cleaned up after all tests complete.
+
+4. **Result Collection and Reporting**
+
+   - The runner script collects the results from each test file, showing a summary (total, passed, failed) at the end.
+   - If any test fails, it is clearly reported, and the script exits with a non-zero status code.
+   - Debug output is included for failed commands to aid troubleshooting.
+
+5. **Cleanup**
+   - All temporary directories and files created during the tests are removed.
+   - The test server and any background processes are stopped.
+
+### Key Features
+
+- **Isolation:** Every test runs in a fresh temp directory, preventing pollution and ensuring repeatability.
+- **Descriptive Output:** Test names and comments make it easy to see what is being tested and why a failure occurred.
+- **Extensibility:** New test scripts can be added easily by following the existing structure.
+
+## Adding New Tests
+
+1. Copy an existing `test_<command>.bats`.
+2. Use proper test tracking and cleanup logic.
+3. Add comprehensive assertions.
+4. Update the test coverage table above.
+9:T17dc,
+FOR THE ONBOARDING TOUR
+# Relates to
+Implementation of interactive onboarding tour for new users
+
+# Risks
+Low
+
+
+# Background
+
+## What does this PR do?
+This PR implements an interactive onboarding tour to help new users understand and navigate ElizaOS. Specifically:
+
+1. Added Onboarding Tour Component
+   - Implemented using react-joyride for smooth tour experience
+   - Created separate tour steps for home and agent creation pages
+   - Added visual styling consistent with dark theme
+
+2. Implemented State Management
+   - Added `useOnboarding` hook for managing tour state
+   - Integrated with localStorage for persistence
+   - Added ability to reset tour state for testing
+
+3. Added Tour Steps and Content
+   - Home page tour covering:
+     - Welcome message
+     - Create button
+     - Agent organization
+     - Groups navigation
+     - System utilities
+     - Connection status
+     - Agent dashboard
+     - Agent interaction
+     - Agent management
+     - Group features
+     - Agent creation
+
+   - Agent creation tour covering:
+     - Agent naming
+     - System prompt
+     - Configuration tabs
+     - Save functionality
+
+4. Integrated with Existing Components
+   - Added tour to main App component
+   - Integrated with existing routing
+   - Maintained consistent styling with UI components
+
+## What kind of change is this?
+Features (non-breaking change which adds functionality)
+
+# Documentation changes needed?
+My changes require a change to the project documentation.
+- Added documentation for onboarding tour
+  - Tour step definitions
+  - State management patterns
+  - Integration points
+
+- Updated UI component documentation
+  - Added tour-related class names
+  - Documented tour triggers
+  - Updated component props
+
+- Added examples of tour integration
+  - Example tour configurations
+  - State management examples
+  - Custom styling examples
+
+# Testing
+
+## Where should a reviewer start?
+1. Review the OnboardingTour component in `packages/client/src/components/onboarding-tour.tsx`
+   - Check tour step definitions
+   - Review event handling
+   - Verify styling implementation
+
+2. Check the useOnboarding hook in `packages/client/src/hooks/use-onboarding.tsx`
+   - Review state management
+   - Check localStorage integration
+   - Verify error handling
+
+3. Review the App component integration in `packages/client/src/App.tsx`
+   - Check tour component placement
+   - Verify routing integration
+   - Review provider setup
+
+
+
+### Before
+[Application without onboarding tour]
+- Clean interface without guidance
+- No initial user assistance
+- Standard navigation
+
+### After
+[Application with onboarding tour]
+- Welcome message with tour start
+- Step-by-step guidance
+- Visual highlights for important elements
+- Progress indicator
+- Consistent dark theme styling
+
+
+SCREEN RECORDING
+
+https://github.com/user-attachments/assets/f38e20dc-a65d-4eb9-877a-9dfaa1b52bcb
+
+
+
+FOR TICKETS 248, 250, 251
+
+# Relates to
+Frontend implementation for handling control messages to enable/disable chat input
+
+# Risks
+Low
+
+# Background
+
+## What does this PR do?
+This PR implements the frontend UI logic for receiving and acting upon control messages that enable/disable chat input fields. Specifically:
+
+1. Added control message handling in SocketIOManager
+   - Implemented `ControlMessageData` type for structured message handling
+   - Added event emitter for control messages
+   - Integrated with existing socket.io message handling
+
+2. Implemented UI state management for input fields
+   - Added `inputDisabled` state in chat components
+   - Integrated with existing message processing state
+   - Maintained consistent state across chat and room components
+
+3. Added visual feedback for disabled/enabled states
+   - Updated input field placeholder text
+   - Added disabled styling through existing Tailwind classes
+   - Maintained consistent UI with existing chat components
+
+4. Integrated with existing chat components
+   - Leveraged existing `ChatInput` component
+   - Maintained compatibility with file upload and audio recording features
+   - Preserved existing message handling logic
+
+## What kind of change is this?
+Features (non-breaking change which adds functionality)
+
+# Documentation changes needed?
+My changes require a change to the project documentation.
+- Added documentation for control message handling in frontend
+  - Updated SocketIOManager documentation
+  - Added control message type definitions
+  - Documented event handling patterns
+
+- Updated UI component documentation
+  - Added input state management details
+  - Documented visual feedback states
+  - Updated component props documentation
+
+- Added examples of control message integration
+  - Example control message payloads
+  - Integration patterns with existing components
+  - State management examples
+
+# Testing
+
+## Where should a reviewer start?
+1. Review the SocketIOManager implementation in `packages/client/src/lib/socketio-manager.ts`
+   - Check `ControlMessageData` type definition
+   - Review control message event handling
+   - Verify socket.io integration
+
+2. Check the chat input handling in `packages/client/src/components/chat.tsx`
+   - Review input state management
+   - Check control message event listeners
+   - Verify UI feedback implementation
+
+3. Review the room component implementation in `packages/client/src/components/room.tsx`
+   - Verify consistent behavior with chat component
+   - Check group chat integration
+   - Review state management patterns
+
+
+### Before
+[Input field in normal enabled state]
+- Clean input field with default placeholder
+- Active send button
+- No loading indicators
+
+### After
+[Input field disabled with visual feedback and loading indicator]
+- Disabled input field with processing message
+- Inactive send button
+- Loading dots animation
+- Consistent styling with existing UI
+
+SCREEN RECORDING
+
+
+https://github.com/user-attachments/assets/9f1c80fa-15fb-4c1c-909f-fa7aa7f79b50
+
+
+
+a:T56c,# Relates to
+
+Adds instrumentation support to LLM plugins for better observability and debugging.
+
+# Risks
+
+**Medium** — Changes involve instrumentation code across plugin logic. Potential risks include:
+- Performance overhead if not handled properly.
+- Incorrect spans/tags leading to confusing traces.
+- Integration issues with existing telemetry systems.
+
+# Background
+
+## What does this PR do?
+
+This PR adds OpenTelemetry-based instrumentation to the LLM plugin modules. It introduces tracing for key functions to capture span data like plugin execution time, plugin name, and error logs if any failures occur.
+
+## What kind of change is this?
+
+- Improvements (misc. changes to existing features)
+- Features (non-breaking change which adds functionality)
+
+# Documentation changes needed?
+
+My changes do not require a change to the project documentation.
+
+# Testing
+
+## Where should a reviewer start?
+
+Start with the `instrumentation/` directory and review the changes to the plugin execution paths where spans have been added.
+
+## Detailed testing steps
+
+- Run the system with the environment variable to enable tracing.
+- Execute multiple LLM plugin calls (successful and failing).
+- Verify the traces are correctly emitted and visible in the backend (e.g., Jaeger, Zipkin).
+- Confirm trace tags and span names are descriptive and accurate.
+
+b:Tbd2,<!-- Use this template by filling in information and copying and pasting relevant items out of the HTML comments. -->
+
+# Relates to
+Fixes Remote Attestation Action.
+<!-- LINK TO ISSUE OR TICKET -->
+
+<!-- This risks section must be filled out before the final review and merge. -->
+
+# Risks
+Low
+<!--
+Low, medium, large. List what kind of risks and what could be affected.
+-->
+
+# Background
+Remote Attestation was not working when registering as an action.
+## What does this PR do?
+Fixes the Remote Attestation Action
+## What kind of change is this?
+Bug fixes
+<!--
+Bug fixes (non-breaking change which fixes an issue)
+Improvements (misc. changes to existing features)
+Features (non-breaking change which adds functionality)
+Updates (new versions of included code)
+-->
+
+<!-- This "Why" section is most relevant if there are no linked issues explaining why. If there is a related issue, it might make sense to skip this why section. -->
+<!--
+## Why are we doing this? Any context or related work?
+-->
+
+# Documentation changes needed?
+
+<!--
+My changes do not require a change to the project documentation.
+My changes require a change to the project documentation.
+If documentation change is needed: I have updated the documentation accordingly.
+-->
+
+<!-- Please show how you tested the PR. This will really help if the PR needs to be retested and probably help the PR get merged quicker. -->
+
+# Testing
+Create a character that imports the TEE Plugin action
+```
+import { phalaRemoteAttestationAction as remoteAttestationAction } from '@elizaos/plugin-tee';
+// Skip code in betweeen
+export const swarmAgent: ProjectAgent = {
+  character,
+  init: async (runtime) => {
+    // Initialize the character
+    await initCharacter({ runtime, config, actions: [remoteAttestationAction] });
+  },
+};
+```
+## Where should a reviewer start?
+
+## Detailed testing steps
+
+<!--
+None: Automated tests are acceptable.
+-->
+
+<!--
+- As [anon/admin], go to [link]
+  - [do action]
+  - verify [result]
+-->
+
+<!-- If there is a UI change, please include before and after screenshots or videos. This will speed up PRs being merged. It is extra nice to annotate screenshots with arrows or boxes pointing out the differences. -->
+<!--
+## Screenshots
+### Before
+### After
+![image](https://github.com/user-attachments/assets/06d72fce-619e-41ba-8cd9-ec784da14601)
+![image](https://github.com/user-attachments/assets/edad5192-7075-4217-b001-762e5711f5ed)
+
+-->
+
+<!-- If there is anything about the deployment, please make a note. -->
+<!--
+# Deploy Notes
+-->
+
+<!--  Copy and paste command line output. -->
+<!--
+## Database changes
+-->
+
+<!--  Please specify deploy instructions if there is something more than the automated steps. -->
+<!--
+## Deployment instructions
+-->
+
+<!-- If you are on Discord, please join https://discord.gg/elizaOS and state your Discord username here for the contributor role and join us in #development-feed -->
+<!--
+## Discord username
+
+-->
+c:T86b,On April 16, 2025, ElizaOS saw significant progress in user experience and system stability, with the implementation of an interactive onboarding tour and crucial bug fixes clarifying the relationship between entities and agents. The team focused on refining the user interface and addressing core functionality, while also identifying new areas for configuration improvement and plugin stability.
+
+## ✅ Completed Work
+
+### User Experience & Onboarding
+- Implemented an interactive onboarding tour to help new users navigate the system effectively. [elizaos/eliza#4293](https://github.com/elizaos/eliza/pull/4293)
+- Improved GUI settings by making the requirement information reusable and adding a validation mechanism for JSON imports. [elizaos/eliza#4300](https://github.com/elizaos/eliza/pull/4300)
+
+### Core System Stability & Bug Fixes
+- Resolved the mix-up between `entities` and `agents` in the `AgentRuntime.initialize()` method, clarifying their definitions and relationships. [elizaos/eliza#4223](https://github.com/elizaos/eliza/pull/4223)
+- Resolved an issue related to processing tweets, which was affecting multiple plugins. [elizaos/eliza#3877](https://github.com/elizaos/eliza/issues/3877)
+
+## 🐞 Issue Triage
+
+### New Issues
+- **elizaos/eliza**
+    - Concern raised regarding the `USE_LOCAL_AI` setting, suggesting it should always default to true. [elizaos/eliza#4303](https://github.com/elizaos/eliza/issues/4303)
+    - Identified redundancy in the `Task.World` reference, proposing its removal as it is already referenced from the room. [elizaos/eliza#4302](https://github.com/elizaos/eliza/issues/4302)
+    - Inquiry about handling content responses from the model to avoid reusing previous prompts. [elizaos/eliza#4299](https://github.com/elizaos/eliza/issues/4299)
+    - Bug reported with the GOAT plugin, which is not functioning after the separation of plugins. [elizaos/eliza#4298](https://github.com/elizaos/eliza/issues/4298)
+
+### Closed Issues
+- **elizaos/eliza**
+    - Resolved an issue related to processing tweets, which was affecting multiple plugins. [elizaos/eliza#3877](https://github.com/elizaos/eliza/issues/3877)0:{"buildId":"US8XLB_zHXYj_PVAECGcd","rsc":["$","$1","c",{"children":[["$","div",null,{"className":"container mx-auto px-6 py-8 md:px-8","children":["$","div",null,{"className":"mx-auto max-w-4xl","children":[["$","div",null,{"className":"mb-4 flex flex-col justify-between sm:flex-row","children":[["$","$L2",null,{"currentInterval":"day","currentDate":"2025-04-16"}],["$","$L3",null,{"metrics":{"date":"2025-04-16","interval":{"intervalStart":"$D2025-04-16T00:00:00.000Z","intervalEnd":"$D2025-04-17T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":5,"merged":3,"total":7},"issues":{"new":4,"closed":1,"total":5},"activeContributors":13,"codeChanges":{"additions":826,"deletions":264,"files":19,"commitCount":51},"topContributors":[{"username":"wtfsayo","avatarUrl":"https://avatars.githubusercontent.com/u/82053242?u=98209a1f10456f42d4d2fa71db4d5bf4a672cbc3&v=4","totalScore":59.7437738965761,"prScore":59.5437738965761,"issueScore":0,"reviewScore":0,"commentScore":0.2,"summary":"wtfsayo: Merged 1 PR (#4301 \"feat: cli-test-suite\") with significant changes of +8606/-5173 lines, focusing primarily on tests (61%). Active today with 31 commits, modifying 162 files (+3401/-3806 lines), demonstrating consistent work patterns."},{"username":"HashWarlock","avatarUrl":"https://avatars.githubusercontent.com/u/64296537?u=1d8228a93c06c603e08d438677b3f736d6b1ab22&v=4","totalScore":41.990805593106984,"prScore":41.990805593106984,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"HashWarlock: Merged 1 PR (#4305) focused on fixing the remote attestation action, contributing a total of +1809/-726 lines across 3 modified files. The work was entirely dedicated to bugfix efforts, demonstrating consistent activity with a primary focus on code, tests, and documentation."},{"username":"tcm390","avatarUrl":"https://avatars.githubusercontent.com/u/60634884?u=c6c41679b8322eaa0c81f72e0b4ed95e80f0ac16&v=4","totalScore":36.77094547390058,"prScore":31.77094547390058,"issueScore":0,"reviewScore":5,"commentScore":0,"summary":"tcm390: Merged 1 pull request (#4300 \"feat: enhance gui\") with a net change of +118/-132 lines, while modifying 36 files with a total of +1140/-609 lines across 11 commits. Maintained a consistent activity pattern, focusing primarily on other work (73%)."},{"username":"0xbbjoker","avatarUrl":"https://avatars.githubusercontent.com/u/54844437?u=90fe1762420de6ad493a1c1582f1f70c0d87d8e2&v=4","totalScore":21.226306144334053,"prScore":21.026306144334054,"issueScore":0,"reviewScore":0,"commentScore":0.2,"summary":"0xbbjoker: Merged 1 PR (#4306) addressing an external dependency issue with significant changes of +806/-266 lines, demonstrating a strong focus on bugfix work. Maintained a consistent activity pattern, actively contributing to the project today."},{"username":"Samarthsinghal28","avatarUrl":"https://avatars.githubusercontent.com/u/120447590?v=4","totalScore":14.942457062637644,"prScore":14.942457062637644,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"Samarthsinghal28: Opened 1 PR (#4304) titled \"Added: Llm instrumentation\" and modified 4 files with significant changes totaling +1110/-376 lines across 2 commits, demonstrating a focused effort on other work. Active today, maintaining a consistent work pattern."},{"username":"jmikedupont2","avatarUrl":"https://avatars.githubusercontent.com/u/16427113?u=2bdad12714de646188f98a07736a54f765ad5e3b&v=4","totalScore":8,"prScore":0,"issueScore":8,"reviewScore":0,"commentScore":0,"summary":"jmikedupont2: Created 2 new issues today, including #4303 \"Ensure USE_LOCAL_AI is always true\" and #4302 \"Task.World is redundant,\" reflecting a focus on identifying potential improvements. Activity remains sporadic with no code changes or merged pull requests."},{"username":"monilpat","avatarUrl":"https://avatars.githubusercontent.com/u/15067321?v=4","totalScore":5.2,"prScore":0,"issueScore":0,"reviewScore":5,"commentScore":0.2,"summary":"monilpat: Made significant code changes by modifying 16 files, resulting in a total of +728 lines added and -146 lines removed, with a primary focus on other work. Additionally, completed 1 review with an approval and left 1 comment on a PR, demonstrating consistent activity today."},{"username":"HarshModi2005","avatarUrl":"https://avatars.githubusercontent.com/u/142230924?u=64e337bbdb6b3aded5943b7e297759e7a3cfc0f0&v=4","totalScore":4.5,"prScore":0,"issueScore":0,"reviewScore":4.5,"commentScore":0,"summary":"HarshModi2005: Made significant code changes by modifying 28 files, resulting in a total of +1055/-420 lines across 2 commits, with a primary focus on other work. Maintained a consistent activity pattern, being active every day."},{"username":"transformer98","avatarUrl":"https://avatars.githubusercontent.com/u/171251322?u=2191a752729a33763266de0ff9a4c5cec3322476&v=4","totalScore":4,"prScore":0,"issueScore":4,"reviewScore":0,"commentScore":0,"summary":"transformer98: Created 1 new issue (#4299 \"How can i handle the content response from the modell?\" (OPEN)), showing sporadic activity today with no other contributions."},{"username":"praveen-kaia","avatarUrl":"https://avatars.githubusercontent.com/u/112046567?v=4","totalScore":4,"prScore":0,"issueScore":4,"reviewScore":0,"commentScore":0,"summary":"praveen-kaia: Created 1 issue today (#4298 \"Unable to use GOAT Plugin\" (OPEN)), showing sporadic activity with no merged pull requests or code changes."}],"focusAreas":[{"area":"client","count":13},{"area":"core","count":5},{"area":"plugin-sql","count":1},{"area":"plugin-bootstrap","count":1}],"topIssues":[{"id":"I_kwDOMT5cIs6yy4Mz","title":"Ensure USE_LOCAL_AI is always true","author":"jmikedupont2","number":4303,"repository":"elizaos/eliza","body":"Hi team,\nI am wondering about \" Ensure USE_LOCAL_AI is always true\" in v2,\nin my small version I don't want to have local ai loaded.\nIf the user sets it to false, we should respect that.\n\n","createdAt":"2025-04-16T13:34:31Z","closedAt":"2025-05-23T02:29:00Z","state":"CLOSED","commentCount":1},{"id":"I_kwDOMT5cIs6yyqVg","title":"Task.World is redundant","author":"jmikedupont2","number":4302,"repository":"elizaos/eliza","body":"The world already is referenced from room and task references room, so we dont need to have world in task.\npackages/plugin-sql/src/schema/tasks.ts\n```\n worldId: uuid('world_id').references(() => worldTable.id, {\n   onDelete: 'cascade',\n }),\n\n```","createdAt":"2025-04-16T13:14:06Z","closedAt":"2025-05-23T02:27:26Z","state":"CLOSED","commentCount":1},{"id":"I_kwDOMT5cIs6yxIb9","title":"How can i handle the content response from the modell?","author":"transformer98","number":4299,"repository":"elizaos/eliza","body":"$4","createdAt":"2025-04-16T10:37:20Z","closedAt":"2025-05-23T02:28:26Z","state":"CLOSED","commentCount":1},{"id":"I_kwDOMT5cIs6yu0eY","title":"Unable to use GOAT Plugin","author":"praveen-kaia","number":4298,"repository":"elizaos/eliza","body":"$5","createdAt":"2025-04-16T06:41:11Z","closedAt":"2025-07-13T16:25:50Z","state":"CLOSED","commentCount":1},{"id":"I_kwDOMT5cIs6tKJNh","title":"Error processing tweet undefined","author":"fction","number":3877,"repository":"elizaos/eliza","body":"$6","createdAt":"2025-03-09T01:08:59Z","closedAt":"2025-04-16T18:34:43Z","state":"CLOSED","commentCount":0}],"topPullRequests":[{"id":"PR_kwDOMT5cIs6Sqrj7","title":"feat: test suite for cli","author":"wtfsayo","number":4290,"body":"$7","repository":"elizaos/eliza","createdAt":"2025-04-15T13:09:58Z","mergedAt":null,"additions":4580,"deletions":443},{"id":"PR_kwDOMT5cIs6S1bOG","title":"feat: cli-test-suite","author":"wtfsayo","number":4301,"body":"$8","repository":"elizaos/eliza","createdAt":"2025-04-16T12:45:51Z","mergedAt":"2025-04-17T13:22:44Z","additions":2087,"deletions":445},{"id":"PR_kwDOMT5cIs6Sta6o","title":"Onboarding Tour and Enabling Disabling the Input Button","author":"HarshModi2005","number":4293,"body":"$9","repository":"elizaos/eliza","createdAt":"2025-04-15T17:53:08Z","mergedAt":"2025-04-16T23:34:52Z","additions":728,"deletions":146},{"id":"PR_kwDOMT5cIs6S4GU2","title":"Added: Llm instrumentation","author":"Samarthsinghal28","number":4304,"body":"$a","repository":"elizaos/eliza","createdAt":"2025-04-16T17:45:12Z","mergedAt":null,"additions":648,"deletions":235},{"id":"PR_kwDOMT5cIs6S43Ys","title":"fix: remote attestation action","author":"HashWarlock","number":4305,"body":"$b","repository":"elizaos/eliza","createdAt":"2025-04-16T19:28:40Z","mergedAt":"2025-04-17T01:05:19Z","additions":76,"deletions":120},{"id":"PR_kwDOMT5cIs6S1PUI","title":"feat: enhance gui","author":"tcm390","number":4300,"body":"This PR makes the settings field requirement information reusable in the GUI and introduces a validation mechanism that checks for the required field in the JSON before importing. It also removes the dots from \"Required\" and \"Optional\" labels, replacing them with a red asterisk (*) for required fields and make tooltip appear on hovering label, based on @wtfsayo suggestion.\r\n\r\n\r\n\r\nhttps://github.com/user-attachments/assets/8fead1ec-bd21-41bd-846e-57c09f2401f2\r\n\r\n\r\nhttps://github.com/user-attachments/assets/aba89908-abfc-47c2-9a9d-b6a77a7fae5f\r\n\r\n\r\n\r\n","repository":"elizaos/eliza","createdAt":"2025-04-16T12:25:39Z","mergedAt":"2025-04-16T12:53:07Z","additions":75,"deletions":89},{"id":"PR_kwDOMT5cIs6RzqaA","title":"Fix relationship between entities and agents","author":"michavie","number":4223,"body":"In v2, the concept of `entities` represent an instance of an agent, while an agent itself refers to its `character`.\r\n\r\nThere is a mix up of these concepts happening within `AgentRuntime.initialize()` that currently requires to create a `character` (agent) for each `entity` (instance of agent) – therefore preventing agent reuse for entities.\r\n\r\n# Risks\r\n\r\nMedium: Downstream an Agent might be incorrectly referenced instead of an entity.\r\n\r\n# Background\r\n\r\n## What does this PR do?\r\n\r\nThe invalid guard is removed and entities are changed to correctly reference agents.\r\n\r\n## What kind of change is this?\r\n\r\nBug fixes (non-breaking change which fixes an issue)\r\n\r\n## Why are we doing this? Any context or related work?\r\n\r\nIt is currently not possible to reuse an in-DB `character` (agent) across multiple entities, without duplications in the `agents` table.\r\n\r\nin `AgentRuntime.initialize()` an invalid check by `agentId` is performed and an incorrect reference between `entity` and `agent` is created.\r\n","repository":"elizaos/eliza","createdAt":"2025-04-08T15:25:47Z","mergedAt":"2025-04-16T11:07:16Z","additions":23,"deletions":29},{"id":"PR_kwDOMT5cIs6S6HaQ","title":"fix: external depn issue","author":"0xbbjoker","number":4306,"body":"Additional note for testing: \r\n- `bun i`\r\n- `bun run build` \r\n- cd out from the project\r\n- `node ../ai-agents/new-eliza/eliza/packages/cli/dist/index.js start`","repository":"elizaos/eliza","createdAt":"2025-04-16T22:53:31Z","mergedAt":"2025-04-17T01:06:49Z","additions":2,"deletions":0}],"detailedContributorSummaries":{"0xbbjoker":"0xbbjoker: Merged 1 PR (#4306) addressing an external dependency issue with significant changes of +806/-266 lines, demonstrating a strong focus on bugfix work. Maintained a consistent activity pattern, actively contributing to the project today.","HarshModi2005":"HarshModi2005: Made significant code changes by modifying 28 files, resulting in a total of +1055/-420 lines across 2 commits, with a primary focus on other work. Maintained a consistent activity pattern, being active every day.","HashWarlock":"HashWarlock: Merged 1 PR (#4305) focused on fixing the remote attestation action, contributing a total of +1809/-726 lines across 3 modified files. The work was entirely dedicated to bugfix efforts, demonstrating consistent activity with a primary focus on code, tests, and documentation.","Samarthsinghal28":"Samarthsinghal28: Opened 1 PR (#4304) titled \"Added: Llm instrumentation\" and modified 4 files with significant changes totaling +1110/-376 lines across 2 commits, demonstrating a focused effort on other work. Active today, maintaining a consistent work pattern.","jmikedupont2":"jmikedupont2: Created 2 new issues today, including #4303 \"Ensure USE_LOCAL_AI is always true\" and #4302 \"Task.World is redundant,\" reflecting a focus on identifying potential improvements. Activity remains sporadic with no code changes or merged pull requests.","monilpat":"monilpat: Made significant code changes by modifying 16 files, resulting in a total of +728 lines added and -146 lines removed, with a primary focus on other work. Additionally, completed 1 review with an approval and left 1 comment on a PR, demonstrating consistent activity today.","praveen-kaia":"praveen-kaia: Created 1 issue today (#4298 \"Unable to use GOAT Plugin\" (OPEN)), showing sporadic activity with no merged pull requests or code changes.","tcm390":"tcm390: Merged 1 pull request (#4300 \"feat: enhance gui\") with a net change of +118/-132 lines, while modifying 36 files with a total of +1140/-609 lines across 11 commits. Maintained a consistent activity pattern, focusing primarily on other work (73%).","transformer98":"transformer98: Created 1 new issue (#4299 \"How can i handle the content response from the modell?\" (OPEN)), showing sporadic activity today with no other contributions.","wtfsayo":"wtfsayo: Merged 1 PR (#4301 \"feat: cli-test-suite\") with significant changes of +8606/-5173 lines, focusing primarily on tests (61%). Active today with 31 commits, modifying 162 files (+3401/-3806 lines), demonstrating consistent work patterns."}},"summaryContent":"$c","className":"self-end sm:self-start"}]]}],"$Ld","$Le","$Lf"]}]}],["$L10","$L11","$L12"],"$L13"]}],"loading":null,"isPartial":false}
+d:["$","div",null,{"className":"mb-6","children":["$","div",null,{"className":"flex items-center justify-between","children":[[["$","$L14",null,{"href":"/summary/day/2025-04-15","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left mr-2 h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"children":"Previous"}],false],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$L14",null,{"href":"/summary/day/2025-04-15","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Previous"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]],["$","div",null,{"className":"flex flex-col items-center","children":[["$","div",null,{"className":"text-sm font-medium text-gray-500","children":["Daily"," Summary"]}],["$","time",null,{"dateTime":"2025-04-16","className":"text-md font-bold","children":"Apr 16, 2025"}]]}],[["$","$L14",null,{"href":"/summary/day/2025-04-17","children":[false,["$","span",null,{"children":"Next"}],["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right ml-2 h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}]],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$L14",null,{"href":"/summary/day/2025-04-17","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Next"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]]]}]}]
+16:T3782,i am getting the content from the prompt using llama_local model, but i don't want to use that content again in my future prompts based on {recentMessages}, e.g i said i want to swap 0.0001 Eth to USDT on Ethereum chain, the model give me content based on the swapTemplate but when i again prompt like just please swap it gives me the same content, from the recentMessages, how can i restrict the model so that it should not give content based on previous messages? here is the swapTemplate and action code:
+
+```
+export const swapTemplate = `Respond with a JSON markdown block containing only the extracted values
+- Use default | null for any values that cannot be determined.
+
+{{recentMessages}}
+
+{{walletInfo}}
+
+Given the recent messages and wallet info, extract the following information about the requested token swap in same chain:
+- Input token symbol.
+- Output token symbol.
+- Input token address. If the address is provided, it must be a valid Ethereum address starting with "0x" (the token being sold), default 0x0000000000000000000000000000000000000000.
+- Output token address. If the address is provided, it must be a valid Ethereum address starting with "0x" (the token being bought), default 0x0000000000000000000000000000000000000000.
+- Amount to swap: Must be a string representing the amount in ether (only number without coin symbol, e.g., "0.1")
+- Chain from chain to execute on swap
+- Slippage percentage value in numbers: default is 0.5
+
+Respond with a JSON markdown block containing only the extracted values. 
+If any field is not provided, use the default value. If no default value is specified, use null.
+ 
+\`\`\`json
+{   
+    "inputTokenSymbol": string,
+    "outputTokenSymbol": string,
+    "amount": string,
+    "chain": "ethereum" | "bsc" | "polygon" | "optimism" | "base" | "mode" | "zora" | "aurora" | "gnosis" | "mantle" | "avalanche" | "linea" | "blast" | "scroll" | "arbitrum" | "zksync era" | "polygon zkevm" | "moonriver" | "moonbeam" | "boba" | "fantom" | "metis" | "sei" | "taiko" | "fraxtal" | "celo" | "rootstock" | "gravity" | "klatyn" | "cronos" | "world chain" | "ink" | "lisk" | "abstract" | "unichain" | "b3" | "berachain" | "nirvana" | "sagaevm" | "maria chain";
+    "slippage": number
+}
+\`\`\`
+`;
+
+```
+
+```
+import {
+    composeContext,
+    elizaLogger,
+    type HandlerCallback,
+    ModelClass,
+    type IAgentRuntime,
+    type Memory,
+    type State,
+    generateObjectDeprecated,
+} from "@elizaos/core";
+import {
+    decodeFunctionData,
+    erc20Abi,
+    formatUnits,
+    parseUnits,
+    zeroAddress,
+    type Hex,
+} from "viem";
+
+import {
+    evmWalletProvider,
+    initWalletProvider,
+    type WalletProvider,
+} from "../providers/evmWallet";
+
+import { swapTemplate } from "../templates";
+import { QuotePayload, RoutePayload, SupportedChain, SwapParams, SwapResponse } from "../types";
+import { PonderAPIProvider } from "../providers/ponder";
+import { swapExamplesSingleToken } from "../utils/examples";
+export { swapTemplate };
+
+export class SwapAction {
+    constructor(private walletProvider: WalletProvider) {}
+
+    async swapSingle(params: SwapParams): Promise<SwapResponse | string> {
+        elizaLogger.info("Single swap params same chain:", params);
+        const fromAddress = this.walletProvider.getAddress();
+
+        const requiredFields = await this.checkRequiredParams(params);
+
+        if (requiredFields.length > 0) {
+            return requiredFields;
+        }
+
+        const requiredParams = await this.validateParams(params)
+
+        if (requiredParams.length > 0) {
+            return requiredParams;
+        }
+
+        const ponderProvider = new PonderAPIProvider();
+        const chains = await ponderProvider.getChains();
+
+        const blockExplorer = chains.find((chain) => chain.name.toLowerCase() === params.chain.toLowerCase())?.blockExplorer;
+
+        const inputChainId = String(await ponderProvider.getChainId(params.chain, chains));
+        const outputChainId = String(await ponderProvider.getChainId(params.chain, chains));
+
+        const resp: SwapResponse = {
+           fromChain: params.chain as SupportedChain,
+           toChain: params.chain as SupportedChain,
+           fromTokenSymbol: params.inputTokenSymbol,
+           toTokenSymbol: params.outputTokenSymbol,
+           fromToken: params.inputToken,
+           toToken: params.outputToken,
+           txHash: blockExplorer + "tx/",
+           recipient:fromAddress,
+           fromAmount: params.amount,
+           toAmount: ""
+        }
+
+        const publicClient = this.walletProvider.getPublicClient(
+            params.chain
+        );
+
+        let decimals;
+
+        if (params.inputToken === zeroAddress) {
+            decimals = 18;
+        } else {
+            decimals = await publicClient.readContract({
+                address: params.inputToken as `0x${string}`,
+                abi: erc20Abi,
+                functionName: "decimals",
+            });
+        }
+
+        params.amount = parseUnits(params.amount, decimals).toString();
+        
+        this.walletProvider.switchChain(params.chain);
+
+        const quotePayload: QuotePayload = {
+            fromChain: inputChainId,
+            toChain: outputChainId,
+            fromToken: [params.inputToken],
+            toToken: [params.outputToken],
+            fromAmount: [params.amount],
+            slippage: 0.5, //TODO: slippage fix now returning "null" in string form
+            fromAddress: fromAddress,
+            toAddress: fromAddress,
+            provider: ""
+        }
+
+        const quote = await ponderProvider.getQuote(quotePayload);
+        
+        if (!quote) {
+            throw new Error("No quote found for the given input");
+        }
+
+        const routePayload: RoutePayload = {
+            fromChain: inputChainId,
+            toChain: outputChainId,
+            fromToken: [params.inputToken],
+            toToken: [params.outputToken],
+            fromAmount: [params.amount],
+            slippage: params.slippage,
+            fromAddress: fromAddress,
+            provider: quote.protocol,
+            routeId: quote.routeId
+        }
+
+        let route = await ponderProvider.getRoute(routePayload);
+
+        if (!route) {
+            throw new Error("No route found for the given quote");
+        }
+
+        if (route.approvalTx) {
+            const approveAmount = BigInt(params.amount)
+            const token = await this.walletProvider.formatAddress(params.inputToken)
+
+            const { args } = decodeFunctionData({
+                abi: erc20Abi,
+                data: route.approvalTx[0].data
+              })
+
+            const spender = await this.walletProvider.formatAddress(args[0] as string)
+
+            const allowance = await this.walletProvider.checkERC20Allowance(
+                params.chain,
+                token,
+                fromAddress,
+                spender
+            );
+            if (allowance < approveAmount) {
+                elizaLogger.info(
+                    `Increasing ERC20 token ${params.inputTokenSymbol} allowance for ${route.protocol}. ${approveAmount - allowance} more needed`
+                );
+                const txHash = await this.walletProvider.approveERC20(
+                    params.chain,
+                    token,
+                    spender,
+                    approveAmount
+                );
+                await publicClient.waitForTransactionReceipt({
+                    hash: txHash,
+                });
+
+                elizaLogger.info(`successfully approved ${params.inputTokenSymbol} for swap`);
+            }
+        }
+
+        route = await ponderProvider.getRoute(routePayload);
+
+        if (!route.executionTx) {
+            throw new Error("No execution data found for the given route");
+        }
+
+        const options: { gas?: bigint; gasPrice?: bigint; data?: Hex } = {}
+        
+        options.gas = BigInt(route.executionTx.gasLimit);
+        options.gasPrice = BigInt(route.executionTx.gasPrice);
+        options.data = route.executionTx.data;
+
+        const txHash = await this.walletProvider.swapToken(params.chain, route.executionTx.to, BigInt(route.executionTx.value), options)
+
+        if (!txHash || txHash === "0x") {
+            throw new Error("Get transaction hash failed");
+        }
+
+        // wait for the transaction to be confirmed
+        await publicClient.waitForTransactionReceipt({
+            hash: txHash,
+        });
+
+        const toAmount = formatUnits(quote.transactionDetails[0].toToken[0].toAmount,  quote.transactionDetails[0].toToken[0].decimals);
+
+        resp.toAmount = toAmount.toString(); 
+        resp.txHash = resp.txHash + txHash;
+
+        return resp;
+
+    }
+
+    async checkRequiredParams(params: SwapParams): Promise<string> {
+
+        let requiredFieldsText = "";
+
+        if (!params.inputTokenSymbol) {
+            requiredFieldsText += `- inputTokenSymbol: Symbol of the input token, like ETH\n`
+        }
+
+        if (!params.outputTokenSymbol) {
+            requiredFieldsText += `- outputTokenSymbol: Symbol of the output token, like USDT\n`
+        }
+
+        if (!params.inputToken) {
+            requiredFieldsText += `- inputToken: Address of the input token\n`
+        }
+
+        if (!params.outputToken) {
+            requiredFieldsText += `- outputToken: Address of the output token\n`
+        }
+
+        if (!params.amount) {
+            requiredFieldsText += `- amount: Amount of input token to swap\n`
+        }
+
+        if (!params.chain) {
+            requiredFieldsText += `- chain: Chain to swap on\n`
+        }
+
+        return requiredFieldsText;
+
+    }
+
+    async validateParams(params: SwapParams): Promise<string> {
+
+        let notValidParamsText = ""; 
+
+        const nativeToken = this.walletProvider.chains[params.chain].nativeCurrency.symbol;
+
+        if (params.inputTokenSymbol.toLowerCase() === params.outputTokenSymbol.toLowerCase()) {
+            notValidParamsText = 'Cannot Swap Same Token, symbols are same'
+            return notValidParamsText;
+        }
+
+        if (params.inputTokenSymbol.toLowerCase() !== nativeToken.toLowerCase() && params.inputToken.toLowerCase() === zeroAddress) {
+            notValidParamsText = `- inputToken: Address of the input token\n`
+            return notValidParamsText;
+        }
+
+        if (params.outputTokenSymbol.toLowerCase() !== nativeToken.toLowerCase() && params.outputToken.toLowerCase() === zeroAddress) {
+            notValidParamsText = `- outputToken: Address of the output token\n`
+            return notValidParamsText;
+        }
+
+        return notValidParamsText;
+
+    }
+}
+
+export const swapSingleAction = {
+    name: "SWAP_SINGLE",
+    description: "Use this action when user swap from evm chain to evm chain, from chain and to chain should not be solana or movement chain.",
+    handler: async (
+        runtime: IAgentRuntime,
+        message: Memory,
+        state: State,
+        _options: Record<string, unknown>,
+        callback?: HandlerCallback
+    ) => {
+        elizaLogger.info("Starting swap action...");
+
+        if (message.content.source === "direct") {
+            // continue
+        } else {
+            callback?.({
+                text: "i can't do that for you.",
+                content: { error: "Swap single not allowed" },
+            });
+            return false;
+        }
+
+        
+        // Initialize or update state
+        let currentState = state;
+        if (!currentState) {
+            currentState = (await runtime.composeState(message)) as State;
+        } else {
+            currentState = await runtime.updateRecentMessageState(currentState);
+        }
+        state.walletInfo = await evmWalletProvider.get(
+            runtime,
+            message,
+            currentState
+        );
+
+        // Compose swap context
+        const swapContext = composeContext({
+            state: currentState,
+            template: swapTemplate,
+        });
+        const content = await generateObjectDeprecated({
+            runtime,
+            context: swapContext,
+            modelClass: ModelClass.LARGE,
+        });
+
+        elizaLogger.debug("Swap evm single token on same chain content:", content);
+
+        const slippage = (!content?.slippage || content.slippage === null || content.slippage === "null") ? 0.5 : Number(content.slippage);
+
+        const walletProvider = initWalletProvider(runtime);
+        const action = new SwapAction(walletProvider);
+        const swapParams: SwapParams = {
+            inputTokenSymbol: content.inputTokenSymbol,
+            outputTokenSymbol: content.outputTokenSymbol,
+            inputToken: content.inputToken,
+            outputToken: content.outputToken,
+            amount: content.amount,
+            chain: content.chain,
+            slippage: slippage,
+        };
+        try {
+            const swapResp = await action.swapSingle(swapParams);
+
+            if (typeof swapResp === "string") {
+                callback?.({
+                    text: `You are trying to do token swap on same evm chain, but following fields are missing or not correct:\n${swapResp}`,
+                    content: { error: swapResp }
+                });
+                return false;
+            }
+
+            callback?.({
+                text: `Successfully swapped ${swapResp.fromAmount} ${swapResp.fromTokenSymbol} to ${swapResp.toAmount} ${swapResp.toTokenSymbol} to receipent address ${swapResp.recipient} on ${swapResp.toChain} chain\nTransaction Hash: ${swapResp.txHash}`,
+                content: { ...swapResp },
+            });
+
+            return true;
+        } catch (error) {
+            elizaLogger.error("Error during single token swap:", error.message);
+            callback?.({
+                text: `Swap failed: ${error.message}`,
+                content: { error: error.message }
+            });
+            return false;
+        }
+    },
+    template: swapTemplate,
+    
+    validate: async (runtime: IAgentRuntime) => {
+        const privateKey = runtime.getSetting("WALLET_PRIVATE_KEY");
+        return typeof privateKey === "string" && privateKey.startsWith("0x");
+    },
+    examples: swapExamplesSingleToken,
+    similes: ["SWAP", "TOKEN_SWAP", "SWAP_TOKEN", "SWAP_FUND", "CONVERT", "EXCHANGE_TOKEN", "TOKEN_CONVERSION"]
+
+};
+
+
+```17:T4a0,**Describe the bug**
+
+<!-- A clear and concise description of what the bug is. -->
+The GOAT plugin https://github.com/elizaos-plugins/plugin-goat doesnt work after eliza separation of plugins .
+
+**To Reproduce**
+
+<!-- Steps to reproduce the behavior. -->
+```
+1. Install the goat plugin in current stable version of elizaos -> npx elizaos plugins install @elizaos-plugins/plugin-goat
+2. Add "plugins": ["@elizaos-plugins/plugin-goat"] to the characterfile and provide appropriate secrets.
+3. Run the eliza with the character file. Even though the plugin is activated, the actions are not triggered.
+
+```
+
+The reason i found was with GOAT plugin returning a async function instead of a json structure.
+https://github.com/elizaos-plugins/plugin-goat/blob/main/src/index.ts#L5.
+
+Because of this https://github.com/elizaOS/eliza/blob/main/agent/src/index.ts#L390 the current elizaos logic doesnt handle this plugin properly.
+This type of async exported plugins can work if in eliza, the code changes to 
+```
+await importedPlugin.default(secrets) instead of importedPlugin.default in above mentioned line L390
+```
+
+**Expected behavior**
+
+Plugins with Async exported functions has to work.
+
+18:T1991,i installed plugins: 
+    "@elizaos-plugins/client-twitter",
+    "@elizaos-plugins/plugin-ferePro",
+    "@elizaos-plugins/plugin-web-search",
+    "@elizaos-plugins/plugin-image"
+all worked perfectly until last launch, i also checked updates and my fork is up to date 
+no matter with enabled ragKnowledge or disabled, it failing to process twitter actions. 
+
+NODE_OPTIONS=--max-old-space-size=8192 pnpm start --character="characters/c3po.character.json"
+
+> eliza@ start /home/bottomtxt/jphdmain
+> pnpm --filter "@elizaos/agent" start --isRoot "--character=characters/c3po.character.json"
+
+
+> @elizaos/agent@0.25.9 start /home/bottomtxt/jphdmain/agent
+> node --loader ts-node/esm src/index.ts "--isRoot" "--character=characters/c3po.character.json"
+
+(node:9032) ExperimentalWarning: `--experimental-loader` may be removed in the future; instead use `register()`:
+--import 'data:text/javascript,import { register } from "node:module"; import { pathToFileURL } from "node:url"; register("ts-node/esm", pathToFileURL("./"));'
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:9032) [DEP0180] DeprecationWarning: fs.Stats constructor is deprecated.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+[2025-03-09 00:41:01] INFO: Loading embedding settings:
+    USE_OPENAI_EMBEDDING: ""
+    USE_OLLAMA_EMBEDDING: ""
+    OLLAMA_EMBEDDING_MODEL: "mxbai-embed-large"
+(node:9032) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+[2025-03-09 00:41:01] INFO: Parsed settings:
+    USE_OPENAI_EMBEDDING: ""
+    USE_OPENAI_EMBEDDING_TYPE: "string"
+    USE_OLLAMA_EMBEDDING: ""
+    USE_OLLAMA_EMBEDDING_TYPE: "string"
+    OLLAMA_EMBEDDING_MODEL: "mxbai-embed-large"
+Failed to import plugin: @elizaos-plugins/client-telegram Error: Cannot find package '@elizaos-plugins/client-telegram' imported from /home/bottomtxt/jphdmain/agent/src/index.ts
+    at packageResolve (/home/bottomtxt/jphdmain/node_modules/.pnpm/ts-node@10.9.2_@swc+core@1.11.4_@swc+helpers@0.5.15__@types+node@22.13.5_typescript@5.8.2/node_modules/ts-node/dist-raw/node-internal-modules-esm-resolve.js:757:9)
+    at moduleResolve (/home/bottomtxt/jphdmain/node_modules/.pnpm/ts-node@10.9.2_@swc+core@1.11.4_@swc+helpers@0.5.15__@types+node@22.13.5_typescript@5.8.2/node_modules/ts-node/dist-raw/node-internal-modules-esm-resolve.js:798:18)
+    at Object.defaultResolve (/home/bottomtxt/jphdmain/node_modules/.pnpm/ts-node@10.9.2_@swc+core@1.11.4_@swc+helpers@0.5.15__@types+node@22.13.5_typescript@5.8.2/node_modules/ts-node/dist-raw/node-internal-modules-esm-resolve.js:912:11)
+    at /home/bottomtxt/jphdmain/node_modules/.pnpm/ts-node@10.9.2_@swc+core@1.11.4_@swc+helpers@0.5.15__@types+node@22.13.5_typescript@5.8.2/node_modules/ts-node/src/esm.ts:218:35
+    at entrypointFallback (/home/bottomtxt/jphdmain/node_modules/.pnpm/ts-node@10.9.2_@swc+core@1.11.4_@swc+helpers@0.5.15__@types+node@22.13.5_typescript@5.8.2/node_modules/ts-node/src/esm.ts:168:34)
+    at /home/bottomtxt/jphdmain/node_modules/.pnpm/ts-node@10.9.2_@swc+core@1.11.4_@swc+helpers@0.5.15__@types+node@22.13.5_typescript@5.8.2/node_modules/ts-node/src/esm.ts:217:14
+    at addShortCircuitFlag (/home/bottomtxt/jphdmain/node_modules/.pnpm/ts-node@10.9.2_@swc+core@1.11.4_@swc+helpers@0.5.15__@types+node@22.13.5_typescript@5.8.2/node_modules/ts-node/src/esm.ts:409:21)
+    at resolve (/home/bottomtxt/jphdmain/node_modules/.pnpm/ts-node@10.9.2_@swc+core@1.11.4_@swc+helpers@0.5.15__@types+node@22.13.5_typescript@5.8.2/node_modules/ts-node/src/esm.ts:197:12)
+    at nextResolve (node:internal/modules/esm/hooks:748:28)
+    at Hooks.resolve (node:internal/modules/esm/hooks:240:30)
+[2025-03-09 00:41:02] INFO: C-3PO loaded plugins: [
+    "@elizaos-plugins/client-twitter",
+    "@elizaos-plugins/plugin-ferePro",
+    "@elizaos-plugins/plugin-web-search",
+    "@elizaos-plugins/plugin-image"
+]
+[2025-03-09 00:41:02] INFO: C-3PO(e61b079d-5226-06e9-9763-a33094aa8d82) - Initializing AgentRuntime with options:
+    character: "C-3PO"
+    modelProvider: "openai"
+    characterModelProvider: "openai"
+[2025-03-09 00:41:02] INFO: C-3PO(e61b079d-5226-06e9-9763-a33094aa8d82) - Setting Model Provider:
+    characterModelProvider: "openai"
+    optsModelProvider: "openai"
+    finalSelection: "openai"
+[2025-03-09 00:41:02] INFO: C-3PO(e61b079d-5226-06e9-9763-a33094aa8d82) - Selected model provider: openai
+[2025-03-09 00:41:02] INFO: C-3PO(e61b079d-5226-06e9-9763-a33094aa8d82) - Selected image model provider: openai
+[2025-03-09 00:41:02] INFO: C-3PO(e61b079d-5226-06e9-9763-a33094aa8d82) - Selected image vision model provider: openai
+[2025-03-09 00:41:02] INFO: Initializing SQLite database at /home/bottomtxt/jphdmain/agent/data/db.sqlite...
+[2025-03-09 00:41:02] INFO: Using Database Cache...
+[2025-03-09 00:41:03] INFO: Successfully logged in.
+[2025-03-09 00:41:03] INFO: Caching cookies
+[2025-03-09 00:41:08] INFO: Run `pnpm start:client` to start the client and visit the outputted URL (http://localhost:5173) to chat with your agents. When running multiple agents, use client with different port `SERVER_PORT=3001 pnpm start:client`
+[2025-03-09 00:41:08] WARN: Invalid embedding input:
+    input: ""
+    type: "string"
+    length: 0
+[2025-03-09 00:41:08] INFO: Generating text with options:
+    modelProvider: "openai"
+    model: "small"
+[2025-03-09 00:41:08] INFO: Selected model: gpt-4o-mini
+[2025-03-09 00:41:08] WARN: Invalid message for knowledge query:
+    message: {
+      "userId": "e61b079d-5226-06e9-9763-a33094aa8d82",
+      "roomId": "38153dbc-2563-0b10-9bdd-cdb1e080fca3",
+      "agentId": "e61b079d-5226-06e9-9763-a33094aa8d82",
+      "content": {
+        "text": "",
+        "action": ""
+      }
+    }
+    content: {
+      "text": "",
+      "action": ""
+    }
+    text: ""
+[2025-03-09 00:41:08] WARN: Invalid embedding input:
+    input: ""
+    type: "string"
+    length: 0
+[2025-03-09 00:41:08] INFO: Generating text with options:
+    modelProvider: "openai"
+    model: "small"
+[2025-03-09 00:41:08] INFO: Selected model: gpt-4o-mini
+Received response from OpenAI model.
+[2025-03-09 00:41:07] ERROR: Error processing tweet undefined:
+Received response from OpenAI model.
+
+**To Reproduce**
+
+<!-- Steps to reproduce the behavior. -->
+
+**Expected behavior**
+
+<!-- A clear and concise description of what you expected to happen. -->
+
+**Screenshots**
+
+<!-- If applicable, add screenshots to help explain your problem. -->
+
+**Additional context**
+
+<!-- Add any other context about the problem here. -->
+19:T332b,# Eliza CLI Shell Tests
+
+This directory contains Bash test scripts that verify the functionality of the `elizaos` CLI commands. These tests ensure that CLI commands work correctly in realistic user scenarios.
+
+## Test Coverage
+
+| Test File            | Command(s) Tested                                  | Test Cases                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| -------------------- | -------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `test_agent.sh`      | `elizaos agent`                                    | • **Test 1**: `agent --help` - Verifies help command displays usage info<br>• **Test 2**: `agent list` - Checks agent list with empty/default agents<br>• **Test 3**: `agent list` - Verifies server API endpoint works<br>• **Test 4**: `agent start --path <character_file>` - Tests character loading from file<br>• **Test 5**: `agent stop <agent_name>` - Tests agent stopping functionality<br>• **Test 6**: Agent lifecycle management                                                                                                  |
+| `test_create.sh`     | `elizaos create`                                   | • **Test 1**: `create --help` - Verifies help command displays usage info<br>• **Test 2**: `create <name> --yes` - Tests default project creation<br>• **Test 3**: `create <name> --yes --type plugin` - Tests plugin project creation<br>• **Test 4**: Tests handling duplicate project names<br>• **Test 5**: `create .` - Tests creation in current directory<br>• **Test 6**: Tests handling invalid project names with spaces<br>• **Test 7**: Tests handling non-existent project types<br>• **Test 8**: Verifies dependency installation |
+| `test_dev.sh`        | `elizaos dev`                                      | • **Test 1**: `dev --help` - Verifies help command displays usage info<br>• **Test 2**: `dev --port <port>` - Tests running dev server as background process<br>• **Test 3**: Tests server accessibility on specified port<br>• **Test 4**: Tests interacting with server API endpoints<br>• **Test 5**: Tests agent commands against dev server<br>• **Test 6**: Tests server process cleanup                                                                                                                                                  |
+| `test_env.sh`        | `elizaos env`                                      | • **Test 1**: `env --help` - Verifies help command displays usage info<br>• **Test 2**: `env list` - Tests listing environment variables from server API                                                                                                                                                                                                                                                                                                                                                                                        |
+| `test_install.sh`    | `elizaos install`                                  | • **Test 1**: `install --help` - Verifies help command displays usage info<br>• **Test 2**: Tests package dependency installation in projects<br>• **Test 3**: Tests package manager integration                                                                                                                                                                                                                                                                                                                                                |
+| `test_plugin.sh`     | `elizaos plugin` /<br>`elizaos project add-plugin` | • **Test 1**: `plugin --help` - Verifies help command displays usage info<br>• **Test 2**: `plugin publish --help` - Tests plugin publish help command<br>• **Test 3**: `project add-plugin <plugin-name> --no-env-prompt` - Tests adding official plugins<br>• **Test 4**: Tests adding multiple plugins at once<br>• **Test 5**: Tests plugin dependency detection in package.json<br>• **Test 6**: Tests custom plugin installation<br>• **Test 7**: Tests custom plugin via GitHub URL                                                      |
+| `test_project.sh`    | `elizaos project`                                  | • **Test 1**: `project --help` - Verifies help command displays usage info<br>• **Test 2**: `project create` - Tests project creation<br>• **Test 3**: `project installed-plugins` - Verifies listing installed plugins<br>• **Test 4**: `project add-plugin` - Tests adding plugins to existing projects<br>• **Test 5**: `project remove-plugin` - Tests removing plugins<br>• **Test 6**: Tests package.json modifications                                                                                                                   |
+| `test_publish.sh`    | `elizaos plugin publish`                           | • **Test 1**: `plugin publish --help` - Verifies help command displays usage info<br>• **Test 2**: Tests plugin validation logic<br>• **Test 3**: Tests plugin packaging<br>• **Test 4**: Tests publication workflow and authentication<br>• **Test 5**: Tests versioning logic                                                                                                                                                                                                                                                                 |
+| `test_start.sh`      | `elizaos start`                                    | • **Test 1**: `start --help` - Verifies help command displays usage info<br>• **Test 2**: Tests various runtime modes<br>• **Test 3**: Tests custom port configuration<br>• **Test 4**: Tests configuration validation<br>• **Test 5**: Tests character loading                                                                                                                                                                                                                                                                                 |
+| `test_test.sh`       | `elizaos test`                                     | • **Test 1**: `test --help` - Verifies help command displays usage info<br>• **Test 2**: Tests basic test suite execution<br>• **Test 3**: Tests test result validation<br>• **Test 4**: Tests different test filtering options<br>• **Test 5**: Tests error reporting                                                                                                                                                                                                                                                                          |
+| `test_update.sh`     | `elizaos update`                                   | • **Test 1**: `update --help` - Verifies help command displays usage info<br>• **Test 2**: Tests plugin update functionality<br>• **Test 3**: Tests project dependency updates<br>• **Test 4**: Tests update failure handling<br>• **Test 5**: Tests selective updating                                                                                                                                                                                                                                                                         |
+| `test_update-cli.sh` | `elizaos update-cli`                               | • **Test 1**: `update-cli --help` - Verifies help command displays usage info<br>• **Test 2**: Tests CLI self-update process<br>• **Test 3**: Tests version checking and comparison<br>• **Test 4**: Tests update cancellation                                                                                                                                                                                                                                                                                                                  |
+
+## Running Tests
+
+To run all tests, use the master test script:
+
+```bash
+./run_cli_tests.sh
+```
+
+To run a specific test:
+
+```bash
+./test_<command>.sh
+```
+
+## Test Environment and Architecture
+
+The testing system consists of several key components:
+
+### Main Runner Script (`run_cli_tests.sh`)
+
+This script orchestrates the entire test suite:
+
+1. **Server Management**:
+
+   - Starts a test server instance on a configurable port (default: 3000)
+   - Loads test character files from `test-characters/` directory
+   - Monitors server startup and availability
+   - Ensures server cleanup on test completion or failure
+
+2. **Test Execution**:
+
+   - Discovers and runs all `test_*.sh` scripts in sequence
+   - Uses timeouts to prevent hanging test scripts (60s default timeout)
+   - Captures exit codes and test results
+   - Provides detailed logging of each test's execution
+
+3. **Cleanup Operations**:
+   - Stops the test server
+   - Removes all temporary test directories
+   - Manages cleanup of individual test environments
+
+### Setup Script (`setup_test_env.sh`)
+
+This shared utility script provides common functionality for all test scripts:
+
+1. **Environment Preparation**:
+
+   - Creates isolated temporary directories for each test run
+   - Locates and validates the ElizaOS executable
+   - Sets up environment variables needed by tests
+   - Determines optimal command to run ElizaOS (`global` vs `local build`)
+
+2. **Test Utilities**:
+
+   - Logging functions (`log_info`, `log_error`, `log_warning`)
+   - Test assertion functions (`assert_success`, `assert_failure`)
+   - Output validation (`assert_stdout_contains`, `assert_stderr_contains`)
+   - File and directory checks (`assert_file_exists`, `assert_dir_exists`)
+   - Command execution wrapper (`run_elizaos`)
+
+3. **Cleanup Functions**:
+   - Trap-based cleanup to ensure test directories are removed
+   - Project-specific cleanup for node_modules and other large artifacts
+
+### Individual Test Scripts (`test_<command>.sh`)
+
+Each test script follows a consistent structure:
+
+1. **Setup Phase**:
+
+   - Sources `setup_test_env.sh` for common utilities
+   - Calls `prepare_test_environment` to create isolated test directory
+   - Sets up test-specific variables and requirements
+
+2. **Test Cases**:
+
+   - Each test is clearly labeled with descriptive log messages
+   - Commands are executed via `run_elizaos` wrapper
+   - Results are validated with various assertion functions
+   - Many tests track pass/fail counts for summary reporting
+
+3. **Cleanup and Reporting**:
+   - Cleans up test-specific artifacts
+   - Reports test summary (total, passed, failed)
+   - Returns appropriate exit code based on test results
+
+## Test Workflow
+
+When running the full test suite via `run_cli_tests.sh`:
+
+1. **Dependencies** are verified (bun, node)
+2. **Test server** is started in the background with isolated data directory
+3. **Server availability** is confirmed via health check endpoint
+4. **Test scripts** are executed sequentially with timeouts
+5. **Results** are captured and summarized
+6. **Cleanup** operations remove all temporary files and stop the server
+7. **Exit code** indicates overall test suite success or failure
+
+For individual test scripts:
+
+1. **Test environment** is prepared via `prepare_test_environment`
+2. **Test operations** are performed against either the global CLI or a local build
+3. **Assertions** verify expected behavior and outputs
+4. **Test-specific cleanup** removes artifacts before exit
+
+## Test Character Assets
+
+The `test-characters` directory contains JSON character definition files used by various tests:
+
+- `ada.json`: Ada character configuration
+- `max.json`: Max character configuration
+- `shaw.json`: Shaw character configuration
+
+These are loaded by the test server and used in agent-related tests.
+
+## Adding New Tests
+
+When adding new tests:
+
+1. Create a new `test_<command>.sh` file based on an existing test
+2. Include proper test tracking logic
+3. Ensure idempotent execution (clean up after yourself)
+4. Add comprehensive assertions
+5. Update this README with details about the new tests
+1a:T1640,# Eliza CLI Shell Tests
+
+**Test Coverage Status: Up-to-date as of 2025-04-17**
+
+_All tests use isolated temporary environments and have descriptive names for clarity._
+
+This directory contains Bash test scripts that verify the functionality of the `elizaos` CLI commands in realistic user scenarios.
+
+## Test Coverage
+
+| Test File              | Command(s) Tested        | Test Cases Summary                                                                |
+| ---------------------- | ------------------------ | --------------------------------------------------------------------------------- |
+| `test_agent.bats`      | `elizaos agent`          | Help, list (default/API), start/stop agent, full agent lifecycle                  |
+| `test_create.bats`     | `elizaos create`         | Help, create (project/plugin), duplicate/invalid names/types, deps                |
+| `test_dev.bats`        | `elizaos dev`            | Help, dev server (port/background), server/API endpoints, agent commands, cleanup |
+| `test_env.bats`        | `elizaos env`            | Help, list environment variables from server API                                  |
+| `test_plugin.bats`     | `elizaos plugin`         | TBD (add summary when implemented)                                                |
+| `test_project.bats`    | `elizaos project`        | Help, create/list projects, plugins, add plugin                                   |
+| `test_publish.bats`    | `elizaos plugin publish` | Help, validate, pack, publish with auth, bump-version in plugin projects          |
+| `test_start.bats`      | `elizaos start`          | Help, (add more tests as implemented)                                             |
+| `test_test.bats`       | `elizaos test`           | Help, run simple test file, fail on error                                         |
+| `test_update.bats`     | `elizaos update`         | TBD (add summary when implemented)                                                |
+| `test_update-cli.bats` | `elizaos update-cli`     | TBD (add summary when implemented)                                                |
+
+_Note: Plugin installation is now tested via `test_project.bats` using `elizaos project add-plugin`. If any test file is present but not yet implemented, its test cases are marked as 'TBD.'_.\_
+
+---
+
+## Setup & Running Tests
+
+### Prerequisites
+
+- **Node.js** (v18+ recommended)
+- **bun** (for CLI and dependencies)
+- **bats-core** ([Install](https://github.com/bats-core/bats-core) or `brew install bats-core`)
+- **git** (for project/plugin tests)
+
+### Install & Build
+
+```bash
+bun install
+bun run build
+```
+
+### Running
+
+- **All tests:**
+  ```bash
+  ./run_all_bats.sh
+  ```
+- **Single test:**
+  ```bash
+  bats test_agent.bats
+  # or
+  bats test_publish.bats
+  ```
+
+### Env Variables
+
+- No special env vars needed. To override test server port, set `ELIZA_TEST_PORT`.
+
+### Troubleshooting
+
+- Ensure `bun`, `node`, and `bats-core` are installed and in `PATH`.
+- Make scripts executable: `chmod +x *.bats *.sh`.
+- If tests fail due to missing build, run `bun run build`.
+- For port conflicts, set `ELIZA_TEST_PORT` to a free port.
+- All tests run in isolated temp directories; avoid polluting the project root.
+
+---
+
+## How the Test Suite Works
+
+The Eliza CLI test suite is designed for reliability, reproducibility, and easy debugging. Here’s how the full flow works:
+
+1. **Test Runner Script (`run_all_bats.sh`)**
+
+   - This script is the entry point for running all CLI tests.
+   - It sets up the environment, verifies dependencies, and ensures a clean start.
+   - It starts a dedicated test server (in the background) on a configurable port and waits for it to become available via a health check.
+   - It then discovers and runs each `*.bats` test file in sequence, reporting progress and results for each.
+
+2. **Test Script Execution**
+
+   - Each test script runs in its own isolated temporary directory, created at the start and cleaned up at the end.
+   - The test scripts set up any required environment variables and use helper functions for assertions and logging.
+   - Each test case is named and described for clear reporting.
+   - All commands (e.g., `elizaos create`, `elizaos agent`, etc.) are run as if by a real user, simulating actual CLI usage.
+
+3. **Server and Asset Management**
+
+   - The test server loads character assets from the `test-characters` directory for agent-related tests.
+   - Server health is checked before tests begin to avoid race conditions.
+   - Server is stopped and cleaned up after all tests complete.
+
+4. **Result Collection and Reporting**
+
+   - The runner script collects the results from each test file, showing a summary (total, passed, failed) at the end.
+   - If any test fails, it is clearly reported, and the script exits with a non-zero status code.
+   - Debug output is included for failed commands to aid troubleshooting.
+
+5. **Cleanup**
+   - All temporary directories and files created during the tests are removed.
+   - The test server and any background processes are stopped.
+
+### Key Features
+
+- **Isolation:** Every test runs in a fresh temp directory, preventing pollution and ensuring repeatability.
+- **Descriptive Output:** Test names and comments make it easy to see what is being tested and why a failure occurred.
+- **Extensibility:** New test scripts can be added easily by following the existing structure.
+
+## Adding New Tests
+
+1. Copy an existing `test_<command>.bats`.
+2. Use proper test tracking and cleanup logic.
+3. Add comprehensive assertions.
+4. Update the test coverage table above.
+1b:T17dc,
+FOR THE ONBOARDING TOUR
+# Relates to
+Implementation of interactive onboarding tour for new users
+
+# Risks
+Low
+
+
+# Background
+
+## What does this PR do?
+This PR implements an interactive onboarding tour to help new users understand and navigate ElizaOS. Specifically:
+
+1. Added Onboarding Tour Component
+   - Implemented using react-joyride for smooth tour experience
+   - Created separate tour steps for home and agent creation pages
+   - Added visual styling consistent with dark theme
+
+2. Implemented State Management
+   - Added `useOnboarding` hook for managing tour state
+   - Integrated with localStorage for persistence
+   - Added ability to reset tour state for testing
+
+3. Added Tour Steps and Content
+   - Home page tour covering:
+     - Welcome message
+     - Create button
+     - Agent organization
+     - Groups navigation
+     - System utilities
+     - Connection status
+     - Agent dashboard
+     - Agent interaction
+     - Agent management
+     - Group features
+     - Agent creation
+
+   - Agent creation tour covering:
+     - Agent naming
+     - System prompt
+     - Configuration tabs
+     - Save functionality
+
+4. Integrated with Existing Components
+   - Added tour to main App component
+   - Integrated with existing routing
+   - Maintained consistent styling with UI components
+
+## What kind of change is this?
+Features (non-breaking change which adds functionality)
+
+# Documentation changes needed?
+My changes require a change to the project documentation.
+- Added documentation for onboarding tour
+  - Tour step definitions
+  - State management patterns
+  - Integration points
+
+- Updated UI component documentation
+  - Added tour-related class names
+  - Documented tour triggers
+  - Updated component props
+
+- Added examples of tour integration
+  - Example tour configurations
+  - State management examples
+  - Custom styling examples
+
+# Testing
+
+## Where should a reviewer start?
+1. Review the OnboardingTour component in `packages/client/src/components/onboarding-tour.tsx`
+   - Check tour step definitions
+   - Review event handling
+   - Verify styling implementation
+
+2. Check the useOnboarding hook in `packages/client/src/hooks/use-onboarding.tsx`
+   - Review state management
+   - Check localStorage integration
+   - Verify error handling
+
+3. Review the App component integration in `packages/client/src/App.tsx`
+   - Check tour component placement
+   - Verify routing integration
+   - Review provider setup
+
+
+
+### Before
+[Application without onboarding tour]
+- Clean interface without guidance
+- No initial user assistance
+- Standard navigation
+
+### After
+[Application with onboarding tour]
+- Welcome message with tour start
+- Step-by-step guidance
+- Visual highlights for important elements
+- Progress indicator
+- Consistent dark theme styling
+
+
+SCREEN RECORDING
+
+https://github.com/user-attachments/assets/f38e20dc-a65d-4eb9-877a-9dfaa1b52bcb
+
+
+
+FOR TICKETS 248, 250, 251
+
+# Relates to
+Frontend implementation for handling control messages to enable/disable chat input
+
+# Risks
+Low
+
+# Background
+
+## What does this PR do?
+This PR implements the frontend UI logic for receiving and acting upon control messages that enable/disable chat input fields. Specifically:
+
+1. Added control message handling in SocketIOManager
+   - Implemented `ControlMessageData` type for structured message handling
+   - Added event emitter for control messages
+   - Integrated with existing socket.io message handling
+
+2. Implemented UI state management for input fields
+   - Added `inputDisabled` state in chat components
+   - Integrated with existing message processing state
+   - Maintained consistent state across chat and room components
+
+3. Added visual feedback for disabled/enabled states
+   - Updated input field placeholder text
+   - Added disabled styling through existing Tailwind classes
+   - Maintained consistent UI with existing chat components
+
+4. Integrated with existing chat components
+   - Leveraged existing `ChatInput` component
+   - Maintained compatibility with file upload and audio recording features
+   - Preserved existing message handling logic
+
+## What kind of change is this?
+Features (non-breaking change which adds functionality)
+
+# Documentation changes needed?
+My changes require a change to the project documentation.
+- Added documentation for control message handling in frontend
+  - Updated SocketIOManager documentation
+  - Added control message type definitions
+  - Documented event handling patterns
+
+- Updated UI component documentation
+  - Added input state management details
+  - Documented visual feedback states
+  - Updated component props documentation
+
+- Added examples of control message integration
+  - Example control message payloads
+  - Integration patterns with existing components
+  - State management examples
+
+# Testing
+
+## Where should a reviewer start?
+1. Review the SocketIOManager implementation in `packages/client/src/lib/socketio-manager.ts`
+   - Check `ControlMessageData` type definition
+   - Review control message event handling
+   - Verify socket.io integration
+
+2. Check the chat input handling in `packages/client/src/components/chat.tsx`
+   - Review input state management
+   - Check control message event listeners
+   - Verify UI feedback implementation
+
+3. Review the room component implementation in `packages/client/src/components/room.tsx`
+   - Verify consistent behavior with chat component
+   - Check group chat integration
+   - Review state management patterns
+
+
+### Before
+[Input field in normal enabled state]
+- Clean input field with default placeholder
+- Active send button
+- No loading indicators
+
+### After
+[Input field disabled with visual feedback and loading indicator]
+- Disabled input field with processing message
+- Inactive send button
+- Loading dots animation
+- Consistent styling with existing UI
+
+SCREEN RECORDING
+
+
+https://github.com/user-attachments/assets/9f1c80fa-15fb-4c1c-909f-fa7aa7f79b50
+
+
+
+1c:T56c,# Relates to
+
+Adds instrumentation support to LLM plugins for better observability and debugging.
+
+# Risks
+
+**Medium** — Changes involve instrumentation code across plugin logic. Potential risks include:
+- Performance overhead if not handled properly.
+- Incorrect spans/tags leading to confusing traces.
+- Integration issues with existing telemetry systems.
+
+# Background
+
+## What does this PR do?
+
+This PR adds OpenTelemetry-based instrumentation to the LLM plugin modules. It introduces tracing for key functions to capture span data like plugin execution time, plugin name, and error logs if any failures occur.
+
+## What kind of change is this?
+
+- Improvements (misc. changes to existing features)
+- Features (non-breaking change which adds functionality)
+
+# Documentation changes needed?
+
+My changes do not require a change to the project documentation.
+
+# Testing
+
+## Where should a reviewer start?
+
+Start with the `instrumentation/` directory and review the changes to the plugin execution paths where spans have been added.
+
+## Detailed testing steps
+
+- Run the system with the environment variable to enable tracing.
+- Execute multiple LLM plugin calls (successful and failing).
+- Verify the traces are correctly emitted and visible in the backend (e.g., Jaeger, Zipkin).
+- Confirm trace tags and span names are descriptive and accurate.
+
+1d:Tbd2,<!-- Use this template by filling in information and copying and pasting relevant items out of the HTML comments. -->
+
+# Relates to
+Fixes Remote Attestation Action.
+<!-- LINK TO ISSUE OR TICKET -->
+
+<!-- This risks section must be filled out before the final review and merge. -->
+
+# Risks
+Low
+<!--
+Low, medium, large. List what kind of risks and what could be affected.
+-->
+
+# Background
+Remote Attestation was not working when registering as an action.
+## What does this PR do?
+Fixes the Remote Attestation Action
+## What kind of change is this?
+Bug fixes
+<!--
+Bug fixes (non-breaking change which fixes an issue)
+Improvements (misc. changes to existing features)
+Features (non-breaking change which adds functionality)
+Updates (new versions of included code)
+-->
+
+<!-- This "Why" section is most relevant if there are no linked issues explaining why. If there is a related issue, it might make sense to skip this why section. -->
+<!--
+## Why are we doing this? Any context or related work?
+-->
+
+# Documentation changes needed?
+
+<!--
+My changes do not require a change to the project documentation.
+My changes require a change to the project documentation.
+If documentation change is needed: I have updated the documentation accordingly.
+-->
+
+<!-- Please show how you tested the PR. This will really help if the PR needs to be retested and probably help the PR get merged quicker. -->
+
+# Testing
+Create a character that imports the TEE Plugin action
+```
+import { phalaRemoteAttestationAction as remoteAttestationAction } from '@elizaos/plugin-tee';
+// Skip code in betweeen
+export const swarmAgent: ProjectAgent = {
+  character,
+  init: async (runtime) => {
+    // Initialize the character
+    await initCharacter({ runtime, config, actions: [remoteAttestationAction] });
+  },
+};
+```
+## Where should a reviewer start?
+
+## Detailed testing steps
+
+<!--
+None: Automated tests are acceptable.
+-->
+
+<!--
+- As [anon/admin], go to [link]
+  - [do action]
+  - verify [result]
+-->
+
+<!-- If there is a UI change, please include before and after screenshots or videos. This will speed up PRs being merged. It is extra nice to annotate screenshots with arrows or boxes pointing out the differences. -->
+<!--
+## Screenshots
+### Before
+### After
+![image](https://github.com/user-attachments/assets/06d72fce-619e-41ba-8cd9-ec784da14601)
+![image](https://github.com/user-attachments/assets/edad5192-7075-4217-b001-762e5711f5ed)
+
+-->
+
+<!-- If there is anything about the deployment, please make a note. -->
+<!--
+# Deploy Notes
+-->
+
+<!--  Copy and paste command line output. -->
+<!--
+## Database changes
+-->
+
+<!--  Please specify deploy instructions if there is something more than the automated steps. -->
+<!--
+## Deployment instructions
+-->
+
+<!-- If you are on Discord, please join https://discord.gg/elizaOS and state your Discord username here for the contributor role and join us in #development-feed -->
+<!--
+## Discord username
+
+-->
+e:["$","div",null,{"className":"mb-8 space-y-6","children":[["$","$L15",null,{"metrics":{"date":"2025-04-16","interval":{"intervalStart":"$D2025-04-16T00:00:00.000Z","intervalEnd":"$D2025-04-17T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":5,"merged":3,"total":7},"issues":{"new":4,"closed":1,"total":5},"activeContributors":13,"codeChanges":{"additions":826,"deletions":264,"files":19,"commitCount":51},"topContributors":[{"username":"wtfsayo","avatarUrl":"https://avatars.githubusercontent.com/u/82053242?u=98209a1f10456f42d4d2fa71db4d5bf4a672cbc3&v=4","totalScore":59.7437738965761,"prScore":59.5437738965761,"issueScore":0,"reviewScore":0,"commentScore":0.2,"summary":"wtfsayo: Merged 1 PR (#4301 \"feat: cli-test-suite\") with significant changes of +8606/-5173 lines, focusing primarily on tests (61%). Active today with 31 commits, modifying 162 files (+3401/-3806 lines), demonstrating consistent work patterns."},{"username":"HashWarlock","avatarUrl":"https://avatars.githubusercontent.com/u/64296537?u=1d8228a93c06c603e08d438677b3f736d6b1ab22&v=4","totalScore":41.990805593106984,"prScore":41.990805593106984,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"HashWarlock: Merged 1 PR (#4305) focused on fixing the remote attestation action, contributing a total of +1809/-726 lines across 3 modified files. The work was entirely dedicated to bugfix efforts, demonstrating consistent activity with a primary focus on code, tests, and documentation."},{"username":"tcm390","avatarUrl":"https://avatars.githubusercontent.com/u/60634884?u=c6c41679b8322eaa0c81f72e0b4ed95e80f0ac16&v=4","totalScore":36.77094547390058,"prScore":31.77094547390058,"issueScore":0,"reviewScore":5,"commentScore":0,"summary":"tcm390: Merged 1 pull request (#4300 \"feat: enhance gui\") with a net change of +118/-132 lines, while modifying 36 files with a total of +1140/-609 lines across 11 commits. Maintained a consistent activity pattern, focusing primarily on other work (73%)."},{"username":"0xbbjoker","avatarUrl":"https://avatars.githubusercontent.com/u/54844437?u=90fe1762420de6ad493a1c1582f1f70c0d87d8e2&v=4","totalScore":21.226306144334053,"prScore":21.026306144334054,"issueScore":0,"reviewScore":0,"commentScore":0.2,"summary":"0xbbjoker: Merged 1 PR (#4306) addressing an external dependency issue with significant changes of +806/-266 lines, demonstrating a strong focus on bugfix work. Maintained a consistent activity pattern, actively contributing to the project today."},{"username":"Samarthsinghal28","avatarUrl":"https://avatars.githubusercontent.com/u/120447590?v=4","totalScore":14.942457062637644,"prScore":14.942457062637644,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"Samarthsinghal28: Opened 1 PR (#4304) titled \"Added: Llm instrumentation\" and modified 4 files with significant changes totaling +1110/-376 lines across 2 commits, demonstrating a focused effort on other work. Active today, maintaining a consistent work pattern."},{"username":"jmikedupont2","avatarUrl":"https://avatars.githubusercontent.com/u/16427113?u=2bdad12714de646188f98a07736a54f765ad5e3b&v=4","totalScore":8,"prScore":0,"issueScore":8,"reviewScore":0,"commentScore":0,"summary":"jmikedupont2: Created 2 new issues today, including #4303 \"Ensure USE_LOCAL_AI is always true\" and #4302 \"Task.World is redundant,\" reflecting a focus on identifying potential improvements. Activity remains sporadic with no code changes or merged pull requests."},{"username":"monilpat","avatarUrl":"https://avatars.githubusercontent.com/u/15067321?v=4","totalScore":5.2,"prScore":0,"issueScore":0,"reviewScore":5,"commentScore":0.2,"summary":"monilpat: Made significant code changes by modifying 16 files, resulting in a total of +728 lines added and -146 lines removed, with a primary focus on other work. Additionally, completed 1 review with an approval and left 1 comment on a PR, demonstrating consistent activity today."},{"username":"HarshModi2005","avatarUrl":"https://avatars.githubusercontent.com/u/142230924?u=64e337bbdb6b3aded5943b7e297759e7a3cfc0f0&v=4","totalScore":4.5,"prScore":0,"issueScore":0,"reviewScore":4.5,"commentScore":0,"summary":"HarshModi2005: Made significant code changes by modifying 28 files, resulting in a total of +1055/-420 lines across 2 commits, with a primary focus on other work. Maintained a consistent activity pattern, being active every day."},{"username":"transformer98","avatarUrl":"https://avatars.githubusercontent.com/u/171251322?u=2191a752729a33763266de0ff9a4c5cec3322476&v=4","totalScore":4,"prScore":0,"issueScore":4,"reviewScore":0,"commentScore":0,"summary":"transformer98: Created 1 new issue (#4299 \"How can i handle the content response from the modell?\" (OPEN)), showing sporadic activity today with no other contributions."},{"username":"praveen-kaia","avatarUrl":"https://avatars.githubusercontent.com/u/112046567?v=4","totalScore":4,"prScore":0,"issueScore":4,"reviewScore":0,"commentScore":0,"summary":"praveen-kaia: Created 1 issue today (#4298 \"Unable to use GOAT Plugin\" (OPEN)), showing sporadic activity with no merged pull requests or code changes."}],"focusAreas":[{"area":"client","count":13},{"area":"core","count":5},{"area":"plugin-sql","count":1},{"area":"plugin-bootstrap","count":1}],"topIssues":[{"id":"I_kwDOMT5cIs6yy4Mz","title":"Ensure USE_LOCAL_AI is always true","author":"jmikedupont2","number":4303,"repository":"elizaos/eliza","body":"Hi team,\nI am wondering about \" Ensure USE_LOCAL_AI is always true\" in v2,\nin my small version I don't want to have local ai loaded.\nIf the user sets it to false, we should respect that.\n\n","createdAt":"2025-04-16T13:34:31Z","closedAt":"2025-05-23T02:29:00Z","state":"CLOSED","commentCount":1},{"id":"I_kwDOMT5cIs6yyqVg","title":"Task.World is redundant","author":"jmikedupont2","number":4302,"repository":"elizaos/eliza","body":"The world already is referenced from room and task references room, so we dont need to have world in task.\npackages/plugin-sql/src/schema/tasks.ts\n```\n worldId: uuid('world_id').references(() => worldTable.id, {\n   onDelete: 'cascade',\n }),\n\n```","createdAt":"2025-04-16T13:14:06Z","closedAt":"2025-05-23T02:27:26Z","state":"CLOSED","commentCount":1},{"id":"I_kwDOMT5cIs6yxIb9","title":"How can i handle the content response from the modell?","author":"transformer98","number":4299,"repository":"elizaos/eliza","body":"$16","createdAt":"2025-04-16T10:37:20Z","closedAt":"2025-05-23T02:28:26Z","state":"CLOSED","commentCount":1},{"id":"I_kwDOMT5cIs6yu0eY","title":"Unable to use GOAT Plugin","author":"praveen-kaia","number":4298,"repository":"elizaos/eliza","body":"$17","createdAt":"2025-04-16T06:41:11Z","closedAt":"2025-07-13T16:25:50Z","state":"CLOSED","commentCount":1},{"id":"I_kwDOMT5cIs6tKJNh","title":"Error processing tweet undefined","author":"fction","number":3877,"repository":"elizaos/eliza","body":"$18","createdAt":"2025-03-09T01:08:59Z","closedAt":"2025-04-16T18:34:43Z","state":"CLOSED","commentCount":0}],"topPullRequests":[{"id":"PR_kwDOMT5cIs6Sqrj7","title":"feat: test suite for cli","author":"wtfsayo","number":4290,"body":"$19","repository":"elizaos/eliza","createdAt":"2025-04-15T13:09:58Z","mergedAt":null,"additions":4580,"deletions":443},{"id":"PR_kwDOMT5cIs6S1bOG","title":"feat: cli-test-suite","author":"wtfsayo","number":4301,"body":"$1a","repository":"elizaos/eliza","createdAt":"2025-04-16T12:45:51Z","mergedAt":"2025-04-17T13:22:44Z","additions":2087,"deletions":445},{"id":"PR_kwDOMT5cIs6Sta6o","title":"Onboarding Tour and Enabling Disabling the Input Button","author":"HarshModi2005","number":4293,"body":"$1b","repository":"elizaos/eliza","createdAt":"2025-04-15T17:53:08Z","mergedAt":"2025-04-16T23:34:52Z","additions":728,"deletions":146},{"id":"PR_kwDOMT5cIs6S4GU2","title":"Added: Llm instrumentation","author":"Samarthsinghal28","number":4304,"body":"$1c","repository":"elizaos/eliza","createdAt":"2025-04-16T17:45:12Z","mergedAt":null,"additions":648,"deletions":235},{"id":"PR_kwDOMT5cIs6S43Ys","title":"fix: remote attestation action","author":"HashWarlock","number":4305,"body":"$1d","repository":"elizaos/eliza","createdAt":"2025-04-16T19:28:40Z","mergedAt":"2025-04-17T01:05:19Z","additions":76,"deletions":120},{"id":"PR_kwDOMT5cIs6S1PUI","title":"feat: enhance gui","author":"tcm390","number":4300,"body":"This PR makes the settings field requirement information reusable in the GUI and introduces a validation mechanism that checks for the required field in the JSON before importing. It also removes the dots from \"Required\" and \"Optional\" labels, replacing them with a red asterisk (*) for required fields and make tooltip appear on hovering label, based on @wtfsayo suggestion.\r\n\r\n\r\n\r\nhttps://github.com/user-attachments/assets/8fead1ec-bd21-41bd-846e-57c09f2401f2\r\n\r\n\r\nhttps://github.com/user-attachments/assets/aba89908-abfc-47c2-9a9d-b6a77a7fae5f\r\n\r\n\r\n\r\n","repository":"elizaos/eliza","createdAt":"2025-04-16T12:25:39Z","mergedAt":"2025-04-16T12:53:07Z","additions":75,"deletions":89},{"id":"PR_kwDOMT5cIs6RzqaA","title":"Fix relationship between entities and agents","author":"michavie","number":4223,"body":"In v2, the concept of `entities` represent an instance of an agent, while an agent itself refers to its `character`.\r\n\r\nThere is a mix up of these concepts happening within `AgentRuntime.initialize()` that currently requires to create a `character` (agent) for each `entity` (instance of agent) – therefore preventing agent reuse for entities.\r\n\r\n# Risks\r\n\r\nMedium: Downstream an Agent might be incorrectly referenced instead of an entity.\r\n\r\n# Background\r\n\r\n## What does this PR do?\r\n\r\nThe invalid guard is removed and entities are changed to correctly reference agents.\r\n\r\n## What kind of change is this?\r\n\r\nBug fixes (non-breaking change which fixes an issue)\r\n\r\n## Why are we doing this? Any context or related work?\r\n\r\nIt is currently not possible to reuse an in-DB `character` (agent) across multiple entities, without duplications in the `agents` table.\r\n\r\nin `AgentRuntime.initialize()` an invalid check by `agentId` is performed and an incorrect reference between `entity` and `agent` is created.\r\n","repository":"elizaos/eliza","createdAt":"2025-04-08T15:25:47Z","mergedAt":"2025-04-16T11:07:16Z","additions":23,"deletions":29},{"id":"PR_kwDOMT5cIs6S6HaQ","title":"fix: external depn issue","author":"0xbbjoker","number":4306,"body":"Additional note for testing: \r\n- `bun i`\r\n- `bun run build` \r\n- cd out from the project\r\n- `node ../ai-agents/new-eliza/eliza/packages/cli/dist/index.js start`","repository":"elizaos/eliza","createdAt":"2025-04-16T22:53:31Z","mergedAt":"2025-04-17T01:06:49Z","additions":2,"deletions":0}],"detailedContributorSummaries":{"0xbbjoker":"0xbbjoker: Merged 1 PR (#4306) addressing an external dependency issue with significant changes of +806/-266 lines, demonstrating a strong focus on bugfix work. Maintained a consistent activity pattern, actively contributing to the project today.","HarshModi2005":"HarshModi2005: Made significant code changes by modifying 28 files, resulting in a total of +1055/-420 lines across 2 commits, with a primary focus on other work. Maintained a consistent activity pattern, being active every day.","HashWarlock":"HashWarlock: Merged 1 PR (#4305) focused on fixing the remote attestation action, contributing a total of +1809/-726 lines across 3 modified files. The work was entirely dedicated to bugfix efforts, demonstrating consistent activity with a primary focus on code, tests, and documentation.","Samarthsinghal28":"Samarthsinghal28: Opened 1 PR (#4304) titled \"Added: Llm instrumentation\" and modified 4 files with significant changes totaling +1110/-376 lines across 2 commits, demonstrating a focused effort on other work. Active today, maintaining a consistent work pattern.","jmikedupont2":"jmikedupont2: Created 2 new issues today, including #4303 \"Ensure USE_LOCAL_AI is always true\" and #4302 \"Task.World is redundant,\" reflecting a focus on identifying potential improvements. Activity remains sporadic with no code changes or merged pull requests.","monilpat":"monilpat: Made significant code changes by modifying 16 files, resulting in a total of +728 lines added and -146 lines removed, with a primary focus on other work. Additionally, completed 1 review with an approval and left 1 comment on a PR, demonstrating consistent activity today.","praveen-kaia":"praveen-kaia: Created 1 issue today (#4298 \"Unable to use GOAT Plugin\" (OPEN)), showing sporadic activity with no merged pull requests or code changes.","tcm390":"tcm390: Merged 1 pull request (#4300 \"feat: enhance gui\") with a net change of +118/-132 lines, while modifying 36 files with a total of +1140/-609 lines across 11 commits. Maintained a consistent activity pattern, focusing primarily on other work (73%).","transformer98":"transformer98: Created 1 new issue (#4299 \"How can i handle the content response from the modell?\" (OPEN)), showing sporadic activity today with no other contributions.","wtfsayo":"wtfsayo: Merged 1 PR (#4301 \"feat: cli-test-suite\") with significant changes of +8606/-5173 lines, focusing primarily on tests (61%). Active today with 31 commits, modifying 162 files (+3401/-3806 lines), demonstrating consistent work patterns."}}}],"$L1e"]}]
+f:["$","div",null,{"className":"prose prose-sm mx-auto mt-8 dark:prose-invert sm:prose lg:prose-lg xl:prose-xl","children":[["$","p","p-0",{"children":"On April 16, 2025, ElizaOS saw significant progress in user experience and system stability, with the implementation of an interactive onboarding tour and crucial bug fixes clarifying the relationship between entities and agents. The team focused on refining the user interface and addressing core functionality, while also identifying new areas for configuration improvement and plugin stability."}],"\n",["$","h2","h2-0",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"✅ Completed Work","position":{"start":{"line":3,"column":4,"offset":402},"end":{"line":3,"column":20,"offset":418}}}],"position":{"start":{"line":3,"column":1,"offset":399},"end":{"line":3,"column":20,"offset":418}}},"children":"✅ Completed Work"}],"\n",["$","h3","h3-0",{"children":"User Experience & Onboarding"}],"\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["Implemented an interactive onboarding tour to help new users navigate the system effectively. ",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/4293","children":"elizaos/eliza#4293"}]]}],"\n",["$","li","li-1",{"children":["Improved GUI settings by making the requirement information reusable and adding a validation mechanism for JSON imports. ",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/4300","children":"elizaos/eliza#4300"}]]}],"\n"]}],"\n",["$","h3","h3-1",{"children":"Core System Stability & Bug Fixes"}],"\n",["$","ul","ul-1",{"children":["\n",["$","li","li-0",{"children":["Resolved the mix-up between ",["$","code","code-0",{"children":"entities"}]," and ",["$","code","code-1",{"children":"agents"}]," in the ",["$","code","code-2",{"children":"AgentRuntime.initialize()"}]," method, clarifying their definitions and relationships. ",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/4223","children":"elizaos/eliza#4223"}]]}],"\n",["$","li","li-1",{"children":["Resolved an issue related to processing tweets, which was affecting multiple plugins. ",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/3877","children":"elizaos/eliza#3877"}]]}],"\n"]}],"\n",["$","h2","h2-1",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"🐞 Issue Triage","position":{"start":{"line":13,"column":4,"offset":1210},"end":{"line":13,"column":19,"offset":1225}}}],"position":{"start":{"line":13,"column":1,"offset":1207},"end":{"line":13,"column":19,"offset":1225}}},"children":"🐞 Issue Triage"}],"\n",["$","h3","h3-2",{"children":"New Issues"}],"\n",["$","ul","ul-2",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"elizaos/eliza"}],"\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["Concern raised regarding the ",["$","code","code-0",{"children":"USE_LOCAL_AI"}]," setting, suggesting it should always default to true. ",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/4303","children":"elizaos/eliza#4303"}]]}],"\n",["$","li","li-1",{"children":["Identified redundancy in the ",["$","code","code-0",{"children":"Task.World"}]," reference, proposing its removal as it is already referenced from the room. ",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/4302","children":"elizaos/eliza#4302"}]]}],"\n",["$","li","li-2",{"children":["Inquiry about handling content responses from the model to avoid reusing previous prompts. ",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/4299","children":"elizaos/eliza#4299"}]]}],"\n",["$","li","li-3",{"children":["Bug reported with the GOAT plugin, which is not functioning after the separation of plugins. ",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/4298","children":"elizaos/eliza#4298"}]]}],"\n"]}],"\n"]}],"\n"]}],"\n",["$","h3","h3-3",{"children":"Closed Issues"}],"\n",["$","ul","ul-3",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"elizaos/eliza"}],"\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["Resolved an issue related to processing tweets, which was affecting multiple plugins. ","$L1f"]}],"\n"]}],"\n"]}],"\n"]}]]}]
+10:["$","script","script-0",{"src":"/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","async":true}]
+11:["$","script","script-1",{"src":"/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","async":true}]
+12:["$","script","script-2",{"src":"/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js","async":true}]
+13:["$","$L20",null,{"children":["$","$21",null,{"name":"Next.MetadataOutlet","children":"$@22"}]}]
+1e:["$","div",null,{"className":"rounded-lg border bg-card text-card-foreground shadow-sm","children":[["$","div",null,{"className":"flex flex-col space-y-1.5 p-6 py-4","children":["$","div",null,{"className":"tracking-tight text-sm font-medium","children":["$undefined","Code Changes"]}]}],["$","div",null,{"className":"p-6 pt-0","children":["$","div",null,{"className":"grid grid-cols-2 gap-4 md:grid-cols-4","children":[["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-git-commit-vertical h-5 w-5","aria-hidden":"true","children":[["$","path","1holv5",{"d":"M12 3v6"}],["$","circle","1v7zrd",{"cx":"12","cy":"12","r":"3"}],["$","path","a9ows0",{"d":"M12 15v6"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":51}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Commits"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-file-code h-5 w-5","aria-hidden":"true","children":[["$","path","1oefj6",{"d":"M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"}],["$","path","wfsgrz",{"d":"M14 2v5a1 1 0 0 0 1 1h5"}],["$","path","1tg20x",{"d":"M10 12.5 8 15l2 2.5"}],["$","path","yinavb",{"d":"m14 12.5 2 2.5-2 2.5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":19}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Files Changed"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-green-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-up h-5 w-5 text-green-500","aria-hidden":"true","children":[["$","path","hav0vg",{"d":"m5 12 7-7 7 7"}],["$","path","x0mq9r",{"d":"M12 19V5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-green-500","children":"+826"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Added"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-red-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-down h-5 w-5 text-red-500","aria-hidden":"true","children":[["$","path","s699le",{"d":"M12 5v14"}],["$","path","1idqje",{"d":"m19 12-7 7-7-7"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-red-500","children":"-264"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Deleted"}]]}]]}]]}]}]]}]
+1f:["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/3877","children":"elizaos/eliza#3877"}]
+22:null

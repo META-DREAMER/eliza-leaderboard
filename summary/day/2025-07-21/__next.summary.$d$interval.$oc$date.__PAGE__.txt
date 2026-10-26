@@ -1,0 +1,2429 @@
+1:"$Sreact.fragment"
+2:I[4817319,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"IntervalSelector"]
+3:I[6998365,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"LlmCopyButton"]
+18:I[3642796,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],""]
+19:I[3238488,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"StatCardsDisplay"]
+2c:I[4261541,["/eliza-leaderboard/_next/static/chunks/b33bcbdcb3f88354.js","/eliza-leaderboard/_next/static/chunks/8ba59154b6704904.js"],"OutletBoundary"]
+2d:"$Sreact.suspense"
+4:Te6f,\## Problem Details
+
+\### Current Behavior
+
+\- User runs \`elizaos create myproject\` from their desktop
+
+\- The \`.elizadb\` directory gets created in the current directory (desktop) instead of inside \`myproject/\`
+
+\- This causes database initialization issues for new projects
+
+\### Expected Behavior
+
+\- Database directory should be created at: \`myproject/.eliza/.elizadb/\`
+
+\- All project-specific files should be contained within the new project directory
+
+\## Root Cause Analysis
+
+After analyzing the codebase, the issue is in how the \`resolvePgliteDir\` function determines the database directory during project creation:
+
+1\. \*\*In \`packages/cli/src/commands/create/actions/creators.ts\`\*\*:
+
+\- The \`createProject\` function creates the project directory but doesn't properly pass the target directory context for database initialization
+
+\- Line 313-364: Project creation happens but database setup uses wrong context
+
+2\. \*\*In \`packages/cli/src/utils/resolve-utils.ts\`\*\*:
+
+\- Line 72-82: The function has logic to handle \`targetProjectDir\` but it's not being properly utilized
+
+\- The fallback logic defaults to \`process.cwd()\` when it should use the new project directory
+
+\## Proposed Fix
+
+\### 1. Update \`createProject\` function to properly pass target directory:
+
+\`\`\`typescript
+
+*// In creators.ts*
+
+await setupProjectEnvironment(projectTargetDir, database, aiModel, embeddingModel, true)
+
+\`\`\`
+
+\### 2. Ensure \`setupPgLite\` receives correct directory context:
+
+\`\`\`typescript
+
+*// In setup.ts*
+
+export async function setupPgLite(
+
+*dbDir*: string | undefined,
+
+*envPath*: string | undefined,
+
+*targetProjectDir*?: string
+
+): Promise<void> {
+
+const dirs = await ensureElizaDir(targetProjectDir);
+
+*// ... rest of implementation*
+
+}
+
+\`\`\`
+
+\### 3. Fix \`resolvePgliteDir\` to properly use target directory:
+
+\`\`\`typescript
+
+*// When targetProjectDir is provided, use it as the base*
+
+const projectRoot = targetProjectDir || pathsInfo.monorepoRoot || process.cwd();
+
+\`\`\`
+
+\## Testing Requirements
+
+1\. \*\*Manual Testing\*\*:
+
+ \`\`\`bash
+
+\# From any directory
+
+elizaos create testproject
+
+\# Verify .elizadb is inside testproject/.eliza/
+
+ls testproject/.eliza/
+
+ \`\`\`
+
+2\. \*\*Automated Tests\*\*:
+
+\- Add test in \`packages/cli/tests/commands/create.test.ts\`
+
+\- Verify database directory is created in correct location
+
+\- Test both interactive and non-interactive modes
+
+3\. \*\*Edge Cases\*\*:
+
+\- Creating project in current directory with \`elizaos create .\`
+
+\- Creating project with absolute path
+
+\- Creating project when parent has existing \`.eliza\` directory
+
+\## Implementation Steps
+
+1\. \*\*Trace the execution flow\*\* of \`elizaos create\` command
+
+2\. \*\*Identify where \`process.cwd()\` is being used\*\* instead of the target project directory
+
+3\. \*\*Update the database initialization\*\* to use the correct base directory
+
+4\. \*\*Add comprehensive tests\*\* to prevent regression
+
+5\. \*\*Test with various scenarios\*\* (different directories, with/without existing .eliza folders)
+
+\## Success Criteria
+
+\- ✅ Running \`elizaos create myproject\` creates \`.elizadb\` inside \`myproject/.eliza/\`
+
+\- ✅ No database files are created in the current working directory
+
+\- ✅ All tests pass for various creation scenarios
+
+\- ✅ Works correctly in both monorepo and standalone environments
+
+\## Priority: High
+
+This is a user-facing bug that affects the initial developer experience with ElizaOS. New users expect project creation to be self-contained.
+
+\## Estimated Effort: 2-4 hours
+
+The fix itself is straightforward, but thorough testing across different scenarios is important to ensure no regression.5:Tb07,\## Summary
+
+The \`elizaos publish\` command fails immediately after creating a new plugin with \`elizaos create --type plugin\`, throwing a "Cannot find module 'zod/v3'" error from @langchain/core.
+
+\## Environment
+
+\- \*\*elizaOS CLI version\*\*: 1.3.0
+
+\- \*\*Bun version\*\*: 1.2.15
+
+\- \*\*OS\*\*: macOS arm64
+
+\- \*\*Location\*\*: Fresh plugin created via CLI
+
+\## Steps to Reproduce
+
+1\. Run \`elizaos create --type plugin testing -y\`
+
+2\. Navigate to the created plugin directory: \`cd plugin-testing\`
+
+3\. Run \`elizaos publish -h\` (or any publish command)
+
+\## Expected Behavior
+
+The publish command should display help information or execute without module errors.
+
+\## Actual Behavior
+
+Command fails with error:
+
+\`\`\`
+
+error: Cannot find module 'zod/v3' from '/Users/yungalgo/Desktop/plugin-testing/node_modules/@langchain/core/dist/runnables/base.js'
+
+\`\`\`
+
+\## Full Terminal Output
+
+\`\`\`bash
+
+yungalgo@machine \~/desktop $ elizaos -v
+
+1.3.0
+
+yungalgo@machine \~/desktop $ elizaos create --type plugin testing -y
+
+Warning: changing "testing" to "plugin-testing" to conform to plugin naming conventions
+
+│
+
+◇ Copying plugin template completed
+
+│
+
+│
+
+◇ ✓ Dependencies installed successfully
+
+◇ Installing dependencies completed
+
+✓ Plugin "plugin-testing" created successfully!
+
+Next steps:
+
+cd plugin-testing
+
+bun run build *# Build the plugin*
+
+Common commands:
+
+elizaos dev *# Start development mode with hot reloading*
+
+elizaos start *# Start in production mode*
+
+yungalgo@machine \~/desktop $ cd plugin-testing
+
+yungalgo@machine \~/desktop/plugin-testing $ elizaos publish -h
+
+\[2025-07-21 20:29:34\] INFO: Using local @elizaos/cli installation
+
+error: Cannot find module 'zod/v3' from '/Users/yungalgo/Desktop/plugin-testing/node_modules/@langchain/core/dist/runnables/base.js'
+
+Bun v1.2.15 (macOS arm64)
+
+\`\`\`
+
+\## Analysis
+
+The issue appears to be a missing or incorrect dependency resolution where:
+
+1\. The plugin template includes @langchain/core as a dependency
+
+2\. @langchain/core expects 'zod/v3' to be available
+
+3\. The zod package is either not installed or not at the correct version that exports a 'v3' subpath
+
+\## Potential Solutions
+
+1\. Add explicit zod dependency to the plugin template's package.json
+
+2\. Update @langchain/core to a version that doesn't require 'zod/v3'
+
+3\. Ensure proper peer dependency resolution during plugin creation
+
+4\. Check if this is a Bun-specific module resolution issue
+
+\## Priority
+
+High - This blocks plugin publishing workflow immediately after creation
+
+\## Additional Notes
+
+\- The plugin creation itself completes successfully
+
+\- Dependencies install without errors during creation
+
+\- The error only appears when trying to use the publish command
+
+\- This affects the out-of-the-box experience for new plugin developers6:T1a73,### 
+
+**Issue Title**: `fix(scenarios): Runtime dependency audit and fix for evaluators`
+
+**Tags**: `cli`, `scenarios`, `bug`, `evaluators`, `runtime-integration`
+
+#### **Description**
+
+Several evaluators in the `EvaluationEngine` make assumptions about `IAgentRuntime` methods that may not exist or may have different signatures than expected. This creates a risk of runtime errors when scenarios are executed, and prevents certain evaluations from functioning correctly.
+
+The issue stems from evaluators being implemented without first auditing the actual `IAgentRuntime` interface and available methods in the ElizaOS core.
+
+#### **Specific Problem Methods**
+
+**1.** `TrajectoryContainsActionEvaluator`
+
+```typescript
+// Current problematic code in EvaluationEngine.ts
+async evaluate(runtime: IAgentRuntime, _result: ScenarioResult): Promise<boolean> {
+    const memories = await runtime.getAllMemories(); // ❌ This method may not exist
+    return memories.some((memory: any) => memory.content?.metadata?.action === this.action);
+}
+```
+
+**2.** `LLMJudgeEvaluator`
+
+```typescript
+// Current problematic code in EvaluationEngine.ts
+async evaluate(runtime: IAgentRuntime, result: ScenarioResult): Promise<boolean> {
+    const llmResult = await runtime.useModel('TEXT_LARGE', { // ❌ Wrong method signature
+        system: `...`,
+        messages: [...]
+    });
+    return llmResult.toLowerCase().includes(this.expected.toLowerCase());
+}
+```
+
+#### **Required Investigation and Fixes**
+
+**1. Audit** `IAgentRuntime` Interface
+
+Before making any changes, thoroughly examine the actual `IAgentRuntime` interface:
+
+* **Review**: `packages/core/src/types.ts` or wherever `IAgentRuntime` is defined
+* **Identify**: What methods are actually available for:
+  * Accessing agent memory/action history
+  * Making LLM calls
+  * Querying agent state
+* **Document**: Create a reference of available methods with their correct signatures
+
+**2. Study Existing ElizaOS Patterns**
+
+Examine how other parts of the codebase interact with the runtime:
+
+* **Look at**: `packages/core/src/` - How do actions and providers access runtime capabilities?
+* **Look at**: `packages/plugin-bootstrap/src/` - How do evaluators and actions query agent state?
+* **Pattern**: Find examples of LLM calls, memory access, and action history retrieval
+* **Follow**: Use the same patterns that exist elsewhere in the codebase
+
+**3. Fix** `TrajectoryContainsActionEvaluator`
+
+* **Research**: How does ElizaOS actually store and retrieve action history?
+* **Options to investigate**:
+  * `runtime.messageManager` - for conversation/action logs
+  * `runtime.databaseAdapter` - for direct database queries
+  * Event/memory storage patterns used elsewhere
+* **Implementation**: Use the correct ElizaOS pattern for accessing action trajectory
+
+**Example research questions:**
+
+```typescript
+// What's the correct way to access action history?
+// Is it one of these patterns?
+const actionHistory = await runtime.messageManager.getMemories({...});
+const events = await runtime.databaseAdapter.getEventHistory();
+const memories = await runtime.memory.getMemoriesByType('action');
+```
+
+**4. Fix** `LLMJudgeEvaluator`
+
+* **Research**: How do other parts of ElizaOS make LLM calls?
+* **Find**: The correct method signature for LLM invocation
+* **Pattern**: Look at how actions, providers, or other evaluators make LLM calls
+
+**Example research questions:**
+
+```typescript
+// What's the correct way to call an LLM?
+// Is it one of these patterns?
+const response = await runtime.completion({...});
+const result = await runtime.generateText({...});
+const output = await runtime.llm.complete({...});
+```
+
+**5. Add Error Handling and Fallbacks**
+
+For each fixed evaluator:
+
+* **Graceful Degradation**: If a runtime method is unavailable, return a clear error or skip
+* **Clear Error Messages**: Provide actionable error messages when dependencies are missing
+* **Feature Detection**: Check if required runtime capabilities are available before using them
+
+**6. Create Runtime Requirements Documentation**
+
+* **Document**: What runtime capabilities each evaluator requires
+* **Specify**: Minimum runtime interface requirements for scenarios
+* **Guide**: Help future evaluator implementations avoid these issues
+
+#### **Implementation Approach**
+
+**Phase 1: Investigation (Do this first)**
+
+1. Create a comprehensive audit of `IAgentRuntime` available methods
+2. Find existing patterns in the codebase for:
+   * LLM calls
+   * Memory/action history access
+   * Agent state queries
+3. Document the correct patterns to follow
+
+**Phase 2: Fix Implementation**
+
+1. Update `TrajectoryContainsActionEvaluator` to use correct action history access
+2. Update `LLMJudgeEvaluator` to use correct LLM invocation method
+3. Add proper error handling for missing capabilities
+4. Update any other evaluators with similar issues
+
+**Phase 3: Validation**
+
+1. Test each evaluator with actual runtime instances
+2. Verify error handling works correctly
+3. Confirm evaluators integrate properly with the rest of the scenario system
+
+#### **Testing Strategy**
+
+**1. Runtime Method Validation**
+
+* Create test scenarios that exercise each evaluator type
+* Verify no runtime errors occur during evaluation execution
+* Test both success and failure cases for each evaluator
+
+**2. Integration Testing**
+
+* Test evaluators with actual agent runtimes
+* Verify trajectory evaluation works with real action sequences
+* Verify LLM judge works with actual model calls
+
+**3. Error Handling**
+
+* Test evaluators with mock runtimes that don't have required methods
+* Verify graceful error handling and clear error messages
+
+#### **Success Criteria**
+
+1. All evaluators use correct `IAgentRuntime` methods with proper signatures
+2. No runtime errors occur when evaluators are executed
+3. `TrajectoryContainsActionEvaluator` correctly identifies actions in agent execution history
+4. `LLMJudgeEvaluator` successfully makes LLM calls and processes responses
+5. Clear error messages when runtime capabilities are missing
+6. Documentation exists for runtime requirements of each evaluator
+
+#### **Implementation Guidelines**
+
+**⚠️ Critical Research First:**
+
+1. **Don't assume method signatures** - Always verify against actual `IAgentRuntime` interface
+2. **Follow existing patterns** - Find how other ElizaOS components do LLM calls and memory access
+3. **Study plugin-bootstrap** - This likely contains examples of evaluators that work correctly
+4. **Test incrementally** - Fix one evaluator at a time and verify it works
+5. **Document findings** - Create clear documentation of correct patterns for future reference
+
+This fix ensures the evaluation engine works reliably with actual ElizaOS runtime instances and follows established patterns in the codebase.7:T1a01,### 
+
+**Issue Title**: `fix(scenarios): Fix environment provider integration - bypass issue`
+
+**Tags**: `cli`, `scenarios`, `bug`, `critical`, `environment-provider`
+
+#### **Description**
+
+The scenario runner currently bypasses the sophisticated environment provider system entirely. The `handleRunScenario` function directly executes shell commands using `child_process.exec` instead of calling the properly implemented `LocalEnvironmentProvider` and `E2BEnvironmentProvider` classes. This means that virtual file systems, proper sandboxing, and environment-specific logic are not functioning as intended.
+
+This is a **critical bug** that breaks core functionality and prevents the scenario system from working as designed.
+
+#### **Current Implementation Problem**
+
+In `packages/cli/src/commands/scenario.ts`, the `handleRunScenario` function currently does this:
+
+```typescript
+async function handleRunScenario(_args: {filePath: string, live: boolean}, _runtime: any, scenario: any): Promise<ScenarioResult> {
+    const runStep = scenario.run[0];
+    
+    return new Promise<ScenarioResult>((resolve) => {
+        exec(runStep.input, (error, stdout, stderr) => {
+            resolve({ stdout, stderr, exitCode: error ? error.code || 1 : 0 });
+        });
+    });
+}
+```
+
+**This completely ignores the environment providers that were carefully implemented.**
+
+#### **Expected Implementation**
+
+The function should instantiate and use the appropriate environment provider based on `scenario.environment.type`:
+
+```typescript
+async function handleRunScenario(args: {filePath: string, live: boolean}, runtime: IAgentRuntime, scenario: Scenario): Promise<ScenarioResult> {
+    let provider: EnvironmentProvider;
+    
+    // Instantiate the correct provider
+    if (scenario.environment.type === 'e2b') {
+        provider = new E2BEnvironmentProvider(runtime);
+    } else if (scenario.environment.type === 'local') {
+        provider = new LocalEnvironmentProvider();
+    } else {
+        throw new Error(`Unsupported environment type: ${scenario.environment.type}`);
+    }
+    
+    try {
+        await provider.setup(scenario);
+        return await provider.run(scenario);
+    } finally {
+        await provider.teardown();
+    }
+}
+```
+
+#### **Root Cause Analysis**
+
+Based on the AI implementation feedback, this likely happened because:
+
+1. The AI didn't review existing ElizaOS patterns for environment abstraction
+2. The AI took a shortcuts approach instead of following the designed architecture
+3. The ticket didn't emphasize examining existing provider implementations in the codebase
+
+#### **Required Changes**
+
+**1. Fix the Main Handler Function**
+
+* **Modify**: `packages/cli/src/commands/scenario.ts` - `handleRunScenario` function
+* **Change**: Remove direct `child_process.exec` usage
+* **Add**: Proper environment provider instantiation and lifecycle management
+
+**2. Review Existing ElizaOS Environment Patterns**
+
+Before implementing, examine these existing patterns in the codebase:
+
+* **Look at**: `packages/cli/src/commands/start/` - How does the start command manage different environments?
+* **Look at**: `packages/core/src/` - Are there existing environment abstraction patterns?
+* **Look at**: Other plugins that manage execution environments
+* **Pattern**: Follow existing ElizaOS conventions for service instantiation and lifecycle
+
+**3. E2B Integration Specifics**
+
+Based on the [`@elizaos/plugin-e2b` documentation](https://github.com/elizaos-plugins/plugin-e2b), ensure proper integration:
+
+* **Service Discovery**: Use `runtime.getService('e2b')` to get the E2B service
+* **Error Handling**: Implement the recommended error checking pattern from the plugin docs
+* **API Usage**: Use the correct E2B service methods:
+  * `createSandbox()` for sandbox creation
+  * `executeCode()` for command execution (not `runCommand()` as currently implemented)
+  * `writeFileToSandbox()` for virtual file system setup
+  * `killSandbox()` for cleanup
+* **Configuration**: Respect E2B environment variables (`E2B_API_KEY`, `E2B_MODE`)
+
+**4. Local Environment Integration**
+
+* **Working Directory**: Ensure commands execute in the temporary directory created by `LocalEnvironmentProvider.setup()`
+* **File System**: Verify that `virtual_fs` files are actually available to the executed commands
+* **Cleanup**: Ensure temporary directories are properly cleaned up even on errors
+
+**5. Error Handling & Integration**
+
+* **Provider Errors**: Catch and properly format provider-specific errors
+* **Service Availability**: Handle cases where E2B service is not available with clear error messages
+* **Graceful Degradation**: Implement proper fallback behavior when providers fail
+
+#### **Testing Strategy**
+
+**1. Verify Virtual File System Works**
+
+* Test scenario with `setup.virtual_fs` containing test files
+* Verify commands can read and modify those files
+* Confirm files are properly isolated between test runs
+
+**2. Test E2B Integration**
+
+* Create test scenario that requires E2B (`environment: { type: 'e2b' }`)
+* Verify sandbox creation, file writing, and command execution
+* Test both with and without `E2B_API_KEY` to verify error handling
+
+**3. Test Local Environment**
+
+* Verify local scenarios work with temporary directory isolation
+* Test complex scenarios with multiple commands and file operations
+
+**4. Error Scenarios**
+
+* Test with invalid environment types
+* Test E2B scenarios without the plugin installed
+* Test scenarios that fail during setup or execution
+
+#### **Implementation Notes**
+
+**⚠️ Critical Implementation Guidelines:**
+
+1. **Review Existing Code First**: Before writing any new code, examine how other parts of ElizaOS handle environment abstraction and service integration
+2. **Follow ElizaOS Patterns**: Use the same patterns for service discovery, error handling, and lifecycle management that exist elsewhere in the codebase
+3. **E2B Plugin Integration**: Study the actual E2B plugin implementation to understand the correct service interface, don't assume the interface based on the provider code alone
+4. **Test Incrementally**: Fix local environment first (simpler), then E2B integration
+5. **Preserve Existing Functionality**: Ensure the mock engine, evaluation engine, and reporting continue to work exactly as they do now
+
+**Dependencies:**
+
+* The `LocalEnvironmentProvider` and `E2BEnvironmentProvider` classes are correctly implemented
+* The `@elizaos/plugin-e2b` service interface matches what's expected
+* The scenario schema and validation logic remain unchanged
+
+This fix will unlock the full potential of the scenario system and enable proper testing of both local and sandboxed agent execution.8:T1684,## 🚀 Clanker Protocol Plugin for ElizaOS
+
+This PR introduces a comprehensive Clanker protocol integration plugin that enables advanced token deployment and management on Base L2 using Clanker SDK v4.0.0.
+
+### 🎯 **Key Features**
+
+#### **Core Functionality**
+- **🪙 Token Deployment**: Advanced token deployment with Clanker SDK v4.0.0
+- **📊 Token Information**: Comprehensive token data queries  
+- **💰 Balance Checking**: Wallet and token balance monitoring
+- **🎯 Vanity Addresses**: Custom address suffix generation
+
+#### **Advanced Configuration**
+- **🏊 Pool Configuration**: Custom liquidity positions and fee structures
+- **🏆 Reward Management**: Creator rewards and fee distribution
+- **🔒 Vault & Vesting**: Token supply locking with custom schedules
+- **💸 Initial Dev Purchases**: Automated initial market making
+- **🎨 Rich Metadata**: IPFS images, social links, audit URLs
+
+#### **Legacy Operations (Properly Deprecated)**
+- **⚠️ Liquidity Management**: Redirects to Uniswap v4
+- **⚠️ Token Swapping**: Redirects to dedicated DEX integrations
+
+---
+
+### 🧪 **Comprehensive Testing - 85%+ Coverage**
+
+#### **Test Statistics**
+- **Test Files**: 9 comprehensive test suites
+- **Test Cases**: 200+ individual scenarios
+- **Lines of Test Code**: 2,500+ lines
+- **Coverage**: All critical user-facing functionality
+
+#### **Test Categories**
+- ✅ **Services** (100%): Clanker SDK integration, wallet operations
+- ✅ **Actions** (100%): Token deployment, info queries, balance checks, deprecated operations  
+- ✅ **Utilities** (100%): Error handling, formatting, validation
+- ✅ **Core** (100%): Plugin initialization and configuration
+
+#### **Quality Features**
+- 🔄 **Edge Cases**: Invalid inputs, service failures, network issues
+- 🎭 **Comprehensive Mocking**: Type-safe service simulation
+- 📊 **SDK Integration**: Tests actual Clanker v4.0.0 patterns
+- 🚨 **Error Scenarios**: Network timeouts, insufficient funds, validation
+- 🔧 **Backwards Compatibility**: Proper deprecation handling
+
+---
+
+### 🏗️ **Technical Architecture**
+
+#### **Services Layer**
+- **ClankerService**: Clanker SDK v4.0.0 integration with advanced config support
+- **WalletService**: Ethers.js wallet management with transaction handling
+
+#### **Actions Layer**
+- **tokenDeployAction**: Natural language → Clanker API parameter conversion
+- **tokenInfoAction**: Token data retrieval with formatting
+- **balanceCheckAction**: Wallet/token balance queries
+- **liquidityManagementAction**: Proper deprecation handling
+- **tokenSwapAction**: Proper deprecation handling
+
+#### **Support Layer**
+- **Providers**: Token context and market data
+- **Evaluators**: Deployment success analysis
+- **Utilities**: Error handling, formatting, validation
+
+---
+
+### 📊 **Clanker SDK v4.0.0 Integration**
+
+#### **New Features Supported**
+- ✅ Vanity address generation with custom suffixes
+- ✅ Advanced pool configuration with custom tick positions  
+- ✅ Comprehensive reward distribution (up to 7 recipients)
+- ✅ Token supply vesting with lockup + linear vesting periods
+- ✅ Initial dev purchases with automated market making
+- ✅ Rich metadata with IPFS images and social links
+- ✅ Social provenance context validation
+
+#### **Breaking Changes Handled**
+- ✅ Fixed token supply (1B tokens) instead of custom amounts
+- ✅ Fixed decimals (18) instead of custom precision
+- ✅ Required `tokenAdmin` parameter for permissions
+- ✅ Enhanced metadata structure for social verification
+
+---
+
+### 🔐 **Security & Production Readiness**
+
+#### **Security Features**
+- 🔑 Private key protection with environment variables
+- ⛽ Gas price monitoring and limits
+- ✅ Comprehensive parameter validation
+- 🚨 Proper error handling with user-friendly messages
+- 🔄 Transaction retry logic with exponential backoff
+
+#### **Production Features**
+- 📚 Comprehensive documentation with examples
+- 🚨 Troubleshooting guide for common issues  
+- ⚠️ Migration guide from legacy versions
+- 🔧 Development workflow documentation
+- 📊 Architecture diagrams and component descriptions
+
+---
+
+### 🎯 **Usage Examples**
+
+#### **Simple Deployment**
+```
+"Deploy a new token called MyToken with symbol MTK"
+"Create a memecoin called PEPE with vanity address"
+```
+
+#### **Advanced Deployment**
+```typescript
+await clankerService.deployToken({
+  name: "Advanced Token",
+  symbol: "ADV", 
+  vanity: true,
+  vault: { percentage: 10, lockupDuration: 2592000, vestingDuration: 2592000 },
+  devBuy: { ethAmount: 0.1 },
+  rewards: { recipients: [{ recipient: "0x...", bps: 8000, token: "Paired" }] }
+});
+```
+
+#### **Information Queries**
+```
+"Get info for token 0x1234567890abcdef1234567890abcdef12345678"
+"What is the price and market cap of BASE token?"
+"Check my wallet balance"
+```
+
+---
+
+### ⚡ **Files Changed**
+
+- **36 files added** with 6,271 lines of code
+- **Source Files**: Complete plugin architecture with services, actions, providers
+- **Test Files**: Comprehensive test coverage across all components
+- **Documentation**: Production-ready README with examples and guides
+- **Configuration**: TypeScript config, build setup, package.json
+
+---
+
+### 🚀 **Ready for Review**
+
+This plugin is production-ready with:
+- ✅ Comprehensive test coverage (85%+)
+- ✅ Full Clanker SDK v4.0.0 integration  
+- ✅ Proper deprecation handling for legacy features
+- ✅ Security best practices implemented
+- ✅ Complete documentation and examples
+- ✅ TypeScript type safety throughout
+- ✅ Error resilience and user-friendly messages
+
+**Testing**: Run `bun test` in `packages/plugin-clanker/` to verify all tests pass.
+
+**Documentation**: See comprehensive README with usage examples, architecture details, and troubleshooting guides.9:T194c,# Relates to
+
+https://github.com/elizaOS/eliza/issues/5183
+
+# Risks
+
+**Risk: Low**
+- Code cleanup and documentation improvement
+- Removes non-functional features to avoid user confusion
+- No impact on existing core functionality
+
+# Background
+
+## What does this PR do?
+
+This PR cleans up the logging system for ElizaOS by removing non-implemented features and updating documentation to reflect actual capabilities:
+
+1. **Code Cleanup**: Removes CloudWatch, Elasticsearch, and multi-transport configurations that were not actually implemented
+2. **Simplified CLI Interface**: Streamlined `elizaos logger` command with only functional options
+3. **Accurate Documentation**: Updated documentation to reflect only supported features
+4. **Clear Transport Options**: Limited to console and file transports (the only working implementations)
+5. **Future Planning**: Added section about planned enhancements for transparency
+
+## What kind of change is this?
+
+**Code Cleanup** (non-breaking change which removes non-functional code)
+- Removed non-implemented transport configurations
+- Simplified CLI interface to show only working options
+- Updated documentation for accuracy
+- Added future enhancement roadmap
+
+# Documentation changes needed?
+
+**My changes require a change to the project documentation.**
+**I have updated the documentation accordingly.**
+
+Updated files:
+- `eliza/packages/docs/docs/cli/logger.md` - Removed references to non-implemented transports
+- `eliza/packages/cli/src/commands/logger.ts` - Cleaned up interface and configuration types
+- `eliza/packages/cli/src/commands/start/index.ts` - Simplified transport validation
+
+# Testing
+
+## Where should a reviewer start?
+
+1. **CLI Interface**: Test the simplified `elizaos logger` command (should only show console/file options)
+2. **Error Handling**: Verify that unsupported transports show appropriate warnings
+3. **Documentation**: Review updated documentation for accuracy and clarity
+4. **Existing Functionality**: Ensure console and file logging still work correctly
+
+## Detailed testing steps
+
+### CLI Logger Interface
+```bash
+# Test simplified interactive menu (should only show 2 transport options)
+elizaos logger
+```
+
+### Transport Validation
+```bash
+# Test that only supported transports work
+elizaos start --log-transport console --log-level debug  # Should work
+elizaos start --log-transport file --log-level debug     # Should work
+
+# Test unsupported transport handling (if somehow configured)
+# Should show warning and fall back to console
+```
+
+### Documentation Verification
+- Review `packages/docs/docs/cli/logger.md` - should only mention console/file transports
+- Check that CloudWatch/Elasticsearch references are removed
+- Verify "Future Enhancements" section explains planned features
+
+## Screenshots
+
+### After - Simplified CLI Menu
+```
+Select output destination:
+❯ Console only
+  Console + File (hybrid)
+```
+
+### Updated Transport Table
+| Transport | Description | CLI Option |
+|-----------|-------------|------------|
+| `console` | Console output only with pretty formatting | `--log-transport console` |
+| `file` | Hybrid: console + file output | `--log-transport file` |
+
+## Documentation Changes
+
+### Added Clarity
+- **Available Transports** section clearly listing only supported options
+- **Future Enhancements** section explaining planned features
+- **Alternative Solutions** for users needing advanced transports
+
+### Updated Examples
+- All examples now use only `console` or `file` transports
+- Removed confusing CloudWatch/Elasticsearch configuration examples
+- Simplified setup instructions
+
+## Benefits
+
+1. **No More User Confusion**: Users won't try to configure non-working features
+2. **Honest Documentation**: Documentation accurately reflects actual capabilities
+3. **Cleaner Codebase**: Removed dead code and unused configuration options
+4. **Better Error Messages**: Clear validation for unsupported transports
+5. **Future-Ready**: Clear roadmap for when advanced transports are implemented
+
+## Code Changes Summary
+
+### `packages/cli/src/commands/logger.ts`
+- Simplified `LoggerConfig` interface to only include working transports
+- Removed CloudWatch/Elasticsearch configuration handling
+- Streamlined `displayConfig` function
+- Updated transport selection menu
+
+### `packages/cli/src/commands/start/index.ts`
+- Updated transport validation logic
+- Simplified help text for transport options
+- Improved error messages for unsupported transports
+
+### `packages/docs/docs/cli/logger.md`
+- Complete rewrite focusing on supported features
+- Added transport comparison table
+- Added future enhancements section
+- Removed misleading examples and configuration sections
+
+## Backward Compatibility
+
+- **Fully Compatible**: All existing functionality continues to work
+- **Configuration Files**: Existing configs with unsupported transports will show warnings and fall back to console
+- **No Breaking Changes**: Console and file logging work exactly as before
+
+## Future Work
+
+This cleanup sets the foundation for properly implementing advanced transports:
+- CloudWatch transport with proper AWS SDK integration
+- Elasticsearch transport with connection management
+- Multi-transport with proper configuration validation
+
+# Deploy Notes
+
+No special deployment requirements. This is a cleanup that improves user experience by removing confusion about non-working features. 
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+- **New Features**
+  - Introduced a new CLI command for interactive logging configuration, allowing users to set log level, transport type, file path, and JSON formatting.
+  - Added advanced logging options to the CLI, including support for file-based logging, hybrid console/file output, and JSON log formatting.
+
+- **Documentation**
+  - Expanded documentation for logging configuration, including a new guide for the logger command and updated instructions for the start command.
+  - Updated README and CLI documentation to reflect new logging options and provide detailed usage examples.
+
+- **Style**
+  - Minor improvements to code comments and whitespace for clarity.
+
+- **Chores**
+  - Updated build configuration to exclude Cypress test files from the server package build process.
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->a:T70e,## Summary
+
+This PR adds critical clarifications to CLAUDE.md to help developers understand the correct usage of ElizaOS components (Services, Providers, Actions, Evaluators).
+
+## Changes
+
+### 1. Main CLAUDE.md updates
+- Added "CRITICAL: ElizaOS Component Clarifications" section with:
+  - Clear distinction between Services vs Providers
+  - Clear distinction between Actions vs Evaluators  
+  - Correct architecture pattern diagram
+  - Plugin structure with required components
+  - Common mistakes to avoid
+- Added guidance for using parallel Claude code agents for maximum performance
+
+### 2. Created CLAUDE.md files for starter templates
+- **packages/plugin-starter/CLAUDE.md**: Complete guide for ElizaOS plugin development
+- **packages/project-starter/CLAUDE.md**: Complete guide for ElizaOS agent projects
+- Both files include:
+  - Detailed component explanations with examples
+  - Best practices and common patterns
+  - `elizaos dev` and `elizaos start` command documentation
+  - Required plugins documentation
+
+### 3. Updated tests
+- Updated create.test.ts to verify CLAUDE.md files are properly copied during project creation
+
+## Background
+
+This documentation was created to address widespread confusion about ElizaOS component usage patterns, particularly:
+- When to use Services vs Providers
+- When to use Actions vs Evaluators
+- The requirement for Services when dealing with external APIs
+- The read-only nature of Providers
+
+## Impact
+
+These changes will help developers:
+- Understand the correct ElizaOS architecture patterns
+- Avoid common mistakes when building plugins
+- Have clear reference documentation in their projects
+- Use parallel agents effectively for better performance
+
+🤖 Generated with [Claude Code](https://claude.ai/code)
+
+Co-Authored-By: Claude <noreply@anthropic.com>b:Tde7,# Refactor: Complete Migration from JSON to XML Prompts
+
+## Summary
+
+This PR completes a comprehensive refactoring of all prompts across the ElizaOS codebase to use XML format instead of JSON, significantly improving LLM response reliability and consistency.
+
+## Motivation
+
+Large Language Models (LLMs) have shown better performance and more reliable parsing when working with XML format compared to JSON. This is particularly important for complex structured outputs where JSON parsing can be fragile due to:
+
+- Escape character handling
+- Nested object complexity
+- String delimiters and special characters
+- Inconsistent formatting across different LLM providers
+
+## Changes Made
+
+### Core Package Updates
+
+- **entities.ts**: Updated entity resolution template to XML format for better entity matching
+
+### Plugin-Bootstrap Actions Refactored
+
+- **imageGeneration.ts**: Migrated image prompt generation to XML
+- **reply.ts**: Updated reply template to use XML response format
+- **sendMessage.ts**: Converted target extraction to XML structure
+- **settings.ts**: Refactored all setting templates (success, failure, error, completion) to XML
+- **updateEntity.ts**: Updated component data extraction to XML format
+- **roles.ts**: Converted role assignment parsing to XML and removed `dedent` dependency
+- **choice.ts**: Updated option extraction template to XML format
+
+### Evaluators Refactored
+
+- **reflection.ts**: Converted complex nested fact and relationship structures to XML with proper array handling
+
+### Test Suite Updates
+
+- **core/entities.test.ts**: Updated all entity tests to mock `parseKeyValueXml` instead of `parseJSONObjectFromText`
+- **plugin-bootstrap/evaluators.test.ts**: Fixed reflection evaluator tests to handle XML responses
+- **plugin-bootstrap/actions.test.ts**: Updated reply action tests to expect XML format
+
+### Technical Improvements
+
+1. **Consistent Parsing**: All responses now use `parseKeyValueXml` for uniform parsing
+2. **Model Type Updates**: Changed from `OBJECT_LARGE/OBJECT_SMALL` to `TEXT_LARGE/TEXT_SMALL` where appropriate
+3. **Better Structure Handling**: Improved handling of nested structures (arrays within XML)
+4. **Type Safety**: Fixed TypeScript errors with proper type annotations
+5. **Clear Instructions**: Added explicit prompting to avoid LLM reasoning sections in responses
+6. **Dependency Cleanup**: Removed unnecessary `dedent` dependency from roles.ts
+
+## XML Structure Examples
+
+### Before (JSON):
+
+```json
+{
+  "thought": "Analyzing the situation",
+  "actions": ["REPLY", "UPDATE_ENTITY"],
+  "text": "Hello, how can I help?"
+}
+```
+
+### After (XML):
+
+```xml
+<response>
+  <thought>Analyzing the situation</thought>
+  <actions>REPLY,UPDATE_ENTITY</actions>
+  <text>Hello, how can I help?</text>
+</response>
+```
+
+## Benefits
+
+- ✅ More reliable LLM responses across all providers
+- ✅ Consistent parsing throughout the entire codebase
+- ✅ Reduced parsing errors and edge cases
+- ✅ Better handling of complex nested structures
+- ✅ Cleaner, more maintainable code
+- ✅ Improved test coverage with proper XML mocking
+
+## Testing
+
+All tests have been updated to handle the new XML format:
+
+- Core entity tests now properly mock XML parsing
+- Plugin-bootstrap tests updated to expect XML responses
+- Test utilities enhanced to support both legacy and new formats
+
+## Breaking Changes
+
+None - This is an internal refactoring that maintains the same external API. All public interfaces remain unchanged.
+c:T523,## Summary
+- Fixed failing dev command tests in CI by addressing missing dependency issues
+- Tests were failing with "Cannot find module '@langchain/core/documents'" error
+- Server subprocess was not outputting to test process due to stdio configuration
+
+## Changes
+1. **Server package dependencies** - Moved `dotenv` from devDependencies to dependencies since it's imported at runtime
+2. **Core package dependencies** - Added `@langchain/core` as explicit dependency to satisfy peer dependency requirements
+3. **Test setup improvements** - Updated test to install dependencies in the test project before running
+4. **Test output capture** - Modified server-manager to use pipes in test mode (when `ELIZA_TEST_MODE=true`) to capture subprocess output
+
+## Test plan
+- [x] Run `bun test tests/commands/dev.test.ts` locally - all tests pass
+- [x] Verify the specific failing test now passes: `bun test tests/commands/dev.test.ts -t "dev command uses specified port when provided"`
+- [ ] CI should pass after these changes
+
+## Context
+The root cause was that when using `bun link` to install the CLI globally, transitive dependencies weren't being resolved properly. The server package was trying to import modules that weren't available in the global context.
+
+🤖 Generated with [Claude Code](https://claude.ai/code)d:T77f,### PR Review – JSON B insert failure fix in `plugin-sql`
+
+Great catch!  
+The change that stringifies `content` and `metadata` before passing them to
+
+```ts
+sql`${...}::jsonb`
+```
+
+solves the root issue where raw objects were implicitly coerced to the string `"[object Object]"`.  
+That coercion broke the `::jsonb` cast, triggered `Failed query` errors, and blocked service startup (most visibly with `plugin-twitter`).
+
+#### What this patch does
+1. **`createMemory`**
+   * Detects string vs. object and always stores a *JSON string*:
+     ```ts
+     const contentToInsert  = typeof memory.content  === 'string'
+                              ? memory.content
+                              : JSON.stringify(memory.content ?? {});
+     const metadataToInsert = typeof memory.metadata === 'string'
+                              ? memory.metadata
+                              : JSON.stringify(memory.metadata ?? {});
+     ```
+   * Uses those variables in the `INSERT`.
+
+2. **`updateMemory`**
+   * Mirrors the same logic when updating existing rows.
+
+3. **Safety**
+   * No DB-schema changes; only the way values are bound.
+   * Back-compatible with records already stored as proper JSON.
+
+#### Why this matters
+* Prevents runtime-blocking SQL exceptions on any plugin that passes nested objects (Twitter, Discord, etc.).
+* Makes the adapter resilient to future changes where callers send rich objects.
+* Keeps the `::jsonb` cast (fast path for PG) without forcing every upstream plugin to remember to stringify.
+
+#### Suggested follow-ups
+* Add a small unit test for `createMemory`/`updateMemory` verifying that both object and string inputs land in Postgres as valid JSON.
+* Consider centralising this stringify helper to avoid duplication if more fields become JSONB later.
+
+Looks good – with this in, service registration succeeds and no more `[object Object]` inserts. 🎉e:T711,### Problem
+When running `elizaos publish` on a newly created plugin, users encounter a module resolution error:
+
+```bash
+error: Cannot find module 'zod/v3' from '/Users/user/plugin-testing/node_modules/@langchain/core/dist/runnables/base.js'
+```
+
+### Root Cause Analysis
+The error occurs due to a version mismatch between dependencies:
+
+1. **@langchain/core v0.3.66** imports from `zod/v3`:
+   ```javascript
+   // @langchain/core/dist/runnables/base.js
+   import { z } from "zod/v3";
+   ```
+
+2. **Plugin templates** were pinning zod to older versions:
+   - `plugin-starter`: zod `3.24.2`
+   - `plugin-quick-starter`: zod `^3.24.4`
+
+3. **The `/v3` export** was added in zod `3.25.0`, so older versions don't have it
+
+4. **@langchain/core** requires `zod ^3.25.32` in its package.json
+
+### Solution
+Updated the zod version in both plugin templates to match @langchain/core's requirements:
+
+```diff
+// plugin-starter/package.json
+  "dependencies": {
+    "@elizaos/core": "workspace:*",
+-   "zod": "3.24.2"
++   "zod": "^3.25.32"
+  },
+  "resolutions": {
+-   "zod": "3.24.2"
++   "zod": "^3.25.32"
+  }
+```
+
+```diff
+// plugin-quick-starter/package.json
+  "dependencies": {
+    "@elizaos/core": "workspace:*",
+-   "zod": "^3.24.4"
++   "zod": "^3.25.32"
+  },
+  "resolutions": {
+-   "zod": "^3.24.4"
++   "zod": "^3.25.32"
+  }
+```
+
+### Testing
+After this change, `elizaos publish` runs without module resolution errors on newly created plugins.
+
+Fixes #5657 
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+* **Chores**
+  * Updated the "zod" dependency to version ^3.25.32 in relevant packages for improved compatibility and maintenance.
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->f:T415,## Summary
+
+Removes the unused `test-function-detection.sh` script from the root directory.
+
+## Context
+
+This script was a development artifact used to validate AWK patterns for function detection during the development of the code quality analysis tools. The patterns are now working correctly in production and this test script serves no ongoing purpose.
+
+## Changes
+
+- ❌ Deleted `test-function-detection.sh` (226 lines removed)
+
+## Why remove it?
+
+1. **Not referenced anywhere** - No other scripts, CI/CD, or documentation mention it
+2. **Not part of test suite** - Not integrated with vitest or any automated testing  
+3. **Redundant validation** - AWK patterns already proven working in:
+   - `.github/workflows/daily-code-quality-analysis.yml`
+   - `scripts/analyze-code-quality.sh`
+4. **Development artifact** - Was useful during development but no longer needed
+
+## Testing
+
+- ✅ No references to fix (confirmed via grep)
+- ✅ Production AWK patterns continue working in GitHub workflow
+- ✅ Code quality analysis scripts unaffected10:T12f5,ElizaOS made significant progress today on core framework refinements, including migrating prompts to XML for improved LLM reliability and addressing critical bugs in CLI and SQL plugins. The project also expanded its plugin ecosystem with a new submission to the registry and introduced new features and documentation enhancements.
+
+## 🚨 Needs Attention 
+- **Pull Requests to Review**:
+    - [elizaos-plugins/registry#192](https://github.com/elizaos-plugins/registry/pull/192): New plugin submission for 'plugin-my' requires review for inclusion in the registry.
+    - [elizaos/eliza#5659](https://github.com/elizaos/eliza/pull/5659): "feat: enhance-logging-rebased" aims to improve logging capabilities.
+    - [elizaos/eliza#5658](https://github.com/elizaos/eliza/pull/5658): "fix: update zod to 3.25 so v3 is there" addresses a dependency update for Zod.
+    - [elizaos/eliza#5650](https://github.com/elizaos/eliza/pull/5650): "feat: Add Clanker Plugin with SDK v4.0.0 Integration" introduces a new Clanker Plugin with SDK integration.
+- **Urgent Discussions**:
+    - [elizaos/eliza#5655](https://github.com/elizaos/eliza/issues/5655): Issue reported regarding the `create-eliza` command's npm deployment.
+    - [elizaos/eliza#5657](https://github.com/elizaos/eliza/issues/5657): Failure of `elizaos publish` with a Zod module error in newly created plugins.
+
+## ✅ Completed Work
+- **Core Framework Refinements & Prompt Standardization**:
+    - Migrated all JSON prompts to an XML format across the codebase, enhancing LLM response reliability in core entities and the bootstrap plugin. [elizaos/eliza#5623](https://github.com/elizaos/eliza/pull/5623)
+- **CLI and Plugin Stability Improvements**:
+    - Fixed CLI dev command test failures due to missing dependencies. [elizaos/eliza#5641](https://github.com/elizaos/eliza/pull/5641)
+    - Resolved issues with JSON string handling in the SQL base plugin, ensuring more robust operations. [elizaos/eliza#5628](https://github.com/elizaos/eliza/pull/5628)
+- **Feature Expansion and Documentation**:
+    - Added new examples to the default Eliza character to support Twitter posting functionality. [elizaos/eliza#5652](https://github.com/elizaos/eliza/pull/5652)
+    - Enhanced documentation with critical clarifications on ElizaOS components (Services, Providers, Actions, Evaluators) in `CLAUDE.md`. [elizaos/eliza#5642](https://github.com/elizaos/eliza/pull/5642)
+
+## 🏗️ Work in Progress
+- **New Pull Requests**:
+    - **elizaos-plugins/registry**:
+        - [elizaos-plugins/registry#192](https://github.com/elizaos-plugins/registry/pull/192): Add 'plugin-my' to the registry.
+    - **elizaos/eliza**:
+        - [elizaos/eliza#5659](https://github.com/elizaos/eliza/pull/5659): feat: enhance-logging-rebased
+        - [elizaos/eliza#5658](https://github.com/elizaos/eliza/pull/5658): fix: update zod to 3.25 so v3 is there
+        - [elizaos/eliza#5650](https://github.com/elizaos/eliza/pull/5650): feat: Add Clanker Plugin with SDK v4.0.0 Integration
+
+## 🐞 Issue Triage
+- **New Issues**:
+    - **elizaos/eliza**:
+        - [elizaos/eliza#5640](https://github.com/elizaos/eliza/issues/5640): Scenario runner runtime dependency audits for evaluators.
+        - [elizaos/eliza#5639](https://github.com/elizaos/eliza/issues/5639): Bypass issue in the environment provider integration.
+        - [elizaos/eliza#5646](https://github.com/elizaos/eliza/issues/5646): Request for Aave plugin.
+        - [elizaos/eliza#5643](https://github.com/elizaos/eliza/issues/5643): Request for Morpho plugin.
+        - [elizaos/eliza#5644](https://github.com/elizaos/eliza/issues/5644): Request for Clanker plugin.
+        - [elizaos/eliza#5645](https://github.com/elizaos/eliza/issues/5645): Request for Defi-Llama plugin.
+        - [elizaos/eliza#5647](https://github.com/elizaos/eliza/issues/5647): Request for Moon-Well plugin.
+        - [elizaos/eliza#5648](https://github.com/elizaos/eliza/issues/5648): Request for documentation on sending messages via webhooks/routes.
+        - [elizaos/eliza#5649](https://github.com/elizaos/eliza/issues/5649): Request for WebSocket API reference.
+        - [elizaos/eliza#5653](https://github.com/elizaos/eliza/issues/5653): Request for MCP plugin documentation.
+        - [elizaos/eliza#5654](https://github.com/elizaos/eliza/issues/5654): Request for action-chaining documentation.
+        - [elizaos/eliza#5655](https://github.com/elizaos/eliza/issues/5655): `create-eliza` command npm deployment issue.
+        - [elizaos/eliza#5657](https://github.com/elizaos/eliza/issues/5657): `elizaos publish` failure with Zod module error.
+- **Closed Issues**:
+    - **elizaos/eliza**:
+        - [elizaos/eliza#5616](https://github.com/elizaos/eliza/issues/5616): Fixed issue where `.elizadb` directory was created in the wrong location when running `elizaos create`.0:{"buildId":"US8XLB_zHXYj_PVAECGcd","rsc":["$","$1","c",{"children":[["$","div",null,{"className":"container mx-auto px-6 py-8 md:px-8","children":["$","div",null,{"className":"mx-auto max-w-4xl","children":[["$","div",null,{"className":"mb-4 flex flex-col justify-between sm:flex-row","children":[["$","$L2",null,{"currentInterval":"day","currentDate":"2025-07-21"}],["$","$L3",null,{"metrics":{"date":"2025-07-21","interval":{"intervalStart":"$D2025-07-21T00:00:00.000Z","intervalEnd":"$D2025-07-22T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":9,"merged":6,"total":11},"issues":{"new":14,"closed":1,"total":15},"activeContributors":13,"codeChanges":{"additions":2256,"deletions":864,"files":29,"commitCount":72},"topContributors":[{"username":"wtfsayo","avatarUrl":"https://avatars.githubusercontent.com/u/82053242?u=98209a1f10456f42d4d2fa71db4d5bf4a672cbc3&v=4","totalScore":158.53601602192933,"prScore":158.09801602192934,"issueScore":0,"reviewScore":0,"commentScore":0.43799999999999994,"summary":"wtfsayo: Focused on critical documentation and development environment stability, merging a significant PR to clarify ElizaOS components in `CLAUDE.md` (elizaos/eliza#5642) and fixing CLI dev command test failures (elizaos/eliza#5641). Their work primarily involved other work, bug fixes, refactoring, and documentation."},{"username":"linear","avatarUrl":"https://avatars.githubusercontent.com/in/20150?v=4","totalScore":52,"prScore":0,"issueScore":52,"reviewScore":0,"commentScore":0,"summary":"linear: Focused on identifying and documenting potential work, creating 15 issues, including two closed issues related to `elizaos create` and `elizaos publish` commands, and 13 open issues primarily for documentation and plugin development."},{"username":"ChristopherTrimboli","avatarUrl":"https://avatars.githubusercontent.com/u/27584221?u=de148a498b5af814e037c2975112fadd09df743f&v=4","totalScore":42.16402753610272,"prScore":26.164027536102726,"issueScore":0,"reviewScore":16,"commentScore":0,"summary":"ChristopherTrimboli: Focused on adding post examples to the default Eliza character, merging elizaos/eliza#5652 (+41/-14 lines) and providing 3 reviews. Their work primarily involved modifying 99 files (+5289/-2982 lines) with a focus on documentation and code changes, encompassing other work, bug fixes, and refactoring."},{"username":"cuongpo","avatarUrl":"https://avatars.githubusercontent.com/u/61429471?u=4ee322b81464e6380a46388ff471c9247bb4cbd7&v=4","totalScore":36.506248211863664,"prScore":36.506248211863664,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"cuongpo: Focused on expanding the plugin registry, merging one PR to add `plugin-coti` to the registry and opening another for `plugin-my`, primarily modifying configuration files."},{"username":"standujar","avatarUrl":"https://avatars.githubusercontent.com/u/16385918?u=718bdcd1585be8447bdfffb8c11ce249baa7532d&v=4","totalScore":35.9757738965761,"prScore":35.7757738965761,"issueScore":0,"reviewScore":0,"commentScore":0.2,"summary":"standujar: Focused on enhancing logging capabilities, opening PR elizaos/eliza#5659 \"feat: enhance-logging-rebased\" and modifying 80 files with 13 commits, primarily contributing to other work, bugfixes, tests, and refactoring across tests, code, and documentation."},{"username":"yungalgo","avatarUrl":"https://avatars.githubusercontent.com/u/113615973?u=92e0f29f7e2fbb8ce46ed13c51f692ca803de02d&v=4","totalScore":28.547948169591304,"prScore":28.347948169591305,"issueScore":0,"reviewScore":0,"commentScore":0.2,"summary":"yungalgo: Focused on an open PR, elizaos/eliza#5658, to update a dependency, contributing 6 commits with changes across 16 files, primarily in configuration and code."},{"username":"github-advanced-security","avatarUrl":"https://avatars.githubusercontent.com/in/57789?v=4","totalScore":4.5,"prScore":0,"issueScore":0,"reviewScore":4.5,"commentScore":0,"summary":"github-advanced-security: No activity today."}],"focusAreas":[{"area":"plugin-bootstrap","count":10},{"area":"cli","count":5},{"area":"docs","count":2},{"area":"core","count":2},{"area":"plugin-sql","count":2},{"area":"plugin-starter","count":1},{"area":"project-starter","count":1}],"topIssues":[{"id":"I_kwDOMT5cIs7BGIrT","title":"When running `elizaos create` command, the `.elizadb` directory is being created in the wrong location (current working directory) instead of inside the newly created project folder.","author":"linear","number":5616,"repository":"elizaos/eliza","body":"$4","createdAt":"2025-07-17T13:31:08Z","closedAt":"2025-07-21T15:52:01Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7BtlQz","title":"`elizaos publish` fails with zod module error in newly created plugins","author":"linear","number":5657,"repository":"elizaos/eliza","body":"$5","createdAt":"2025-07-21T20:30:37Z","closedAt":"2025-07-24T12:04:49Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7Bte9R","title":"update action-chaining docs on docs repo/site","author":"linear","number":5656,"repository":"elizaos/eliza","body":"* How and when to use callbacks\n* how to avoid double response\n* what happens with action results","createdAt":"2025-07-21T20:20:33Z","closedAt":"2025-07-24T22:25:03Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7BtdQ9","title":"update create-eliza command npm deployment etc","author":"linear","number":5655,"repository":"elizaos/eliza","body":"","createdAt":"2025-07-21T20:18:06Z","closedAt":null,"state":"OPEN","commentCount":0},{"id":"I_kwDOMT5cIs7BtcsO","title":"Add MCP plugin docs","author":"linear","number":5654,"repository":"elizaos/eliza","body":"","createdAt":"2025-07-21T20:17:24Z","closedAt":"2025-08-09T16:22:04Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7BtcWc","title":"Add web socket api references to docs site","author":"linear","number":5653,"repository":"elizaos/eliza","body":"[https://mintlify.com/docs/api-playground/asyncapi/setup](https://mintlify.com/docs/api-playground/asyncapi/setup)<br>[https://studio.asyncapi.com/](https://studio.asyncapi.com/)","createdAt":"2025-07-21T20:16:46Z","closedAt":null,"state":"OPEN","commentCount":0},{"id":"I_kwDOMT5cIs7Bl7RB","title":"Add docs for sending message as agent to any chat via webhook / routes in plugins","author":"linear","number":5649,"repository":"elizaos/eliza","body":"","createdAt":"2025-07-21T09:52:28Z","closedAt":"2025-09-13T07:51:52Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7Bl5Q6","title":"moon-well plugin","author":"linear","number":5648,"repository":"elizaos/eliza","body":"","createdAt":"2025-07-21T09:49:50Z","closedAt":"2025-07-30T12:31:54Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7Bl5Az","title":"defi-llama plugin","author":"linear","number":5647,"repository":"elizaos/eliza","body":"","createdAt":"2025-07-21T09:49:35Z","closedAt":"2025-07-30T12:31:51Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7Bl47l","title":"aave plugin","author":"linear","number":5646,"repository":"elizaos/eliza","body":"","createdAt":"2025-07-21T09:49:28Z","closedAt":"2025-07-30T12:31:56Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7Bl4zM","title":"clanker plugin","author":"linear","number":5645,"repository":"elizaos/eliza","body":"","createdAt":"2025-07-21T09:49:17Z","closedAt":"2025-07-30T12:31:57Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7Bl4vm","title":"morpho plugin","author":"linear","number":5644,"repository":"elizaos/eliza","body":"","createdAt":"2025-07-21T09:49:12Z","closedAt":"2025-08-04T15:35:42Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7Bl4ZM","title":"base agent -- clank tank","author":"linear","number":5643,"repository":"elizaos/eliza","body":"","createdAt":"2025-07-21T09:48:54Z","closedAt":"2025-08-05T13:53:26Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7Bh7_I","title":"Ticket Spec: `fix(scenarios): Runtime dependency audit and fix for evaluators`","author":"linear","number":5640,"repository":"elizaos/eliza","body":"$6","createdAt":"2025-07-21T01:20:49Z","closedAt":"2025-08-07T02:40:16Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7Bh7k0","title":"Ticket Spec: `fix(scenarios): Fix environment provider integration - bypass issue`","author":"linear","number":5639,"repository":"elizaos/eliza","body":"$7","createdAt":"2025-07-21T01:18:50Z","closedAt":"2025-08-07T02:39:52Z","state":"CLOSED","commentCount":0}],"topPullRequests":[{"id":"PR_kwDOMT5cIs6f17vD","title":"feat: Add Clanker Plugin with SDK v4.0.0 Integration","author":"wtfsayo","number":5650,"body":"$8","repository":"elizaos/eliza","createdAt":"2025-07-21T12:15:16Z","mergedAt":null,"additions":6271,"deletions":0},{"id":"PR_kwDOMT5cIs6f75vg","title":"feat: enhance-logging-rebased","author":"standujar","number":5659,"body":"<!-- This is an auto-generated comment: release notes by coderabbit.ai -->\r\n\r\n## Summary by CodeRabbit\r\n\r\n* **New Features**\r\n  * Introduced advanced logging configuration for ElizaOS agents, including new CLI options for log level, transport (console or file), file path, and JSON formatting.\r\n  * Added an interactive `elizaos logger` CLI command for persistent logging setup.\r\n  * Logging can now be configured via CLI flags, environment variables, or config files, with hybrid console and file output supported.\r\n\r\n* **Documentation**\r\n  * Expanded and reorganized documentation for logging, CLI commands, and server testing, including new guides and usage examples.\r\n\r\n<!-- end of auto-generated comment: release notes by coderabbit.ai -->","repository":"elizaos/eliza","createdAt":"2025-07-21T21:59:42Z","mergedAt":null,"additions":1796,"deletions":642},{"id":"PR_kwDOMT5cIs6bUr_K","title":"feat: enhance logging capabilities in CLI","author":"standujar","number":5203,"body":"$9","repository":"elizaos/eliza","createdAt":"2025-06-19T23:38:53Z","mergedAt":null,"additions":1661,"deletions":626},{"id":"PR_kwDOMT5cIs6fzjrm","title":"docs: add critical ElizaOS component clarifications to CLAUDE.md","author":"wtfsayo","number":5642,"body":"$a","repository":"elizaos/eliza","createdAt":"2025-07-21T08:41:23Z","mergedAt":"2025-07-21T16:11:39Z","additions":1307,"deletions":4},{"id":"PR_kwDOMT5cIs6fcktq","title":"refactor(plugin-bootstrap): migrate JSON prompts to XML format","author":"0xbbjoker","number":5623,"body":"$b","repository":"elizaos/eliza","createdAt":"2025-07-17T20:28:58Z","mergedAt":"2025-07-21T18:41:51Z","additions":598,"deletions":487},{"id":"PR_kwDOMT5cIs6fy3xt","title":"fix: CLI dev command test failures due to missing dependencies","author":"wtfsayo","number":5641,"body":"$c","repository":"elizaos/eliza","createdAt":"2025-07-21T07:20:44Z","mergedAt":"2025-07-21T08:24:48Z","additions":229,"deletions":126},{"id":"PR_kwDONkg7v86fzZfd","title":"Add plugin-my to registry","author":"cuongpo","number":192,"body":"This PR adds plugin-my to the registry.\n\n- Package name: plugin-my\n- GitHub repository: github:cuongpo/plugin-my\n- Version: 0.1.0\n- Description: COTI blockchain plugin for ElizaOS - enables private token operations and encrypted transactions\n\nSubmitted by: @cuongpo\n\n<!-- This is an auto-generated comment: release notes by coderabbit.ai -->\n\n## Summary by CodeRabbit\n\n* **New Features**\n  * Added several new plugins and adapters, expanding available integrations.\n* **Chores**\n  * Updated plugin and adapter naming conventions for consistency.\n  * Changed repository sources for some existing plugins.\n  * Standardized and expanded the plugin index metadata.\n\n<!-- end of auto-generated comment: release notes by coderabbit.ai -->","repository":"elizaos-plugins/registry","createdAt":"2025-07-21T08:22:21Z","mergedAt":null,"additions":199,"deletions":171},{"id":"PR_kwDOMT5cIs6ffqSu","title":"fix: JSON strings in sql base","author":"ChristopherTrimboli","number":5628,"body":"$d","repository":"elizaos/eliza","createdAt":"2025-07-18T03:22:36Z","mergedAt":"2025-07-21T18:37:21Z","additions":81,"deletions":7},{"id":"PR_kwDOMT5cIs6f5vNn","title":"feat: add post examples to default eliza char","author":"ChristopherTrimboli","number":5652,"body":"Without this, twitter posting doesn't run.","repository":"elizaos/eliza","createdAt":"2025-07-21T17:48:33Z","mergedAt":"2025-07-21T18:36:53Z","additions":41,"deletions":14},{"id":"PR_kwDOMT5cIs6f70UI","title":"fix: update zod to 3.25 so v3 is there","author":"yungalgo","number":5658,"body":"$e","repository":"elizaos/eliza","createdAt":"2025-07-21T21:45:16Z","mergedAt":null,"additions":20,"deletions":23},{"id":"PR_kwDONkg7v86f0pRE","title":"Add plugin-coti to registry","author":"cuongpo","number":193,"body":"This PR adds plugin-coti to the registry.\n\n- Package name: plugin-coti\n- GitHub repository: github:cuongpo/plugin-coti\n- Version: 0.1.0\n- Description: COTI blockchain plugin for ElizaOS - enables private token operations and encrypted transactions\n\nSubmitted by: @cuongpo\n\n<!-- This is an auto-generated comment: release notes by coderabbit.ai -->\n\n## Summary by CodeRabbit\n\n* **New Features**\n  * Added support for the \"plugin-coti\" plugin, enabling integration with its features.\n\n<!-- end of auto-generated comment: release notes by coderabbit.ai -->","repository":"elizaos-plugins/registry","createdAt":"2025-07-21T10:22:03Z","mergedAt":"2025-07-22T08:25:22Z","additions":2,"deletions":1},{"id":"PR_kwDOMT5cIs6f5EMr","title":"cleanup: remove unused test-function-detection.sh script","author":"wtfsayo","number":5651,"body":"$f","repository":"elizaos/eliza","createdAt":"2025-07-21T16:39:59Z","mergedAt":"2025-07-21T16:43:22Z","additions":0,"deletions":226}],"detailedContributorSummaries":{"ChristopherTrimboli":"ChristopherTrimboli: Focused on adding post examples to the default Eliza character, merging elizaos/eliza#5652 (+41/-14 lines) and providing 3 reviews. Their work primarily involved modifying 99 files (+5289/-2982 lines) with a focus on documentation and code changes, encompassing other work, bug fixes, and refactoring.","cuongpo":"cuongpo: Focused on expanding the plugin registry, merging one PR to add `plugin-coti` to the registry and opening another for `plugin-my`, primarily modifying configuration files.","github-advanced-security":"github-advanced-security: No activity today.","linear":"linear: Focused on identifying and documenting potential work, creating 15 issues, including two closed issues related to `elizaos create` and `elizaos publish` commands, and 13 open issues primarily for documentation and plugin development.","standujar":"standujar: Focused on enhancing logging capabilities, opening PR elizaos/eliza#5659 \"feat: enhance-logging-rebased\" and modifying 80 files with 13 commits, primarily contributing to other work, bugfixes, tests, and refactoring across tests, code, and documentation.","wtfsayo":"wtfsayo: Focused on critical documentation and development environment stability, merging a significant PR to clarify ElizaOS components in `CLAUDE.md` (elizaos/eliza#5642) and fixing CLI dev command test failures (elizaos/eliza#5641). Their work primarily involved other work, bug fixes, refactoring, and documentation.","yungalgo":"yungalgo: Focused on an open PR, elizaos/eliza#5658, to update a dependency, contributing 6 commits with changes across 16 files, primarily in configuration and code."}},"summaryContent":"$10","className":"self-end sm:self-start"}]]}],"$L11","$L12","$L13"]}]}],["$L14","$L15","$L16"],"$L17"]}],"loading":null,"isPartial":false}
+11:["$","div",null,{"className":"mb-6","children":["$","div",null,{"className":"flex items-center justify-between","children":[[["$","$L18",null,{"href":"/summary/day/2025-07-20","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left mr-2 h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"children":"Previous"}],false],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$L18",null,{"href":"/summary/day/2025-07-20","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Previous"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]],["$","div",null,{"className":"flex flex-col items-center","children":[["$","div",null,{"className":"text-sm font-medium text-gray-500","children":["Daily"," Summary"]}],["$","time",null,{"dateTime":"2025-07-21","className":"text-md font-bold","children":"Jul 21, 2025"}]]}],[["$","$L18",null,{"href":"/summary/day/2025-07-22","children":[false,["$","span",null,{"children":"Next"}],["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right ml-2 h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}]],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$L18",null,{"href":"/summary/day/2025-07-22","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Next"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]]]}]}]
+1a:Te6f,\## Problem Details
+
+\### Current Behavior
+
+\- User runs \`elizaos create myproject\` from their desktop
+
+\- The \`.elizadb\` directory gets created in the current directory (desktop) instead of inside \`myproject/\`
+
+\- This causes database initialization issues for new projects
+
+\### Expected Behavior
+
+\- Database directory should be created at: \`myproject/.eliza/.elizadb/\`
+
+\- All project-specific files should be contained within the new project directory
+
+\## Root Cause Analysis
+
+After analyzing the codebase, the issue is in how the \`resolvePgliteDir\` function determines the database directory during project creation:
+
+1\. \*\*In \`packages/cli/src/commands/create/actions/creators.ts\`\*\*:
+
+\- The \`createProject\` function creates the project directory but doesn't properly pass the target directory context for database initialization
+
+\- Line 313-364: Project creation happens but database setup uses wrong context
+
+2\. \*\*In \`packages/cli/src/utils/resolve-utils.ts\`\*\*:
+
+\- Line 72-82: The function has logic to handle \`targetProjectDir\` but it's not being properly utilized
+
+\- The fallback logic defaults to \`process.cwd()\` when it should use the new project directory
+
+\## Proposed Fix
+
+\### 1. Update \`createProject\` function to properly pass target directory:
+
+\`\`\`typescript
+
+*// In creators.ts*
+
+await setupProjectEnvironment(projectTargetDir, database, aiModel, embeddingModel, true)
+
+\`\`\`
+
+\### 2. Ensure \`setupPgLite\` receives correct directory context:
+
+\`\`\`typescript
+
+*// In setup.ts*
+
+export async function setupPgLite(
+
+*dbDir*: string | undefined,
+
+*envPath*: string | undefined,
+
+*targetProjectDir*?: string
+
+): Promise<void> {
+
+const dirs = await ensureElizaDir(targetProjectDir);
+
+*// ... rest of implementation*
+
+}
+
+\`\`\`
+
+\### 3. Fix \`resolvePgliteDir\` to properly use target directory:
+
+\`\`\`typescript
+
+*// When targetProjectDir is provided, use it as the base*
+
+const projectRoot = targetProjectDir || pathsInfo.monorepoRoot || process.cwd();
+
+\`\`\`
+
+\## Testing Requirements
+
+1\. \*\*Manual Testing\*\*:
+
+ \`\`\`bash
+
+\# From any directory
+
+elizaos create testproject
+
+\# Verify .elizadb is inside testproject/.eliza/
+
+ls testproject/.eliza/
+
+ \`\`\`
+
+2\. \*\*Automated Tests\*\*:
+
+\- Add test in \`packages/cli/tests/commands/create.test.ts\`
+
+\- Verify database directory is created in correct location
+
+\- Test both interactive and non-interactive modes
+
+3\. \*\*Edge Cases\*\*:
+
+\- Creating project in current directory with \`elizaos create .\`
+
+\- Creating project with absolute path
+
+\- Creating project when parent has existing \`.eliza\` directory
+
+\## Implementation Steps
+
+1\. \*\*Trace the execution flow\*\* of \`elizaos create\` command
+
+2\. \*\*Identify where \`process.cwd()\` is being used\*\* instead of the target project directory
+
+3\. \*\*Update the database initialization\*\* to use the correct base directory
+
+4\. \*\*Add comprehensive tests\*\* to prevent regression
+
+5\. \*\*Test with various scenarios\*\* (different directories, with/without existing .eliza folders)
+
+\## Success Criteria
+
+\- ✅ Running \`elizaos create myproject\` creates \`.elizadb\` inside \`myproject/.eliza/\`
+
+\- ✅ No database files are created in the current working directory
+
+\- ✅ All tests pass for various creation scenarios
+
+\- ✅ Works correctly in both monorepo and standalone environments
+
+\## Priority: High
+
+This is a user-facing bug that affects the initial developer experience with ElizaOS. New users expect project creation to be self-contained.
+
+\## Estimated Effort: 2-4 hours
+
+The fix itself is straightforward, but thorough testing across different scenarios is important to ensure no regression.1b:Tb07,\## Summary
+
+The \`elizaos publish\` command fails immediately after creating a new plugin with \`elizaos create --type plugin\`, throwing a "Cannot find module 'zod/v3'" error from @langchain/core.
+
+\## Environment
+
+\- \*\*elizaOS CLI version\*\*: 1.3.0
+
+\- \*\*Bun version\*\*: 1.2.15
+
+\- \*\*OS\*\*: macOS arm64
+
+\- \*\*Location\*\*: Fresh plugin created via CLI
+
+\## Steps to Reproduce
+
+1\. Run \`elizaos create --type plugin testing -y\`
+
+2\. Navigate to the created plugin directory: \`cd plugin-testing\`
+
+3\. Run \`elizaos publish -h\` (or any publish command)
+
+\## Expected Behavior
+
+The publish command should display help information or execute without module errors.
+
+\## Actual Behavior
+
+Command fails with error:
+
+\`\`\`
+
+error: Cannot find module 'zod/v3' from '/Users/yungalgo/Desktop/plugin-testing/node_modules/@langchain/core/dist/runnables/base.js'
+
+\`\`\`
+
+\## Full Terminal Output
+
+\`\`\`bash
+
+yungalgo@machine \~/desktop $ elizaos -v
+
+1.3.0
+
+yungalgo@machine \~/desktop $ elizaos create --type plugin testing -y
+
+Warning: changing "testing" to "plugin-testing" to conform to plugin naming conventions
+
+│
+
+◇ Copying plugin template completed
+
+│
+
+│
+
+◇ ✓ Dependencies installed successfully
+
+◇ Installing dependencies completed
+
+✓ Plugin "plugin-testing" created successfully!
+
+Next steps:
+
+cd plugin-testing
+
+bun run build *# Build the plugin*
+
+Common commands:
+
+elizaos dev *# Start development mode with hot reloading*
+
+elizaos start *# Start in production mode*
+
+yungalgo@machine \~/desktop $ cd plugin-testing
+
+yungalgo@machine \~/desktop/plugin-testing $ elizaos publish -h
+
+\[2025-07-21 20:29:34\] INFO: Using local @elizaos/cli installation
+
+error: Cannot find module 'zod/v3' from '/Users/yungalgo/Desktop/plugin-testing/node_modules/@langchain/core/dist/runnables/base.js'
+
+Bun v1.2.15 (macOS arm64)
+
+\`\`\`
+
+\## Analysis
+
+The issue appears to be a missing or incorrect dependency resolution where:
+
+1\. The plugin template includes @langchain/core as a dependency
+
+2\. @langchain/core expects 'zod/v3' to be available
+
+3\. The zod package is either not installed or not at the correct version that exports a 'v3' subpath
+
+\## Potential Solutions
+
+1\. Add explicit zod dependency to the plugin template's package.json
+
+2\. Update @langchain/core to a version that doesn't require 'zod/v3'
+
+3\. Ensure proper peer dependency resolution during plugin creation
+
+4\. Check if this is a Bun-specific module resolution issue
+
+\## Priority
+
+High - This blocks plugin publishing workflow immediately after creation
+
+\## Additional Notes
+
+\- The plugin creation itself completes successfully
+
+\- Dependencies install without errors during creation
+
+\- The error only appears when trying to use the publish command
+
+\- This affects the out-of-the-box experience for new plugin developers1c:T1a73,### 
+
+**Issue Title**: `fix(scenarios): Runtime dependency audit and fix for evaluators`
+
+**Tags**: `cli`, `scenarios`, `bug`, `evaluators`, `runtime-integration`
+
+#### **Description**
+
+Several evaluators in the `EvaluationEngine` make assumptions about `IAgentRuntime` methods that may not exist or may have different signatures than expected. This creates a risk of runtime errors when scenarios are executed, and prevents certain evaluations from functioning correctly.
+
+The issue stems from evaluators being implemented without first auditing the actual `IAgentRuntime` interface and available methods in the ElizaOS core.
+
+#### **Specific Problem Methods**
+
+**1.** `TrajectoryContainsActionEvaluator`
+
+```typescript
+// Current problematic code in EvaluationEngine.ts
+async evaluate(runtime: IAgentRuntime, _result: ScenarioResult): Promise<boolean> {
+    const memories = await runtime.getAllMemories(); // ❌ This method may not exist
+    return memories.some((memory: any) => memory.content?.metadata?.action === this.action);
+}
+```
+
+**2.** `LLMJudgeEvaluator`
+
+```typescript
+// Current problematic code in EvaluationEngine.ts
+async evaluate(runtime: IAgentRuntime, result: ScenarioResult): Promise<boolean> {
+    const llmResult = await runtime.useModel('TEXT_LARGE', { // ❌ Wrong method signature
+        system: `...`,
+        messages: [...]
+    });
+    return llmResult.toLowerCase().includes(this.expected.toLowerCase());
+}
+```
+
+#### **Required Investigation and Fixes**
+
+**1. Audit** `IAgentRuntime` Interface
+
+Before making any changes, thoroughly examine the actual `IAgentRuntime` interface:
+
+* **Review**: `packages/core/src/types.ts` or wherever `IAgentRuntime` is defined
+* **Identify**: What methods are actually available for:
+  * Accessing agent memory/action history
+  * Making LLM calls
+  * Querying agent state
+* **Document**: Create a reference of available methods with their correct signatures
+
+**2. Study Existing ElizaOS Patterns**
+
+Examine how other parts of the codebase interact with the runtime:
+
+* **Look at**: `packages/core/src/` - How do actions and providers access runtime capabilities?
+* **Look at**: `packages/plugin-bootstrap/src/` - How do evaluators and actions query agent state?
+* **Pattern**: Find examples of LLM calls, memory access, and action history retrieval
+* **Follow**: Use the same patterns that exist elsewhere in the codebase
+
+**3. Fix** `TrajectoryContainsActionEvaluator`
+
+* **Research**: How does ElizaOS actually store and retrieve action history?
+* **Options to investigate**:
+  * `runtime.messageManager` - for conversation/action logs
+  * `runtime.databaseAdapter` - for direct database queries
+  * Event/memory storage patterns used elsewhere
+* **Implementation**: Use the correct ElizaOS pattern for accessing action trajectory
+
+**Example research questions:**
+
+```typescript
+// What's the correct way to access action history?
+// Is it one of these patterns?
+const actionHistory = await runtime.messageManager.getMemories({...});
+const events = await runtime.databaseAdapter.getEventHistory();
+const memories = await runtime.memory.getMemoriesByType('action');
+```
+
+**4. Fix** `LLMJudgeEvaluator`
+
+* **Research**: How do other parts of ElizaOS make LLM calls?
+* **Find**: The correct method signature for LLM invocation
+* **Pattern**: Look at how actions, providers, or other evaluators make LLM calls
+
+**Example research questions:**
+
+```typescript
+// What's the correct way to call an LLM?
+// Is it one of these patterns?
+const response = await runtime.completion({...});
+const result = await runtime.generateText({...});
+const output = await runtime.llm.complete({...});
+```
+
+**5. Add Error Handling and Fallbacks**
+
+For each fixed evaluator:
+
+* **Graceful Degradation**: If a runtime method is unavailable, return a clear error or skip
+* **Clear Error Messages**: Provide actionable error messages when dependencies are missing
+* **Feature Detection**: Check if required runtime capabilities are available before using them
+
+**6. Create Runtime Requirements Documentation**
+
+* **Document**: What runtime capabilities each evaluator requires
+* **Specify**: Minimum runtime interface requirements for scenarios
+* **Guide**: Help future evaluator implementations avoid these issues
+
+#### **Implementation Approach**
+
+**Phase 1: Investigation (Do this first)**
+
+1. Create a comprehensive audit of `IAgentRuntime` available methods
+2. Find existing patterns in the codebase for:
+   * LLM calls
+   * Memory/action history access
+   * Agent state queries
+3. Document the correct patterns to follow
+
+**Phase 2: Fix Implementation**
+
+1. Update `TrajectoryContainsActionEvaluator` to use correct action history access
+2. Update `LLMJudgeEvaluator` to use correct LLM invocation method
+3. Add proper error handling for missing capabilities
+4. Update any other evaluators with similar issues
+
+**Phase 3: Validation**
+
+1. Test each evaluator with actual runtime instances
+2. Verify error handling works correctly
+3. Confirm evaluators integrate properly with the rest of the scenario system
+
+#### **Testing Strategy**
+
+**1. Runtime Method Validation**
+
+* Create test scenarios that exercise each evaluator type
+* Verify no runtime errors occur during evaluation execution
+* Test both success and failure cases for each evaluator
+
+**2. Integration Testing**
+
+* Test evaluators with actual agent runtimes
+* Verify trajectory evaluation works with real action sequences
+* Verify LLM judge works with actual model calls
+
+**3. Error Handling**
+
+* Test evaluators with mock runtimes that don't have required methods
+* Verify graceful error handling and clear error messages
+
+#### **Success Criteria**
+
+1. All evaluators use correct `IAgentRuntime` methods with proper signatures
+2. No runtime errors occur when evaluators are executed
+3. `TrajectoryContainsActionEvaluator` correctly identifies actions in agent execution history
+4. `LLMJudgeEvaluator` successfully makes LLM calls and processes responses
+5. Clear error messages when runtime capabilities are missing
+6. Documentation exists for runtime requirements of each evaluator
+
+#### **Implementation Guidelines**
+
+**⚠️ Critical Research First:**
+
+1. **Don't assume method signatures** - Always verify against actual `IAgentRuntime` interface
+2. **Follow existing patterns** - Find how other ElizaOS components do LLM calls and memory access
+3. **Study plugin-bootstrap** - This likely contains examples of evaluators that work correctly
+4. **Test incrementally** - Fix one evaluator at a time and verify it works
+5. **Document findings** - Create clear documentation of correct patterns for future reference
+
+This fix ensures the evaluation engine works reliably with actual ElizaOS runtime instances and follows established patterns in the codebase.1d:T1a01,### 
+
+**Issue Title**: `fix(scenarios): Fix environment provider integration - bypass issue`
+
+**Tags**: `cli`, `scenarios`, `bug`, `critical`, `environment-provider`
+
+#### **Description**
+
+The scenario runner currently bypasses the sophisticated environment provider system entirely. The `handleRunScenario` function directly executes shell commands using `child_process.exec` instead of calling the properly implemented `LocalEnvironmentProvider` and `E2BEnvironmentProvider` classes. This means that virtual file systems, proper sandboxing, and environment-specific logic are not functioning as intended.
+
+This is a **critical bug** that breaks core functionality and prevents the scenario system from working as designed.
+
+#### **Current Implementation Problem**
+
+In `packages/cli/src/commands/scenario.ts`, the `handleRunScenario` function currently does this:
+
+```typescript
+async function handleRunScenario(_args: {filePath: string, live: boolean}, _runtime: any, scenario: any): Promise<ScenarioResult> {
+    const runStep = scenario.run[0];
+    
+    return new Promise<ScenarioResult>((resolve) => {
+        exec(runStep.input, (error, stdout, stderr) => {
+            resolve({ stdout, stderr, exitCode: error ? error.code || 1 : 0 });
+        });
+    });
+}
+```
+
+**This completely ignores the environment providers that were carefully implemented.**
+
+#### **Expected Implementation**
+
+The function should instantiate and use the appropriate environment provider based on `scenario.environment.type`:
+
+```typescript
+async function handleRunScenario(args: {filePath: string, live: boolean}, runtime: IAgentRuntime, scenario: Scenario): Promise<ScenarioResult> {
+    let provider: EnvironmentProvider;
+    
+    // Instantiate the correct provider
+    if (scenario.environment.type === 'e2b') {
+        provider = new E2BEnvironmentProvider(runtime);
+    } else if (scenario.environment.type === 'local') {
+        provider = new LocalEnvironmentProvider();
+    } else {
+        throw new Error(`Unsupported environment type: ${scenario.environment.type}`);
+    }
+    
+    try {
+        await provider.setup(scenario);
+        return await provider.run(scenario);
+    } finally {
+        await provider.teardown();
+    }
+}
+```
+
+#### **Root Cause Analysis**
+
+Based on the AI implementation feedback, this likely happened because:
+
+1. The AI didn't review existing ElizaOS patterns for environment abstraction
+2. The AI took a shortcuts approach instead of following the designed architecture
+3. The ticket didn't emphasize examining existing provider implementations in the codebase
+
+#### **Required Changes**
+
+**1. Fix the Main Handler Function**
+
+* **Modify**: `packages/cli/src/commands/scenario.ts` - `handleRunScenario` function
+* **Change**: Remove direct `child_process.exec` usage
+* **Add**: Proper environment provider instantiation and lifecycle management
+
+**2. Review Existing ElizaOS Environment Patterns**
+
+Before implementing, examine these existing patterns in the codebase:
+
+* **Look at**: `packages/cli/src/commands/start/` - How does the start command manage different environments?
+* **Look at**: `packages/core/src/` - Are there existing environment abstraction patterns?
+* **Look at**: Other plugins that manage execution environments
+* **Pattern**: Follow existing ElizaOS conventions for service instantiation and lifecycle
+
+**3. E2B Integration Specifics**
+
+Based on the [`@elizaos/plugin-e2b` documentation](https://github.com/elizaos-plugins/plugin-e2b), ensure proper integration:
+
+* **Service Discovery**: Use `runtime.getService('e2b')` to get the E2B service
+* **Error Handling**: Implement the recommended error checking pattern from the plugin docs
+* **API Usage**: Use the correct E2B service methods:
+  * `createSandbox()` for sandbox creation
+  * `executeCode()` for command execution (not `runCommand()` as currently implemented)
+  * `writeFileToSandbox()` for virtual file system setup
+  * `killSandbox()` for cleanup
+* **Configuration**: Respect E2B environment variables (`E2B_API_KEY`, `E2B_MODE`)
+
+**4. Local Environment Integration**
+
+* **Working Directory**: Ensure commands execute in the temporary directory created by `LocalEnvironmentProvider.setup()`
+* **File System**: Verify that `virtual_fs` files are actually available to the executed commands
+* **Cleanup**: Ensure temporary directories are properly cleaned up even on errors
+
+**5. Error Handling & Integration**
+
+* **Provider Errors**: Catch and properly format provider-specific errors
+* **Service Availability**: Handle cases where E2B service is not available with clear error messages
+* **Graceful Degradation**: Implement proper fallback behavior when providers fail
+
+#### **Testing Strategy**
+
+**1. Verify Virtual File System Works**
+
+* Test scenario with `setup.virtual_fs` containing test files
+* Verify commands can read and modify those files
+* Confirm files are properly isolated between test runs
+
+**2. Test E2B Integration**
+
+* Create test scenario that requires E2B (`environment: { type: 'e2b' }`)
+* Verify sandbox creation, file writing, and command execution
+* Test both with and without `E2B_API_KEY` to verify error handling
+
+**3. Test Local Environment**
+
+* Verify local scenarios work with temporary directory isolation
+* Test complex scenarios with multiple commands and file operations
+
+**4. Error Scenarios**
+
+* Test with invalid environment types
+* Test E2B scenarios without the plugin installed
+* Test scenarios that fail during setup or execution
+
+#### **Implementation Notes**
+
+**⚠️ Critical Implementation Guidelines:**
+
+1. **Review Existing Code First**: Before writing any new code, examine how other parts of ElizaOS handle environment abstraction and service integration
+2. **Follow ElizaOS Patterns**: Use the same patterns for service discovery, error handling, and lifecycle management that exist elsewhere in the codebase
+3. **E2B Plugin Integration**: Study the actual E2B plugin implementation to understand the correct service interface, don't assume the interface based on the provider code alone
+4. **Test Incrementally**: Fix local environment first (simpler), then E2B integration
+5. **Preserve Existing Functionality**: Ensure the mock engine, evaluation engine, and reporting continue to work exactly as they do now
+
+**Dependencies:**
+
+* The `LocalEnvironmentProvider` and `E2BEnvironmentProvider` classes are correctly implemented
+* The `@elizaos/plugin-e2b` service interface matches what's expected
+* The scenario schema and validation logic remain unchanged
+
+This fix will unlock the full potential of the scenario system and enable proper testing of both local and sandboxed agent execution.1e:T1684,## 🚀 Clanker Protocol Plugin for ElizaOS
+
+This PR introduces a comprehensive Clanker protocol integration plugin that enables advanced token deployment and management on Base L2 using Clanker SDK v4.0.0.
+
+### 🎯 **Key Features**
+
+#### **Core Functionality**
+- **🪙 Token Deployment**: Advanced token deployment with Clanker SDK v4.0.0
+- **📊 Token Information**: Comprehensive token data queries  
+- **💰 Balance Checking**: Wallet and token balance monitoring
+- **🎯 Vanity Addresses**: Custom address suffix generation
+
+#### **Advanced Configuration**
+- **🏊 Pool Configuration**: Custom liquidity positions and fee structures
+- **🏆 Reward Management**: Creator rewards and fee distribution
+- **🔒 Vault & Vesting**: Token supply locking with custom schedules
+- **💸 Initial Dev Purchases**: Automated initial market making
+- **🎨 Rich Metadata**: IPFS images, social links, audit URLs
+
+#### **Legacy Operations (Properly Deprecated)**
+- **⚠️ Liquidity Management**: Redirects to Uniswap v4
+- **⚠️ Token Swapping**: Redirects to dedicated DEX integrations
+
+---
+
+### 🧪 **Comprehensive Testing - 85%+ Coverage**
+
+#### **Test Statistics**
+- **Test Files**: 9 comprehensive test suites
+- **Test Cases**: 200+ individual scenarios
+- **Lines of Test Code**: 2,500+ lines
+- **Coverage**: All critical user-facing functionality
+
+#### **Test Categories**
+- ✅ **Services** (100%): Clanker SDK integration, wallet operations
+- ✅ **Actions** (100%): Token deployment, info queries, balance checks, deprecated operations  
+- ✅ **Utilities** (100%): Error handling, formatting, validation
+- ✅ **Core** (100%): Plugin initialization and configuration
+
+#### **Quality Features**
+- 🔄 **Edge Cases**: Invalid inputs, service failures, network issues
+- 🎭 **Comprehensive Mocking**: Type-safe service simulation
+- 📊 **SDK Integration**: Tests actual Clanker v4.0.0 patterns
+- 🚨 **Error Scenarios**: Network timeouts, insufficient funds, validation
+- 🔧 **Backwards Compatibility**: Proper deprecation handling
+
+---
+
+### 🏗️ **Technical Architecture**
+
+#### **Services Layer**
+- **ClankerService**: Clanker SDK v4.0.0 integration with advanced config support
+- **WalletService**: Ethers.js wallet management with transaction handling
+
+#### **Actions Layer**
+- **tokenDeployAction**: Natural language → Clanker API parameter conversion
+- **tokenInfoAction**: Token data retrieval with formatting
+- **balanceCheckAction**: Wallet/token balance queries
+- **liquidityManagementAction**: Proper deprecation handling
+- **tokenSwapAction**: Proper deprecation handling
+
+#### **Support Layer**
+- **Providers**: Token context and market data
+- **Evaluators**: Deployment success analysis
+- **Utilities**: Error handling, formatting, validation
+
+---
+
+### 📊 **Clanker SDK v4.0.0 Integration**
+
+#### **New Features Supported**
+- ✅ Vanity address generation with custom suffixes
+- ✅ Advanced pool configuration with custom tick positions  
+- ✅ Comprehensive reward distribution (up to 7 recipients)
+- ✅ Token supply vesting with lockup + linear vesting periods
+- ✅ Initial dev purchases with automated market making
+- ✅ Rich metadata with IPFS images and social links
+- ✅ Social provenance context validation
+
+#### **Breaking Changes Handled**
+- ✅ Fixed token supply (1B tokens) instead of custom amounts
+- ✅ Fixed decimals (18) instead of custom precision
+- ✅ Required `tokenAdmin` parameter for permissions
+- ✅ Enhanced metadata structure for social verification
+
+---
+
+### 🔐 **Security & Production Readiness**
+
+#### **Security Features**
+- 🔑 Private key protection with environment variables
+- ⛽ Gas price monitoring and limits
+- ✅ Comprehensive parameter validation
+- 🚨 Proper error handling with user-friendly messages
+- 🔄 Transaction retry logic with exponential backoff
+
+#### **Production Features**
+- 📚 Comprehensive documentation with examples
+- 🚨 Troubleshooting guide for common issues  
+- ⚠️ Migration guide from legacy versions
+- 🔧 Development workflow documentation
+- 📊 Architecture diagrams and component descriptions
+
+---
+
+### 🎯 **Usage Examples**
+
+#### **Simple Deployment**
+```
+"Deploy a new token called MyToken with symbol MTK"
+"Create a memecoin called PEPE with vanity address"
+```
+
+#### **Advanced Deployment**
+```typescript
+await clankerService.deployToken({
+  name: "Advanced Token",
+  symbol: "ADV", 
+  vanity: true,
+  vault: { percentage: 10, lockupDuration: 2592000, vestingDuration: 2592000 },
+  devBuy: { ethAmount: 0.1 },
+  rewards: { recipients: [{ recipient: "0x...", bps: 8000, token: "Paired" }] }
+});
+```
+
+#### **Information Queries**
+```
+"Get info for token 0x1234567890abcdef1234567890abcdef12345678"
+"What is the price and market cap of BASE token?"
+"Check my wallet balance"
+```
+
+---
+
+### ⚡ **Files Changed**
+
+- **36 files added** with 6,271 lines of code
+- **Source Files**: Complete plugin architecture with services, actions, providers
+- **Test Files**: Comprehensive test coverage across all components
+- **Documentation**: Production-ready README with examples and guides
+- **Configuration**: TypeScript config, build setup, package.json
+
+---
+
+### 🚀 **Ready for Review**
+
+This plugin is production-ready with:
+- ✅ Comprehensive test coverage (85%+)
+- ✅ Full Clanker SDK v4.0.0 integration  
+- ✅ Proper deprecation handling for legacy features
+- ✅ Security best practices implemented
+- ✅ Complete documentation and examples
+- ✅ TypeScript type safety throughout
+- ✅ Error resilience and user-friendly messages
+
+**Testing**: Run `bun test` in `packages/plugin-clanker/` to verify all tests pass.
+
+**Documentation**: See comprehensive README with usage examples, architecture details, and troubleshooting guides.1f:T194c,# Relates to
+
+https://github.com/elizaOS/eliza/issues/5183
+
+# Risks
+
+**Risk: Low**
+- Code cleanup and documentation improvement
+- Removes non-functional features to avoid user confusion
+- No impact on existing core functionality
+
+# Background
+
+## What does this PR do?
+
+This PR cleans up the logging system for ElizaOS by removing non-implemented features and updating documentation to reflect actual capabilities:
+
+1. **Code Cleanup**: Removes CloudWatch, Elasticsearch, and multi-transport configurations that were not actually implemented
+2. **Simplified CLI Interface**: Streamlined `elizaos logger` command with only functional options
+3. **Accurate Documentation**: Updated documentation to reflect only supported features
+4. **Clear Transport Options**: Limited to console and file transports (the only working implementations)
+5. **Future Planning**: Added section about planned enhancements for transparency
+
+## What kind of change is this?
+
+**Code Cleanup** (non-breaking change which removes non-functional code)
+- Removed non-implemented transport configurations
+- Simplified CLI interface to show only working options
+- Updated documentation for accuracy
+- Added future enhancement roadmap
+
+# Documentation changes needed?
+
+**My changes require a change to the project documentation.**
+**I have updated the documentation accordingly.**
+
+Updated files:
+- `eliza/packages/docs/docs/cli/logger.md` - Removed references to non-implemented transports
+- `eliza/packages/cli/src/commands/logger.ts` - Cleaned up interface and configuration types
+- `eliza/packages/cli/src/commands/start/index.ts` - Simplified transport validation
+
+# Testing
+
+## Where should a reviewer start?
+
+1. **CLI Interface**: Test the simplified `elizaos logger` command (should only show console/file options)
+2. **Error Handling**: Verify that unsupported transports show appropriate warnings
+3. **Documentation**: Review updated documentation for accuracy and clarity
+4. **Existing Functionality**: Ensure console and file logging still work correctly
+
+## Detailed testing steps
+
+### CLI Logger Interface
+```bash
+# Test simplified interactive menu (should only show 2 transport options)
+elizaos logger
+```
+
+### Transport Validation
+```bash
+# Test that only supported transports work
+elizaos start --log-transport console --log-level debug  # Should work
+elizaos start --log-transport file --log-level debug     # Should work
+
+# Test unsupported transport handling (if somehow configured)
+# Should show warning and fall back to console
+```
+
+### Documentation Verification
+- Review `packages/docs/docs/cli/logger.md` - should only mention console/file transports
+- Check that CloudWatch/Elasticsearch references are removed
+- Verify "Future Enhancements" section explains planned features
+
+## Screenshots
+
+### After - Simplified CLI Menu
+```
+Select output destination:
+❯ Console only
+  Console + File (hybrid)
+```
+
+### Updated Transport Table
+| Transport | Description | CLI Option |
+|-----------|-------------|------------|
+| `console` | Console output only with pretty formatting | `--log-transport console` |
+| `file` | Hybrid: console + file output | `--log-transport file` |
+
+## Documentation Changes
+
+### Added Clarity
+- **Available Transports** section clearly listing only supported options
+- **Future Enhancements** section explaining planned features
+- **Alternative Solutions** for users needing advanced transports
+
+### Updated Examples
+- All examples now use only `console` or `file` transports
+- Removed confusing CloudWatch/Elasticsearch configuration examples
+- Simplified setup instructions
+
+## Benefits
+
+1. **No More User Confusion**: Users won't try to configure non-working features
+2. **Honest Documentation**: Documentation accurately reflects actual capabilities
+3. **Cleaner Codebase**: Removed dead code and unused configuration options
+4. **Better Error Messages**: Clear validation for unsupported transports
+5. **Future-Ready**: Clear roadmap for when advanced transports are implemented
+
+## Code Changes Summary
+
+### `packages/cli/src/commands/logger.ts`
+- Simplified `LoggerConfig` interface to only include working transports
+- Removed CloudWatch/Elasticsearch configuration handling
+- Streamlined `displayConfig` function
+- Updated transport selection menu
+
+### `packages/cli/src/commands/start/index.ts`
+- Updated transport validation logic
+- Simplified help text for transport options
+- Improved error messages for unsupported transports
+
+### `packages/docs/docs/cli/logger.md`
+- Complete rewrite focusing on supported features
+- Added transport comparison table
+- Added future enhancements section
+- Removed misleading examples and configuration sections
+
+## Backward Compatibility
+
+- **Fully Compatible**: All existing functionality continues to work
+- **Configuration Files**: Existing configs with unsupported transports will show warnings and fall back to console
+- **No Breaking Changes**: Console and file logging work exactly as before
+
+## Future Work
+
+This cleanup sets the foundation for properly implementing advanced transports:
+- CloudWatch transport with proper AWS SDK integration
+- Elasticsearch transport with connection management
+- Multi-transport with proper configuration validation
+
+# Deploy Notes
+
+No special deployment requirements. This is a cleanup that improves user experience by removing confusion about non-working features. 
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+- **New Features**
+  - Introduced a new CLI command for interactive logging configuration, allowing users to set log level, transport type, file path, and JSON formatting.
+  - Added advanced logging options to the CLI, including support for file-based logging, hybrid console/file output, and JSON log formatting.
+
+- **Documentation**
+  - Expanded documentation for logging configuration, including a new guide for the logger command and updated instructions for the start command.
+  - Updated README and CLI documentation to reflect new logging options and provide detailed usage examples.
+
+- **Style**
+  - Minor improvements to code comments and whitespace for clarity.
+
+- **Chores**
+  - Updated build configuration to exclude Cypress test files from the server package build process.
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->20:T70e,## Summary
+
+This PR adds critical clarifications to CLAUDE.md to help developers understand the correct usage of ElizaOS components (Services, Providers, Actions, Evaluators).
+
+## Changes
+
+### 1. Main CLAUDE.md updates
+- Added "CRITICAL: ElizaOS Component Clarifications" section with:
+  - Clear distinction between Services vs Providers
+  - Clear distinction between Actions vs Evaluators  
+  - Correct architecture pattern diagram
+  - Plugin structure with required components
+  - Common mistakes to avoid
+- Added guidance for using parallel Claude code agents for maximum performance
+
+### 2. Created CLAUDE.md files for starter templates
+- **packages/plugin-starter/CLAUDE.md**: Complete guide for ElizaOS plugin development
+- **packages/project-starter/CLAUDE.md**: Complete guide for ElizaOS agent projects
+- Both files include:
+  - Detailed component explanations with examples
+  - Best practices and common patterns
+  - `elizaos dev` and `elizaos start` command documentation
+  - Required plugins documentation
+
+### 3. Updated tests
+- Updated create.test.ts to verify CLAUDE.md files are properly copied during project creation
+
+## Background
+
+This documentation was created to address widespread confusion about ElizaOS component usage patterns, particularly:
+- When to use Services vs Providers
+- When to use Actions vs Evaluators
+- The requirement for Services when dealing with external APIs
+- The read-only nature of Providers
+
+## Impact
+
+These changes will help developers:
+- Understand the correct ElizaOS architecture patterns
+- Avoid common mistakes when building plugins
+- Have clear reference documentation in their projects
+- Use parallel agents effectively for better performance
+
+🤖 Generated with [Claude Code](https://claude.ai/code)
+
+Co-Authored-By: Claude <noreply@anthropic.com>21:Tde7,# Refactor: Complete Migration from JSON to XML Prompts
+
+## Summary
+
+This PR completes a comprehensive refactoring of all prompts across the ElizaOS codebase to use XML format instead of JSON, significantly improving LLM response reliability and consistency.
+
+## Motivation
+
+Large Language Models (LLMs) have shown better performance and more reliable parsing when working with XML format compared to JSON. This is particularly important for complex structured outputs where JSON parsing can be fragile due to:
+
+- Escape character handling
+- Nested object complexity
+- String delimiters and special characters
+- Inconsistent formatting across different LLM providers
+
+## Changes Made
+
+### Core Package Updates
+
+- **entities.ts**: Updated entity resolution template to XML format for better entity matching
+
+### Plugin-Bootstrap Actions Refactored
+
+- **imageGeneration.ts**: Migrated image prompt generation to XML
+- **reply.ts**: Updated reply template to use XML response format
+- **sendMessage.ts**: Converted target extraction to XML structure
+- **settings.ts**: Refactored all setting templates (success, failure, error, completion) to XML
+- **updateEntity.ts**: Updated component data extraction to XML format
+- **roles.ts**: Converted role assignment parsing to XML and removed `dedent` dependency
+- **choice.ts**: Updated option extraction template to XML format
+
+### Evaluators Refactored
+
+- **reflection.ts**: Converted complex nested fact and relationship structures to XML with proper array handling
+
+### Test Suite Updates
+
+- **core/entities.test.ts**: Updated all entity tests to mock `parseKeyValueXml` instead of `parseJSONObjectFromText`
+- **plugin-bootstrap/evaluators.test.ts**: Fixed reflection evaluator tests to handle XML responses
+- **plugin-bootstrap/actions.test.ts**: Updated reply action tests to expect XML format
+
+### Technical Improvements
+
+1. **Consistent Parsing**: All responses now use `parseKeyValueXml` for uniform parsing
+2. **Model Type Updates**: Changed from `OBJECT_LARGE/OBJECT_SMALL` to `TEXT_LARGE/TEXT_SMALL` where appropriate
+3. **Better Structure Handling**: Improved handling of nested structures (arrays within XML)
+4. **Type Safety**: Fixed TypeScript errors with proper type annotations
+5. **Clear Instructions**: Added explicit prompting to avoid LLM reasoning sections in responses
+6. **Dependency Cleanup**: Removed unnecessary `dedent` dependency from roles.ts
+
+## XML Structure Examples
+
+### Before (JSON):
+
+```json
+{
+  "thought": "Analyzing the situation",
+  "actions": ["REPLY", "UPDATE_ENTITY"],
+  "text": "Hello, how can I help?"
+}
+```
+
+### After (XML):
+
+```xml
+<response>
+  <thought>Analyzing the situation</thought>
+  <actions>REPLY,UPDATE_ENTITY</actions>
+  <text>Hello, how can I help?</text>
+</response>
+```
+
+## Benefits
+
+- ✅ More reliable LLM responses across all providers
+- ✅ Consistent parsing throughout the entire codebase
+- ✅ Reduced parsing errors and edge cases
+- ✅ Better handling of complex nested structures
+- ✅ Cleaner, more maintainable code
+- ✅ Improved test coverage with proper XML mocking
+
+## Testing
+
+All tests have been updated to handle the new XML format:
+
+- Core entity tests now properly mock XML parsing
+- Plugin-bootstrap tests updated to expect XML responses
+- Test utilities enhanced to support both legacy and new formats
+
+## Breaking Changes
+
+None - This is an internal refactoring that maintains the same external API. All public interfaces remain unchanged.
+22:T523,## Summary
+- Fixed failing dev command tests in CI by addressing missing dependency issues
+- Tests were failing with "Cannot find module '@langchain/core/documents'" error
+- Server subprocess was not outputting to test process due to stdio configuration
+
+## Changes
+1. **Server package dependencies** - Moved `dotenv` from devDependencies to dependencies since it's imported at runtime
+2. **Core package dependencies** - Added `@langchain/core` as explicit dependency to satisfy peer dependency requirements
+3. **Test setup improvements** - Updated test to install dependencies in the test project before running
+4. **Test output capture** - Modified server-manager to use pipes in test mode (when `ELIZA_TEST_MODE=true`) to capture subprocess output
+
+## Test plan
+- [x] Run `bun test tests/commands/dev.test.ts` locally - all tests pass
+- [x] Verify the specific failing test now passes: `bun test tests/commands/dev.test.ts -t "dev command uses specified port when provided"`
+- [ ] CI should pass after these changes
+
+## Context
+The root cause was that when using `bun link` to install the CLI globally, transitive dependencies weren't being resolved properly. The server package was trying to import modules that weren't available in the global context.
+
+🤖 Generated with [Claude Code](https://claude.ai/code)23:T77f,### PR Review – JSON B insert failure fix in `plugin-sql`
+
+Great catch!  
+The change that stringifies `content` and `metadata` before passing them to
+
+```ts
+sql`${...}::jsonb`
+```
+
+solves the root issue where raw objects were implicitly coerced to the string `"[object Object]"`.  
+That coercion broke the `::jsonb` cast, triggered `Failed query` errors, and blocked service startup (most visibly with `plugin-twitter`).
+
+#### What this patch does
+1. **`createMemory`**
+   * Detects string vs. object and always stores a *JSON string*:
+     ```ts
+     const contentToInsert  = typeof memory.content  === 'string'
+                              ? memory.content
+                              : JSON.stringify(memory.content ?? {});
+     const metadataToInsert = typeof memory.metadata === 'string'
+                              ? memory.metadata
+                              : JSON.stringify(memory.metadata ?? {});
+     ```
+   * Uses those variables in the `INSERT`.
+
+2. **`updateMemory`**
+   * Mirrors the same logic when updating existing rows.
+
+3. **Safety**
+   * No DB-schema changes; only the way values are bound.
+   * Back-compatible with records already stored as proper JSON.
+
+#### Why this matters
+* Prevents runtime-blocking SQL exceptions on any plugin that passes nested objects (Twitter, Discord, etc.).
+* Makes the adapter resilient to future changes where callers send rich objects.
+* Keeps the `::jsonb` cast (fast path for PG) without forcing every upstream plugin to remember to stringify.
+
+#### Suggested follow-ups
+* Add a small unit test for `createMemory`/`updateMemory` verifying that both object and string inputs land in Postgres as valid JSON.
+* Consider centralising this stringify helper to avoid duplication if more fields become JSONB later.
+
+Looks good – with this in, service registration succeeds and no more `[object Object]` inserts. 🎉24:T711,### Problem
+When running `elizaos publish` on a newly created plugin, users encounter a module resolution error:
+
+```bash
+error: Cannot find module 'zod/v3' from '/Users/user/plugin-testing/node_modules/@langchain/core/dist/runnables/base.js'
+```
+
+### Root Cause Analysis
+The error occurs due to a version mismatch between dependencies:
+
+1. **@langchain/core v0.3.66** imports from `zod/v3`:
+   ```javascript
+   // @langchain/core/dist/runnables/base.js
+   import { z } from "zod/v3";
+   ```
+
+2. **Plugin templates** were pinning zod to older versions:
+   - `plugin-starter`: zod `3.24.2`
+   - `plugin-quick-starter`: zod `^3.24.4`
+
+3. **The `/v3` export** was added in zod `3.25.0`, so older versions don't have it
+
+4. **@langchain/core** requires `zod ^3.25.32` in its package.json
+
+### Solution
+Updated the zod version in both plugin templates to match @langchain/core's requirements:
+
+```diff
+// plugin-starter/package.json
+  "dependencies": {
+    "@elizaos/core": "workspace:*",
+-   "zod": "3.24.2"
++   "zod": "^3.25.32"
+  },
+  "resolutions": {
+-   "zod": "3.24.2"
++   "zod": "^3.25.32"
+  }
+```
+
+```diff
+// plugin-quick-starter/package.json
+  "dependencies": {
+    "@elizaos/core": "workspace:*",
+-   "zod": "^3.24.4"
++   "zod": "^3.25.32"
+  },
+  "resolutions": {
+-   "zod": "^3.24.4"
++   "zod": "^3.25.32"
+  }
+```
+
+### Testing
+After this change, `elizaos publish` runs without module resolution errors on newly created plugins.
+
+Fixes #5657 
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+* **Chores**
+  * Updated the "zod" dependency to version ^3.25.32 in relevant packages for improved compatibility and maintenance.
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->25:T415,## Summary
+
+Removes the unused `test-function-detection.sh` script from the root directory.
+
+## Context
+
+This script was a development artifact used to validate AWK patterns for function detection during the development of the code quality analysis tools. The patterns are now working correctly in production and this test script serves no ongoing purpose.
+
+## Changes
+
+- ❌ Deleted `test-function-detection.sh` (226 lines removed)
+
+## Why remove it?
+
+1. **Not referenced anywhere** - No other scripts, CI/CD, or documentation mention it
+2. **Not part of test suite** - Not integrated with vitest or any automated testing  
+3. **Redundant validation** - AWK patterns already proven working in:
+   - `.github/workflows/daily-code-quality-analysis.yml`
+   - `scripts/analyze-code-quality.sh`
+4. **Development artifact** - Was useful during development but no longer needed
+
+## Testing
+
+- ✅ No references to fix (confirmed via grep)
+- ✅ Production AWK patterns continue working in GitHub workflow
+- ✅ Code quality analysis scripts unaffected12:["$","div",null,{"className":"mb-8 space-y-6","children":[["$","$L19",null,{"metrics":{"date":"2025-07-21","interval":{"intervalStart":"$D2025-07-21T00:00:00.000Z","intervalEnd":"$D2025-07-22T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":9,"merged":6,"total":11},"issues":{"new":14,"closed":1,"total":15},"activeContributors":13,"codeChanges":{"additions":2256,"deletions":864,"files":29,"commitCount":72},"topContributors":[{"username":"wtfsayo","avatarUrl":"https://avatars.githubusercontent.com/u/82053242?u=98209a1f10456f42d4d2fa71db4d5bf4a672cbc3&v=4","totalScore":158.53601602192933,"prScore":158.09801602192934,"issueScore":0,"reviewScore":0,"commentScore":0.43799999999999994,"summary":"wtfsayo: Focused on critical documentation and development environment stability, merging a significant PR to clarify ElizaOS components in `CLAUDE.md` (elizaos/eliza#5642) and fixing CLI dev command test failures (elizaos/eliza#5641). Their work primarily involved other work, bug fixes, refactoring, and documentation."},{"username":"linear","avatarUrl":"https://avatars.githubusercontent.com/in/20150?v=4","totalScore":52,"prScore":0,"issueScore":52,"reviewScore":0,"commentScore":0,"summary":"linear: Focused on identifying and documenting potential work, creating 15 issues, including two closed issues related to `elizaos create` and `elizaos publish` commands, and 13 open issues primarily for documentation and plugin development."},{"username":"ChristopherTrimboli","avatarUrl":"https://avatars.githubusercontent.com/u/27584221?u=de148a498b5af814e037c2975112fadd09df743f&v=4","totalScore":42.16402753610272,"prScore":26.164027536102726,"issueScore":0,"reviewScore":16,"commentScore":0,"summary":"ChristopherTrimboli: Focused on adding post examples to the default Eliza character, merging elizaos/eliza#5652 (+41/-14 lines) and providing 3 reviews. Their work primarily involved modifying 99 files (+5289/-2982 lines) with a focus on documentation and code changes, encompassing other work, bug fixes, and refactoring."},{"username":"cuongpo","avatarUrl":"https://avatars.githubusercontent.com/u/61429471?u=4ee322b81464e6380a46388ff471c9247bb4cbd7&v=4","totalScore":36.506248211863664,"prScore":36.506248211863664,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"cuongpo: Focused on expanding the plugin registry, merging one PR to add `plugin-coti` to the registry and opening another for `plugin-my`, primarily modifying configuration files."},{"username":"standujar","avatarUrl":"https://avatars.githubusercontent.com/u/16385918?u=718bdcd1585be8447bdfffb8c11ce249baa7532d&v=4","totalScore":35.9757738965761,"prScore":35.7757738965761,"issueScore":0,"reviewScore":0,"commentScore":0.2,"summary":"standujar: Focused on enhancing logging capabilities, opening PR elizaos/eliza#5659 \"feat: enhance-logging-rebased\" and modifying 80 files with 13 commits, primarily contributing to other work, bugfixes, tests, and refactoring across tests, code, and documentation."},{"username":"yungalgo","avatarUrl":"https://avatars.githubusercontent.com/u/113615973?u=92e0f29f7e2fbb8ce46ed13c51f692ca803de02d&v=4","totalScore":28.547948169591304,"prScore":28.347948169591305,"issueScore":0,"reviewScore":0,"commentScore":0.2,"summary":"yungalgo: Focused on an open PR, elizaos/eliza#5658, to update a dependency, contributing 6 commits with changes across 16 files, primarily in configuration and code."},{"username":"github-advanced-security","avatarUrl":"https://avatars.githubusercontent.com/in/57789?v=4","totalScore":4.5,"prScore":0,"issueScore":0,"reviewScore":4.5,"commentScore":0,"summary":"github-advanced-security: No activity today."}],"focusAreas":[{"area":"plugin-bootstrap","count":10},{"area":"cli","count":5},{"area":"docs","count":2},{"area":"core","count":2},{"area":"plugin-sql","count":2},{"area":"plugin-starter","count":1},{"area":"project-starter","count":1}],"topIssues":[{"id":"I_kwDOMT5cIs7BGIrT","title":"When running `elizaos create` command, the `.elizadb` directory is being created in the wrong location (current working directory) instead of inside the newly created project folder.","author":"linear","number":5616,"repository":"elizaos/eliza","body":"$1a","createdAt":"2025-07-17T13:31:08Z","closedAt":"2025-07-21T15:52:01Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7BtlQz","title":"`elizaos publish` fails with zod module error in newly created plugins","author":"linear","number":5657,"repository":"elizaos/eliza","body":"$1b","createdAt":"2025-07-21T20:30:37Z","closedAt":"2025-07-24T12:04:49Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7Bte9R","title":"update action-chaining docs on docs repo/site","author":"linear","number":5656,"repository":"elizaos/eliza","body":"* How and when to use callbacks\n* how to avoid double response\n* what happens with action results","createdAt":"2025-07-21T20:20:33Z","closedAt":"2025-07-24T22:25:03Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7BtdQ9","title":"update create-eliza command npm deployment etc","author":"linear","number":5655,"repository":"elizaos/eliza","body":"","createdAt":"2025-07-21T20:18:06Z","closedAt":null,"state":"OPEN","commentCount":0},{"id":"I_kwDOMT5cIs7BtcsO","title":"Add MCP plugin docs","author":"linear","number":5654,"repository":"elizaos/eliza","body":"","createdAt":"2025-07-21T20:17:24Z","closedAt":"2025-08-09T16:22:04Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7BtcWc","title":"Add web socket api references to docs site","author":"linear","number":5653,"repository":"elizaos/eliza","body":"[https://mintlify.com/docs/api-playground/asyncapi/setup](https://mintlify.com/docs/api-playground/asyncapi/setup)<br>[https://studio.asyncapi.com/](https://studio.asyncapi.com/)","createdAt":"2025-07-21T20:16:46Z","closedAt":null,"state":"OPEN","commentCount":0},{"id":"I_kwDOMT5cIs7Bl7RB","title":"Add docs for sending message as agent to any chat via webhook / routes in plugins","author":"linear","number":5649,"repository":"elizaos/eliza","body":"","createdAt":"2025-07-21T09:52:28Z","closedAt":"2025-09-13T07:51:52Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7Bl5Q6","title":"moon-well plugin","author":"linear","number":5648,"repository":"elizaos/eliza","body":"","createdAt":"2025-07-21T09:49:50Z","closedAt":"2025-07-30T12:31:54Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7Bl5Az","title":"defi-llama plugin","author":"linear","number":5647,"repository":"elizaos/eliza","body":"","createdAt":"2025-07-21T09:49:35Z","closedAt":"2025-07-30T12:31:51Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7Bl47l","title":"aave plugin","author":"linear","number":5646,"repository":"elizaos/eliza","body":"","createdAt":"2025-07-21T09:49:28Z","closedAt":"2025-07-30T12:31:56Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7Bl4zM","title":"clanker plugin","author":"linear","number":5645,"repository":"elizaos/eliza","body":"","createdAt":"2025-07-21T09:49:17Z","closedAt":"2025-07-30T12:31:57Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7Bl4vm","title":"morpho plugin","author":"linear","number":5644,"repository":"elizaos/eliza","body":"","createdAt":"2025-07-21T09:49:12Z","closedAt":"2025-08-04T15:35:42Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7Bl4ZM","title":"base agent -- clank tank","author":"linear","number":5643,"repository":"elizaos/eliza","body":"","createdAt":"2025-07-21T09:48:54Z","closedAt":"2025-08-05T13:53:26Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7Bh7_I","title":"Ticket Spec: `fix(scenarios): Runtime dependency audit and fix for evaluators`","author":"linear","number":5640,"repository":"elizaos/eliza","body":"$1c","createdAt":"2025-07-21T01:20:49Z","closedAt":"2025-08-07T02:40:16Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs7Bh7k0","title":"Ticket Spec: `fix(scenarios): Fix environment provider integration - bypass issue`","author":"linear","number":5639,"repository":"elizaos/eliza","body":"$1d","createdAt":"2025-07-21T01:18:50Z","closedAt":"2025-08-07T02:39:52Z","state":"CLOSED","commentCount":0}],"topPullRequests":[{"id":"PR_kwDOMT5cIs6f17vD","title":"feat: Add Clanker Plugin with SDK v4.0.0 Integration","author":"wtfsayo","number":5650,"body":"$1e","repository":"elizaos/eliza","createdAt":"2025-07-21T12:15:16Z","mergedAt":null,"additions":6271,"deletions":0},{"id":"PR_kwDOMT5cIs6f75vg","title":"feat: enhance-logging-rebased","author":"standujar","number":5659,"body":"<!-- This is an auto-generated comment: release notes by coderabbit.ai -->\r\n\r\n## Summary by CodeRabbit\r\n\r\n* **New Features**\r\n  * Introduced advanced logging configuration for ElizaOS agents, including new CLI options for log level, transport (console or file), file path, and JSON formatting.\r\n  * Added an interactive `elizaos logger` CLI command for persistent logging setup.\r\n  * Logging can now be configured via CLI flags, environment variables, or config files, with hybrid console and file output supported.\r\n\r\n* **Documentation**\r\n  * Expanded and reorganized documentation for logging, CLI commands, and server testing, including new guides and usage examples.\r\n\r\n<!-- end of auto-generated comment: release notes by coderabbit.ai -->","repository":"elizaos/eliza","createdAt":"2025-07-21T21:59:42Z","mergedAt":null,"additions":1796,"deletions":642},{"id":"PR_kwDOMT5cIs6bUr_K","title":"feat: enhance logging capabilities in CLI","author":"standujar","number":5203,"body":"$1f","repository":"elizaos/eliza","createdAt":"2025-06-19T23:38:53Z","mergedAt":null,"additions":1661,"deletions":626},{"id":"PR_kwDOMT5cIs6fzjrm","title":"docs: add critical ElizaOS component clarifications to CLAUDE.md","author":"wtfsayo","number":5642,"body":"$20","repository":"elizaos/eliza","createdAt":"2025-07-21T08:41:23Z","mergedAt":"2025-07-21T16:11:39Z","additions":1307,"deletions":4},{"id":"PR_kwDOMT5cIs6fcktq","title":"refactor(plugin-bootstrap): migrate JSON prompts to XML format","author":"0xbbjoker","number":5623,"body":"$21","repository":"elizaos/eliza","createdAt":"2025-07-17T20:28:58Z","mergedAt":"2025-07-21T18:41:51Z","additions":598,"deletions":487},{"id":"PR_kwDOMT5cIs6fy3xt","title":"fix: CLI dev command test failures due to missing dependencies","author":"wtfsayo","number":5641,"body":"$22","repository":"elizaos/eliza","createdAt":"2025-07-21T07:20:44Z","mergedAt":"2025-07-21T08:24:48Z","additions":229,"deletions":126},{"id":"PR_kwDONkg7v86fzZfd","title":"Add plugin-my to registry","author":"cuongpo","number":192,"body":"This PR adds plugin-my to the registry.\n\n- Package name: plugin-my\n- GitHub repository: github:cuongpo/plugin-my\n- Version: 0.1.0\n- Description: COTI blockchain plugin for ElizaOS - enables private token operations and encrypted transactions\n\nSubmitted by: @cuongpo\n\n<!-- This is an auto-generated comment: release notes by coderabbit.ai -->\n\n## Summary by CodeRabbit\n\n* **New Features**\n  * Added several new plugins and adapters, expanding available integrations.\n* **Chores**\n  * Updated plugin and adapter naming conventions for consistency.\n  * Changed repository sources for some existing plugins.\n  * Standardized and expanded the plugin index metadata.\n\n<!-- end of auto-generated comment: release notes by coderabbit.ai -->","repository":"elizaos-plugins/registry","createdAt":"2025-07-21T08:22:21Z","mergedAt":null,"additions":199,"deletions":171},{"id":"PR_kwDOMT5cIs6ffqSu","title":"fix: JSON strings in sql base","author":"ChristopherTrimboli","number":5628,"body":"$23","repository":"elizaos/eliza","createdAt":"2025-07-18T03:22:36Z","mergedAt":"2025-07-21T18:37:21Z","additions":81,"deletions":7},{"id":"PR_kwDOMT5cIs6f5vNn","title":"feat: add post examples to default eliza char","author":"ChristopherTrimboli","number":5652,"body":"Without this, twitter posting doesn't run.","repository":"elizaos/eliza","createdAt":"2025-07-21T17:48:33Z","mergedAt":"2025-07-21T18:36:53Z","additions":41,"deletions":14},{"id":"PR_kwDOMT5cIs6f70UI","title":"fix: update zod to 3.25 so v3 is there","author":"yungalgo","number":5658,"body":"$24","repository":"elizaos/eliza","createdAt":"2025-07-21T21:45:16Z","mergedAt":null,"additions":20,"deletions":23},{"id":"PR_kwDONkg7v86f0pRE","title":"Add plugin-coti to registry","author":"cuongpo","number":193,"body":"This PR adds plugin-coti to the registry.\n\n- Package name: plugin-coti\n- GitHub repository: github:cuongpo/plugin-coti\n- Version: 0.1.0\n- Description: COTI blockchain plugin for ElizaOS - enables private token operations and encrypted transactions\n\nSubmitted by: @cuongpo\n\n<!-- This is an auto-generated comment: release notes by coderabbit.ai -->\n\n## Summary by CodeRabbit\n\n* **New Features**\n  * Added support for the \"plugin-coti\" plugin, enabling integration with its features.\n\n<!-- end of auto-generated comment: release notes by coderabbit.ai -->","repository":"elizaos-plugins/registry","createdAt":"2025-07-21T10:22:03Z","mergedAt":"2025-07-22T08:25:22Z","additions":2,"deletions":1},{"id":"PR_kwDOMT5cIs6f5EMr","title":"cleanup: remove unused test-function-detection.sh script","author":"wtfsayo","number":5651,"body":"$25","repository":"elizaos/eliza","createdAt":"2025-07-21T16:39:59Z","mergedAt":"2025-07-21T16:43:22Z","additions":0,"deletions":226}],"detailedContributorSummaries":{"ChristopherTrimboli":"ChristopherTrimboli: Focused on adding post examples to the default Eliza character, merging elizaos/eliza#5652 (+41/-14 lines) and providing 3 reviews. Their work primarily involved modifying 99 files (+5289/-2982 lines) with a focus on documentation and code changes, encompassing other work, bug fixes, and refactoring.","cuongpo":"cuongpo: Focused on expanding the plugin registry, merging one PR to add `plugin-coti` to the registry and opening another for `plugin-my`, primarily modifying configuration files.","github-advanced-security":"github-advanced-security: No activity today.","linear":"linear: Focused on identifying and documenting potential work, creating 15 issues, including two closed issues related to `elizaos create` and `elizaos publish` commands, and 13 open issues primarily for documentation and plugin development.","standujar":"standujar: Focused on enhancing logging capabilities, opening PR elizaos/eliza#5659 \"feat: enhance-logging-rebased\" and modifying 80 files with 13 commits, primarily contributing to other work, bugfixes, tests, and refactoring across tests, code, and documentation.","wtfsayo":"wtfsayo: Focused on critical documentation and development environment stability, merging a significant PR to clarify ElizaOS components in `CLAUDE.md` (elizaos/eliza#5642) and fixing CLI dev command test failures (elizaos/eliza#5641). Their work primarily involved other work, bug fixes, refactoring, and documentation.","yungalgo":"yungalgo: Focused on an open PR, elizaos/eliza#5658, to update a dependency, contributing 6 commits with changes across 16 files, primarily in configuration and code."}}}],"$L26"]}]
+13:["$","div",null,{"className":"prose prose-sm mx-auto mt-8 dark:prose-invert sm:prose lg:prose-lg xl:prose-xl","children":[["$","p","p-0",{"children":"ElizaOS made significant progress today on core framework refinements, including migrating prompts to XML for improved LLM reliability and addressing critical bugs in CLI and SQL plugins. The project also expanded its plugin ecosystem with a new submission to the registry and introduced new features and documentation enhancements."}],"\n",["$","h2","h2-0",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"🚨 Needs Attention","position":{"start":{"line":3,"column":4,"offset":337},"end":{"line":3,"column":22,"offset":355}}}],"position":{"start":{"line":3,"column":1,"offset":334},"end":{"line":3,"column":23,"offset":356}}},"children":"🚨 Needs Attention"}],"\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"Pull Requests to Review"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos-plugins/registry/pull/192","children":"elizaos-plugins/registry#192"}],": New plugin submission for 'plugin-my' requires review for inclusion in the registry."]}],"\n",["$","li","li-1",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5659","children":"elizaos/eliza#5659"}],": \"feat: enhance-logging-rebased\" aims to improve logging capabilities."]}],"\n",["$","li","li-2",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5658","children":"elizaos/eliza#5658"}],": \"fix: update zod to 3.25 so v3 is there\" addresses a dependency update for Zod."]}],"\n",["$","li","li-3",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5650","children":"elizaos/eliza#5650"}],": \"feat: Add Clanker Plugin with SDK v4.0.0 Integration\" introduces a new Clanker Plugin with SDK integration."]}],"\n"]}],"\n"]}],"\n",["$","li","li-1",{"children":[["$","strong","strong-0",{"children":"Urgent Discussions"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/5655","children":"elizaos/eliza#5655"}],": Issue reported regarding the ",["$","code","code-0",{"children":"create-eliza"}]," command's npm deployment."]}],"\n",["$","li","li-1",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/5657","children":"elizaos/eliza#5657"}],": Failure of ",["$","code","code-0",{"children":"elizaos publish"}]," with a Zod module error in newly created plugins."]}],"\n"]}],"\n"]}],"\n"]}],"\n",["$","h2","h2-1",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"✅ Completed Work","position":{"start":{"line":13,"column":4,"offset":1367},"end":{"line":13,"column":20,"offset":1383}}}],"position":{"start":{"line":13,"column":1,"offset":1364},"end":{"line":13,"column":20,"offset":1383}}},"children":"✅ Completed Work"}],"\n",["$","ul","ul-1",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"Core Framework Refinements & Prompt Standardization"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["Migrated all JSON prompts to an XML format across the codebase, enhancing LLM response reliability in core entities and the bootstrap plugin. ",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5623","children":"elizaos/eliza#5623"}]]}],"\n"]}],"\n"]}],"\n",["$","li","li-1",{"children":[["$","strong","strong-0",{"children":"CLI and Plugin Stability Improvements"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["Fixed CLI dev command test failures due to missing dependencies. ",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5641","children":"elizaos/eliza#5641"}]]}],"\n",["$","li","li-1",{"children":["Resolved issues with JSON string handling in the SQL base plugin, ensuring more robust operations. ",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5628","children":"elizaos/eliza#5628"}]]}],"\n"]}],"\n"]}],"\n",["$","li","li-2",{"children":[["$","strong","strong-0",{"children":"Feature Expansion and Documentation"}],":","\n","$L27","\n"]}],"\n"]}],"\n","$L28","\n","$L29","\n","$L2a","\n","$L2b"]}]
+14:["$","script","script-0",{"src":"/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","async":true}]
+15:["$","script","script-1",{"src":"/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","async":true}]
+16:["$","script","script-2",{"src":"/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js","async":true}]
+17:["$","$L2c",null,{"children":["$","$2d",null,{"name":"Next.MetadataOutlet","children":"$@2e"}]}]
+26:["$","div",null,{"className":"rounded-lg border bg-card text-card-foreground shadow-sm","children":[["$","div",null,{"className":"flex flex-col space-y-1.5 p-6 py-4","children":["$","div",null,{"className":"tracking-tight text-sm font-medium","children":["$undefined","Code Changes"]}]}],["$","div",null,{"className":"p-6 pt-0","children":["$","div",null,{"className":"grid grid-cols-2 gap-4 md:grid-cols-4","children":[["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-git-commit-vertical h-5 w-5","aria-hidden":"true","children":[["$","path","1holv5",{"d":"M12 3v6"}],["$","circle","1v7zrd",{"cx":"12","cy":"12","r":"3"}],["$","path","a9ows0",{"d":"M12 15v6"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":72}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Commits"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-file-code h-5 w-5","aria-hidden":"true","children":[["$","path","1oefj6",{"d":"M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"}],["$","path","wfsgrz",{"d":"M14 2v5a1 1 0 0 0 1 1h5"}],["$","path","1tg20x",{"d":"M10 12.5 8 15l2 2.5"}],["$","path","yinavb",{"d":"m14 12.5 2 2.5-2 2.5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":29}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Files Changed"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-green-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-up h-5 w-5 text-green-500","aria-hidden":"true","children":[["$","path","hav0vg",{"d":"m5 12 7-7 7 7"}],["$","path","x0mq9r",{"d":"M12 19V5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-green-500","children":"+2,256"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Added"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-red-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-down h-5 w-5 text-red-500","aria-hidden":"true","children":[["$","path","s699le",{"d":"M12 5v14"}],["$","path","1idqje",{"d":"m19 12-7 7-7-7"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-red-500","children":"-864"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Deleted"}]]}]]}]]}]}]]}]
+27:["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["Added new examples to the default Eliza character to support Twitter posting functionality. ",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5652","children":"elizaos/eliza#5652"}]]}],"\n",["$","li","li-1",{"children":["Enhanced documentation with critical clarifications on ElizaOS components (Services, Providers, Actions, Evaluators) in ",["$","code","code-0",{"children":"CLAUDE.md"}],". ",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5642","children":"elizaos/eliza#5642"}]]}],"\n"]}]
+28:["$","h2","h2-2",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"🏗️ Work in Progress","position":{"start":{"line":23,"column":4,"offset":2421},"end":{"line":23,"column":24,"offset":2441}}}],"position":{"start":{"line":23,"column":1,"offset":2418},"end":{"line":23,"column":24,"offset":2441}}},"children":"🏗️ Work in Progress"}]
+29:["$","ul","ul-2",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"New Pull Requests"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"elizaos-plugins/registry"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos-plugins/registry/pull/192","children":"elizaos-plugins/registry#192"}],": Add 'plugin-my' to the registry."]}],"\n"]}],"\n"]}],"\n",["$","li","li-1",{"children":[["$","strong","strong-0",{"children":"elizaos/eliza"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5659","children":"elizaos/eliza#5659"}],": feat: enhance-logging-rebased"]}],"\n",["$","li","li-1",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5658","children":"elizaos/eliza#5658"}],": fix: update zod to 3.25 so v3 is there"]}],"\n",["$","li","li-2",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5650","children":"elizaos/eliza#5650"}],": feat: Add Clanker Plugin with SDK v4.0.0 Integration"]}],"\n"]}],"\n"]}],"\n"]}],"\n"]}],"\n"]}]
+2a:["$","h2","h2-3",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"🐞 Issue Triage","position":{"start":{"line":32,"column":4,"offset":3011},"end":{"line":32,"column":19,"offset":3026}}}],"position":{"start":{"line":32,"column":1,"offset":3008},"end":{"line":32,"column":19,"offset":3026}}},"children":"🐞 Issue Triage"}]
+2b:["$","ul","ul-3",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"New Issues"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"elizaos/eliza"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/5640","children":"elizaos/eliza#5640"}],": Scenario runner runtime dependency audits for evaluators."]}],"\n",["$","li","li-1",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/5639","children":"elizaos/eliza#5639"}],": Bypass issue in the environment provider integration."]}],"\n",["$","li","li-2",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/5646","children":"elizaos/eliza#5646"}],": Request for Aave plugin."]}],"\n",["$","li","li-3",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/5643","children":"elizaos/eliza#5643"}],": Request for Morpho plugin."]}],"\n",["$","li","li-4",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/5644","children":"elizaos/eliza#5644"}],": Request for Clanker plugin."]}],"\n",["$","li","li-5",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/5645","children":"elizaos/eliza#5645"}],": Request for Defi-Llama plugin."]}],"\n",["$","li","li-6",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/5647","children":"elizaos/eliza#5647"}],": Request for Moon-Well plugin."]}],"\n",["$","li","li-7",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/5648","children":"elizaos/eliza#5648"}],": Request for documentation on sending messages via webhooks/routes."]}],"\n",["$","li","li-8",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/5649","children":"elizaos/eliza#5649"}],": Request for WebSocket API reference."]}],"\n",["$","li","li-9",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/5653","children":"elizaos/eliza#5653"}],": Request for MCP plugin documentation."]}],"\n",["$","li","li-10",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/5654","children":"elizaos/eliza#5654"}],": Request for action-chaining documentation."]}],"\n",["$","li","li-11",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/5655","children":"elizaos/eliza#5655"}],": ",["$","code","code-0",{"children":"create-eliza"}]," command npm deployment issue."]}],"\n",["$","li","li-12",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/5657","children":"elizaos/eliza#5657"}],": ",["$","code","code-0",{"children":"elizaos publish"}]," failure with Zod module error."]}],"\n"]}],"\n"]}],"\n"]}],"\n"]}],"\n",["$","li","li-1",{"children":[["$","strong","strong-0",{"children":"Closed Issues"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"elizaos/eliza"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/5616","children":"elizaos/eliza#5616"}],": Fixed issue where ",["$","code","code-0",{"children":".elizadb"}]," directory was created in the wrong location when running ",["$","code","code-1",{"children":"elizaos create"}],"."]}],"\n"]}],"\n"]}],"\n"]}],"\n"]}],"\n"]}]
+2e:null

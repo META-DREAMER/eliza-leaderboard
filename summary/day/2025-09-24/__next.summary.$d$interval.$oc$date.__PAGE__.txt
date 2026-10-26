@@ -1,0 +1,267 @@
+1:"$Sreact.fragment"
+2:I[4817319,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"IntervalSelector"]
+3:I[6998365,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"LlmCopyButton"]
+e:I[3642796,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],""]
+f:I[3238488,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"StatCardsDisplay"]
+14:I[4261541,["/eliza-leaderboard/_next/static/chunks/b33bcbdcb3f88354.js","/eliza-leaderboard/_next/static/chunks/8ba59154b6704904.js"],"OutletBoundary"]
+15:"$Sreact.suspense"
+4:T82b,Stabilize Docker image builds in CI by aligning Bun to 1.2.21, enabling Buildx with GitHub Actions cache, constraining parallelism, and adding diagnostics and disk cleanup.
+
+**Diff vs develop**
+```
+2 files changed, 51 insertions(+), 9 deletions(-)
+.github/workflows/image.yaml | +46/-6
+Dockerfile                   | +14/-3
+```
+
+**Changed files**
+- `.github/workflows/image.yaml`
+- `Dockerfile`
+
+**Commits**
+- e8f27c6c1d fix(ci): stabilize Docker image build — align Bun to 1.2.21; add verbose build diagnostics; limit Turbo concurrency; set up Buildx with GHA cache; reduce parallelism; add disk cleanup; add 60m timeout.
+- cea94ffeea Refine Docker image workflow for efficiency and clarity.
+
+**Why**
+- Previous workflow failed when `bun run build` exited 1 inside Docker build.
+- CI image used Bun 1.2.5 while local used 1.2.21; unify to 1.2.21.
+- CI hosts are resource constrained; limit build parallelism and clean disk before build.
+- Add diagnostics for faster root-cause when failures happen.
+
+**Key changes**
+- Dockerfile:
+  - Install `bun@1.2.21` and `turbo@2.3.3`.
+  - Add environment diagnostics (Node, Bun, memory, CPU, disk) before build.
+  - Constrain build: `TURBO_CONCURRENCY=2 bun run build --concurrency=2 --verbose`; on failure, print system state.
+- Workflow (`.github/workflows/image.yaml`):
+  - Add `timeout-minutes: 60`.
+  - Free disk space (remove large SDKs, prune Docker images).
+  - Set up Buildx with log size limits and `max-parallelism = 2`.
+  - Use GHA cache: `cache-from: type=gha` and `cache-to: type=gha,mode=max`.
+  - Use `linux/amd64` single-arch for stability.
+  - Keep build provenance attestation.
+
+**Expected outcome**
+- More stable and reproducible Docker image builds; faster subsequent builds via cache; clearer diagnostics on failure.
+
+**Test plan**
+- CI: run workflow via `workflow_dispatch` and verify successful build and push to GHCR.
+- Manual: local `docker build` validates Bun version parity and constrained build succeeds.
+
+**Links**
+- Failed job for reference: `https://github.com/elizaOS/eliza/actions/runs/17969674458/job/51109114397`5:Ta92,# Registry Update Checklist
+
+Registry:
+- [ ] I've made the left side of the colon of JSON entry in index.json match the potential NPM package name
+- [ ] I've used github not github.com
+- [ ] There is no .git extension
+- [ ] It's placed it alphabetically in the list
+- [ ] I've dealt with commas properly so the list is still valid JSON
+
+If not an eliza-plugins official repo, i.e. new plugin: 
+
+The plugin repo has:
+- [ ] is publically accessible (not a private repo)
+- [ ] uses main as it's default branch
+- [ ] I have include `elizaos-plugins` in the topics in the GitHub repo settings. If the plugin is related to `AI` or `crypto`, please add those as topics as well.
+- [ ] add simple description in github repo
+- [ ] follows this convention
+```
+plugin-name/
+├── images/
+│   ├── logo.jpg        # Plugin branding logo
+│   ├── banner.jpg      # Plugin banner image
+├── src/
+│   ├── index.ts        # Main plugin entry point
+│   ├── actions/        # Plugin-specific actions
+│   ├── clients/        # Client implementations
+│   ├── adapters/       # Adapter implementations
+│   └── types.ts        # Type definitions
+│   └── environment.ts  # runtime.getSetting, zod validation
+├── package.json        # Plugin dependencies
+└── README.md          # Plugin documentation
+```
+- [ ] an `images/banner.jpg` and `images/logo.jpg` and they
+  - Use clear, high-resolution images
+  - Keep file sizes optimized (< 500KB for logos, < 1MB for banners)
+  - Follow the [elizaOS Brand Guidelines](https://github.com/elizaOS/brandkit)
+  - Include alt text for accessibility
+- [ ] package.json has a agentConfig like the following
+```json
+{
+  "name": "@myNpmOrg/plugin-example",
+  "version": "1.0.0",
+  "agentConfig": {
+    "pluginType": "elizaos:plugin:1.0.0",
+    "pluginParameters": {
+      "API_KEY": {
+        "type": "string",
+        "description": "API key for the service"
+      }
+    }
+  }
+}
+```
+
+<!-- If you are on Discord, please join https://discord.gg/elizaOS and state your Discord username here for the contributor role and join us in #development-feed -->
+<!--
+## Discord username
+
+-->
+
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+* New Features
+  * Added the Beacon plugin to the public plugin index, making it discoverable and installable via the plugin catalog.
+  * Expands available integrations without affecting existing plugin entries.
+  * No configuration changes required; the plugin is immediately available for use.
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->6:T71a,On Sep 24, 2025, ElizaOS saw significant progress in core system stability and plugin ecosystem expansion. Key achievements include stabilizing Docker image builds and upgrading the Zod validation library across the `elizaos/eliza` repository, alongside the submission of a new `plugin-beacon` to the registry. Preparatory work for a Zod v4 migration also began in `elizaos-plugins/plugin-auton8n`, indicating ongoing efforts to modernize dependencies across the project.
+
+## 🚨 Needs Attention
+- **Pull Requests to Review**:
+    - [elizaos-plugins/registry#233](https://github.com/elizaos-plugins/registry/pull/233): This PR to add `plugin-beacon` to the registry is open and awaiting review.
+
+## ✅ Completed Work
+### CI/CD Pipeline Enhancements
+- Stabilized Docker image builds in CI for `elizaos/eliza` by aligning Bun to version 1.2.21, enabling Buildx with GitHub Actions cache, constraining parallelism, and adding diagnostics and disk cleanup. ([elizaos/eliza#5997](https://github.com/elizaos/eliza/pull/5997))
+
+### Dependency Updates
+- Upgraded the Zod validation library to its latest major version across CLI, Core, plugins, and starter templates in `elizaos/eliza`, improving validation capabilities. ([elizaos/eliza#5994](https://github.com/elizaos/eliza/pull/5994))
+
+## 🏗️ Work in Progress
+### New Pull Requests
+- **elizaos-plugins/registry**:
+    - [#233](https://github.com/elizaos-plugins/registry/pull/233) Add `plugin-beacon` to the registry.
+- **elizaos-plugins/plugin-auton8n**:
+    - [#1](https://github.com/elizaos-plugins/plugin-auton8n/pull/1) Address TypeScript errors from Zod v4 migration.
+- **elizaos/eliza**:
+    - [#5998](https://github.com/elizaos/eliza/pull/5998) refactor type definitions across runtime.
+    - [#5996](https://github.com/elizaos/eliza/pull/5996) chore: 1.5.110:{"buildId":"US8XLB_zHXYj_PVAECGcd","rsc":["$","$1","c",{"children":[["$","div",null,{"className":"container mx-auto px-6 py-8 md:px-8","children":["$","div",null,{"className":"mx-auto max-w-4xl","children":[["$","div",null,{"className":"mb-4 flex flex-col justify-between sm:flex-row","children":[["$","$L2",null,{"currentInterval":"day","currentDate":"2025-09-24"}],["$","$L3",null,{"metrics":{"date":"2025-09-24","interval":{"intervalStart":"$D2025-09-24T00:00:00.000Z","intervalEnd":"$D2025-09-25T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":6,"merged":2,"total":7},"issues":{"new":0,"closed":0,"total":0},"activeContributors":6,"codeChanges":{"additions":228,"deletions":81,"files":18,"commitCount":43},"topContributors":[{"username":"wtfsayo","avatarUrl":"https://avatars.githubusercontent.com/u/82053242?u=98209a1f10456f42d4d2fa71db4d5bf4a672cbc3&v=4","totalScore":63.92164776074941,"prScore":63.92164776074941,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"wtfsayo: Focused on stabilizing the CI pipeline, successfully merging a significant PR in elizaos/eliza (#5997) that addressed Docker image build stability with Bun 1.2.21 and Buildx. Their work primarily involved bug fixes and other general improvements, touching a mix of code, tests, and configuration files."},{"username":"standujar","avatarUrl":"https://avatars.githubusercontent.com/u/16385918?u=718bdcd1585be8447bdfffb8c11ce249baa7532d&v=4","totalScore":62.54590606554893,"prScore":62.54590606554893,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"standujar: An open pull request, elizaos-plugins/plugin-auton8n#1, indicates a focus on addressing TypeScript errors related to a Zod v4 migration."},{"username":"tcm390","avatarUrl":"https://avatars.githubusercontent.com/u/60634884?u=c6c41679b8322eaa0c81f72e0b4ed95e80f0ac16&v=4","totalScore":49.5437738965761,"prScore":49.5437738965761,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"tcm390: Focused on significant refactoring work, notably merging a large PR in elizaos/eliza (#5998) that refactored type definitions across the runtime, involving substantial code changes (+5265/-3370 lines). Their primary focus was on bugfix and refactor work, primarily impacting code files."},{"username":"SergiuTomus","avatarUrl":"https://avatars.githubusercontent.com/u/40544351?v=4","totalScore":12.200573590279971,"prScore":12.200573590279971,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"SergiuTomus: Focused on expanding plugin availability by opening PR elizaos-plugins/registry#233 to add a new plugin to the registry, which involved a minor configuration change."}],"focusAreas":[{"area":"cli","count":3},{"area":"project-tee-starter","count":3},{"area":"core","count":2},{"area":".github/workflows","count":1}],"topIssues":[],"topPullRequests":[{"id":"PR_kwDOO65CGs6qXsmU","title":"Update to Zod v4 and dependencies","author":"standujar","number":1,"body":"Not tested.\n\n<!-- This is an auto-generated comment: release notes by coderabbit.ai -->\n\n## Summary by CodeRabbit\n\n- Chores\n  - Bumped app version to 1.3.3.\n  - Upgraded key dependencies to latest compatible versions for improved stability, compatibility, and security.\n  - Aligned dependency resolutions to avoid version conflicts.\n  - No changes to user-facing behavior or public APIs are expected.\n\n<!-- end of auto-generated comment: release notes by coderabbit.ai -->","repository":"elizaos-plugins/plugin-autocoder","createdAt":"2025-09-24T20:59:30Z","mergedAt":"2025-10-03T13:22:31Z","additions":12774,"deletions":15},{"id":"PR_kwDOMT5cIs6qN0pL","title":"chore: 1.5.11","author":"wtfsayo","number":5996,"body":"","repository":"elizaos/eliza","createdAt":"2025-09-24T07:17:51Z","mergedAt":null,"additions":4601,"deletions":2906},{"id":"PR_kwDOO7HBBc6qXtTW","title":"Fix TypeScript errors for Zod v4 migration","author":"standujar","number":1,"body":"Not tested.\n\n<!-- This is an auto-generated comment: release notes by coderabbit.ai -->\n\n## Summary by CodeRabbit\n\n- New Features\n  - Actions now return structured results (success/text/error) for clearer responses and richer validation error details.\n- Refactor\n  - Standardized extensionless imports across the codebase without changing behavior.\n- Tests\n  - Updated test and e2e imports to align with extensionless module resolution; no functional changes.\n- Chores\n  - Bumped version to 1.1.1.\n  - Updated dependencies: @elizaos/core, @elizaos/plugin-bootstrap, zod; aligned resolutions.\n  - Refreshed plugin-starter template dependencies to match current versions.\n\n<!-- end of auto-generated comment: release notes by coderabbit.ai -->","repository":"elizaos-plugins/plugin-auton8n","createdAt":"2025-09-24T21:00:56Z","mergedAt":null,"additions":1463,"deletions":79},{"id":"PR_kwDOMT5cIs6qTmMU","title":"refactor type definitions across runtime.","author":"tcm390","number":5998,"body":"","repository":"elizaos/eliza","createdAt":"2025-09-24T14:48:48Z","mergedAt":"2025-09-28T15:56:49Z","additions":896,"deletions":499},{"id":"PR_kwDOMT5cIs6p6DgA","title":"chore: update zod pckg version","author":"0xbbjoker","number":5994,"body":"\n\n<!-- This is an auto-generated comment: release notes by coderabbit.ai -->\n\n## Summary by CodeRabbit\n\n* **Chores**\n  * Upgraded the validation library to the latest major version across CLI, Core, plugins, and starter templates for improved compatibility, stability, and security.\n  * Aligned dependency resolutions across packages; no feature changes introduced.\n\n* **Refactor**\n  * Strengthened validation for configuration maps, ensuring keys are treated as strings for clearer error messages and more predictable behavior. No breaking API changes expected for typical usage.\n\n<!-- end of auto-generated comment: release notes by coderabbit.ai -->","repository":"elizaos/eliza","createdAt":"2025-09-22T18:17:09Z","mergedAt":"2025-09-24T07:09:16Z","additions":177,"deletions":72},{"id":"PR_kwDOMT5cIs6qOETW","title":"fix(ci): stabilize Docker image build (Bun 1.2.21, Buildx cache, concurrency)","author":"wtfsayo","number":5997,"body":"$4","repository":"elizaos/eliza","createdAt":"2025-09-24T07:39:06Z","mergedAt":"2025-09-24T07:54:35Z","additions":51,"deletions":9},{"id":"PR_kwDONkg7v86qTjIl","title":"Add plugin-beacon to registry","author":"SergiuTomus","number":233,"body":"$5","repository":"elizaos-plugins/registry","createdAt":"2025-09-24T14:44:44Z","mergedAt":null,"additions":1,"deletions":0}],"detailedContributorSummaries":{"SergiuTomus":"SergiuTomus: Focused on expanding plugin availability by opening PR elizaos-plugins/registry#233 to add a new plugin to the registry, which involved a minor configuration change.","standujar":"standujar: An open pull request, elizaos-plugins/plugin-auton8n#1, indicates a focus on addressing TypeScript errors related to a Zod v4 migration.","tcm390":"tcm390: Focused on significant refactoring work, notably merging a large PR in elizaos/eliza (#5998) that refactored type definitions across the runtime, involving substantial code changes (+5265/-3370 lines). Their primary focus was on bugfix and refactor work, primarily impacting code files.","wtfsayo":"wtfsayo: Focused on stabilizing the CI pipeline, successfully merging a significant PR in elizaos/eliza (#5997) that addressed Docker image build stability with Bun 1.2.21 and Buildx. Their work primarily involved bug fixes and other general improvements, touching a mix of code, tests, and configuration files."}},"summaryContent":"$6","className":"self-end sm:self-start"}]]}],"$L7","$L8","$L9"]}]}],["$La","$Lb","$Lc"],"$Ld"]}],"loading":null,"isPartial":false}
+7:["$","div",null,{"className":"mb-6","children":["$","div",null,{"className":"flex items-center justify-between","children":[[["$","$Le",null,{"href":"/summary/day/2025-09-23","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left mr-2 h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"children":"Previous"}],false],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$Le",null,{"href":"/summary/day/2025-09-23","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Previous"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]],["$","div",null,{"className":"flex flex-col items-center","children":[["$","div",null,{"className":"text-sm font-medium text-gray-500","children":["Daily"," Summary"]}],["$","time",null,{"dateTime":"2025-09-24","className":"text-md font-bold","children":"Sep 24, 2025"}]]}],[["$","$Le",null,{"href":"/summary/day/2025-09-25","children":[false,["$","span",null,{"children":"Next"}],["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right ml-2 h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}]],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$Le",null,{"href":"/summary/day/2025-09-25","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Next"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]]]}]}]
+10:T82b,Stabilize Docker image builds in CI by aligning Bun to 1.2.21, enabling Buildx with GitHub Actions cache, constraining parallelism, and adding diagnostics and disk cleanup.
+
+**Diff vs develop**
+```
+2 files changed, 51 insertions(+), 9 deletions(-)
+.github/workflows/image.yaml | +46/-6
+Dockerfile                   | +14/-3
+```
+
+**Changed files**
+- `.github/workflows/image.yaml`
+- `Dockerfile`
+
+**Commits**
+- e8f27c6c1d fix(ci): stabilize Docker image build — align Bun to 1.2.21; add verbose build diagnostics; limit Turbo concurrency; set up Buildx with GHA cache; reduce parallelism; add disk cleanup; add 60m timeout.
+- cea94ffeea Refine Docker image workflow for efficiency and clarity.
+
+**Why**
+- Previous workflow failed when `bun run build` exited 1 inside Docker build.
+- CI image used Bun 1.2.5 while local used 1.2.21; unify to 1.2.21.
+- CI hosts are resource constrained; limit build parallelism and clean disk before build.
+- Add diagnostics for faster root-cause when failures happen.
+
+**Key changes**
+- Dockerfile:
+  - Install `bun@1.2.21` and `turbo@2.3.3`.
+  - Add environment diagnostics (Node, Bun, memory, CPU, disk) before build.
+  - Constrain build: `TURBO_CONCURRENCY=2 bun run build --concurrency=2 --verbose`; on failure, print system state.
+- Workflow (`.github/workflows/image.yaml`):
+  - Add `timeout-minutes: 60`.
+  - Free disk space (remove large SDKs, prune Docker images).
+  - Set up Buildx with log size limits and `max-parallelism = 2`.
+  - Use GHA cache: `cache-from: type=gha` and `cache-to: type=gha,mode=max`.
+  - Use `linux/amd64` single-arch for stability.
+  - Keep build provenance attestation.
+
+**Expected outcome**
+- More stable and reproducible Docker image builds; faster subsequent builds via cache; clearer diagnostics on failure.
+
+**Test plan**
+- CI: run workflow via `workflow_dispatch` and verify successful build and push to GHCR.
+- Manual: local `docker build` validates Bun version parity and constrained build succeeds.
+
+**Links**
+- Failed job for reference: `https://github.com/elizaOS/eliza/actions/runs/17969674458/job/51109114397`11:Ta92,# Registry Update Checklist
+
+Registry:
+- [ ] I've made the left side of the colon of JSON entry in index.json match the potential NPM package name
+- [ ] I've used github not github.com
+- [ ] There is no .git extension
+- [ ] It's placed it alphabetically in the list
+- [ ] I've dealt with commas properly so the list is still valid JSON
+
+If not an eliza-plugins official repo, i.e. new plugin: 
+
+The plugin repo has:
+- [ ] is publically accessible (not a private repo)
+- [ ] uses main as it's default branch
+- [ ] I have include `elizaos-plugins` in the topics in the GitHub repo settings. If the plugin is related to `AI` or `crypto`, please add those as topics as well.
+- [ ] add simple description in github repo
+- [ ] follows this convention
+```
+plugin-name/
+├── images/
+│   ├── logo.jpg        # Plugin branding logo
+│   ├── banner.jpg      # Plugin banner image
+├── src/
+│   ├── index.ts        # Main plugin entry point
+│   ├── actions/        # Plugin-specific actions
+│   ├── clients/        # Client implementations
+│   ├── adapters/       # Adapter implementations
+│   └── types.ts        # Type definitions
+│   └── environment.ts  # runtime.getSetting, zod validation
+├── package.json        # Plugin dependencies
+└── README.md          # Plugin documentation
+```
+- [ ] an `images/banner.jpg` and `images/logo.jpg` and they
+  - Use clear, high-resolution images
+  - Keep file sizes optimized (< 500KB for logos, < 1MB for banners)
+  - Follow the [elizaOS Brand Guidelines](https://github.com/elizaOS/brandkit)
+  - Include alt text for accessibility
+- [ ] package.json has a agentConfig like the following
+```json
+{
+  "name": "@myNpmOrg/plugin-example",
+  "version": "1.0.0",
+  "agentConfig": {
+    "pluginType": "elizaos:plugin:1.0.0",
+    "pluginParameters": {
+      "API_KEY": {
+        "type": "string",
+        "description": "API key for the service"
+      }
+    }
+  }
+}
+```
+
+<!-- If you are on Discord, please join https://discord.gg/elizaOS and state your Discord username here for the contributor role and join us in #development-feed -->
+<!--
+## Discord username
+
+-->
+
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+* New Features
+  * Added the Beacon plugin to the public plugin index, making it discoverable and installable via the plugin catalog.
+  * Expands available integrations without affecting existing plugin entries.
+  * No configuration changes required; the plugin is immediately available for use.
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->8:["$","div",null,{"className":"mb-8 space-y-6","children":[["$","$Lf",null,{"metrics":{"date":"2025-09-24","interval":{"intervalStart":"$D2025-09-24T00:00:00.000Z","intervalEnd":"$D2025-09-25T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":6,"merged":2,"total":7},"issues":{"new":0,"closed":0,"total":0},"activeContributors":6,"codeChanges":{"additions":228,"deletions":81,"files":18,"commitCount":43},"topContributors":[{"username":"wtfsayo","avatarUrl":"https://avatars.githubusercontent.com/u/82053242?u=98209a1f10456f42d4d2fa71db4d5bf4a672cbc3&v=4","totalScore":63.92164776074941,"prScore":63.92164776074941,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"wtfsayo: Focused on stabilizing the CI pipeline, successfully merging a significant PR in elizaos/eliza (#5997) that addressed Docker image build stability with Bun 1.2.21 and Buildx. Their work primarily involved bug fixes and other general improvements, touching a mix of code, tests, and configuration files."},{"username":"standujar","avatarUrl":"https://avatars.githubusercontent.com/u/16385918?u=718bdcd1585be8447bdfffb8c11ce249baa7532d&v=4","totalScore":62.54590606554893,"prScore":62.54590606554893,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"standujar: An open pull request, elizaos-plugins/plugin-auton8n#1, indicates a focus on addressing TypeScript errors related to a Zod v4 migration."},{"username":"tcm390","avatarUrl":"https://avatars.githubusercontent.com/u/60634884?u=c6c41679b8322eaa0c81f72e0b4ed95e80f0ac16&v=4","totalScore":49.5437738965761,"prScore":49.5437738965761,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"tcm390: Focused on significant refactoring work, notably merging a large PR in elizaos/eliza (#5998) that refactored type definitions across the runtime, involving substantial code changes (+5265/-3370 lines). Their primary focus was on bugfix and refactor work, primarily impacting code files."},{"username":"SergiuTomus","avatarUrl":"https://avatars.githubusercontent.com/u/40544351?v=4","totalScore":12.200573590279971,"prScore":12.200573590279971,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"SergiuTomus: Focused on expanding plugin availability by opening PR elizaos-plugins/registry#233 to add a new plugin to the registry, which involved a minor configuration change."}],"focusAreas":[{"area":"cli","count":3},{"area":"project-tee-starter","count":3},{"area":"core","count":2},{"area":".github/workflows","count":1}],"topIssues":[],"topPullRequests":[{"id":"PR_kwDOO65CGs6qXsmU","title":"Update to Zod v4 and dependencies","author":"standujar","number":1,"body":"Not tested.\n\n<!-- This is an auto-generated comment: release notes by coderabbit.ai -->\n\n## Summary by CodeRabbit\n\n- Chores\n  - Bumped app version to 1.3.3.\n  - Upgraded key dependencies to latest compatible versions for improved stability, compatibility, and security.\n  - Aligned dependency resolutions to avoid version conflicts.\n  - No changes to user-facing behavior or public APIs are expected.\n\n<!-- end of auto-generated comment: release notes by coderabbit.ai -->","repository":"elizaos-plugins/plugin-autocoder","createdAt":"2025-09-24T20:59:30Z","mergedAt":"2025-10-03T13:22:31Z","additions":12774,"deletions":15},{"id":"PR_kwDOMT5cIs6qN0pL","title":"chore: 1.5.11","author":"wtfsayo","number":5996,"body":"","repository":"elizaos/eliza","createdAt":"2025-09-24T07:17:51Z","mergedAt":null,"additions":4601,"deletions":2906},{"id":"PR_kwDOO7HBBc6qXtTW","title":"Fix TypeScript errors for Zod v4 migration","author":"standujar","number":1,"body":"Not tested.\n\n<!-- This is an auto-generated comment: release notes by coderabbit.ai -->\n\n## Summary by CodeRabbit\n\n- New Features\n  - Actions now return structured results (success/text/error) for clearer responses and richer validation error details.\n- Refactor\n  - Standardized extensionless imports across the codebase without changing behavior.\n- Tests\n  - Updated test and e2e imports to align with extensionless module resolution; no functional changes.\n- Chores\n  - Bumped version to 1.1.1.\n  - Updated dependencies: @elizaos/core, @elizaos/plugin-bootstrap, zod; aligned resolutions.\n  - Refreshed plugin-starter template dependencies to match current versions.\n\n<!-- end of auto-generated comment: release notes by coderabbit.ai -->","repository":"elizaos-plugins/plugin-auton8n","createdAt":"2025-09-24T21:00:56Z","mergedAt":null,"additions":1463,"deletions":79},{"id":"PR_kwDOMT5cIs6qTmMU","title":"refactor type definitions across runtime.","author":"tcm390","number":5998,"body":"","repository":"elizaos/eliza","createdAt":"2025-09-24T14:48:48Z","mergedAt":"2025-09-28T15:56:49Z","additions":896,"deletions":499},{"id":"PR_kwDOMT5cIs6p6DgA","title":"chore: update zod pckg version","author":"0xbbjoker","number":5994,"body":"\n\n<!-- This is an auto-generated comment: release notes by coderabbit.ai -->\n\n## Summary by CodeRabbit\n\n* **Chores**\n  * Upgraded the validation library to the latest major version across CLI, Core, plugins, and starter templates for improved compatibility, stability, and security.\n  * Aligned dependency resolutions across packages; no feature changes introduced.\n\n* **Refactor**\n  * Strengthened validation for configuration maps, ensuring keys are treated as strings for clearer error messages and more predictable behavior. No breaking API changes expected for typical usage.\n\n<!-- end of auto-generated comment: release notes by coderabbit.ai -->","repository":"elizaos/eliza","createdAt":"2025-09-22T18:17:09Z","mergedAt":"2025-09-24T07:09:16Z","additions":177,"deletions":72},{"id":"PR_kwDOMT5cIs6qOETW","title":"fix(ci): stabilize Docker image build (Bun 1.2.21, Buildx cache, concurrency)","author":"wtfsayo","number":5997,"body":"$10","repository":"elizaos/eliza","createdAt":"2025-09-24T07:39:06Z","mergedAt":"2025-09-24T07:54:35Z","additions":51,"deletions":9},{"id":"PR_kwDONkg7v86qTjIl","title":"Add plugin-beacon to registry","author":"SergiuTomus","number":233,"body":"$11","repository":"elizaos-plugins/registry","createdAt":"2025-09-24T14:44:44Z","mergedAt":null,"additions":1,"deletions":0}],"detailedContributorSummaries":{"SergiuTomus":"SergiuTomus: Focused on expanding plugin availability by opening PR elizaos-plugins/registry#233 to add a new plugin to the registry, which involved a minor configuration change.","standujar":"standujar: An open pull request, elizaos-plugins/plugin-auton8n#1, indicates a focus on addressing TypeScript errors related to a Zod v4 migration.","tcm390":"tcm390: Focused on significant refactoring work, notably merging a large PR in elizaos/eliza (#5998) that refactored type definitions across the runtime, involving substantial code changes (+5265/-3370 lines). Their primary focus was on bugfix and refactor work, primarily impacting code files.","wtfsayo":"wtfsayo: Focused on stabilizing the CI pipeline, successfully merging a significant PR in elizaos/eliza (#5997) that addressed Docker image build stability with Bun 1.2.21 and Buildx. Their work primarily involved bug fixes and other general improvements, touching a mix of code, tests, and configuration files."}}}],"$L12"]}]
+9:["$","div",null,{"className":"prose prose-sm mx-auto mt-8 dark:prose-invert sm:prose lg:prose-lg xl:prose-xl","children":[["$","p","p-0",{"children":["On Sep 24, 2025, ElizaOS saw significant progress in core system stability and plugin ecosystem expansion. Key achievements include stabilizing Docker image builds and upgrading the Zod validation library across the ",["$","code","code-0",{"children":"elizaos/eliza"}]," repository, alongside the submission of a new ",["$","code","code-1",{"children":"plugin-beacon"}]," to the registry. Preparatory work for a Zod v4 migration also began in ",["$","code","code-2",{"children":"elizaos-plugins/plugin-auton8n"}],", indicating ongoing efforts to modernize dependencies across the project."]}],"\n",["$","h2","h2-0",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"🚨 Needs Attention","position":{"start":{"line":3,"column":4,"offset":476},"end":{"line":3,"column":22,"offset":494}}}],"position":{"start":{"line":3,"column":1,"offset":473},"end":{"line":3,"column":22,"offset":494}}},"children":"🚨 Needs Attention"}],"\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"Pull Requests to Review"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos-plugins/registry/pull/233","children":"elizaos-plugins/registry#233"}],": This PR to add ",["$","code","code-0",{"children":"plugin-beacon"}]," to the registry is open and awaiting review."]}],"\n"]}],"\n"]}],"\n"]}],"\n",["$","h2","h2-1",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"✅ Completed Work","position":{"start":{"line":7,"column":4,"offset":698},"end":{"line":7,"column":20,"offset":714}}}],"position":{"start":{"line":7,"column":1,"offset":695},"end":{"line":7,"column":20,"offset":714}}},"children":"✅ Completed Work"}],"\n",["$","h3","h3-0",{"children":"CI/CD Pipeline Enhancements"}],"\n",["$","ul","ul-1",{"children":["\n",["$","li","li-0",{"children":["Stabilized Docker image builds in CI for ",["$","code","code-0",{"children":"elizaos/eliza"}]," by aligning Bun to version 1.2.21, enabling Buildx with GitHub Actions cache, constraining parallelism, and adding diagnostics and disk cleanup. (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5997","children":"elizaos/eliza#5997"}],")"]}],"\n"]}],"\n",["$","h3","h3-1",{"children":"Dependency Updates"}],"\n",["$","ul","ul-2",{"children":["\n",["$","li","li-0",{"children":["Upgraded the Zod validation library to its latest major version across CLI, Core, plugins, and starter templates in ",["$","code","code-0",{"children":"elizaos/eliza"}],", improving validation capabilities. (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5994","children":"elizaos/eliza#5994"}],")"]}],"\n"]}],"\n",["$","h2","h2-2",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"🏗️ Work in Progress","position":{"start":{"line":14,"column":4,"offset":1283},"end":{"line":14,"column":24,"offset":1303}}}],"position":{"start":{"line":14,"column":1,"offset":1280},"end":{"line":14,"column":24,"offset":1303}}},"children":"🏗️ Work in Progress"}],"\n",["$","h3","h3-2",{"children":"New Pull Requests"}],"\n",["$","ul","ul-3",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"elizaos-plugins/registry"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos-plugins/registry/pull/233","children":"#233"}]," Add ",["$","code","code-0",{"children":"plugin-beacon"}]," to the registry."]}],"\n"]}],"\n"]}],"\n",["$","li","li-1",{"children":[["$","strong","strong-0",{"children":"elizaos-plugins/plugin-auton8n"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos-plugins/plugin-auton8n/pull/1","children":"#1"}]," Address TypeScript errors from Zod v4 migration."]}],"\n"]}],"\n"]}],"\n",["$","li","li-2",{"children":[["$","strong","strong-0",{"children":"elizaos/eliza"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5998","children":"#5998"}]," refactor type definitions across runtime."]}],"\n","$L13","\n"]}],"\n"]}],"\n"]}]]}]
+a:["$","script","script-0",{"src":"/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","async":true}]
+b:["$","script","script-1",{"src":"/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","async":true}]
+c:["$","script","script-2",{"src":"/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js","async":true}]
+d:["$","$L14",null,{"children":["$","$15",null,{"name":"Next.MetadataOutlet","children":"$@16"}]}]
+12:["$","div",null,{"className":"rounded-lg border bg-card text-card-foreground shadow-sm","children":[["$","div",null,{"className":"flex flex-col space-y-1.5 p-6 py-4","children":["$","div",null,{"className":"tracking-tight text-sm font-medium","children":["$undefined","Code Changes"]}]}],["$","div",null,{"className":"p-6 pt-0","children":["$","div",null,{"className":"grid grid-cols-2 gap-4 md:grid-cols-4","children":[["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-git-commit-vertical h-5 w-5","aria-hidden":"true","children":[["$","path","1holv5",{"d":"M12 3v6"}],["$","circle","1v7zrd",{"cx":"12","cy":"12","r":"3"}],["$","path","a9ows0",{"d":"M12 15v6"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":43}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Commits"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-file-code h-5 w-5","aria-hidden":"true","children":[["$","path","1oefj6",{"d":"M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"}],["$","path","wfsgrz",{"d":"M14 2v5a1 1 0 0 0 1 1h5"}],["$","path","1tg20x",{"d":"M10 12.5 8 15l2 2.5"}],["$","path","yinavb",{"d":"m14 12.5 2 2.5-2 2.5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":18}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Files Changed"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-green-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-up h-5 w-5 text-green-500","aria-hidden":"true","children":[["$","path","hav0vg",{"d":"m5 12 7-7 7 7"}],["$","path","x0mq9r",{"d":"M12 19V5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-green-500","children":"+228"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Added"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-red-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-down h-5 w-5 text-red-500","aria-hidden":"true","children":[["$","path","s699le",{"d":"M12 5v14"}],["$","path","1idqje",{"d":"m19 12-7 7-7-7"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-red-500","children":"-81"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Deleted"}]]}]]}]]}]}]]}]
+13:["$","li","li-1",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5996","children":"#5996"}]," chore: 1.5.11"]}]
+16:null

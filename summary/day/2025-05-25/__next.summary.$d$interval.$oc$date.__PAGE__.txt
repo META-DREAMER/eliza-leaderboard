@@ -1,0 +1,1212 @@
+1:"$Sreact.fragment"
+2:I[4817319,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"IntervalSelector"]
+3:I[6998365,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"LlmCopyButton"]
+12:I[3642796,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],""]
+13:I[3238488,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"StatCardsDisplay"]
+1f:I[4261541,["/eliza-leaderboard/_next/static/chunks/b33bcbdcb3f88354.js","/eliza-leaderboard/_next/static/chunks/8ba59154b6704904.js"],"OutletBoundary"]
+20:"$Sreact.suspense"
+4:Te70,When you send a message, two messages get added to the chat immediately: one from the user and a second from the "system" with a loading indicator. 
+But if the API call fails (like due to no internet), both fake messages stay in the chat as if nothing went wrong. There’s no rollback, no error handling on the UI so it looks like the message was sent when it actually wasn’t.
+
+To Reproduce:
+
+1.Open the chat page (eliza/client/src/components/chat.tsx)
+
+2.Disconnect from the internet or block the request to the send message endpoint.
+
+3.Type a message and hit Enter.
+
+4.You’ll see your message and a “loading” message instantly.
+
+5.Even though the request fails, both messages stay on screen.
+
+Expected behavior
+If the message fails to send, the temporary messages should be removed automatically. The user should also get feedback (like a toast or error icon) to let them know it didn’t work.
+
+Additional context
+To fix it, I added a tempId to identify and clean up fake messages properly. Now if the message fails, those temporary entries get removed from the cache.
+
+
+In chat.tsx, update the type:
+```
+type ExtraContentFields = {
+    user: string;
+    createdAt: number;
+    isLoading?: boolean;
+    tempId?: string; // ✅ for cleanup
+};
+
+```
+Replace handleSendMessage with:
+```
+const handleSendMessage = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!input) return;
+
+    const tempId = `${Date.now()}-${Math.random()}`;
+    const attachments: IAttachment[] | undefined = selectedFile
+        ? [
+              {
+                  url: URL.createObjectURL(selectedFile),
+                  contentType: selectedFile.type,
+                  title: selectedFile.name,
+              },
+          ]
+        : undefined;
+
+    const tempMessages: ContentWithUser[] = [
+        {
+            text: input,
+            user: "user",
+            createdAt: Date.now(),
+            attachments,
+            isLoading: true,
+            tempId,
+        },
+        {
+            text: input,
+            user: "system",
+            createdAt: Date.now(),
+            isLoading: true,
+            tempId,
+        },
+    ];
+
+    queryClient.setQueryData(
+        ["messages", agentId],
+        (old: ContentWithUser[] = []) => [...old, ...tempMessages]
+    );
+
+    sendMessageMutation.mutate({
+        message: input,
+        selectedFile,
+        tempId,
+    });
+
+    setSelectedFile(null);
+    setInput("");
+    formRef.current?.reset();
+};
+```
+
+And update the mutation like this:
+```
+const sendMessageMutation = useMutation({
+    mutationKey: ["send_message", agentId],
+    mutationFn: ({
+        message,
+        selectedFile,
+    }: {
+        message: string;
+        selectedFile?: File | null;
+        tempId: string;
+    }) => apiClient.sendMessage(agentId, message, selectedFile),
+    onSuccess: (newMessages: ContentWithUser[], variables) => {
+        const { tempId } = variables;
+        queryClient.setQueryData(
+            ["messages", agentId],
+            (old: ContentWithUser[] = []) => [
+                ...old.filter((msg) => msg.tempId !== tempId),
+                ...newMessages.map((msg) => ({
+                    ...msg,
+                    createdAt: Date.now(),
+                })),
+            ]
+        );
+    },
+    onError: (error, variables) => {
+        const { tempId } = variables;
+        queryClient.setQueryData(
+            ["messages", agentId],
+            (old: ContentWithUser[] = []) =>
+                old.filter((msg) => msg.tempId !== tempId)
+        );
+
+        toast({
+            variant: "destructive",
+            title: "Unable to send message",
+            description: error.message,
+        });
+    },
+});
+```
+5:Teb9,<!-- Use this template by filling in information and copying and pasting relevant items out of the HTML comments. -->
+
+# Relates to
+Adds TEE Project Starter Template for a quickstart to launch in TEE Cloud provider. For the time being, Phala Cloud is the current available option for a customizable ElizaOS deployment.
+<!-- LINK TO ISSUE OR TICKET -->
+
+<!-- This risks section must be filled out before the final review and merge. -->
+
+# Risks
+Low
+<!--
+Low, medium, large. List what kind of risks and what could be affected.
+-->
+
+# Background
+
+## What does this PR do?
+Creates a quick start to generate a TEE Agent project.
+## What kind of change is this?
+Feature
+<!--
+Bug fixes (non-breaking change which fixes an issue)
+Improvements (misc. changes to existing features)
+Features (non-breaking change which adds functionality)
+Updates (new versions of included code)
+-->
+
+<!-- This "Why" section is most relevant if there are no linked issues explaining why. If there is a related issue, it might make sense to skip this why section. -->
+<!--
+## Why are we doing this? Any context or related work?
+-->
+
+# Documentation changes needed?
+
+<!--
+My changes do not require a change to the project documentation.
+My changes require a change to the project documentation.
+If documentation change is needed: I have updated the documentation accordingly.
+-->
+
+<!-- Please show how you tested the PR. This will really help if the PR needs to be retested and probably help the PR get merged quicker. -->
+
+# Testing
+
+## Where should a reviewer start?
+A reviewer should start with getting a Phala Cloud Account to test the CVM deployment. Get an API Key and Install the Phala Cloud CLI for deployment. Check Docs [here]()
+### Detailed testing steps
+First clone the repo (I have not added the CLI command, yet. This could be easier with elizaos CLI.)
+```bash
+# Make sure you are in the `project-tee-starter` folder
+npm install -g phala
+# Set TEE_MODE=PRODUCTION
+# Ensure you are also running docker
+
+# Step0: Set your API Key from Phala Cloud Dashboard
+phala auth login
+
+# Step1: Build Docker Image
+phala docker build
+
+# Step2: Publish Docker Image to DockerHub
+phala docker push
+
+# Step3: Update docker-compose.yaml file with your published Docker image and deploy CVM
+phala cvms create -c docker-compose.yaml -e .env
+
+# (Optional) Step4: Check attestation
+phala cvms attestation
+
+# (Optional) Step5: Upgrade CVM if updated changes
+phala cvms upgrade -c docker-compose.yaml
+```
+<!--
+None: Automated tests are acceptable.
+-->
+
+<!--
+- As [anon/admin], go to [link]
+  - [do action]
+  - verify [result]
+-->
+
+<!-- If there is a UI change, please include before and after screenshots or videos. This will speed up PRs being merged. It is extra nice to annotate screenshots with arrows or boxes pointing out the differences. -->
+
+## Screenshots
+Test deployment: https://94068a91ffa0d8f97f2fb38941ee0139f533daab-3000.dstack-prod6.phala.network/chat/f1b8ef45-dab5-095e-90a8-87a35b16966e
+
+![image](https://github.com/user-attachments/assets/f0f09aa4-14f4-4523-b013-0d7af096dd99)
+
+![image](https://github.com/user-attachments/assets/0e0e8b5d-3e4a-4cb0-a06f-bfd932c3c746)
+
+
+<!-- If there is anything about the deployment, please make a note. -->
+<!--
+# Deploy Notes
+-->
+
+<!--  Copy and paste command line output. -->
+<!--
+## Database changes
+-->
+
+<!--  Please specify deploy instructions if there is something more than the automated steps. -->
+<!--
+## Deployment instructions
+-->
+
+<!-- If you are on Discord, please join https://discord.gg/elizaOS and state your Discord username here for the contributor role and join us in #development-feed -->
+<!--
+## Discord username
+
+-->
+6:T8fc,<!-- Use this template by filling in information and copying and pasting relevant items out of the HTML comments. -->
+
+# Relates to
+
+<!-- LINK TO ISSUE OR TICKET -->
+
+<!-- This risks section must be filled out before the final review and merge. -->
+
+# Risks
+
+<!--
+Low, medium, large. List what kind of risks and what could be affected.
+-->
+
+# Background
+
+## What does this PR do?
+
+## What kind of change is this?
+
+<!--
+Bug fixes (non-breaking change which fixes an issue)
+Improvements (misc. changes to existing features)
+Features (non-breaking change which adds functionality)
+Updates (new versions of included code)
+-->
+
+<!-- This "Why" section is most relevant if there are no linked issues explaining why. If there is a related issue, it might make sense to skip this why section. -->
+<!--
+## Why are we doing this? Any context or related work?
+-->
+
+# Documentation changes needed?
+
+<!--
+My changes do not require a change to the project documentation.
+My changes require a change to the project documentation.
+If documentation change is needed: I have updated the documentation accordingly.
+-->
+
+<!-- Please show how you tested the PR. This will really help if the PR needs to be retested and probably help the PR get merged quicker. -->
+
+# Testing
+
+## Where should a reviewer start?
+
+## Detailed testing steps
+
+<!--
+None: Automated tests are acceptable.
+-->
+
+<!--
+- As [anon/admin], go to [link]
+  - [do action]
+  - verify [result]
+-->
+
+<!-- If there is a UI change, please include before and after screenshots or videos. This will speed up PRs being merged. It is extra nice to annotate screenshots with arrows or boxes pointing out the differences. -->
+<!--
+## Screenshots
+### Before
+### After
+-->
+
+<!-- If there is anything about the deployment, please make a note. -->
+<!--
+# Deploy Notes
+-->
+
+<!--  Copy and paste command line output. -->
+<!--
+## Database changes
+-->
+
+<!--  Please specify deploy instructions if there is something more than the automated steps. -->
+<!--
+## Deployment instructions
+-->
+
+<!-- If you are on Discord, please join https://discord.gg/elizaOS and state your Discord username here for the contributor role and join us in #development-feed -->
+<!--
+## Discord username
+
+-->
+7:T9ec,<!-- Use this template by filling in information and copying and pasting relevant items out of the HTML comments. -->
+
+# Relates to
+
+<!-- LINK TO ISSUE OR TICKET -->
+I was just reading the README.md file and path to defaultCharacter.ts was incorrect just correct that
+
+<!-- This risks section must be filled out before the final review and merge. -->
+
+# Risks 
+0 risk
+
+<!--
+Low, medium, large. List what kind of risks and what could be affected.
+-->
+
+# Background
+
+## What does this PR do?
+
+## What kind of change is this?
+
+<!--
+Bug fixes (non-breaking change which fixes an issue)
+Improvements (misc. changes to existing features)
+Features (non-breaking change which adds functionality)
+Updates (new versions of included code)
+-->
+
+<!-- This "Why" section is most relevant if there are no linked issues explaining why. If there is a related issue, it might make sense to skip this why section. -->
+<!--
+## Why are we doing this? Any context or related work?
+-->
+
+# Documentation changes needed?
+
+<!--
+My changes do not require a change to the project documentation.
+My changes require a change to the project documentation.
+If documentation change is needed: I have updated the documentation accordingly.
+-->
+
+<!-- Please show how you tested the PR. This will really help if the PR needs to be retested and probably help the PR get merged quicker. -->
+
+# Testing
+No need
+## Where should a reviewer start?
+
+## Detailed testing steps
+
+<!--
+None: Automated tests are acceptable.
+-->
+
+<!--
+- As [anon/admin], go to [link]
+  - [do action]
+  - verify [result]
+-->
+
+<!-- If there is a UI change, please include before and after screenshots or videos. This will speed up PRs being merged. It is extra nice to annotate screenshots with arrows or boxes pointing out the differences. -->
+<!--
+## Screenshots
+<img width="593" alt="image" src="https://github.com/user-attachments/assets/d3a26615-2886-4b48-8914-fa6fc1b7f037" />
+
+### Before
+### After
+-->
+
+<!-- If there is anything about the deployment, please make a note. -->
+<!--
+# Deploy Notes
+-->
+
+<!--  Copy and paste command line output. -->
+<!--
+## Database changes
+-->
+
+<!--  Please specify deploy instructions if there is something more than the automated steps. -->
+<!--
+## Deployment instructions
+-->
+
+<!-- If you are on Discord, please join https://discord.gg/elizaOS and state your Discord username here for the contributor role and join us in #development-feed -->
+<!--
+## Discord username
+
+-->
+8:T92b,added Malaysian translation to main readme.
+
+<!-- Use this template by filling in information and copying and pasting relevant items out of the HTML comments. -->
+
+# Relates to
+
+<!-- LINK TO ISSUE OR TICKET -->
+
+<!-- This risks section must be filled out before the final review and merge. -->
+
+# Risks
+
+<!--
+Low, medium, large. List what kind of risks and what could be affected.
+-->
+
+# Background
+
+## What does this PR do?
+
+## What kind of change is this?
+
+<!--
+Bug fixes (non-breaking change which fixes an issue)
+Improvements (misc. changes to existing features)
+Features (non-breaking change which adds functionality)
+Updates (new versions of included code)
+-->
+
+<!-- This "Why" section is most relevant if there are no linked issues explaining why. If there is a related issue, it might make sense to skip this why section. -->
+<!--
+## Why are we doing this? Any context or related work?
+-->
+
+# Documentation changes needed?
+
+<!--
+My changes do not require a change to the project documentation.
+My changes require a change to the project documentation.
+If documentation change is needed: I have updated the documentation accordingly.
+-->
+
+<!-- Please show how you tested the PR. This will really help if the PR needs to be retested and probably help the PR get merged quicker. -->
+
+# Testing
+
+## Where should a reviewer start?
+
+## Detailed testing steps
+
+<!--
+None: Automated tests are acceptable.
+-->
+
+<!--
+- As [anon/admin], go to [link]
+  - [do action]
+  - verify [result]
+-->
+
+<!-- If there is a UI change, please include before and after screenshots or videos. This will speed up PRs being merged. It is extra nice to annotate screenshots with arrows or boxes pointing out the differences. -->
+<!--
+## Screenshots
+### Before
+### After
+-->
+
+<!-- If there is anything about the deployment, please make a note. -->
+<!--
+# Deploy Notes
+-->
+
+<!--  Copy and paste command line output. -->
+<!--
+## Database changes
+-->
+
+<!--  Please specify deploy instructions if there is something more than the automated steps. -->
+<!--
+## Deployment instructions
+-->
+
+<!-- If you are on Discord, please join https://discord.gg/elizaOS and state your Discord username here for the contributor role and join us in #development-feed -->
+<!--
+## Discord username
+
+-->
+9:T92b,because this file is already in the folder.
+
+<!-- Use this template by filling in information and copying and pasting relevant items out of the HTML comments. -->
+
+# Relates to
+
+<!-- LINK TO ISSUE OR TICKET -->
+
+<!-- This risks section must be filled out before the final review and merge. -->
+
+# Risks
+
+<!--
+Low, medium, large. List what kind of risks and what could be affected.
+-->
+
+# Background
+
+## What does this PR do?
+
+## What kind of change is this?
+
+<!--
+Bug fixes (non-breaking change which fixes an issue)
+Improvements (misc. changes to existing features)
+Features (non-breaking change which adds functionality)
+Updates (new versions of included code)
+-->
+
+<!-- This "Why" section is most relevant if there are no linked issues explaining why. If there is a related issue, it might make sense to skip this why section. -->
+<!--
+## Why are we doing this? Any context or related work?
+-->
+
+# Documentation changes needed?
+
+<!--
+My changes do not require a change to the project documentation.
+My changes require a change to the project documentation.
+If documentation change is needed: I have updated the documentation accordingly.
+-->
+
+<!-- Please show how you tested the PR. This will really help if the PR needs to be retested and probably help the PR get merged quicker. -->
+
+# Testing
+
+## Where should a reviewer start?
+
+## Detailed testing steps
+
+<!--
+None: Automated tests are acceptable.
+-->
+
+<!--
+- As [anon/admin], go to [link]
+  - [do action]
+  - verify [result]
+-->
+
+<!-- If there is a UI change, please include before and after screenshots or videos. This will speed up PRs being merged. It is extra nice to annotate screenshots with arrows or boxes pointing out the differences. -->
+<!--
+## Screenshots
+### Before
+### After
+-->
+
+<!-- If there is anything about the deployment, please make a note. -->
+<!--
+# Deploy Notes
+-->
+
+<!--  Copy and paste command line output. -->
+<!--
+## Database changes
+-->
+
+<!--  Please specify deploy instructions if there is something more than the automated steps. -->
+<!--
+## Deployment instructions
+-->
+
+<!-- If you are on Discord, please join https://discord.gg/elizaOS and state your Discord username here for the contributor role and join us in #development-feed -->
+<!--
+## Discord username
+
+-->
+a:T7f0,On May 25, 2025, ElizaOS focused on refining the `eliza` repository with a critical bug fix for the Undelegate Action and significant documentation updates, including a Malaysian translation for the README. Several new issues were reported, highlighting areas for immediate attention in logging, data fetching, and UI message handling.
+
+## 🚨 Needs Attention 
+- **Urgent Discussions**:
+    - [elizaos/eliza#4772](https://github.com/elizaos/eliza/issues/4772): The `LOG_LEVEL` variable is not functioning correctly, impacting logging capabilities.
+    - [elizaos/eliza#4770](https://github.com/elizaos/eliza/issues/4770): A failure in the fetch-news process indicates a potential issue with Git integration.
+    - [elizaos/eliza#4769](https://github.com/elizaos/eliza/issues/4769): Temporary messages are not being removed after failed API calls, leading to UI clutter.
+
+## ✅ Completed Work
+- **Core Functionality Fixes**:
+    - Fixed the Undelegate Action, addressing a critical functionality issue in `eliza`. [elizaos/eliza#4771](https://github.com/elizaos/eliza/pull/4771)
+- **Documentation & Repository Cleanup**:
+    - Corrected the path for `defaultCharacter.ts` to ensure accurate references in `eliza`. [elizaos/eliza#4775](https://github.com/elizaos/eliza/pull/4775)
+    - Deleted the redundant `README_MY.md` file to reduce clutter in `eliza`. [elizaos/eliza#4768](https://github.com/elizaos/eliza/pull/4768)
+    - Added a Malaysian translation to the main README, enhancing accessibility for a broader audience in `eliza`. [elizaos/eliza#4767](https://github.com/elizaos/eliza/pull/4767)
+
+## 🐞 Issue Triage
+- **New Issues**:
+    - **elizaos/eliza**:
+        - `LOG_LEVEL` variable not functioning correctly. [elizaos/eliza#4772](https://github.com/elizaos/eliza/issues/4772)
+        - Failure in fetch-news process. [elizaos/eliza#4770](https://github.com/elizaos/eliza/issues/4770)
+        - Temporary messages not removed after failed API calls. [elizaos/eliza#4769](https://github.com/elizaos/eliza/issues/4769)0:{"buildId":"US8XLB_zHXYj_PVAECGcd","rsc":["$","$1","c",{"children":[["$","div",null,{"className":"container mx-auto px-6 py-8 md:px-8","children":["$","div",null,{"className":"mx-auto max-w-4xl","children":[["$","div",null,{"className":"mb-4 flex flex-col justify-between sm:flex-row","children":[["$","$L2",null,{"currentInterval":"day","currentDate":"2025-05-25"}],["$","$L3",null,{"metrics":{"date":"2025-05-25","interval":{"intervalStart":"$D2025-05-25T00:00:00.000Z","intervalEnd":"$D2025-05-26T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":7,"merged":4,"total":7},"issues":{"new":3,"closed":0,"total":3},"activeContributors":10,"codeChanges":{"additions":570,"deletions":1102,"files":15,"commitCount":14},"topContributors":[{"username":"HashWarlock","avatarUrl":"https://avatars.githubusercontent.com/u/64296537?u=1d8228a93c06c603e08d438677b3f736d6b1ab22&v=4","totalScore":59.5437738965761,"prScore":59.5437738965761,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"HashWarlock: Opened 1 PR (#4774) for the \"feat: Add Project TEE Starter Template\" and made significant code changes by modifying 41 files (+4202/-47 lines) across 4 commits, with a primary focus on other work (75%). Maintained a consistent activity pattern, being active every day."},{"username":"imholders","avatarUrl":"https://avatars.githubusercontent.com/u/202005793?v=4","totalScore":56.61097273695029,"prScore":56.61097273695029,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"imholders: Opened 2 pull requests (#4768 \"Delete README_MY.md\" and #4767 \"Update README.md\") and modified 2 files with a total of 55 lines removed. Maintained a consistent activity pattern, focusing entirely on documentation work today."},{"username":"Samarthsinghal28","avatarUrl":"https://avatars.githubusercontent.com/u/120447590?v=4","totalScore":56.4317738965761,"prScore":56.4317738965761,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"Samarthsinghal28: Merged 1 pull request today, specifically PR #4771 \"fixed: Undelegate Action,\" which involved significant changes of +980/-2051 lines. Activity was sporadic, with no other contributions recorded."},{"username":"lalalune","avatarUrl":"https://avatars.githubusercontent.com/u/18633264?u=e2e906c3712c2506ebfa98df01c2cfdc50050b30&v=4","totalScore":50.7227738965761,"prScore":50.7227738965761,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"lalalune: Opened 1 PR (#4766) focused on migrating the knowledge tab to plugin-knowledge and made significant code changes by modifying 28 files (+2936/-2199 lines), demonstrating consistent activity with a primary focus on other work."},{"username":"0xbbjoker","avatarUrl":"https://avatars.githubusercontent.com/u/54844437?u=90fe1762420de6ad493a1c1582f1f70c0d87d8e2&v=4","totalScore":36.66021429178685,"prScore":36.66021429178685,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"0xbbjoker: Opened 1 pull request (#4773) focused on describing images, contributing to feature work with modifications across 3 files (+308/-37 lines). Maintained a consistent activity pattern, being active every day."},{"username":"dotslashapaar","avatarUrl":"https://avatars.githubusercontent.com/u/161523898?u=f8b144a0258c983a9425c3d3608dbbf1478bd81f&v=4","totalScore":28.157306144334054,"prScore":28.157306144334054,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"dotslashapaar: Opened 1 PR (#4775) to correct the path for `defaultCharacter.ts` and modified 1 file with a net change of +1/-1 lines, demonstrating consistent activity with a focus on documentation work."},{"username":"monilpat","avatarUrl":"https://avatars.githubusercontent.com/u/15067321?v=4","totalScore":5,"prScore":0,"issueScore":0,"reviewScore":5,"commentScore":0,"summary":"monilpat: Reviewed 1 pull request with 1 approval, showing sporadic activity today. No other contributions were made, as there were no merged or open pull requests, issues created or closed, or code changes."},{"username":"standujar","avatarUrl":"https://avatars.githubusercontent.com/u/16385918?u=718bdcd1585be8447bdfffb8c11ce249baa7532d&v=4","totalScore":4.7379999999999995,"prScore":0,"issueScore":4.3,"reviewScore":0,"commentScore":0.43799999999999994,"summary":"standujar: Created 1 issue (#4772 \"LOG_LEVEL not working\" (OPEN)) and commented on 4 issues, demonstrating sporadic activity today."},{"username":"K1mc4n","avatarUrl":"https://avatars.githubusercontent.com/u/156217571?u=cc94e7743c591f36eaf958d88befa855348bba9d&v=4","totalScore":4,"prScore":0,"issueScore":4,"reviewScore":0,"commentScore":0,"summary":"K1mc4n: Created 1 issue today (#4770 \"Failed Fetch-News\" (OPEN)), showing sporadic activity with no merged pull requests or code changes."},{"username":"0x-Tek","avatarUrl":"https://avatars.githubusercontent.com/u/213325917?u=537cc8d4735054e9559240efefb8c42c010768c7&v=4","totalScore":4,"prScore":0,"issueScore":4,"reviewScore":0,"commentScore":0,"summary":"0x-Tek: Created 1 issue today (#4769 \"Temporary messages not removed after failed send messages sta...\" (OPEN)), showing sporadic activity with no merged pull requests or code changes."}],"focusAreas":[{"area":"plugin-polygon","count":12}],"topIssues":[{"id":"I_kwDOMT5cIs64JzeU","title":"LOG_LEVEL not working","author":"standujar","number":4772,"repository":"elizaos/eliza","body":"**Describe the bug**\n\nThe LOG_LEVEL variable is not working anymore. I have the same log level if I se LOG_LEVEL=debug ou DEBUG or INFO or info.","createdAt":"2025-05-25T21:14:04Z","closedAt":"2025-05-26T07:53:38Z","state":"CLOSED","commentCount":2},{"id":"I_kwDOMT5cIs64JPkJ","title":"Temporary messages not removed after failed send messages stay in UI even on error","author":"0x-Tek","number":4769,"repository":"elizaos/eliza","body":"$4","createdAt":"2025-05-25T16:53:00Z","closedAt":"2025-06-02T12:36:45Z","state":"CLOSED","commentCount":1},{"id":"I_kwDOMT5cIs64JQK6","title":"Failed Fetch-News","author":"K1mc4n","number":4770,"repository":"elizaos/eliza","body":"fetch-news\n\nThe process '/usr/bin/git' failed with exit\n\ncode 1","createdAt":"2025-05-25T16:57:08Z","closedAt":"2025-05-31T19:08:02Z","state":"CLOSED","commentCount":0}],"topPullRequests":[{"id":"PR_kwDOMT5cIs6Xjeuj","title":"feat: Add Project TEE Starter Template","author":"HashWarlock","number":4774,"body":"$5","repository":"elizaos/eliza","createdAt":"2025-05-25T21:42:34Z","mergedAt":"2025-05-27T07:53:37Z","additions":4168,"deletions":0},{"id":"PR_kwDOMT5cIs6Xh8oU","title":"feat: Migrate knowledge tab to plugin-knowledge, add graph view to memories","author":"lalalune","number":4766,"body":"This PR makes some changes to enable the knowledge plugin\r\n\r\n- Some stuff could be moved out of the PR but is probably fine, like the package.json changes, and we should adopt the convention of .beta\" anyways\r\n\r\n- Removes knowledge APIs since they are in plugin-knowledge\r\n\r\n- Adds some PCA stuff to map embeddings to a 2D graph\r\n\r\n- Adds a graph view to memories and lib stuff for other views","repository":"elizaos/eliza","createdAt":"2025-05-25T06:57:28Z","mergedAt":"2025-05-26T08:29:38Z","additions":1135,"deletions":1236},{"id":"PR_kwDOMT5cIs6XjL5N","title":"fixed: Undelegate Action","author":"Samarthsinghal28","number":4771,"body":"$6","repository":"elizaos/eliza","createdAt":"2025-05-25T18:46:25Z","mergedAt":"2025-05-25T18:58:47Z","additions":568,"deletions":1046},{"id":"PR_kwDOMT5cIs6Xjdku","title":"feat: describe images WIP","author":"0xbbjoker","number":4773,"body":"Draft describing works only for small images. \r\n\r\nNot complete. \r\n\r\nWe would need to do cleanup for the prompt. Right now url is being added in the prompt.\r\n\r\nig we need to test this a bit and see what's best approach for image description from the client side.","repository":"elizaos/eliza","createdAt":"2025-05-25T21:31:21Z","mergedAt":"2025-05-30T08:25:57Z","additions":504,"deletions":68},{"id":"PR_kwDOMT5cIs6XV4vc","title":"feat: Add graph view for memories and knowledge","author":"lalalune","number":4737,"body":"## Summary\n- expose embeddings via API with `includeEmbedding` flag\n- add PCA implementation and simple force graph\n- integrate graph toggle for memory and knowledge views\n- add unit test for PCA\n\n## Testing\n- `bun test` *(fails: vi.resetAllMocks is not a function)*","repository":"elizaos/eliza","createdAt":"2025-05-23T07:43:24Z","mergedAt":null,"additions":184,"deletions":20},{"id":"PR_kwDOMT5cIs6XV4Dk","title":"Add missing tests for fetchMediaData","author":"lalalune","number":4735,"body":"## Summary\n- add tests for `fetchMediaData`\n- verify default content type and that fetch isn't called for local paths\n\n## Testing\n- `npx vitest run packages/plugin-bootstrap/__tests__/fetchMediaData.test.ts`\n- `npx vitest run packages/plugin-bootstrap/__tests__`","repository":"elizaos/eliza","createdAt":"2025-05-23T07:42:09Z","mergedAt":null,"additions":75,"deletions":0},{"id":"PR_kwDOMT5cIs6XV4ad","title":"feat: Display action state in sidebar","author":"lalalune","number":4736,"body":"## Summary\n- show state in action viewer\n- export `ActionCard` for testing\n- add unit test verifying state toggle\n\n## Testing\n- `bun run test:client`\n","repository":"elizaos/eliza","createdAt":"2025-05-23T07:42:48Z","mergedAt":null,"additions":44,"deletions":1},{"id":"PR_kwDOMT5cIs6Xjh2G","title":"corrected path for defaultCharacter.ts","author":"dotslashapaar","number":4775,"body":"$7","repository":"elizaos/eliza","createdAt":"2025-05-25T22:12:47Z","mergedAt":"2025-05-25T23:39:46Z","additions":1,"deletions":1},{"id":"PR_kwDOMT5cIs6Xi-iZ","title":"Update README.md","author":"imholders","number":4767,"body":"$8","repository":"elizaos/eliza","createdAt":"2025-05-25T16:48:45Z","mergedAt":"2025-05-25T23:39:05Z","additions":1,"deletions":1},{"id":"PR_kwDOMT5cIs6Xi-rk","title":"Delete README_MY.md","author":"imholders","number":4768,"body":"$9","repository":"elizaos/eliza","createdAt":"2025-05-25T16:50:02Z","mergedAt":"2025-05-25T23:40:02Z","additions":0,"deletions":54}],"detailedContributorSummaries":{"0x-Tek":"0x-Tek: Created 1 issue today (#4769 \"Temporary messages not removed after failed send messages sta...\" (OPEN)), showing sporadic activity with no merged pull requests or code changes.","0xbbjoker":"0xbbjoker: Opened 1 pull request (#4773) focused on describing images, contributing to feature work with modifications across 3 files (+308/-37 lines). Maintained a consistent activity pattern, being active every day.","HashWarlock":"HashWarlock: Opened 1 PR (#4774) for the \"feat: Add Project TEE Starter Template\" and made significant code changes by modifying 41 files (+4202/-47 lines) across 4 commits, with a primary focus on other work (75%). Maintained a consistent activity pattern, being active every day.","K1mc4n":"K1mc4n: Created 1 issue today (#4770 \"Failed Fetch-News\" (OPEN)), showing sporadic activity with no merged pull requests or code changes.","Samarthsinghal28":"Samarthsinghal28: Merged 1 pull request today, specifically PR #4771 \"fixed: Undelegate Action,\" which involved significant changes of +980/-2051 lines. Activity was sporadic, with no other contributions recorded.","dotslashapaar":"dotslashapaar: Opened 1 PR (#4775) to correct the path for `defaultCharacter.ts` and modified 1 file with a net change of +1/-1 lines, demonstrating consistent activity with a focus on documentation work.","imholders":"imholders: Opened 2 pull requests (#4768 \"Delete README_MY.md\" and #4767 \"Update README.md\") and modified 2 files with a total of 55 lines removed. Maintained a consistent activity pattern, focusing entirely on documentation work today.","lalalune":"lalalune: Opened 1 PR (#4766) focused on migrating the knowledge tab to plugin-knowledge and made significant code changes by modifying 28 files (+2936/-2199 lines), demonstrating consistent activity with a primary focus on other work.","monilpat":"monilpat: Reviewed 1 pull request with 1 approval, showing sporadic activity today. No other contributions were made, as there were no merged or open pull requests, issues created or closed, or code changes.","standujar":"standujar: Created 1 issue (#4772 \"LOG_LEVEL not working\" (OPEN)) and commented on 4 issues, demonstrating sporadic activity today."}},"summaryContent":"$a","className":"self-end sm:self-start"}]]}],"$Lb","$Lc","$Ld"]}]}],["$Le","$Lf","$L10"],"$L11"]}],"loading":null,"isPartial":false}
+b:["$","div",null,{"className":"mb-6","children":["$","div",null,{"className":"flex items-center justify-between","children":[[["$","$L12",null,{"href":"/summary/day/2025-05-24","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left mr-2 h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"children":"Previous"}],false],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$L12",null,{"href":"/summary/day/2025-05-24","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Previous"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]],["$","div",null,{"className":"flex flex-col items-center","children":[["$","div",null,{"className":"text-sm font-medium text-gray-500","children":["Daily"," Summary"]}],["$","time",null,{"dateTime":"2025-05-25","className":"text-md font-bold","children":"May 25, 2025"}]]}],[["$","$L12",null,{"href":"/summary/day/2025-05-26","children":[false,["$","span",null,{"children":"Next"}],["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right ml-2 h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}]],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$L12",null,{"href":"/summary/day/2025-05-26","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Next"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]]]}]}]
+14:Te70,When you send a message, two messages get added to the chat immediately: one from the user and a second from the "system" with a loading indicator. 
+But if the API call fails (like due to no internet), both fake messages stay in the chat as if nothing went wrong. There’s no rollback, no error handling on the UI so it looks like the message was sent when it actually wasn’t.
+
+To Reproduce:
+
+1.Open the chat page (eliza/client/src/components/chat.tsx)
+
+2.Disconnect from the internet or block the request to the send message endpoint.
+
+3.Type a message and hit Enter.
+
+4.You’ll see your message and a “loading” message instantly.
+
+5.Even though the request fails, both messages stay on screen.
+
+Expected behavior
+If the message fails to send, the temporary messages should be removed automatically. The user should also get feedback (like a toast or error icon) to let them know it didn’t work.
+
+Additional context
+To fix it, I added a tempId to identify and clean up fake messages properly. Now if the message fails, those temporary entries get removed from the cache.
+
+
+In chat.tsx, update the type:
+```
+type ExtraContentFields = {
+    user: string;
+    createdAt: number;
+    isLoading?: boolean;
+    tempId?: string; // ✅ for cleanup
+};
+
+```
+Replace handleSendMessage with:
+```
+const handleSendMessage = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!input) return;
+
+    const tempId = `${Date.now()}-${Math.random()}`;
+    const attachments: IAttachment[] | undefined = selectedFile
+        ? [
+              {
+                  url: URL.createObjectURL(selectedFile),
+                  contentType: selectedFile.type,
+                  title: selectedFile.name,
+              },
+          ]
+        : undefined;
+
+    const tempMessages: ContentWithUser[] = [
+        {
+            text: input,
+            user: "user",
+            createdAt: Date.now(),
+            attachments,
+            isLoading: true,
+            tempId,
+        },
+        {
+            text: input,
+            user: "system",
+            createdAt: Date.now(),
+            isLoading: true,
+            tempId,
+        },
+    ];
+
+    queryClient.setQueryData(
+        ["messages", agentId],
+        (old: ContentWithUser[] = []) => [...old, ...tempMessages]
+    );
+
+    sendMessageMutation.mutate({
+        message: input,
+        selectedFile,
+        tempId,
+    });
+
+    setSelectedFile(null);
+    setInput("");
+    formRef.current?.reset();
+};
+```
+
+And update the mutation like this:
+```
+const sendMessageMutation = useMutation({
+    mutationKey: ["send_message", agentId],
+    mutationFn: ({
+        message,
+        selectedFile,
+    }: {
+        message: string;
+        selectedFile?: File | null;
+        tempId: string;
+    }) => apiClient.sendMessage(agentId, message, selectedFile),
+    onSuccess: (newMessages: ContentWithUser[], variables) => {
+        const { tempId } = variables;
+        queryClient.setQueryData(
+            ["messages", agentId],
+            (old: ContentWithUser[] = []) => [
+                ...old.filter((msg) => msg.tempId !== tempId),
+                ...newMessages.map((msg) => ({
+                    ...msg,
+                    createdAt: Date.now(),
+                })),
+            ]
+        );
+    },
+    onError: (error, variables) => {
+        const { tempId } = variables;
+        queryClient.setQueryData(
+            ["messages", agentId],
+            (old: ContentWithUser[] = []) =>
+                old.filter((msg) => msg.tempId !== tempId)
+        );
+
+        toast({
+            variant: "destructive",
+            title: "Unable to send message",
+            description: error.message,
+        });
+    },
+});
+```
+15:Teb9,<!-- Use this template by filling in information and copying and pasting relevant items out of the HTML comments. -->
+
+# Relates to
+Adds TEE Project Starter Template for a quickstart to launch in TEE Cloud provider. For the time being, Phala Cloud is the current available option for a customizable ElizaOS deployment.
+<!-- LINK TO ISSUE OR TICKET -->
+
+<!-- This risks section must be filled out before the final review and merge. -->
+
+# Risks
+Low
+<!--
+Low, medium, large. List what kind of risks and what could be affected.
+-->
+
+# Background
+
+## What does this PR do?
+Creates a quick start to generate a TEE Agent project.
+## What kind of change is this?
+Feature
+<!--
+Bug fixes (non-breaking change which fixes an issue)
+Improvements (misc. changes to existing features)
+Features (non-breaking change which adds functionality)
+Updates (new versions of included code)
+-->
+
+<!-- This "Why" section is most relevant if there are no linked issues explaining why. If there is a related issue, it might make sense to skip this why section. -->
+<!--
+## Why are we doing this? Any context or related work?
+-->
+
+# Documentation changes needed?
+
+<!--
+My changes do not require a change to the project documentation.
+My changes require a change to the project documentation.
+If documentation change is needed: I have updated the documentation accordingly.
+-->
+
+<!-- Please show how you tested the PR. This will really help if the PR needs to be retested and probably help the PR get merged quicker. -->
+
+# Testing
+
+## Where should a reviewer start?
+A reviewer should start with getting a Phala Cloud Account to test the CVM deployment. Get an API Key and Install the Phala Cloud CLI for deployment. Check Docs [here]()
+### Detailed testing steps
+First clone the repo (I have not added the CLI command, yet. This could be easier with elizaos CLI.)
+```bash
+# Make sure you are in the `project-tee-starter` folder
+npm install -g phala
+# Set TEE_MODE=PRODUCTION
+# Ensure you are also running docker
+
+# Step0: Set your API Key from Phala Cloud Dashboard
+phala auth login
+
+# Step1: Build Docker Image
+phala docker build
+
+# Step2: Publish Docker Image to DockerHub
+phala docker push
+
+# Step3: Update docker-compose.yaml file with your published Docker image and deploy CVM
+phala cvms create -c docker-compose.yaml -e .env
+
+# (Optional) Step4: Check attestation
+phala cvms attestation
+
+# (Optional) Step5: Upgrade CVM if updated changes
+phala cvms upgrade -c docker-compose.yaml
+```
+<!--
+None: Automated tests are acceptable.
+-->
+
+<!--
+- As [anon/admin], go to [link]
+  - [do action]
+  - verify [result]
+-->
+
+<!-- If there is a UI change, please include before and after screenshots or videos. This will speed up PRs being merged. It is extra nice to annotate screenshots with arrows or boxes pointing out the differences. -->
+
+## Screenshots
+Test deployment: https://94068a91ffa0d8f97f2fb38941ee0139f533daab-3000.dstack-prod6.phala.network/chat/f1b8ef45-dab5-095e-90a8-87a35b16966e
+
+![image](https://github.com/user-attachments/assets/f0f09aa4-14f4-4523-b013-0d7af096dd99)
+
+![image](https://github.com/user-attachments/assets/0e0e8b5d-3e4a-4cb0-a06f-bfd932c3c746)
+
+
+<!-- If there is anything about the deployment, please make a note. -->
+<!--
+# Deploy Notes
+-->
+
+<!--  Copy and paste command line output. -->
+<!--
+## Database changes
+-->
+
+<!--  Please specify deploy instructions if there is something more than the automated steps. -->
+<!--
+## Deployment instructions
+-->
+
+<!-- If you are on Discord, please join https://discord.gg/elizaOS and state your Discord username here for the contributor role and join us in #development-feed -->
+<!--
+## Discord username
+
+-->
+16:T8fc,<!-- Use this template by filling in information and copying and pasting relevant items out of the HTML comments. -->
+
+# Relates to
+
+<!-- LINK TO ISSUE OR TICKET -->
+
+<!-- This risks section must be filled out before the final review and merge. -->
+
+# Risks
+
+<!--
+Low, medium, large. List what kind of risks and what could be affected.
+-->
+
+# Background
+
+## What does this PR do?
+
+## What kind of change is this?
+
+<!--
+Bug fixes (non-breaking change which fixes an issue)
+Improvements (misc. changes to existing features)
+Features (non-breaking change which adds functionality)
+Updates (new versions of included code)
+-->
+
+<!-- This "Why" section is most relevant if there are no linked issues explaining why. If there is a related issue, it might make sense to skip this why section. -->
+<!--
+## Why are we doing this? Any context or related work?
+-->
+
+# Documentation changes needed?
+
+<!--
+My changes do not require a change to the project documentation.
+My changes require a change to the project documentation.
+If documentation change is needed: I have updated the documentation accordingly.
+-->
+
+<!-- Please show how you tested the PR. This will really help if the PR needs to be retested and probably help the PR get merged quicker. -->
+
+# Testing
+
+## Where should a reviewer start?
+
+## Detailed testing steps
+
+<!--
+None: Automated tests are acceptable.
+-->
+
+<!--
+- As [anon/admin], go to [link]
+  - [do action]
+  - verify [result]
+-->
+
+<!-- If there is a UI change, please include before and after screenshots or videos. This will speed up PRs being merged. It is extra nice to annotate screenshots with arrows or boxes pointing out the differences. -->
+<!--
+## Screenshots
+### Before
+### After
+-->
+
+<!-- If there is anything about the deployment, please make a note. -->
+<!--
+# Deploy Notes
+-->
+
+<!--  Copy and paste command line output. -->
+<!--
+## Database changes
+-->
+
+<!--  Please specify deploy instructions if there is something more than the automated steps. -->
+<!--
+## Deployment instructions
+-->
+
+<!-- If you are on Discord, please join https://discord.gg/elizaOS and state your Discord username here for the contributor role and join us in #development-feed -->
+<!--
+## Discord username
+
+-->
+17:T9ec,<!-- Use this template by filling in information and copying and pasting relevant items out of the HTML comments. -->
+
+# Relates to
+
+<!-- LINK TO ISSUE OR TICKET -->
+I was just reading the README.md file and path to defaultCharacter.ts was incorrect just correct that
+
+<!-- This risks section must be filled out before the final review and merge. -->
+
+# Risks 
+0 risk
+
+<!--
+Low, medium, large. List what kind of risks and what could be affected.
+-->
+
+# Background
+
+## What does this PR do?
+
+## What kind of change is this?
+
+<!--
+Bug fixes (non-breaking change which fixes an issue)
+Improvements (misc. changes to existing features)
+Features (non-breaking change which adds functionality)
+Updates (new versions of included code)
+-->
+
+<!-- This "Why" section is most relevant if there are no linked issues explaining why. If there is a related issue, it might make sense to skip this why section. -->
+<!--
+## Why are we doing this? Any context or related work?
+-->
+
+# Documentation changes needed?
+
+<!--
+My changes do not require a change to the project documentation.
+My changes require a change to the project documentation.
+If documentation change is needed: I have updated the documentation accordingly.
+-->
+
+<!-- Please show how you tested the PR. This will really help if the PR needs to be retested and probably help the PR get merged quicker. -->
+
+# Testing
+No need
+## Where should a reviewer start?
+
+## Detailed testing steps
+
+<!--
+None: Automated tests are acceptable.
+-->
+
+<!--
+- As [anon/admin], go to [link]
+  - [do action]
+  - verify [result]
+-->
+
+<!-- If there is a UI change, please include before and after screenshots or videos. This will speed up PRs being merged. It is extra nice to annotate screenshots with arrows or boxes pointing out the differences. -->
+<!--
+## Screenshots
+<img width="593" alt="image" src="https://github.com/user-attachments/assets/d3a26615-2886-4b48-8914-fa6fc1b7f037" />
+
+### Before
+### After
+-->
+
+<!-- If there is anything about the deployment, please make a note. -->
+<!--
+# Deploy Notes
+-->
+
+<!--  Copy and paste command line output. -->
+<!--
+## Database changes
+-->
+
+<!--  Please specify deploy instructions if there is something more than the automated steps. -->
+<!--
+## Deployment instructions
+-->
+
+<!-- If you are on Discord, please join https://discord.gg/elizaOS and state your Discord username here for the contributor role and join us in #development-feed -->
+<!--
+## Discord username
+
+-->
+18:T92b,added Malaysian translation to main readme.
+
+<!-- Use this template by filling in information and copying and pasting relevant items out of the HTML comments. -->
+
+# Relates to
+
+<!-- LINK TO ISSUE OR TICKET -->
+
+<!-- This risks section must be filled out before the final review and merge. -->
+
+# Risks
+
+<!--
+Low, medium, large. List what kind of risks and what could be affected.
+-->
+
+# Background
+
+## What does this PR do?
+
+## What kind of change is this?
+
+<!--
+Bug fixes (non-breaking change which fixes an issue)
+Improvements (misc. changes to existing features)
+Features (non-breaking change which adds functionality)
+Updates (new versions of included code)
+-->
+
+<!-- This "Why" section is most relevant if there are no linked issues explaining why. If there is a related issue, it might make sense to skip this why section. -->
+<!--
+## Why are we doing this? Any context or related work?
+-->
+
+# Documentation changes needed?
+
+<!--
+My changes do not require a change to the project documentation.
+My changes require a change to the project documentation.
+If documentation change is needed: I have updated the documentation accordingly.
+-->
+
+<!-- Please show how you tested the PR. This will really help if the PR needs to be retested and probably help the PR get merged quicker. -->
+
+# Testing
+
+## Where should a reviewer start?
+
+## Detailed testing steps
+
+<!--
+None: Automated tests are acceptable.
+-->
+
+<!--
+- As [anon/admin], go to [link]
+  - [do action]
+  - verify [result]
+-->
+
+<!-- If there is a UI change, please include before and after screenshots or videos. This will speed up PRs being merged. It is extra nice to annotate screenshots with arrows or boxes pointing out the differences. -->
+<!--
+## Screenshots
+### Before
+### After
+-->
+
+<!-- If there is anything about the deployment, please make a note. -->
+<!--
+# Deploy Notes
+-->
+
+<!--  Copy and paste command line output. -->
+<!--
+## Database changes
+-->
+
+<!--  Please specify deploy instructions if there is something more than the automated steps. -->
+<!--
+## Deployment instructions
+-->
+
+<!-- If you are on Discord, please join https://discord.gg/elizaOS and state your Discord username here for the contributor role and join us in #development-feed -->
+<!--
+## Discord username
+
+-->
+19:T92b,because this file is already in the folder.
+
+<!-- Use this template by filling in information and copying and pasting relevant items out of the HTML comments. -->
+
+# Relates to
+
+<!-- LINK TO ISSUE OR TICKET -->
+
+<!-- This risks section must be filled out before the final review and merge. -->
+
+# Risks
+
+<!--
+Low, medium, large. List what kind of risks and what could be affected.
+-->
+
+# Background
+
+## What does this PR do?
+
+## What kind of change is this?
+
+<!--
+Bug fixes (non-breaking change which fixes an issue)
+Improvements (misc. changes to existing features)
+Features (non-breaking change which adds functionality)
+Updates (new versions of included code)
+-->
+
+<!-- This "Why" section is most relevant if there are no linked issues explaining why. If there is a related issue, it might make sense to skip this why section. -->
+<!--
+## Why are we doing this? Any context or related work?
+-->
+
+# Documentation changes needed?
+
+<!--
+My changes do not require a change to the project documentation.
+My changes require a change to the project documentation.
+If documentation change is needed: I have updated the documentation accordingly.
+-->
+
+<!-- Please show how you tested the PR. This will really help if the PR needs to be retested and probably help the PR get merged quicker. -->
+
+# Testing
+
+## Where should a reviewer start?
+
+## Detailed testing steps
+
+<!--
+None: Automated tests are acceptable.
+-->
+
+<!--
+- As [anon/admin], go to [link]
+  - [do action]
+  - verify [result]
+-->
+
+<!-- If there is a UI change, please include before and after screenshots or videos. This will speed up PRs being merged. It is extra nice to annotate screenshots with arrows or boxes pointing out the differences. -->
+<!--
+## Screenshots
+### Before
+### After
+-->
+
+<!-- If there is anything about the deployment, please make a note. -->
+<!--
+# Deploy Notes
+-->
+
+<!--  Copy and paste command line output. -->
+<!--
+## Database changes
+-->
+
+<!--  Please specify deploy instructions if there is something more than the automated steps. -->
+<!--
+## Deployment instructions
+-->
+
+<!-- If you are on Discord, please join https://discord.gg/elizaOS and state your Discord username here for the contributor role and join us in #development-feed -->
+<!--
+## Discord username
+
+-->
+c:["$","div",null,{"className":"mb-8 space-y-6","children":[["$","$L13",null,{"metrics":{"date":"2025-05-25","interval":{"intervalStart":"$D2025-05-25T00:00:00.000Z","intervalEnd":"$D2025-05-26T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":7,"merged":4,"total":7},"issues":{"new":3,"closed":0,"total":3},"activeContributors":10,"codeChanges":{"additions":570,"deletions":1102,"files":15,"commitCount":14},"topContributors":[{"username":"HashWarlock","avatarUrl":"https://avatars.githubusercontent.com/u/64296537?u=1d8228a93c06c603e08d438677b3f736d6b1ab22&v=4","totalScore":59.5437738965761,"prScore":59.5437738965761,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"HashWarlock: Opened 1 PR (#4774) for the \"feat: Add Project TEE Starter Template\" and made significant code changes by modifying 41 files (+4202/-47 lines) across 4 commits, with a primary focus on other work (75%). Maintained a consistent activity pattern, being active every day."},{"username":"imholders","avatarUrl":"https://avatars.githubusercontent.com/u/202005793?v=4","totalScore":56.61097273695029,"prScore":56.61097273695029,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"imholders: Opened 2 pull requests (#4768 \"Delete README_MY.md\" and #4767 \"Update README.md\") and modified 2 files with a total of 55 lines removed. Maintained a consistent activity pattern, focusing entirely on documentation work today."},{"username":"Samarthsinghal28","avatarUrl":"https://avatars.githubusercontent.com/u/120447590?v=4","totalScore":56.4317738965761,"prScore":56.4317738965761,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"Samarthsinghal28: Merged 1 pull request today, specifically PR #4771 \"fixed: Undelegate Action,\" which involved significant changes of +980/-2051 lines. Activity was sporadic, with no other contributions recorded."},{"username":"lalalune","avatarUrl":"https://avatars.githubusercontent.com/u/18633264?u=e2e906c3712c2506ebfa98df01c2cfdc50050b30&v=4","totalScore":50.7227738965761,"prScore":50.7227738965761,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"lalalune: Opened 1 PR (#4766) focused on migrating the knowledge tab to plugin-knowledge and made significant code changes by modifying 28 files (+2936/-2199 lines), demonstrating consistent activity with a primary focus on other work."},{"username":"0xbbjoker","avatarUrl":"https://avatars.githubusercontent.com/u/54844437?u=90fe1762420de6ad493a1c1582f1f70c0d87d8e2&v=4","totalScore":36.66021429178685,"prScore":36.66021429178685,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"0xbbjoker: Opened 1 pull request (#4773) focused on describing images, contributing to feature work with modifications across 3 files (+308/-37 lines). Maintained a consistent activity pattern, being active every day."},{"username":"dotslashapaar","avatarUrl":"https://avatars.githubusercontent.com/u/161523898?u=f8b144a0258c983a9425c3d3608dbbf1478bd81f&v=4","totalScore":28.157306144334054,"prScore":28.157306144334054,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"dotslashapaar: Opened 1 PR (#4775) to correct the path for `defaultCharacter.ts` and modified 1 file with a net change of +1/-1 lines, demonstrating consistent activity with a focus on documentation work."},{"username":"monilpat","avatarUrl":"https://avatars.githubusercontent.com/u/15067321?v=4","totalScore":5,"prScore":0,"issueScore":0,"reviewScore":5,"commentScore":0,"summary":"monilpat: Reviewed 1 pull request with 1 approval, showing sporadic activity today. No other contributions were made, as there were no merged or open pull requests, issues created or closed, or code changes."},{"username":"standujar","avatarUrl":"https://avatars.githubusercontent.com/u/16385918?u=718bdcd1585be8447bdfffb8c11ce249baa7532d&v=4","totalScore":4.7379999999999995,"prScore":0,"issueScore":4.3,"reviewScore":0,"commentScore":0.43799999999999994,"summary":"standujar: Created 1 issue (#4772 \"LOG_LEVEL not working\" (OPEN)) and commented on 4 issues, demonstrating sporadic activity today."},{"username":"K1mc4n","avatarUrl":"https://avatars.githubusercontent.com/u/156217571?u=cc94e7743c591f36eaf958d88befa855348bba9d&v=4","totalScore":4,"prScore":0,"issueScore":4,"reviewScore":0,"commentScore":0,"summary":"K1mc4n: Created 1 issue today (#4770 \"Failed Fetch-News\" (OPEN)), showing sporadic activity with no merged pull requests or code changes."},{"username":"0x-Tek","avatarUrl":"https://avatars.githubusercontent.com/u/213325917?u=537cc8d4735054e9559240efefb8c42c010768c7&v=4","totalScore":4,"prScore":0,"issueScore":4,"reviewScore":0,"commentScore":0,"summary":"0x-Tek: Created 1 issue today (#4769 \"Temporary messages not removed after failed send messages sta...\" (OPEN)), showing sporadic activity with no merged pull requests or code changes."}],"focusAreas":[{"area":"plugin-polygon","count":12}],"topIssues":[{"id":"I_kwDOMT5cIs64JzeU","title":"LOG_LEVEL not working","author":"standujar","number":4772,"repository":"elizaos/eliza","body":"**Describe the bug**\n\nThe LOG_LEVEL variable is not working anymore. I have the same log level if I se LOG_LEVEL=debug ou DEBUG or INFO or info.","createdAt":"2025-05-25T21:14:04Z","closedAt":"2025-05-26T07:53:38Z","state":"CLOSED","commentCount":2},{"id":"I_kwDOMT5cIs64JPkJ","title":"Temporary messages not removed after failed send messages stay in UI even on error","author":"0x-Tek","number":4769,"repository":"elizaos/eliza","body":"$14","createdAt":"2025-05-25T16:53:00Z","closedAt":"2025-06-02T12:36:45Z","state":"CLOSED","commentCount":1},{"id":"I_kwDOMT5cIs64JQK6","title":"Failed Fetch-News","author":"K1mc4n","number":4770,"repository":"elizaos/eliza","body":"fetch-news\n\nThe process '/usr/bin/git' failed with exit\n\ncode 1","createdAt":"2025-05-25T16:57:08Z","closedAt":"2025-05-31T19:08:02Z","state":"CLOSED","commentCount":0}],"topPullRequests":[{"id":"PR_kwDOMT5cIs6Xjeuj","title":"feat: Add Project TEE Starter Template","author":"HashWarlock","number":4774,"body":"$15","repository":"elizaos/eliza","createdAt":"2025-05-25T21:42:34Z","mergedAt":"2025-05-27T07:53:37Z","additions":4168,"deletions":0},{"id":"PR_kwDOMT5cIs6Xh8oU","title":"feat: Migrate knowledge tab to plugin-knowledge, add graph view to memories","author":"lalalune","number":4766,"body":"This PR makes some changes to enable the knowledge plugin\r\n\r\n- Some stuff could be moved out of the PR but is probably fine, like the package.json changes, and we should adopt the convention of .beta\" anyways\r\n\r\n- Removes knowledge APIs since they are in plugin-knowledge\r\n\r\n- Adds some PCA stuff to map embeddings to a 2D graph\r\n\r\n- Adds a graph view to memories and lib stuff for other views","repository":"elizaos/eliza","createdAt":"2025-05-25T06:57:28Z","mergedAt":"2025-05-26T08:29:38Z","additions":1135,"deletions":1236},{"id":"PR_kwDOMT5cIs6XjL5N","title":"fixed: Undelegate Action","author":"Samarthsinghal28","number":4771,"body":"$16","repository":"elizaos/eliza","createdAt":"2025-05-25T18:46:25Z","mergedAt":"2025-05-25T18:58:47Z","additions":568,"deletions":1046},{"id":"PR_kwDOMT5cIs6Xjdku","title":"feat: describe images WIP","author":"0xbbjoker","number":4773,"body":"Draft describing works only for small images. \r\n\r\nNot complete. \r\n\r\nWe would need to do cleanup for the prompt. Right now url is being added in the prompt.\r\n\r\nig we need to test this a bit and see what's best approach for image description from the client side.","repository":"elizaos/eliza","createdAt":"2025-05-25T21:31:21Z","mergedAt":"2025-05-30T08:25:57Z","additions":504,"deletions":68},{"id":"PR_kwDOMT5cIs6XV4vc","title":"feat: Add graph view for memories and knowledge","author":"lalalune","number":4737,"body":"## Summary\n- expose embeddings via API with `includeEmbedding` flag\n- add PCA implementation and simple force graph\n- integrate graph toggle for memory and knowledge views\n- add unit test for PCA\n\n## Testing\n- `bun test` *(fails: vi.resetAllMocks is not a function)*","repository":"elizaos/eliza","createdAt":"2025-05-23T07:43:24Z","mergedAt":null,"additions":184,"deletions":20},{"id":"PR_kwDOMT5cIs6XV4Dk","title":"Add missing tests for fetchMediaData","author":"lalalune","number":4735,"body":"## Summary\n- add tests for `fetchMediaData`\n- verify default content type and that fetch isn't called for local paths\n\n## Testing\n- `npx vitest run packages/plugin-bootstrap/__tests__/fetchMediaData.test.ts`\n- `npx vitest run packages/plugin-bootstrap/__tests__`","repository":"elizaos/eliza","createdAt":"2025-05-23T07:42:09Z","mergedAt":null,"additions":75,"deletions":0},{"id":"PR_kwDOMT5cIs6XV4ad","title":"feat: Display action state in sidebar","author":"lalalune","number":4736,"body":"## Summary\n- show state in action viewer\n- export `ActionCard` for testing\n- add unit test verifying state toggle\n\n## Testing\n- `bun run test:client`\n","repository":"elizaos/eliza","createdAt":"2025-05-23T07:42:48Z","mergedAt":null,"additions":44,"deletions":1},{"id":"PR_kwDOMT5cIs6Xjh2G","title":"corrected path for defaultCharacter.ts","author":"dotslashapaar","number":4775,"body":"$17","repository":"elizaos/eliza","createdAt":"2025-05-25T22:12:47Z","mergedAt":"2025-05-25T23:39:46Z","additions":1,"deletions":1},{"id":"PR_kwDOMT5cIs6Xi-iZ","title":"Update README.md","author":"imholders","number":4767,"body":"$18","repository":"elizaos/eliza","createdAt":"2025-05-25T16:48:45Z","mergedAt":"2025-05-25T23:39:05Z","additions":1,"deletions":1},{"id":"PR_kwDOMT5cIs6Xi-rk","title":"Delete README_MY.md","author":"imholders","number":4768,"body":"$19","repository":"elizaos/eliza","createdAt":"2025-05-25T16:50:02Z","mergedAt":"2025-05-25T23:40:02Z","additions":0,"deletions":54}],"detailedContributorSummaries":{"0x-Tek":"0x-Tek: Created 1 issue today (#4769 \"Temporary messages not removed after failed send messages sta...\" (OPEN)), showing sporadic activity with no merged pull requests or code changes.","0xbbjoker":"0xbbjoker: Opened 1 pull request (#4773) focused on describing images, contributing to feature work with modifications across 3 files (+308/-37 lines). Maintained a consistent activity pattern, being active every day.","HashWarlock":"HashWarlock: Opened 1 PR (#4774) for the \"feat: Add Project TEE Starter Template\" and made significant code changes by modifying 41 files (+4202/-47 lines) across 4 commits, with a primary focus on other work (75%). Maintained a consistent activity pattern, being active every day.","K1mc4n":"K1mc4n: Created 1 issue today (#4770 \"Failed Fetch-News\" (OPEN)), showing sporadic activity with no merged pull requests or code changes.","Samarthsinghal28":"Samarthsinghal28: Merged 1 pull request today, specifically PR #4771 \"fixed: Undelegate Action,\" which involved significant changes of +980/-2051 lines. Activity was sporadic, with no other contributions recorded.","dotslashapaar":"dotslashapaar: Opened 1 PR (#4775) to correct the path for `defaultCharacter.ts` and modified 1 file with a net change of +1/-1 lines, demonstrating consistent activity with a focus on documentation work.","imholders":"imholders: Opened 2 pull requests (#4768 \"Delete README_MY.md\" and #4767 \"Update README.md\") and modified 2 files with a total of 55 lines removed. Maintained a consistent activity pattern, focusing entirely on documentation work today.","lalalune":"lalalune: Opened 1 PR (#4766) focused on migrating the knowledge tab to plugin-knowledge and made significant code changes by modifying 28 files (+2936/-2199 lines), demonstrating consistent activity with a primary focus on other work.","monilpat":"monilpat: Reviewed 1 pull request with 1 approval, showing sporadic activity today. No other contributions were made, as there were no merged or open pull requests, issues created or closed, or code changes.","standujar":"standujar: Created 1 issue (#4772 \"LOG_LEVEL not working\" (OPEN)) and commented on 4 issues, demonstrating sporadic activity today."}}}],"$L1a"]}]
+d:["$","div",null,{"className":"prose prose-sm mx-auto mt-8 dark:prose-invert sm:prose lg:prose-lg xl:prose-xl","children":[["$","p","p-0",{"children":["On May 25, 2025, ElizaOS focused on refining the ",["$","code","code-0",{"children":"eliza"}]," repository with a critical bug fix for the Undelegate Action and significant documentation updates, including a Malaysian translation for the README. Several new issues were reported, highlighting areas for immediate attention in logging, data fetching, and UI message handling."]}],"\n",["$","h2","h2-0",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"🚨 Needs Attention","position":{"start":{"line":3,"column":4,"offset":340},"end":{"line":3,"column":22,"offset":358}}}],"position":{"start":{"line":3,"column":1,"offset":337},"end":{"line":3,"column":23,"offset":359}}},"children":"🚨 Needs Attention"}],"\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"Urgent Discussions"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/4772","children":"elizaos/eliza#4772"}],": The ",["$","code","code-0",{"children":"LOG_LEVEL"}]," variable is not functioning correctly, impacting logging capabilities."]}],"\n",["$","li","li-1",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/4770","children":"elizaos/eliza#4770"}],": A failure in the fetch-news process indicates a potential issue with Git integration."]}],"\n",["$","li","li-2",{"children":[["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/4769","children":"elizaos/eliza#4769"}],": Temporary messages are not being removed after failed API calls, leading to UI clutter."]}],"\n"]}],"\n"]}],"\n"]}],"\n",["$","h2","h2-1",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"✅ Completed Work","position":{"start":{"line":9,"column":4,"offset":873},"end":{"line":9,"column":20,"offset":889}}}],"position":{"start":{"line":9,"column":1,"offset":870},"end":{"line":9,"column":20,"offset":889}}},"children":"✅ Completed Work"}],"\n",["$","ul","ul-1",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"Core Functionality Fixes"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["Fixed the Undelegate Action, addressing a critical functionality issue in ",["$","code","code-0",{"children":"eliza"}],". ",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/4771","children":"elizaos/eliza#4771"}]]}],"\n"]}],"\n"]}],"\n",["$","li","li-1",{"children":[["$","strong","strong-0",{"children":"Documentation & Repository Cleanup"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["Corrected the path for ",["$","code","code-0",{"children":"defaultCharacter.ts"}]," to ensure accurate references in ",["$","code","code-1",{"children":"eliza"}],". ",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/4775","children":"elizaos/eliza#4775"}]]}],"\n",["$","li","li-1",{"children":["Deleted the redundant ",["$","code","code-0",{"children":"README_MY.md"}]," file to reduce clutter in ",["$","code","code-1",{"children":"eliza"}],". ",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/4768","children":"elizaos/eliza#4768"}]]}],"\n",["$","li","li-2",{"children":["Added a Malaysian translation to the main README, enhancing accessibility for a broader audience in ",["$","code","code-0",{"children":"eliza"}],". ",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/4767","children":"elizaos/eliza#4767"}]]}],"\n"]}],"\n"]}],"\n"]}],"\n",["$","h2","h2-2",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"🐞 Issue Triage","position":{"start":{"line":17,"column":4,"offset":1603},"end":{"line":17,"column":19,"offset":1618}}}],"position":{"start":{"line":17,"column":1,"offset":1600},"end":{"line":17,"column":19,"offset":1618}}},"children":"🐞 Issue Triage"}],"\n",["$","ul","ul-2",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"New Issues"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"elizaos/eliza"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["$L1b"," variable not functioning correctly. ","$L1c"]}],"\n","$L1d","\n","$L1e","\n"]}],"\n"]}],"\n"]}],"\n"]}],"\n"]}]]}]
+e:["$","script","script-0",{"src":"/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","async":true}]
+f:["$","script","script-1",{"src":"/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","async":true}]
+10:["$","script","script-2",{"src":"/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js","async":true}]
+11:["$","$L1f",null,{"children":["$","$20",null,{"name":"Next.MetadataOutlet","children":"$@21"}]}]
+1a:["$","div",null,{"className":"rounded-lg border bg-card text-card-foreground shadow-sm","children":[["$","div",null,{"className":"flex flex-col space-y-1.5 p-6 py-4","children":["$","div",null,{"className":"tracking-tight text-sm font-medium","children":["$undefined","Code Changes"]}]}],["$","div",null,{"className":"p-6 pt-0","children":["$","div",null,{"className":"grid grid-cols-2 gap-4 md:grid-cols-4","children":[["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-git-commit-vertical h-5 w-5","aria-hidden":"true","children":[["$","path","1holv5",{"d":"M12 3v6"}],["$","circle","1v7zrd",{"cx":"12","cy":"12","r":"3"}],["$","path","a9ows0",{"d":"M12 15v6"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":14}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Commits"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-file-code h-5 w-5","aria-hidden":"true","children":[["$","path","1oefj6",{"d":"M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"}],["$","path","wfsgrz",{"d":"M14 2v5a1 1 0 0 0 1 1h5"}],["$","path","1tg20x",{"d":"M10 12.5 8 15l2 2.5"}],["$","path","yinavb",{"d":"m14 12.5 2 2.5-2 2.5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":15}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Files Changed"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-green-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-up h-5 w-5 text-green-500","aria-hidden":"true","children":[["$","path","hav0vg",{"d":"m5 12 7-7 7 7"}],["$","path","x0mq9r",{"d":"M12 19V5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-green-500","children":"+570"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Added"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-red-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-down h-5 w-5 text-red-500","aria-hidden":"true","children":[["$","path","s699le",{"d":"M12 5v14"}],["$","path","1idqje",{"d":"m19 12-7 7-7-7"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-red-500","children":"-1,102"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Deleted"}]]}]]}]]}]}]]}]
+1b:["$","code","code-0",{"children":"LOG_LEVEL"}]
+1c:["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/4772","children":"elizaos/eliza#4772"}]
+1d:["$","li","li-1",{"children":["Failure in fetch-news process. ",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/4770","children":"elizaos/eliza#4770"}]]}]
+1e:["$","li","li-2",{"children":["Temporary messages not removed after failed API calls. ",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/4769","children":"elizaos/eliza#4769"}]]}]
+21:null

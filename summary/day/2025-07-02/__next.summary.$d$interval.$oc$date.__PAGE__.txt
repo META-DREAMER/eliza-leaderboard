@@ -1,0 +1,588 @@
+1:"$Sreact.fragment"
+2:I[4817319,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"IntervalSelector"]
+3:I[6998365,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"LlmCopyButton"]
+f:I[3642796,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],""]
+10:I[3238488,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"StatCardsDisplay"]
+25:I[4261541,["/eliza-leaderboard/_next/static/chunks/b33bcbdcb3f88354.js","/eliza-leaderboard/_next/static/chunks/8ba59154b6704904.js"],"OutletBoundary"]
+26:"$Sreact.suspense"
+4:T126b,## Problem
+
+Currently, `bun run test` does not work consistently across all packages in the ElizaOS monorepo. This creates several issues:
+
+1. **Inconsistent Developer Experience**: Developers cannot reliably run tests in individual packages
+2. **CI/CD Fragility**: The root `bun test` command fails, making it difficult to validate changes
+3. **Low Test Coverage**: Only 28% of source files have tests (excluding dist files)
+4. **Missing Test Infrastructure**: 29% of packages have no test scripts defined
+
+### Current State Analysis
+
+**Test Coverage by Package:**
+- ✅ **10/14 packages (71%)** have test scripts defined
+- ❌ **4/14 packages (29%)** have no test infrastructure
+- 🔴 Root `bun test` fails due to `@elizaos/plugin-bootstrap` mock initialization errors
+
+**Packages with Issues:**
+1. **No Tests At All:**
+   - `@elizaos/app` - Tauri application
+   - `@elizaos/autodoc` - Documentation generator
+   - `create-eliza` - Scaffolding tool
+   - `@elizaos/docs` - Docusaurus site (expected)
+
+2. **Failing Tests:**
+   - `@elizaos/plugin-bootstrap` - Mock initialization errors
+   - `@elizaos/project-tee-starter` - Environment setup issues
+
+3. **Excluded from Root Tests:**
+   - `@elizaos/plugin-starter` (template)
+   - `@elizaos/docs` (documentation)
+   - `@elizaos/plugin-sql` (has tests but excluded)
+
+## Proposed Solution
+
+Implement a phased approach to ensure all packages have working tests:
+
+### Phase 1: Fix Failing Tests (Priority: High)
+- [ ] Fix `@elizaos/plugin-bootstrap` mock initialization errors
+- [ ] Fix `@elizaos/project-tee-starter` environment setup issues
+- [ ] Ensure root `bun test` command passes
+
+### Phase 2: Add Missing Test Infrastructure (Priority: High)
+- [ ] Add test setup to `@elizaos/app` (Tauri app testing)
+- [ ] Add test setup to `@elizaos/autodoc`
+- [ ] Add test setup to `create-eliza`
+- [ ] Create minimal test files to validate setup
+
+### Phase 3: Standardize Test Configuration (Priority: Medium)
+- [ ] Create shared test configuration for consistency
+- [ ] Standardize coverage reporting (exclude dist/, build/, node_modules/)
+- [ ] Add coverage thresholds per package
+- [ ] Ensure all packages use Bun test runner consistently
+
+### Phase 4: Documentation & CI Updates (Priority: Medium)
+- [ ] Update contributing guide with testing requirements
+- [ ] Add pre-commit hooks for test validation
+- [ ] Update CI workflows to run package-specific tests
+- [ ] Create testing best practices documentation
+
+## Implementation Details
+
+### 1. Shared Test Configuration
+Create a base test configuration that all packages can extend:
+
+```typescript
+// packages/test-config/base.config.ts
+export default {
+  testMatch: ["**/*.test.ts", "**/*.spec.ts"],
+  coverage: {
+    exclude: [
+      "**/dist/**",
+      "**/build/**",
+      "**/node_modules/**",
+      "**/*.d.ts",
+      "**/coverage/**"
+    ],
+    threshold: {
+      statements: 60,
+      branches: 60,
+      functions: 60,
+      lines: 60
+    }
+  }
+}
+```
+
+### 2. Package Test Script Standardization
+Ensure every package.json has:
+```json
+{
+  "scripts": {
+    "test": "bun test",
+    "test:coverage": "bun test --coverage"
+  }
+}
+```
+
+### 3. Fix Root Test Command
+Update root package.json to handle package-specific test requirements:
+```json
+{
+  "scripts": {
+    "test": "turbo run test --filter=\!@elizaos/docs --filter=\!@elizaos/plugin-starter"
+  }
+}
+```
+
+## Success Criteria
+
+- [ ] `bun run test` works in every package directory
+- [ ] Root `bun test` command passes without errors
+- [ ] All packages have at least minimal test coverage
+- [ ] Test coverage reporting excludes dist/build artifacts
+- [ ] CI/CD pipeline runs all tests successfully
+- [ ] Developer documentation updated with testing guidelines
+
+## Benefits
+
+1. **Improved Developer Experience**: Consistent testing commands across all packages
+2. **Better Code Quality**: Increased test coverage from 28% to target 60%+
+3. **Reliable CI/CD**: All PRs validated with comprehensive test suite
+4. **Easier Onboarding**: New contributors can confidently run tests
+5. **Reduced Bugs**: Catch issues early with standardized testing
+
+## Alternatives Considered
+
+1. **Using Different Test Runners**: Considered Jest/Vitest but Bun test is already established
+2. **Monorepo-level Testing Only**: Would miss package-specific issues
+3. **Excluding Packages from Testing**: Would leave gaps in coverage
+
+## Additional Context
+
+- Current test coverage is ~28% (excluding dist files)
+- The monorepo uses Turbo for orchestration
+- Bun test runner is the standard across the project
+- Some packages have E2E tests (client) that need special handling
+
+This improvement will significantly enhance the development workflow and code quality across the ElizaOS project.5:T987,README said to use
+`LOAD_DOCS_ON_STARTUP=true`
+
+logs are saying
+`CTX_KNOWLEDGE_ENABLED` needs to be set
+
+provider is dynamic, probably shouldn't be. A model isn't going to know when to ask about what it doesn't know.
+
+looksLikeBase64 was too greedy, converted it to
+
+(util.ts)
+```ts
+export function looksLikeBase64(content?: string | null): boolean {
+  if (!content || content.length === 0) return false;
+
+  const cleanContent = content.replace(/\s/g, '');
+
+  // Too short to be meaningful Base64
+  if (cleanContent.length < 16) return false;
+
+  // Must be divisible by 4
+  if (cleanContent.length % 4 !== 0) return false;
+
+  // Check for Base64 pattern with proper padding
+  const base64Regex = /^[A-Za-z0-9+/]*={0,2}$/;
+  if (!base64Regex.test(cleanContent)) return false;
+
+  // Additional heuristic: Base64 typically has a good mix of characters
+  const hasNumbers = /\d/.test(cleanContent);
+  const hasUpperCase = /[A-Z]/.test(cleanContent);
+  const hasLowerCase = /[a-z]/.test(cleanContent);
+
+  return (hasNumbers || hasUpperCase) && hasLowerCase;
+}
+```
+
+getting told
+```
+[2025-07-01 23:06:40] DEBUG: [Document Processor] CTX_KNOWLEDGE_ENABLED: 'undefined' → false (runtime: false)
+[2025-07-01 23:06:40] DEBUG: [Document Processor] EMBEDDING_PROVIDER not specified. Assuming embeddings are provided by another plugin (e.g., plugin-google-genai).
+[2025-07-01 23:06:40] DEBUG: [Document Processor] No EMBEDDING_PROVIDER specified. Embeddings will be handled by the runtime.
+[2025-07-01 23:06:40] INFO: [Document Processor] Contextual Knowledge is DISABLED!
+[2025-07-01 23:06:40] INFO: [Document Processor] This means documents will NOT be enriched with context.
+```
+
+even though it's on... confirmed in config.ts it's enabled but I still see this:
+```
+[2025-07-01 23:06:39] INFO: KnowledgeService initialized for agent 479233fd-b0e7-0f50-9d88-d4c9ea5b0de0 with config:
+    CTX_KNOWLEDGE_ENABLED: false
+    LOAD_DOCS_ON_STARTUP: true
+[2025-07-01 23:06:39] INFO: LOAD_DOCS_ON_STARTUP is enabled. Loading documents from docs folder...
+```
+
+looks like service loads a config different than config.ts. Service doesn't not take runtime.getSettings into account at all.
+
+I also blame how service cstr takes config as a 2nd param. I don't think this system/patterns has been thought through or used properly.
+
+After reviewing how/where plugin-twitter does it's config, I believe the service should do the detection and store the configuration6:T913,## 🎨 UI Redesign: Agent Cards Homepage
+
+This PR redesigns the agent cards on the client homepage to match the target design specification.
+
+### 📋 Changes Made
+
+#### **AgentCard Component**
+- ✅ **Layout**: Changed from square/vertical to horizontal rectangular cards
+- ✅ **Avatar**: Moved to left side, square shape with rounded corners (12x12)
+- ✅ **Status Indicator**: Added colored dot (green/red) next to agent name
+- ✅ **Description**: Bio text now spans up to 2 lines with proper line clamping
+- ✅ **Menu**: Replaced action buttons with three-dot dropdown in top-right corner
+- ✅ **Dropdown Options**: 'New Chat', 'Pause/Start Agent', 'Settings'
+
+#### **AddAgentCard Component**
+- ✅ **Matching Layout**: Updated to horizontal design matching agent cards
+- ✅ **Consistent Spacing**: Same height and padding as agent cards
+- ✅ **Square Avatar Area**: Dashed border placeholder with rounded corners
+
+#### **Home Page Layout**
+- ✅ **Grid Optimization**: 2 columns on medium+ screens for better display
+- ✅ **Spacing**: Reduced gaps for tighter, cleaner layout
+
+### 🔧 Technical Details
+
+- **Preserved Functionality**: All existing features maintained (start/stop, navigation, error handling)
+- **TypeScript Safety**: No type errors, full build compatibility
+- **Responsive Design**: Works across all screen sizes
+- **Accessibility**: Proper ARIA labels, keyboard navigation, screen reader support
+- **Performance**: No performance regressions, efficient rendering
+
+### 🎯 Design Alignment
+
+The updated cards now perfectly match the target design with:
+- Compact horizontal layout
+- Square avatars with rounded corners
+- Status indicators with colored dots
+- Two-line description support
+- Top-right positioned dropdown menus
+- Consistent spacing and typography
+
+### 🧪 Testing
+
+- ✅ Build passes without errors
+- ✅ TypeScript compilation successful
+- ✅ All existing functionality preserved
+- ✅ Responsive design tested
+- ✅ Component structure maintains compatibility
+
+### 📱 Before/After
+
+**Before**: Square cards with large avatars, action buttons at bottom
+**After**: Horizontal cards with left avatars, status dots, top-right menus
+
+This redesign provides a more modern, space-efficient interface that better showcases agent information while maintaining full functionality.7:T1d09,Today, ElizaOS saw significant UI/UX overhauls in the `eliza` repository, including redesigned agent cards, chat components, and agent settings, alongside critical bug fixes. Concurrently, `plugin-knowledge` refined its configuration handling and Base64 detection, while a new critical issue emerged across multiple repositories regarding Twitter client initialization errors.
+
+## 🚨 Needs Attention 
+- **Urgent Discussion: Twitter Client Initialization Error ([elizaos/eliza#31](https://github.com/elizaos/eliza/issues/31), [elizaos-plugins/plugin-twitter#31](https://github.com/elizaos-plugins/plugin-twitter/issues/31), [elizaos-plugins/plugin-knowledge#31](https://github.com/elizaos-plugins/plugin-knowledge/issues/31))**: Multiple users are reporting a critical "client initialization error" with the Twitter plugin despite successful authentication, preventing autonomous Twitter agents. This requires immediate investigation and resolution.
+- **Blocked Issue: Event Message Sent Not Working ([elizaos/eliza#5216](https://github.com/elizaos/eliza/issues/5216), [elizaos-plugins/plugin-twitter#5216](https://github.com/elizaos-plugins/plugin-twitter/issues/5216), [elizaos-plugins/plugin-knowledge#5216](https://github.com/elizaos-plugins/plugin-knowledge/issues/5216))**: `sendAgentResponseToBus` is not emitting `EventType.MESSAGE_SENT`. A user asked if the bootstrap plugin was added, suggesting a potential dependency or configuration issue that needs clarification.
+- **Pull Request to Review: Migrate CLI Input Methods to @clack/prompts ([elizaos-plugins/plugin-knowledge#5359](https://github.com/elizaos-plugins/plugin-knowledge/pull/5359))**: This PR is ready for review to standardize CLI input methods.
+
+## ✅ Completed Work
+### UI/UX Enhancements & Refinements
+- **Agent Card & Homepage Redesign**: Major visual overhauls for client-side UI, including refining Agent Cards to match Figma designs (layout changes from square/vertical to horizontal) and a complete redesign of the homepage layout for agent cards. ([elizaos/eliza#5351](https://github.com/elizaos/eliza/pull/5351), [elizaos/eliza#5344](https://github.com/elizaos/eliza/pull/5344))
+- **Chat Component Refactoring**: Significant refactoring of the Chat component, including chat bubbles and the chat view, to align with new Figma designs for visual consistency. ([elizaos/eliza#5349](https://github.com/elizaos/eliza/pull/5349))
+- **Agent Settings UI Updates**: Agent Settings UI updated to match design specifications, featuring improved dark theme colors, fixed form field styling, and restructured form element order. ([elizaos/eliza#5345](https://github.com/elizaos/eliza/pull/5345))
+
+### Core System Stability & Configuration
+- **Client-Side Bug Fixes & Optimizations**: Updated default Eliza avatar to a smaller, optimized size (512x512) to improve app load times and resolved all TypeScript type issues in `home.tsx`. ([elizaos/eliza#5350](https://github.com/elizaos/eliza/pull/5350), [elizaos/eliza#5346](https://github.com/elizaos/eliza/pull/5346))
+- **Consistent CLI Testing**: Ensured `bun run test` works consistently across all packages in the monorepo, resolving issues with inconsistent developer experience. ([elizaos/eliza#5218](https://github.com/elizaos/eliza/issues/5218), [elizaos-plugins/plugin-twitter#5218](https://github.com/elizaos-plugins/plugin-twitter/issues/5218), [elizaos-plugins/plugin-knowledge#5218](https://github.com/elizaos-plugins/plugin-knowledge/issues/5218))
+- **CLI Input Method Standardization**: Migrated remaining CLI input methods to use `@clack/prompts` for consistency. ([elizaos/eliza#5295](https://github.com/elizaos/eliza/issues/5295))
+- **Plugin Configuration Refinements**: Refactored `plugin-knowledge`'s configuration and runtime initialization to ensure configuration occurs only once, improving efficiency and addressing dynamic configuration issues. ([elizaos-plugins/plugin-knowledge#32](https://github.com/elizaos-plugins/plugin-knowledge/pull/32))
+- **Enhanced Base64 Detection**: Improved the `looksLikeBase64` utility function in `plugin-knowledge` to prevent misidentification of small Markdown files as Base64 strings. ([elizaos-plugins/plugin-knowledge#30](https://github.2com/elizaos-plugins/plugin-knowledge/pull/30))
+- **Initial Setup & Configuration Issues Resolved**: Addressed problems with `LOAD_DOCS_ON_STARTUP`, `CTX_KNOWLEDGE_ENABLED` settings, and dynamic provider issues across `eliza` and `plugin-twitter`. ([elizaos/eliza#31](https://github.com/elizaos/eliza/issues/31), [elizaos-plugins/plugin-twitter#31](https://github.com/elizaos-plugins/plugin-twitter/issues/31), [elizaos-plugins/plugin-knowledge#31](https://github.com/elizaos-plugins/plugin-knowledge/issues/31))
+
+## 🏗️ Work in Progress
+### New Pull Requests
+- **elizaos/eliza**:
+    - Agent Card Refactor: [#5347](https://github.com/elizaos/eliza/pull/5347)
+
+### Active Discussions
+- **elizaos/eliza**:
+    - CLI Test Command Monorepo Requirement: [#5142](https://github.com/elizaos/eliza/issues/5142) (Resolved according to `claude`'s analysis)
+- **elizaos-plugins/plugin-twitter**:
+    - CLI Test Command Monorepo Requirement: [#5142](https://github.com/elizaos-plugins/plugin-twitter/issues/5142)
+    - CLI Input Method Consistency: [#5295](https://github.com/elizaos-plugins/plugin-twitter/issues/5295)
+- **elizaos-plugins/plugin-knowledge**:
+    - CLI Test Command Monorepo Requirement: [#5142](https://github.com/elizaos-plugins/plugin-knowledge/issues/5142)
+    - Migrate CLI Input Methods to @clack/prompts: [#5295](https://github.com/elizaos-plugins/plugin-knowledge/issues/5295)
+
+## 🐞 Issue Triage
+### New Issues
+- **elizaos/eliza**:
+    - Twitter Client Initialization Errors: [#31](https://github.com/elizaos/eliza/issues/31)
+- **elizaos-plugins/plugin-knowledge**:
+    - Twitter Client Initialization Error: [#31](https://github.com/elizaos-plugins/plugin-knowledge/issues/31)
+- **elizaos-plugins/plugin-twitter**:
+    - Twitter Client Initialization Error: [#31](https://github.com/elizaos-plugins/plugin-twitter/issues/31)
+
+### Closed Issues
+- **elizaos/eliza**:
+    - Upgrade BD tier 1-4 plugins: [#5341](https://github.com/elizaos/eliza/issues/5341)
+    - Ensure `bun run test` works consistently across all packages: [#5218](https://github.com/elizaos/eliza/issues/5218)
+    - Migrate remaining CLI input methods to use `@clack/prompts`: [#5295](https://github.com/elizaos/eliza/issues/5295)
+    - Initial Setup and Configuration Issues: [#31](https://github.com/elizaos/eliza/issues/31)
+- **elizaos-plugins/plugin-twitter**:
+    - CLI Test Command Improvements: [#5218](https://github.com/elizaos-plugins/plugin-twitter/issues/5218)
+    - Initial Plugin Setup and Configuration: [#31](https://github.com/elizaos-plugins/plugin-twitter/issues/31)
+- **elizaos-plugins/plugin-knowledge**:
+    - Configuration and Environment Variable Issues Resolved: [#31](https://github.com/elizaos-plugins/plugin-knowledge/issues/31)
+
+## ✨ Contributor Spotlight
+- **claude**: Provided a detailed analysis confirming the resolution of the CLI test command monorepo requirement issue ([elizaos/eliza#5142](https://github.com/elizaos/eliza/issues/5142)).
+- **wtfsayo**: Confirmed completion of work on consistent `bun run test` behavior ([elizaos-plugins/plugin-knowledge#5218](https://github.com/elizaos-plugins/plugin-knowledge/issues/5218)) and encouraged progress on the `@clack/prompts` migration.0:{"buildId":"US8XLB_zHXYj_PVAECGcd","rsc":["$","$1","c",{"children":[["$","div",null,{"className":"container mx-auto px-6 py-8 md:px-8","children":["$","div",null,{"className":"mx-auto max-w-4xl","children":[["$","div",null,{"className":"mb-4 flex flex-col justify-between sm:flex-row","children":[["$","$L2",null,{"currentInterval":"day","currentDate":"2025-07-02"}],["$","$L3",null,{"metrics":{"date":"2025-07-02","interval":{"intervalStart":"$D2025-07-02T00:00:00.000Z","intervalEnd":"$D2025-07-03T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":10,"merged":8,"total":10},"issues":{"new":2,"closed":3,"total":4},"activeContributors":10,"codeChanges":{"additions":773,"deletions":704,"files":40,"commitCount":79},"topContributors":[{"username":"wtfsayo","avatarUrl":"https://avatars.githubusercontent.com/u/82053242?u=98209a1f10456f42d4d2fa71db4d5bf4a672cbc3&v=4","totalScore":141.99918776716316,"prScore":141.56118776716318,"issueScore":0,"reviewScore":0,"commentScore":0.43799999999999994,"summary":"wtfsayo: Merged 3 PRs in elizaos/eliza, including a redesign of the Agent Cards Homepage Layout (+443/-398 lines) and updates to the agent settings UI (+221/-185 lines), and created and closed issue elizaos/eliza#5218. Also commented on 4 issues and 3 PRs, modifying 72 files with +1334/-1070 lines in total."},{"username":"tcm390","avatarUrl":"https://avatars.githubusercontent.com/u/60634884?u=c6c41679b8322eaa0c81f72e0b4ed95e80f0ac16&v=4","totalScore":116.27184437300627,"prScore":116.27184437300627,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"tcm390: Merged 3 PRs in elizaos/eliza, including a feature to tweak the agent card (+667/-632 lines) and a chat refactor (+46/-70 lines), and has one open PR for an agent card refactor. Modified 49 files with a focus on other work and refactoring."},{"username":"odilitime","avatarUrl":"https://avatars.githubusercontent.com/u/16395496?u=c9bac48e632aae594a0d85aaf9e9c9c69b674d8b&v=4","totalScore":76.43239488210207,"prScore":67.63239488210208,"issueScore":4.1,"reviewScore":4.5,"commentScore":0.2,"summary":"odilitime: Modified one file with 81 additions and 1 deletion, committing changes primarily focused on other work. This continues a pattern of very consistent daily activity."},{"username":"0xbbjoker","avatarUrl":"https://avatars.githubusercontent.com/u/54844437?u=90fe1762420de6ad493a1c1582f1f70c0d87d8e2&v=4","totalScore":30.627751502819134,"prScore":30.287751502819134,"issueScore":0,"reviewScore":0,"commentScore":0.33999999999999997,"summary":"0xbbjoker: Merged elizaos/eliza#5348, improving logs with +329/-40 lines, and commented on 2 PRs. The work was focused on other areas."},{"username":"standujar","avatarUrl":"https://avatars.githubusercontent.com/u/16385918?u=718bdcd1585be8447bdfffb8c11ce249baa7532d&v=4","totalScore":5,"prScore":0,"issueScore":0,"reviewScore":5,"commentScore":0,"summary":null},{"username":"Ovodo","avatarUrl":"https://avatars.githubusercontent.com/u/107152769?u=875457368f5da28dd042a989613a3b38c9d008e2&v=4","totalScore":2.1,"prScore":0,"issueScore":2.1,"reviewScore":0,"commentScore":0,"summary":null},{"username":"META-DREAMER","avatarUrl":"https://avatars.githubusercontent.com/u/7143583?u=96f63f10e066a06d5ad592c8efc659e2b84a68fc&v=4","totalScore":0.2,"prScore":0,"issueScore":0,"reviewScore":0,"commentScore":0.2,"summary":null}],"focusAreas":[{"area":"client","count":37},{"area":"src","count":7}],"topIssues":[{"id":"I_kwDOMT5cIs68jIbD","title":"fix: ensure `bun run test` works consistently across all packages","author":"wtfsayo","number":5218,"repository":"elizaos/eliza","body":"$4","createdAt":"2025-06-20T13:18:54Z","closedAt":"2025-07-02T11:54:24Z","state":"CLOSED","commentCount":1},{"id":"I_kwDONkwNcc6-hh1V","title":"Twitter Client Initialization Error","author":"Ovodo","number":31,"repository":"elizaos-plugins/plugin-twitter","body":"I  am getting the error below on creating / starting my agent using the twitter plugin.\nIt says successfully Authenticated but then i am getting a client initialization error.\nTake a look at the image below.\n\n![Image](https://github.com/user-attachments/assets/23235ba6-1595-4bb8-bd01-5b192458ca3a)","createdAt":"2025-07-02T16:19:04Z","closedAt":null,"state":"OPEN","commentCount":1},{"id":"I_kwDOOu4gVs6-ZlR6","title":"Various issues found","author":"odilitime","number":31,"repository":"elizaos-plugins/plugin-knowledge","body":"$5","createdAt":"2025-07-02T03:18:58Z","closedAt":"2025-07-02T19:30:22Z","state":"CLOSED","commentCount":1},{"id":"I_kwDOMT5cIs6-RUyw","title":"Upgrade BD tier 1-4 plugins","author":"borisudovicic","number":5341,"repository":"elizaos/eliza","body":"[https://docs.google.com/spreadsheets/d/13Xbqg5W80jx9kCK_3AzkeTCPVT6Lm19gyConLTw5KEU/edit?gid=123741074#gid=123741074](https://docs.google.com/spreadsheets/d/13Xbqg5W80jx9kCK_3AzkeTCPVT6Lm19gyConLTw5KEU/edit?gid=123741074#gid=123741074)","createdAt":"2025-07-01T12:07:38Z","closedAt":"2025-07-02T15:42:01Z","state":"CLOSED","commentCount":0}],"topPullRequests":[{"id":"PR_kwDOMT5cIs6dHcDI","title":"chore: improve logs","author":"0xbbjoker","number":5348,"body":"\n\n<!-- This is an auto-generated comment: release notes by coderabbit.ai -->\n\n## Summary by CodeRabbit\n\n* **New Features**\n  * Added visual spinner animations to indicate progress during migrations.\n  * Introduced real-time tracking and display of token usage and estimated costs.\n  * Enhanced progress updates with timestamps, emojis, and clearer formatting.\n  * Improved tool usage reporting with simplified names, emojis, and elapsed time indicators.\n\n* **Bug Fixes**\n  * Improved error and abort handling with detailed messages, recovery suggestions, and better feedback on failures.\n\n* **Chores**\n  * Enhanced migration summaries to include detailed statistics on tokens, costs, and operation counts.\n\n<!-- end of auto-generated comment: release notes by coderabbit.ai -->","repository":"elizaos/eliza","createdAt":"2025-07-02T16:34:15Z","mergedAt":"2025-07-03T15:10:37Z","additions":329,"deletions":40},{"id":"PR_kwDOMT5cIs6dDDuR","title":"feat: update agent settings UI to match design specifications","author":"wtfsayo","number":5345,"body":"## Summary\n\n- Updated dark theme colors for better contrast and visual consistency\n- Fixed form field styling with proper border radius (4px) and increased spacing\n- Restructured form element order to follow design pattern: label → input → description\n- Increased input height to 48px with proper padding for improved UX\n- Removed Card wrapper component for a cleaner, flatter design\n- Added consistent spacing between form sections\n- Updated typography with lighter label colors and proper font weights\n\n## Changes\n\n- Modified dark theme CSS variables in \n- Updated Input, Textarea, and Select components with consistent styling\n- Refactored CharacterForm component to properly structure form fields\n- Adjusted Label component with muted foreground color\n- Fixed spacing and layout issues throughout the form\n\n## Screenshots\n\nThe form now matches the Figma design specifications with proper spacing, colors, and visual hierarchy.","repository":"elizaos/eliza","createdAt":"2025-07-02T09:12:01Z","mergedAt":"2025-07-02T09:46:19Z","additions":193,"deletions":157},{"id":"PR_kwDOMT5cIs6dCLBt","title":"feat: redesign Agent Cards Homepage Layout","author":"wtfsayo","number":5344,"body":"$6","repository":"elizaos/eliza","createdAt":"2025-07-02T07:42:42Z","mergedAt":"2025-07-02T08:12:44Z","additions":191,"deletions":146},{"id":"PR_kwDOMT5cIs6dDxPO","title":"fix(client): resolve all type issues in home.tsx for complete type safety","author":"wtfsayo","number":5346,"body":"## Summary\n\nThis PR fixes all TypeScript type issues in the home.tsx file to ensure complete type safety.\n\n## Changes\n\n- Use  enum instead of string literals for status comparison\n- Add proper type imports for  and \n- Add explicit type annotations for  and  hooks\n- Fix  to accept  parameter\n- Add  to  memoized component\n- Properly type  group prop with type assertion\n- Ensure all map functions have explicit type annotations\n\n## Testing\n\n- All TypeScript errors have been resolved\n- No functionality changes, only type safety improvements\n- Verified with  tool - no errors or warnings\n\n## Related Issues\n\nImproves type safety as part of ongoing client improvements.","repository":"elizaos/eliza","createdAt":"2025-07-02T10:26:47Z","mergedAt":"2025-07-02T10:31:18Z","additions":140,"deletions":89},{"id":"PR_kwDOOu4gVs6dAZds","title":"\"runtime is required to configure\" refactor","author":"odilitime","number":32,"body":"and do configuration once when making the singleton object helps #29 \n\n<!-- This is an auto-generated comment: release notes by coderabbit.ai -->\n\n## Summary by CodeRabbit\n\n* **New Features**\n  * Added a new configuration option to control loading of documents on startup.\n  * Improved handling and consistency of boolean environment variable parsing for configuration flags.\n\n* **Refactor**\n  * Centralized and standardized configuration validation and retrieval across the application.\n  * Updated several public function signatures to require a runtime parameter for context-aware configuration.\n  * Streamlined plugin exports by removing dynamic initialization logic.\n\n* **Style**\n  * Enhanced logging to provide clearer information about configuration and operational status.\n\n<!-- end of auto-generated comment: release notes by coderabbit.ai -->","repository":"elizaos-plugins/plugin-knowledge","createdAt":"2025-07-02T03:28:35Z","mergedAt":"2025-07-02T16:07:12Z","additions":133,"deletions":189},{"id":"PR_kwDOMT5cIs6dKXz7","title":"feat: tweak agent card","author":"tcm390","number":5351,"body":"This PR refines the Agent Card to match the Figma design more closely.\r\n\r\nbefore:\r\n\r\n\r\n<img width=\"807\" alt=\"Screenshot 2025-07-03 at 6 36 23 AM\" src=\"https://github.com/user-attachments/assets/2aafc81c-4d1a-4f8e-87c2-a3811c47d500\" />\r\n\r\nafter:\r\n\r\n<img width=\"927\" alt=\"Screenshot 2025-07-03 at 6 36 36 AM\" src=\"https://github.com/user-attachments/assets/d2a89bed-2c29-4f26-8232-7e2e0f1fe767\" />\r\n","repository":"elizaos/eliza","createdAt":"2025-07-02T22:37:21Z","mergedAt":"2025-07-02T22:38:25Z","additions":53,"deletions":53},{"id":"PR_kwDOMT5cIs6dGlqa","title":"feat: agent card refactor","author":"tcm390","number":5347,"body":"This PR updates the AgentCard component to clean up its layout by moving the Settings, New Chat, and Start/Pause Agent options into a dropdown menu under the vertical (MoreVertical) icon. This removes the buttons from the card footer, providing a cleaner, less cluttered interface while maintaining full functionality.\r\n\r\n","repository":"elizaos/eliza","createdAt":"2025-07-02T15:06:33Z","mergedAt":null,"additions":45,"deletions":55},{"id":"PR_kwDOMT5cIs6dJBJL","title":"feat: chat refactor","author":"tcm390","number":5349,"body":"This PR refactors the Chat component, including the chat bubble and chat view, to align with the new Figma design. Please note that the group chat design is not finalized yet and will be refactored in a separate PR once the design is complete.","repository":"elizaos/eliza","createdAt":"2025-07-02T19:26:21Z","mergedAt":"2025-07-02T21:37:21Z","additions":40,"deletions":64},{"id":"PR_kwDOOu4gVs6dAVke","title":"make looksLikeBase64 smarter","author":"odilitime","number":30,"body":"I have a small MD file that it just assumed was base64\n\n<!-- This is an auto-generated comment: release notes by coderabbit.ai -->\n\n## Summary by CodeRabbit\n\n* **Bug Fixes**\n  * Improved detection of Base64-encoded strings for more accurate results, especially for edge cases and short or malformed inputs.\n\n<!-- end of auto-generated comment: release notes by coderabbit.ai -->","repository":"elizaos-plugins/plugin-knowledge","createdAt":"2025-07-02T03:15:16Z","mergedAt":"2025-07-02T14:10:37Z","additions":20,"deletions":4},{"id":"PR_kwDOMT5cIs6dKBHX","title":"fix: update eliza avatar","author":"tcm390","number":5350,"body":"Currently, we are using a large image for the default Eliza avatar, which makes the app load slowly. Since we only need a reasonable resolution for avatars, this PR:\r\n\r\nResizes the default Eliza avatar to 512x512, which is sufficient for UI display.\r\n\r\nReduces the compression threshold to 512px for avatars to align with the new target size.\r\n\r\nThis improves initial load times, reduces bandwidth, and keeps the avatar quality clear enough for the UI without unnecessarily large files.","repository":"elizaos/eliza","createdAt":"2025-07-02T21:37:14Z","mergedAt":"2025-07-02T21:37:45Z","additions":3,"deletions":2}],"detailedContributorSummaries":{"0xbbjoker":"0xbbjoker: Merged elizaos/eliza#5348, improving logs with +329/-40 lines, and commented on 2 PRs. The work was focused on other areas.","odilitime":"odilitime: Modified one file with 81 additions and 1 deletion, committing changes primarily focused on other work. This continues a pattern of very consistent daily activity.","tcm390":"tcm390: Merged 3 PRs in elizaos/eliza, including a feature to tweak the agent card (+667/-632 lines) and a chat refactor (+46/-70 lines), and has one open PR for an agent card refactor. Modified 49 files with a focus on other work and refactoring.","wtfsayo":"wtfsayo: Merged 3 PRs in elizaos/eliza, including a redesign of the Agent Cards Homepage Layout (+443/-398 lines) and updates to the agent settings UI (+221/-185 lines), and created and closed issue elizaos/eliza#5218. Also commented on 4 issues and 3 PRs, modifying 72 files with +1334/-1070 lines in total."}},"summaryContent":"$7","className":"self-end sm:self-start"}]]}],"$L8","$L9","$La"]}]}],["$Lb","$Lc","$Ld"],"$Le"]}],"loading":null,"isPartial":false}
+8:["$","div",null,{"className":"mb-6","children":["$","div",null,{"className":"flex items-center justify-between","children":[[["$","$Lf",null,{"href":"/summary/day/2025-07-01","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left mr-2 h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"children":"Previous"}],false],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$Lf",null,{"href":"/summary/day/2025-07-01","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Previous"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]],["$","div",null,{"className":"flex flex-col items-center","children":[["$","div",null,{"className":"text-sm font-medium text-gray-500","children":["Daily"," Summary"]}],["$","time",null,{"dateTime":"2025-07-02","className":"text-md font-bold","children":"Jul 2, 2025"}]]}],[["$","$Lf",null,{"href":"/summary/day/2025-07-03","children":[false,["$","span",null,{"children":"Next"}],["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right ml-2 h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}]],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$Lf",null,{"href":"/summary/day/2025-07-03","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Next"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]]]}]}]
+11:T126b,## Problem
+
+Currently, `bun run test` does not work consistently across all packages in the ElizaOS monorepo. This creates several issues:
+
+1. **Inconsistent Developer Experience**: Developers cannot reliably run tests in individual packages
+2. **CI/CD Fragility**: The root `bun test` command fails, making it difficult to validate changes
+3. **Low Test Coverage**: Only 28% of source files have tests (excluding dist files)
+4. **Missing Test Infrastructure**: 29% of packages have no test scripts defined
+
+### Current State Analysis
+
+**Test Coverage by Package:**
+- ✅ **10/14 packages (71%)** have test scripts defined
+- ❌ **4/14 packages (29%)** have no test infrastructure
+- 🔴 Root `bun test` fails due to `@elizaos/plugin-bootstrap` mock initialization errors
+
+**Packages with Issues:**
+1. **No Tests At All:**
+   - `@elizaos/app` - Tauri application
+   - `@elizaos/autodoc` - Documentation generator
+   - `create-eliza` - Scaffolding tool
+   - `@elizaos/docs` - Docusaurus site (expected)
+
+2. **Failing Tests:**
+   - `@elizaos/plugin-bootstrap` - Mock initialization errors
+   - `@elizaos/project-tee-starter` - Environment setup issues
+
+3. **Excluded from Root Tests:**
+   - `@elizaos/plugin-starter` (template)
+   - `@elizaos/docs` (documentation)
+   - `@elizaos/plugin-sql` (has tests but excluded)
+
+## Proposed Solution
+
+Implement a phased approach to ensure all packages have working tests:
+
+### Phase 1: Fix Failing Tests (Priority: High)
+- [ ] Fix `@elizaos/plugin-bootstrap` mock initialization errors
+- [ ] Fix `@elizaos/project-tee-starter` environment setup issues
+- [ ] Ensure root `bun test` command passes
+
+### Phase 2: Add Missing Test Infrastructure (Priority: High)
+- [ ] Add test setup to `@elizaos/app` (Tauri app testing)
+- [ ] Add test setup to `@elizaos/autodoc`
+- [ ] Add test setup to `create-eliza`
+- [ ] Create minimal test files to validate setup
+
+### Phase 3: Standardize Test Configuration (Priority: Medium)
+- [ ] Create shared test configuration for consistency
+- [ ] Standardize coverage reporting (exclude dist/, build/, node_modules/)
+- [ ] Add coverage thresholds per package
+- [ ] Ensure all packages use Bun test runner consistently
+
+### Phase 4: Documentation & CI Updates (Priority: Medium)
+- [ ] Update contributing guide with testing requirements
+- [ ] Add pre-commit hooks for test validation
+- [ ] Update CI workflows to run package-specific tests
+- [ ] Create testing best practices documentation
+
+## Implementation Details
+
+### 1. Shared Test Configuration
+Create a base test configuration that all packages can extend:
+
+```typescript
+// packages/test-config/base.config.ts
+export default {
+  testMatch: ["**/*.test.ts", "**/*.spec.ts"],
+  coverage: {
+    exclude: [
+      "**/dist/**",
+      "**/build/**",
+      "**/node_modules/**",
+      "**/*.d.ts",
+      "**/coverage/**"
+    ],
+    threshold: {
+      statements: 60,
+      branches: 60,
+      functions: 60,
+      lines: 60
+    }
+  }
+}
+```
+
+### 2. Package Test Script Standardization
+Ensure every package.json has:
+```json
+{
+  "scripts": {
+    "test": "bun test",
+    "test:coverage": "bun test --coverage"
+  }
+}
+```
+
+### 3. Fix Root Test Command
+Update root package.json to handle package-specific test requirements:
+```json
+{
+  "scripts": {
+    "test": "turbo run test --filter=\!@elizaos/docs --filter=\!@elizaos/plugin-starter"
+  }
+}
+```
+
+## Success Criteria
+
+- [ ] `bun run test` works in every package directory
+- [ ] Root `bun test` command passes without errors
+- [ ] All packages have at least minimal test coverage
+- [ ] Test coverage reporting excludes dist/build artifacts
+- [ ] CI/CD pipeline runs all tests successfully
+- [ ] Developer documentation updated with testing guidelines
+
+## Benefits
+
+1. **Improved Developer Experience**: Consistent testing commands across all packages
+2. **Better Code Quality**: Increased test coverage from 28% to target 60%+
+3. **Reliable CI/CD**: All PRs validated with comprehensive test suite
+4. **Easier Onboarding**: New contributors can confidently run tests
+5. **Reduced Bugs**: Catch issues early with standardized testing
+
+## Alternatives Considered
+
+1. **Using Different Test Runners**: Considered Jest/Vitest but Bun test is already established
+2. **Monorepo-level Testing Only**: Would miss package-specific issues
+3. **Excluding Packages from Testing**: Would leave gaps in coverage
+
+## Additional Context
+
+- Current test coverage is ~28% (excluding dist files)
+- The monorepo uses Turbo for orchestration
+- Bun test runner is the standard across the project
+- Some packages have E2E tests (client) that need special handling
+
+This improvement will significantly enhance the development workflow and code quality across the ElizaOS project.12:T987,README said to use
+`LOAD_DOCS_ON_STARTUP=true`
+
+logs are saying
+`CTX_KNOWLEDGE_ENABLED` needs to be set
+
+provider is dynamic, probably shouldn't be. A model isn't going to know when to ask about what it doesn't know.
+
+looksLikeBase64 was too greedy, converted it to
+
+(util.ts)
+```ts
+export function looksLikeBase64(content?: string | null): boolean {
+  if (!content || content.length === 0) return false;
+
+  const cleanContent = content.replace(/\s/g, '');
+
+  // Too short to be meaningful Base64
+  if (cleanContent.length < 16) return false;
+
+  // Must be divisible by 4
+  if (cleanContent.length % 4 !== 0) return false;
+
+  // Check for Base64 pattern with proper padding
+  const base64Regex = /^[A-Za-z0-9+/]*={0,2}$/;
+  if (!base64Regex.test(cleanContent)) return false;
+
+  // Additional heuristic: Base64 typically has a good mix of characters
+  const hasNumbers = /\d/.test(cleanContent);
+  const hasUpperCase = /[A-Z]/.test(cleanContent);
+  const hasLowerCase = /[a-z]/.test(cleanContent);
+
+  return (hasNumbers || hasUpperCase) && hasLowerCase;
+}
+```
+
+getting told
+```
+[2025-07-01 23:06:40] DEBUG: [Document Processor] CTX_KNOWLEDGE_ENABLED: 'undefined' → false (runtime: false)
+[2025-07-01 23:06:40] DEBUG: [Document Processor] EMBEDDING_PROVIDER not specified. Assuming embeddings are provided by another plugin (e.g., plugin-google-genai).
+[2025-07-01 23:06:40] DEBUG: [Document Processor] No EMBEDDING_PROVIDER specified. Embeddings will be handled by the runtime.
+[2025-07-01 23:06:40] INFO: [Document Processor] Contextual Knowledge is DISABLED!
+[2025-07-01 23:06:40] INFO: [Document Processor] This means documents will NOT be enriched with context.
+```
+
+even though it's on... confirmed in config.ts it's enabled but I still see this:
+```
+[2025-07-01 23:06:39] INFO: KnowledgeService initialized for agent 479233fd-b0e7-0f50-9d88-d4c9ea5b0de0 with config:
+    CTX_KNOWLEDGE_ENABLED: false
+    LOAD_DOCS_ON_STARTUP: true
+[2025-07-01 23:06:39] INFO: LOAD_DOCS_ON_STARTUP is enabled. Loading documents from docs folder...
+```
+
+looks like service loads a config different than config.ts. Service doesn't not take runtime.getSettings into account at all.
+
+I also blame how service cstr takes config as a 2nd param. I don't think this system/patterns has been thought through or used properly.
+
+After reviewing how/where plugin-twitter does it's config, I believe the service should do the detection and store the configuration13:T913,## 🎨 UI Redesign: Agent Cards Homepage
+
+This PR redesigns the agent cards on the client homepage to match the target design specification.
+
+### 📋 Changes Made
+
+#### **AgentCard Component**
+- ✅ **Layout**: Changed from square/vertical to horizontal rectangular cards
+- ✅ **Avatar**: Moved to left side, square shape with rounded corners (12x12)
+- ✅ **Status Indicator**: Added colored dot (green/red) next to agent name
+- ✅ **Description**: Bio text now spans up to 2 lines with proper line clamping
+- ✅ **Menu**: Replaced action buttons with three-dot dropdown in top-right corner
+- ✅ **Dropdown Options**: 'New Chat', 'Pause/Start Agent', 'Settings'
+
+#### **AddAgentCard Component**
+- ✅ **Matching Layout**: Updated to horizontal design matching agent cards
+- ✅ **Consistent Spacing**: Same height and padding as agent cards
+- ✅ **Square Avatar Area**: Dashed border placeholder with rounded corners
+
+#### **Home Page Layout**
+- ✅ **Grid Optimization**: 2 columns on medium+ screens for better display
+- ✅ **Spacing**: Reduced gaps for tighter, cleaner layout
+
+### 🔧 Technical Details
+
+- **Preserved Functionality**: All existing features maintained (start/stop, navigation, error handling)
+- **TypeScript Safety**: No type errors, full build compatibility
+- **Responsive Design**: Works across all screen sizes
+- **Accessibility**: Proper ARIA labels, keyboard navigation, screen reader support
+- **Performance**: No performance regressions, efficient rendering
+
+### 🎯 Design Alignment
+
+The updated cards now perfectly match the target design with:
+- Compact horizontal layout
+- Square avatars with rounded corners
+- Status indicators with colored dots
+- Two-line description support
+- Top-right positioned dropdown menus
+- Consistent spacing and typography
+
+### 🧪 Testing
+
+- ✅ Build passes without errors
+- ✅ TypeScript compilation successful
+- ✅ All existing functionality preserved
+- ✅ Responsive design tested
+- ✅ Component structure maintains compatibility
+
+### 📱 Before/After
+
+**Before**: Square cards with large avatars, action buttons at bottom
+**After**: Horizontal cards with left avatars, status dots, top-right menus
+
+This redesign provides a more modern, space-efficient interface that better showcases agent information while maintaining full functionality.9:["$","div",null,{"className":"mb-8 space-y-6","children":[["$","$L10",null,{"metrics":{"date":"2025-07-02","interval":{"intervalStart":"$D2025-07-02T00:00:00.000Z","intervalEnd":"$D2025-07-03T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":10,"merged":8,"total":10},"issues":{"new":2,"closed":3,"total":4},"activeContributors":10,"codeChanges":{"additions":773,"deletions":704,"files":40,"commitCount":79},"topContributors":[{"username":"wtfsayo","avatarUrl":"https://avatars.githubusercontent.com/u/82053242?u=98209a1f10456f42d4d2fa71db4d5bf4a672cbc3&v=4","totalScore":141.99918776716316,"prScore":141.56118776716318,"issueScore":0,"reviewScore":0,"commentScore":0.43799999999999994,"summary":"wtfsayo: Merged 3 PRs in elizaos/eliza, including a redesign of the Agent Cards Homepage Layout (+443/-398 lines) and updates to the agent settings UI (+221/-185 lines), and created and closed issue elizaos/eliza#5218. Also commented on 4 issues and 3 PRs, modifying 72 files with +1334/-1070 lines in total."},{"username":"tcm390","avatarUrl":"https://avatars.githubusercontent.com/u/60634884?u=c6c41679b8322eaa0c81f72e0b4ed95e80f0ac16&v=4","totalScore":116.27184437300627,"prScore":116.27184437300627,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"tcm390: Merged 3 PRs in elizaos/eliza, including a feature to tweak the agent card (+667/-632 lines) and a chat refactor (+46/-70 lines), and has one open PR for an agent card refactor. Modified 49 files with a focus on other work and refactoring."},{"username":"odilitime","avatarUrl":"https://avatars.githubusercontent.com/u/16395496?u=c9bac48e632aae594a0d85aaf9e9c9c69b674d8b&v=4","totalScore":76.43239488210207,"prScore":67.63239488210208,"issueScore":4.1,"reviewScore":4.5,"commentScore":0.2,"summary":"odilitime: Modified one file with 81 additions and 1 deletion, committing changes primarily focused on other work. This continues a pattern of very consistent daily activity."},{"username":"0xbbjoker","avatarUrl":"https://avatars.githubusercontent.com/u/54844437?u=90fe1762420de6ad493a1c1582f1f70c0d87d8e2&v=4","totalScore":30.627751502819134,"prScore":30.287751502819134,"issueScore":0,"reviewScore":0,"commentScore":0.33999999999999997,"summary":"0xbbjoker: Merged elizaos/eliza#5348, improving logs with +329/-40 lines, and commented on 2 PRs. The work was focused on other areas."},{"username":"standujar","avatarUrl":"https://avatars.githubusercontent.com/u/16385918?u=718bdcd1585be8447bdfffb8c11ce249baa7532d&v=4","totalScore":5,"prScore":0,"issueScore":0,"reviewScore":5,"commentScore":0,"summary":null},{"username":"Ovodo","avatarUrl":"https://avatars.githubusercontent.com/u/107152769?u=875457368f5da28dd042a989613a3b38c9d008e2&v=4","totalScore":2.1,"prScore":0,"issueScore":2.1,"reviewScore":0,"commentScore":0,"summary":null},{"username":"META-DREAMER","avatarUrl":"https://avatars.githubusercontent.com/u/7143583?u=96f63f10e066a06d5ad592c8efc659e2b84a68fc&v=4","totalScore":0.2,"prScore":0,"issueScore":0,"reviewScore":0,"commentScore":0.2,"summary":null}],"focusAreas":[{"area":"client","count":37},{"area":"src","count":7}],"topIssues":[{"id":"I_kwDOMT5cIs68jIbD","title":"fix: ensure `bun run test` works consistently across all packages","author":"wtfsayo","number":5218,"repository":"elizaos/eliza","body":"$11","createdAt":"2025-06-20T13:18:54Z","closedAt":"2025-07-02T11:54:24Z","state":"CLOSED","commentCount":1},{"id":"I_kwDONkwNcc6-hh1V","title":"Twitter Client Initialization Error","author":"Ovodo","number":31,"repository":"elizaos-plugins/plugin-twitter","body":"I  am getting the error below on creating / starting my agent using the twitter plugin.\nIt says successfully Authenticated but then i am getting a client initialization error.\nTake a look at the image below.\n\n![Image](https://github.com/user-attachments/assets/23235ba6-1595-4bb8-bd01-5b192458ca3a)","createdAt":"2025-07-02T16:19:04Z","closedAt":null,"state":"OPEN","commentCount":1},{"id":"I_kwDOOu4gVs6-ZlR6","title":"Various issues found","author":"odilitime","number":31,"repository":"elizaos-plugins/plugin-knowledge","body":"$12","createdAt":"2025-07-02T03:18:58Z","closedAt":"2025-07-02T19:30:22Z","state":"CLOSED","commentCount":1},{"id":"I_kwDOMT5cIs6-RUyw","title":"Upgrade BD tier 1-4 plugins","author":"borisudovicic","number":5341,"repository":"elizaos/eliza","body":"[https://docs.google.com/spreadsheets/d/13Xbqg5W80jx9kCK_3AzkeTCPVT6Lm19gyConLTw5KEU/edit?gid=123741074#gid=123741074](https://docs.google.com/spreadsheets/d/13Xbqg5W80jx9kCK_3AzkeTCPVT6Lm19gyConLTw5KEU/edit?gid=123741074#gid=123741074)","createdAt":"2025-07-01T12:07:38Z","closedAt":"2025-07-02T15:42:01Z","state":"CLOSED","commentCount":0}],"topPullRequests":[{"id":"PR_kwDOMT5cIs6dHcDI","title":"chore: improve logs","author":"0xbbjoker","number":5348,"body":"\n\n<!-- This is an auto-generated comment: release notes by coderabbit.ai -->\n\n## Summary by CodeRabbit\n\n* **New Features**\n  * Added visual spinner animations to indicate progress during migrations.\n  * Introduced real-time tracking and display of token usage and estimated costs.\n  * Enhanced progress updates with timestamps, emojis, and clearer formatting.\n  * Improved tool usage reporting with simplified names, emojis, and elapsed time indicators.\n\n* **Bug Fixes**\n  * Improved error and abort handling with detailed messages, recovery suggestions, and better feedback on failures.\n\n* **Chores**\n  * Enhanced migration summaries to include detailed statistics on tokens, costs, and operation counts.\n\n<!-- end of auto-generated comment: release notes by coderabbit.ai -->","repository":"elizaos/eliza","createdAt":"2025-07-02T16:34:15Z","mergedAt":"2025-07-03T15:10:37Z","additions":329,"deletions":40},{"id":"PR_kwDOMT5cIs6dDDuR","title":"feat: update agent settings UI to match design specifications","author":"wtfsayo","number":5345,"body":"## Summary\n\n- Updated dark theme colors for better contrast and visual consistency\n- Fixed form field styling with proper border radius (4px) and increased spacing\n- Restructured form element order to follow design pattern: label → input → description\n- Increased input height to 48px with proper padding for improved UX\n- Removed Card wrapper component for a cleaner, flatter design\n- Added consistent spacing between form sections\n- Updated typography with lighter label colors and proper font weights\n\n## Changes\n\n- Modified dark theme CSS variables in \n- Updated Input, Textarea, and Select components with consistent styling\n- Refactored CharacterForm component to properly structure form fields\n- Adjusted Label component with muted foreground color\n- Fixed spacing and layout issues throughout the form\n\n## Screenshots\n\nThe form now matches the Figma design specifications with proper spacing, colors, and visual hierarchy.","repository":"elizaos/eliza","createdAt":"2025-07-02T09:12:01Z","mergedAt":"2025-07-02T09:46:19Z","additions":193,"deletions":157},{"id":"PR_kwDOMT5cIs6dCLBt","title":"feat: redesign Agent Cards Homepage Layout","author":"wtfsayo","number":5344,"body":"$13","repository":"elizaos/eliza","createdAt":"2025-07-02T07:42:42Z","mergedAt":"2025-07-02T08:12:44Z","additions":191,"deletions":146},{"id":"PR_kwDOMT5cIs6dDxPO","title":"fix(client): resolve all type issues in home.tsx for complete type safety","author":"wtfsayo","number":5346,"body":"## Summary\n\nThis PR fixes all TypeScript type issues in the home.tsx file to ensure complete type safety.\n\n## Changes\n\n- Use  enum instead of string literals for status comparison\n- Add proper type imports for  and \n- Add explicit type annotations for  and  hooks\n- Fix  to accept  parameter\n- Add  to  memoized component\n- Properly type  group prop with type assertion\n- Ensure all map functions have explicit type annotations\n\n## Testing\n\n- All TypeScript errors have been resolved\n- No functionality changes, only type safety improvements\n- Verified with  tool - no errors or warnings\n\n## Related Issues\n\nImproves type safety as part of ongoing client improvements.","repository":"elizaos/eliza","createdAt":"2025-07-02T10:26:47Z","mergedAt":"2025-07-02T10:31:18Z","additions":140,"deletions":89},{"id":"PR_kwDOOu4gVs6dAZds","title":"\"runtime is required to configure\" refactor","author":"odilitime","number":32,"body":"and do configuration once when making the singleton object helps #29 \n\n<!-- This is an auto-generated comment: release notes by coderabbit.ai -->\n\n## Summary by CodeRabbit\n\n* **New Features**\n  * Added a new configuration option to control loading of documents on startup.\n  * Improved handling and consistency of boolean environment variable parsing for configuration flags.\n\n* **Refactor**\n  * Centralized and standardized configuration validation and retrieval across the application.\n  * Updated several public function signatures to require a runtime parameter for context-aware configuration.\n  * Streamlined plugin exports by removing dynamic initialization logic.\n\n* **Style**\n  * Enhanced logging to provide clearer information about configuration and operational status.\n\n<!-- end of auto-generated comment: release notes by coderabbit.ai -->","repository":"elizaos-plugins/plugin-knowledge","createdAt":"2025-07-02T03:28:35Z","mergedAt":"2025-07-02T16:07:12Z","additions":133,"deletions":189},{"id":"PR_kwDOMT5cIs6dKXz7","title":"feat: tweak agent card","author":"tcm390","number":5351,"body":"This PR refines the Agent Card to match the Figma design more closely.\r\n\r\nbefore:\r\n\r\n\r\n<img width=\"807\" alt=\"Screenshot 2025-07-03 at 6 36 23 AM\" src=\"https://github.com/user-attachments/assets/2aafc81c-4d1a-4f8e-87c2-a3811c47d500\" />\r\n\r\nafter:\r\n\r\n<img width=\"927\" alt=\"Screenshot 2025-07-03 at 6 36 36 AM\" src=\"https://github.com/user-attachments/assets/d2a89bed-2c29-4f26-8232-7e2e0f1fe767\" />\r\n","repository":"elizaos/eliza","createdAt":"2025-07-02T22:37:21Z","mergedAt":"2025-07-02T22:38:25Z","additions":53,"deletions":53},{"id":"PR_kwDOMT5cIs6dGlqa","title":"feat: agent card refactor","author":"tcm390","number":5347,"body":"This PR updates the AgentCard component to clean up its layout by moving the Settings, New Chat, and Start/Pause Agent options into a dropdown menu under the vertical (MoreVertical) icon. This removes the buttons from the card footer, providing a cleaner, less cluttered interface while maintaining full functionality.\r\n\r\n","repository":"elizaos/eliza","createdAt":"2025-07-02T15:06:33Z","mergedAt":null,"additions":45,"deletions":55},{"id":"PR_kwDOMT5cIs6dJBJL","title":"feat: chat refactor","author":"tcm390","number":5349,"body":"This PR refactors the Chat component, including the chat bubble and chat view, to align with the new Figma design. Please note that the group chat design is not finalized yet and will be refactored in a separate PR once the design is complete.","repository":"elizaos/eliza","createdAt":"2025-07-02T19:26:21Z","mergedAt":"2025-07-02T21:37:21Z","additions":40,"deletions":64},{"id":"PR_kwDOOu4gVs6dAVke","title":"make looksLikeBase64 smarter","author":"odilitime","number":30,"body":"I have a small MD file that it just assumed was base64\n\n<!-- This is an auto-generated comment: release notes by coderabbit.ai -->\n\n## Summary by CodeRabbit\n\n* **Bug Fixes**\n  * Improved detection of Base64-encoded strings for more accurate results, especially for edge cases and short or malformed inputs.\n\n<!-- end of auto-generated comment: release notes by coderabbit.ai -->","repository":"elizaos-plugins/plugin-knowledge","createdAt":"2025-07-02T03:15:16Z","mergedAt":"2025-07-02T14:10:37Z","additions":20,"deletions":4},{"id":"PR_kwDOMT5cIs6dKBHX","title":"fix: update eliza avatar","author":"tcm390","number":5350,"body":"Currently, we are using a large image for the default Eliza avatar, which makes the app load slowly. Since we only need a reasonable resolution for avatars, this PR:\r\n\r\nResizes the default Eliza avatar to 512x512, which is sufficient for UI display.\r\n\r\nReduces the compression threshold to 512px for avatars to align with the new target size.\r\n\r\nThis improves initial load times, reduces bandwidth, and keeps the avatar quality clear enough for the UI without unnecessarily large files.","repository":"elizaos/eliza","createdAt":"2025-07-02T21:37:14Z","mergedAt":"2025-07-02T21:37:45Z","additions":3,"deletions":2}],"detailedContributorSummaries":{"0xbbjoker":"0xbbjoker: Merged elizaos/eliza#5348, improving logs with +329/-40 lines, and commented on 2 PRs. The work was focused on other areas.","odilitime":"odilitime: Modified one file with 81 additions and 1 deletion, committing changes primarily focused on other work. This continues a pattern of very consistent daily activity.","tcm390":"tcm390: Merged 3 PRs in elizaos/eliza, including a feature to tweak the agent card (+667/-632 lines) and a chat refactor (+46/-70 lines), and has one open PR for an agent card refactor. Modified 49 files with a focus on other work and refactoring.","wtfsayo":"wtfsayo: Merged 3 PRs in elizaos/eliza, including a redesign of the Agent Cards Homepage Layout (+443/-398 lines) and updates to the agent settings UI (+221/-185 lines), and created and closed issue elizaos/eliza#5218. Also commented on 4 issues and 3 PRs, modifying 72 files with +1334/-1070 lines in total."}}}],"$L14"]}]
+a:["$","div",null,{"className":"prose prose-sm mx-auto mt-8 dark:prose-invert sm:prose lg:prose-lg xl:prose-xl","children":[["$","p","p-0",{"children":["Today, ElizaOS saw significant UI/UX overhauls in the ",["$","code","code-0",{"children":"eliza"}]," repository, including redesigned agent cards, chat components, and agent settings, alongside critical bug fixes. Concurrently, ",["$","code","code-1",{"children":"plugin-knowledge"}]," refined its configuration handling and Base64 detection, while a new critical issue emerged across multiple repositories regarding Twitter client initialization errors."]}],"\n",["$","h2","h2-0",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"🚨 Needs Attention","position":{"start":{"line":3,"column":4,"offset":381},"end":{"line":3,"column":22,"offset":399}}}],"position":{"start":{"line":3,"column":1,"offset":378},"end":{"line":3,"column":23,"offset":400}}},"children":"🚨 Needs Attention"}],"\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":["Urgent Discussion: Twitter Client Initialization Error (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/31","children":"elizaos/eliza#31"}],", ",["$","a","a-1",{"href":"https://github.com/elizaos-plugins/plugin-twitter/issues/31","children":"elizaos-plugins/plugin-twitter#31"}],", ",["$","a","a-2",{"href":"https://github.com/elizaos-plugins/plugin-knowledge/issues/31","children":"elizaos-plugins/plugin-knowledge#31"}],")"]}],": Multiple users are reporting a critical \"client initialization error\" with the Twitter plugin despite successful authentication, preventing autonomous Twitter agents. This requires immediate investigation and resolution."]}],"\n",["$","li","li-1",{"children":[["$","strong","strong-0",{"children":["Blocked Issue: Event Message Sent Not Working (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/5216","children":"elizaos/eliza#5216"}],", ",["$","a","a-1",{"href":"https://github.com/elizaos-plugins/plugin-twitter/issues/5216","children":"elizaos-plugins/plugin-twitter#5216"}],", ",["$","a","a-2",{"href":"https://github.com/elizaos-plugins/plugin-knowledge/issues/5216","children":"elizaos-plugins/plugin-knowledge#5216"}],")"]}],": ",["$","code","code-0",{"children":"sendAgentResponseToBus"}]," is not emitting ",["$","code","code-1",{"children":"EventType.MESSAGE_SENT"}],". A user asked if the bootstrap plugin was added, suggesting a potential dependency or configuration issue that needs clarification."]}],"\n",["$","li","li-2",{"children":[["$","strong","strong-0",{"children":["Pull Request to Review: Migrate CLI Input Methods to @clack/prompts (",["$","a","a-0",{"href":"https://github.com/elizaos-plugins/plugin-knowledge/pull/5359","children":"elizaos-plugins/plugin-knowledge#5359"}],")"]}],": This PR is ready for review to standardize CLI input methods."]}],"\n"]}],"\n",["$","h2","h2-1",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"✅ Completed Work","position":{"start":{"line":8,"column":4,"offset":1723},"end":{"line":8,"column":20,"offset":1739}}}],"position":{"start":{"line":8,"column":1,"offset":1720},"end":{"line":8,"column":20,"offset":1739}}},"children":"✅ Completed Work"}],"\n",["$","h3","h3-0",{"children":"UI/UX Enhancements & Refinements"}],"\n",["$","ul","ul-1",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"Agent Card & Homepage Redesign"}],": Major visual overhauls for client-side UI, including refining Agent Cards to match Figma designs (layout changes from square/vertical to horizontal) and a complete redesign of the homepage layout for agent cards. (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5351","children":"elizaos/eliza#5351"}],", ",["$","a","a-1",{"href":"https://github.com/elizaos/eliza/pull/5344","children":"elizaos/eliza#5344"}],")"]}],"\n",["$","li","li-1",{"children":[["$","strong","strong-0",{"children":"Chat Component Refactoring"}],": Significant refactoring of the Chat component, including chat bubbles and the chat view, to align with new Figma designs for visual consistency. (","$L15",")"]}],"\n","$L16","\n"]}],"\n","$L17","\n","$L18","\n","$L19","\n","$L1a","\n","$L1b","\n","$L1c","\n","$L1d","\n","$L1e","\n","$L1f","\n","$L20","\n","$L21","\n","$L22","\n","$L23","\n","$L24"]}]
+b:["$","script","script-0",{"src":"/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","async":true}]
+c:["$","script","script-1",{"src":"/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","async":true}]
+d:["$","script","script-2",{"src":"/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js","async":true}]
+e:["$","$L25",null,{"children":["$","$26",null,{"name":"Next.MetadataOutlet","children":"$@27"}]}]
+14:["$","div",null,{"className":"rounded-lg border bg-card text-card-foreground shadow-sm","children":[["$","div",null,{"className":"flex flex-col space-y-1.5 p-6 py-4","children":["$","div",null,{"className":"tracking-tight text-sm font-medium","children":["$undefined","Code Changes"]}]}],["$","div",null,{"className":"p-6 pt-0","children":["$","div",null,{"className":"grid grid-cols-2 gap-4 md:grid-cols-4","children":[["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-git-commit-vertical h-5 w-5","aria-hidden":"true","children":[["$","path","1holv5",{"d":"M12 3v6"}],["$","circle","1v7zrd",{"cx":"12","cy":"12","r":"3"}],["$","path","a9ows0",{"d":"M12 15v6"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":79}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Commits"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-file-code h-5 w-5","aria-hidden":"true","children":[["$","path","1oefj6",{"d":"M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"}],["$","path","wfsgrz",{"d":"M14 2v5a1 1 0 0 0 1 1h5"}],["$","path","1tg20x",{"d":"M10 12.5 8 15l2 2.5"}],["$","path","yinavb",{"d":"m14 12.5 2 2.5-2 2.5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":40}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Files Changed"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-green-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-up h-5 w-5 text-green-500","aria-hidden":"true","children":[["$","path","hav0vg",{"d":"m5 12 7-7 7 7"}],["$","path","x0mq9r",{"d":"M12 19V5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-green-500","children":"+773"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Added"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-red-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-down h-5 w-5 text-red-500","aria-hidden":"true","children":[["$","path","s699le",{"d":"M12 5v14"}],["$","path","1idqje",{"d":"m19 12-7 7-7-7"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-red-500","children":"-704"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Deleted"}]]}]]}]]}]}]]}]
+15:["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5349","children":"elizaos/eliza#5349"}]
+16:["$","li","li-2",{"children":[["$","strong","strong-0",{"children":"Agent Settings UI Updates"}],": Agent Settings UI updated to match design specifications, featuring improved dark theme colors, fixed form field styling, and restructured form element order. (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5345","children":"elizaos/eliza#5345"}],")"]}]
+17:["$","h3","h3-1",{"children":"Core System Stability & Configuration"}]
+18:["$","ul","ul-2",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"Client-Side Bug Fixes & Optimizations"}],": Updated default Eliza avatar to a smaller, optimized size (512x512) to improve app load times and resolved all TypeScript type issues in ",["$","code","code-0",{"children":"home.tsx"}],". (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5350","children":"elizaos/eliza#5350"}],", ",["$","a","a-1",{"href":"https://github.com/elizaos/eliza/pull/5346","children":"elizaos/eliza#5346"}],")"]}],"\n",["$","li","li-1",{"children":[["$","strong","strong-0",{"children":"Consistent CLI Testing"}],": Ensured ",["$","code","code-0",{"children":"bun run test"}]," works consistently across all packages in the monorepo, resolving issues with inconsistent developer experience. (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/5218","children":"elizaos/eliza#5218"}],", ",["$","a","a-1",{"href":"https://github.com/elizaos-plugins/plugin-twitter/issues/5218","children":"elizaos-plugins/plugin-twitter#5218"}],", ",["$","a","a-2",{"href":"https://github.com/elizaos-plugins/plugin-knowledge/issues/5218","children":"elizaos-plugins/plugin-knowledge#5218"}],")"]}],"\n",["$","li","li-2",{"children":[["$","strong","strong-0",{"children":"CLI Input Method Standardization"}],": Migrated remaining CLI input methods to use ",["$","code","code-0",{"children":"@clack/prompts"}]," for consistency. (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/5295","children":"elizaos/eliza#5295"}],")"]}],"\n",["$","li","li-3",{"children":[["$","strong","strong-0",{"children":"Plugin Configuration Refinements"}],": Refactored ",["$","code","code-0",{"children":"plugin-knowledge"}],"'s configuration and runtime initialization to ensure configuration occurs only once, improving efficiency and addressing dynamic configuration issues. (",["$","a","a-0",{"href":"https://github.com/elizaos-plugins/plugin-knowledge/pull/32","children":"elizaos-plugins/plugin-knowledge#32"}],")"]}],"\n",["$","li","li-4",{"children":[["$","strong","strong-0",{"children":"Enhanced Base64 Detection"}],": Improved the ",["$","code","code-0",{"children":"looksLikeBase64"}]," utility function in ",["$","code","code-1",{"children":"plugin-knowledge"}]," to prevent misidentification of small Markdown files as Base64 strings. (",["$","a","a-0",{"href":"https://github.2com/elizaos-plugins/plugin-knowledge/pull/30","children":"elizaos-plugins/plugin-knowledge#30"}],")"]}],"\n",["$","li","li-5",{"children":[["$","strong","strong-0",{"children":"Initial Setup & Configuration Issues Resolved"}],": Addressed problems with ",["$","code","code-0",{"children":"LOAD_DOCS_ON_STARTUP"}],", ",["$","code","code-1",{"children":"CTX_KNOWLEDGE_ENABLED"}]," settings, and dynamic provider issues across ",["$","code","code-2",{"children":"eliza"}]," and ",["$","code","code-3",{"children":"plugin-twitter"}],". (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/31","children":"elizaos/eliza#31"}],", ",["$","a","a-1",{"href":"https://github.com/elizaos-plugins/plugin-twitter/issues/31","children":"elizaos-plugins/plugin-twitter#31"}],", ",["$","a","a-2",{"href":"https://github.com/elizaos-plugins/plugin-knowledge/issues/31","children":"elizaos-plugins/plugin-knowledge#31"}],")"]}],"\n"]}]
+19:["$","h2","h2-2",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"🏗️ Work in Progress","position":{"start":{"line":22,"column":4,"offset":4734},"end":{"line":22,"column":24,"offset":4754}}}],"position":{"start":{"line":22,"column":1,"offset":4731},"end":{"line":22,"column":24,"offset":4754}}},"children":"🏗️ Work in Progress"}]
+1a:["$","h3","h3-2",{"children":"New Pull Requests"}]
+1b:["$","ul","ul-3",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"elizaos/eliza"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["Agent Card Refactor: ",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/5347","children":"#5347"}]]}],"\n"]}],"\n"]}],"\n"]}]
+1c:["$","h3","h3-3",{"children":"Active Discussions"}]
+1d:["$","ul","ul-4",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"elizaos/eliza"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["CLI Test Command Monorepo Requirement: ",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/5142","children":"#5142"}]," (Resolved according to ",["$","code","code-0",{"children":"claude"}],"'s analysis)"]}],"\n"]}],"\n"]}],"\n",["$","li","li-1",{"children":[["$","strong","strong-0",{"children":"elizaos-plugins/plugin-twitter"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["CLI Test Command Monorepo Requirement: ",["$","a","a-0",{"href":"https://github.com/elizaos-plugins/plugin-twitter/issues/5142","children":"#5142"}]]}],"\n",["$","li","li-1",{"children":["CLI Input Method Consistency: ",["$","a","a-0",{"href":"https://github.com/elizaos-plugins/plugin-twitter/issues/5295","children":"#5295"}]]}],"\n"]}],"\n"]}],"\n",["$","li","li-2",{"children":[["$","strong","strong-0",{"children":"elizaos-plugins/plugin-knowledge"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["CLI Test Command Monorepo Requirement: ",["$","a","a-0",{"href":"https://github.com/elizaos-plugins/plugin-knowledge/issues/5142","children":"#5142"}]]}],"\n",["$","li","li-1",{"children":["Migrate CLI Input Methods to @clack/prompts: ",["$","a","a-0",{"href":"https://github.com/elizaos-plugins/plugin-knowledge/issues/5295","children":"#5295"}]]}],"\n"]}],"\n"]}],"\n"]}]
+1e:["$","h2","h2-3",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"🐞 Issue Triage","position":{"start":{"line":37,"column":4,"offset":5612},"end":{"line":37,"column":19,"offset":5627}}}],"position":{"start":{"line":37,"column":1,"offset":5609},"end":{"line":37,"column":19,"offset":5627}}},"children":"🐞 Issue Triage"}]
+1f:["$","h3","h3-4",{"children":"New Issues"}]
+20:["$","ul","ul-5",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"elizaos/eliza"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["Twitter Client Initialization Errors: ",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/31","children":"#31"}]]}],"\n"]}],"\n"]}],"\n",["$","li","li-1",{"children":[["$","strong","strong-0",{"children":"elizaos-plugins/plugin-knowledge"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["Twitter Client Initialization Error: ",["$","a","a-0",{"href":"https://github.com/elizaos-plugins/plugin-knowledge/issues/31","children":"#31"}]]}],"\n"]}],"\n"]}],"\n",["$","li","li-2",{"children":[["$","strong","strong-0",{"children":"elizaos-plugins/plugin-twitter"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["Twitter Client Initialization Error: ",["$","a","a-0",{"href":"https://github.com/elizaos-plugins/plugin-twitter/issues/31","children":"#31"}]]}],"\n"]}],"\n"]}],"\n"]}]
+21:["$","h3","h3-5",{"children":"Closed Issues"}]
+22:["$","ul","ul-6",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"elizaos/eliza"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["Upgrade BD tier 1-4 plugins: ",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/5341","children":"#5341"}]]}],"\n",["$","li","li-1",{"children":["Ensure ",["$","code","code-0",{"children":"bun run test"}]," works consistently across all packages: ",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/5218","children":"#5218"}]]}],"\n",["$","li","li-2",{"children":["Migrate remaining CLI input methods to use ",["$","code","code-0",{"children":"@clack/prompts"}],": ",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/5295","children":"#5295"}]]}],"\n",["$","li","li-3",{"children":["Initial Setup and Configuration Issues: ",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/31","children":"#31"}]]}],"\n"]}],"\n"]}],"\n",["$","li","li-1",{"children":[["$","strong","strong-0",{"children":"elizaos-plugins/plugin-twitter"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["CLI Test Command Improvements: ",["$","a","a-0",{"href":"https://github.com/elizaos-plugins/plugin-twitter/issues/5218","children":"#5218"}]]}],"\n",["$","li","li-1",{"children":["Initial Plugin Setup and Configuration: ",["$","a","a-0",{"href":"https://github.com/elizaos-plugins/plugin-twitter/issues/31","children":"#31"}]]}],"\n"]}],"\n"]}],"\n",["$","li","li-2",{"children":[["$","strong","strong-0",{"children":"elizaos-plugins/plugin-knowledge"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["Configuration and Environment Variable Issues Resolved: ",["$","a","a-0",{"href":"https://github.com/elizaos-plugins/plugin-knowledge/issues/31","children":"#31"}]]}],"\n"]}],"\n"]}],"\n"]}]
+23:["$","h2","h2-4",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"✨ Contributor Spotlight","position":{"start":{"line":58,"column":4,"offset":6960},"end":{"line":58,"column":27,"offset":6983}}}],"position":{"start":{"line":58,"column":1,"offset":6957},"end":{"line":58,"column":27,"offset":6983}}},"children":"✨ Contributor Spotlight"}]
+24:["$","ul","ul-7",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"claude"}],": Provided a detailed analysis confirming the resolution of the CLI test command monorepo requirement issue (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/5142","children":"elizaos/eliza#5142"}],")."]}],"\n",["$","li","li-1",{"children":[["$","strong","strong-0",{"children":"wtfsayo"}],": Confirmed completion of work on consistent ",["$","code","code-0",{"children":"bun run test"}]," behavior (",["$","a","a-0",{"href":"https://github.com/elizaos-plugins/plugin-knowledge/issues/5218","children":"elizaos-plugins/plugin-knowledge#5218"}],") and encouraged progress on the ",["$","code","code-1",{"children":"@clack/prompts"}]," migration."]}],"\n"]}]
+27:null

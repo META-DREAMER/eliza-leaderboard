@@ -1,0 +1,879 @@
+1:"$Sreact.fragment"
+2:I[4817319,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"IntervalSelector"]
+3:I[6998365,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"LlmCopyButton"]
+14:I[3642796,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],""]
+15:I[3238488,["/eliza-leaderboard/_next/static/chunks/872c789639e5504e.js","/eliza-leaderboard/_next/static/chunks/85ed81863e311381.js","/eliza-leaderboard/_next/static/chunks/f907095fa5da043c.js","/eliza-leaderboard/_next/static/chunks/3c4b6a41a4af2135.js","/eliza-leaderboard/_next/static/chunks/e104a2dfca7e4183.js","/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js"],"StatCardsDisplay"]
+24:I[4261541,["/eliza-leaderboard/_next/static/chunks/b33bcbdcb3f88354.js","/eliza-leaderboard/_next/static/chunks/8ba59154b6704904.js"],"OutletBoundary"]
+25:"$Sreact.suspense"
+4:T60c,**Describe the bug**
+
+`parseJSONObjectFromText` broke for me in or before 0.25.9
+It was working OK for me in 0.18
+
+The problem imo is the `normalizeJSONString` function.
+
+**To Reproduce**
+
+1. Run `node` interpreter in your eliza repo.
+2. Run the following:
+```
+const { parseJSONObjectFromText, cleanJsonResponse } = await import("@elizaos/core");
+
+let text = '```json{    "success": true,    "result": {        "serviceAdCID": "zdpuB1ZVfhZFX4iaVhXkyhTuGUhPA1Ac3LuQdSWe9zcdXrKce",        "wallet": "9ovkK7WoiSXyEJDM5cZG3or3W95bdzZLDDHhuMgSJT9U",        "desiredServiceID": "Landing Page Creation",        "desiredUnitAmount": "1"    }}```'
+
+parseJSONObjectFromText(text)
+```
+You will see an error, and then the code tries to handle it by doing `extractAttributes(text)`
+But `extractAttributesText` cannot handle nested objects.
+
+![Image](https://github.com/user-attachments/assets/2cb0d3bc-c662-4f4b-b3b3-59ab0e2f02a0)
+
+**Expected behavior**
+
+In my opinion, running the text through `cleanJsonResponse` and then `JSON.parse` should be enough, as `JSON.parse` handles a lot of the stuff that `normalizeJSONString` is trying to handle.
+
+Additionally, the code should fail if `JSON.parse` can't parse it, instead of trying to fix the problem with `extractAttributesText`.
+That way the user can fix their AI prompt.
+
+![Image](https://github.com/user-attachments/assets/da93c13d-ede8-4e50-bc83-5e069dfa36b3)
+
+
+**Additional context**
+
+Happy to help with this and write some test cases around it. Documenting the issue in case someone gets to it before me.5:T97e,**Description**  
+Extend the TON Plugin to enable AI agents (and other modules) to list NFTs for sale, purchase listed NFTs, and conduct auctions. This new functionality should support creating and managing both fixed-price sales and auction-style listings, allowing bids, retrieving pricing information, and handling related on-chain data for specific NFTs or entire collections.
+
+**Key Requirements**  
+1. **List NFTs for Sale**  
+   - Implement an action to list an NFT for sale at a fixed price.  
+   - Allow customization of parameters such as price, and any additional data.  
+
+2. **Buy Listed NFTs**  
+   - Provide a mechanism for AI agents to purchase NFTs that have been listed for a fixed price.  
+   - Handle payment transactions securely and confirm successful transfers.
+
+3. **Auction Listings**  
+   - Offer actions to create an auction for an NFT, defining starting price, duration, and any bid increment rules.  
+   - Enable cancellation of an auction if no bids have been placed or before a predefined time threshold.
+
+4. **Bidding and Bid Management**  
+   - Implement a bidding system for ongoing auctions, including placing, updating, or canceling bids.  
+   - Return real-time auction status (e.g., highest bid, time remaining) to AI agents.
+
+5. **Price & Bid Information Retrieval**  
+   - Provide a means to fetch pricing data (fixed price or current highest bid), bid history, and overall activity for specific NFTs or entire collections.  
+   - Ensure timely updates and reliable responses to support AI-driven trading or analytics.
+
+**Resources**  
+- [TON Plugin Repository](https://github.com/elizaOS/eliza/tree/develop/packages/plugin-ton)  
+- [TON Documentation](https://docs.ton.org/)  
+- TON NFT standard references (e.g., [TEP-62](https://github.com/ton-blockchain/TEPs/blob/master/text/0062-nft-standard.md))  
+- [GetGems SDK](https://github.com/getgems-io)
+
+**Definition of Done**  
+- Fully functional listings for both fixed-price sales and auctions, with comprehensive test coverage.  
+- Successful purchase and bid flow, verified by unit and integration tests.  
+- Documentation detailing how to list NFTs, buy listed NFTs, create auctions, place bids, and retrieve up-to-date pricing/bid info.
+
+**Bounty**  
+- **Estimated Reward**: \$2000 in TON  
+
+For additional questions or in-depth discussion, join the bounty program working group: [Telegram: @ton_ai_bounty](https://t.me/ton_ai_bounty).6:T88b,**Description**  
+Enhance the TON Plugin within the elizaOS framework to enable the creation and management of liquidity pools on existing TON decentralized exchanges. The plugin should offer robust actions for automated pool creation, liquidity provisioning, and management, integrating seamlessly with AI agents to facilitate advanced, programmatic control of DeFi operations.
+
+**Key Requirements**  
+1. **DEX Integration**  
+   Leverage existing DEX SDKs to create new liquidity pools on supported platforms, handle deposits/withdrawals, and manage fees. The design must remain extendable for future DEX integrations.
+
+2. **Pool Creation & Configuration**  
+   Provide user-friendly actions to define parameters (e.g., token pairs, initial liquidity) and initiate pool creation. Ensure that essential checks are in place to prevent invalid or insecure setups.
+
+3. **Liquidity Management**  
+   Support depositing and withdrawing liquidity, accurately tracking each contributor’s share. LP tokens should be issued/burned, reflecting real-time positions.
+
+4. **Fee Distribution**  
+   Integrate with the underlying DEX’s fee model so that providers can receive rewards proportional to their stakes. Offer methods to retrieve or claim accrued fees.
+
+5. **Security & Best Practices**  
+   Follow TON documentation guidelines and recommended practices from the chosen DEX SDK. Validate input parameters rigorously and manage error handling gracefully.
+
+**Resources**  
+- [List of DEXs](https://github.com/ton-society/ecosystem-map?tab=readme-ov-file#decentralized-exchanges)
+- [TON Documentation](https://docs.ton.org/)  
+
+**Definition of Done**  
+- Successful creation a working set of actions and/or interfaces providing pool creation, deposit, withdrawal, and fee distribution with DEXs
+- Comprehensive test coverage for all newly introduced actions and workflows.  
+- Clear documentation explaining how to configure and invoke these new actions in conjunction with the relevant DEX.
+
+**Bounty**  
+- **Estimated Reward**: $2,000 in TON  
+
+For further discussion or clarification, reach out in the bounty program working group: [Telegram: @ton_ai_bounty](https://t.me/ton_ai_bounty).7:T87d,**Description**  
+Extend the TON Plugin to provide an action set enabling AI agents to create and manage NFTs according to the [TEP-62](https://github.com/ton-blockchain/TEPs/blob/master/text/0062-nft-standard.md) standard. The new actions should handle various NFT workflows, including metadata handling (on-chain/off-chain with IPFS support), minting, transferring, and editing metadata, giving AI agents direct blockchain interaction capabilities.
+
+**Key Requirements**  
+1. **NFT Creation & Metadata Handling**  
+   - Action to initialize an NFT Collection or standalone NFT.  
+   - Provide options for metadata storage: on-chain, off-chain.  
+   - Allow selection of different IPFS providers.  
+
+2. **Mint NFT**  
+   - Action to mint new NFT items within a collection.  
+   - Ensure minted items follow TEP-62 and store or reference metadata appropriately.
+
+3. **Transfer NFT**  
+   - Action to transfer ownership of an existing NFT item.  
+   - Verify that only authorized agents can invoke this action, respecting any access controls.
+
+4. **Edit Metadata**  
+   - Action to update NFT metadata post-mint.  
+   - Support partial or full metadata edits, following on-chain or off-chain constraints.
+
+5. **AI Agent Integration**  
+   - Ensure each action is exposed in a manner that AI agents can call programmatically.  
+   - Provide clear function signatures or APIs for elizaOS modules interacting with these actions.
+
+**Useful Resources**  
+- [TEP-62: TON NFT Stantard](https://github.com/ton-blockchain/TEPs/blob/master/text/0062-nft-standard.md)
+- [Reference NFT implementation](https://github.com/ton-blockchain/token-contract/tree/main/nft)
+
+**Definition of Done**  
+- Deployed and tested actions for NFT creation, minting, transferring, and metadata editing.  
+- Verified interoperability with TEP-62.  
+- Comprehensive test coverage for all newly introduced actions and workflows.
+- Documentation detailing how AI agents can invoke and use each action.  
+
+**Bounty**  
+- **Estimated Reward**: $1500 in TON 
+
+For questions or further discussion, feel free to reach out in the bounty program working group: [Telegram: @ton_ai_bounty](https://t.me/ton_ai_bounty)8:Tc4a,<!-- Use this template by filling in information and copying and pasting relevant items out of the HTML comments. -->
+
+# Relates to
+
+<!-- LINK TO ISSUE OR TICKET -->
+#3775
+#3776
+<!-- This risks section must be filled out before the final review and merge. -->
+
+# Risks
+
+Low
+<!--
+Low, medium, large. List what kind of risks and what could be affected.
+-->
+
+# Background
+
+## What does this PR do?
+
+1. Enhance Sui Swap by expanding support from only SUI and USDC swaps to supporting swaps for any coin. 
+2. The following four foundational capabilities will be added through integration with Cetus:
+- Create CLMM pools for any token pair.
+- Open positions and add liquidity in any pool.
+- Remove liquidity from any position you hold.
+
+## What kind of change is this?
+
+Improvements & Features
+<!--
+Bug fixes (non-breaking change which fixes an issue)
+Improvements (misc. changes to existing features)
+Features (non-breaking change which adds functionality)
+Updates (new versions of included code)
+-->
+
+<!-- This "Why" section is most relevant if there are no linked issues explaining why. If there is a related issue, it might make sense to skip this why section. -->
+<!--
+## Why are we doing this? Any context or related work?
+-->
+
+# Documentation changes needed?
+My changes do not require a change to the project documentation.
+<!--
+My changes do not require a change to the project documentation.
+My changes require a change to the project documentation.
+If documentation change is needed: I have updated the documentation accordingly.
+-->
+
+<!-- Please show how you tested the PR. This will really help if the PR needs to be retested and probably help the PR get merged quicker. -->
+
+# Testing
+add swap check
+![image](https://github.com/user-attachments/assets/d71b707e-7b8d-45ca-ae9c-38026088ffab)
+
+remove liquidity
+<img width="1378" alt="image" src="https://github.com/user-attachments/assets/753d44f0-a2b1-45ab-9b69-3f30e5876d46" />
+
+open position with liquidity
+<img width="1432" alt="image" src="https://github.com/user-attachments/assets/4aecc1dd-d797-4af3-9235-d898146c1ec8" />
+
+## Where should a reviewer start?
+
+## Detailed testing steps
+
+<!--
+None: Automated tests are acceptable.
+-->
+
+<!--
+- As [anon/admin], go to [link]
+  - [do action]
+  - verify [result]
+-->
+
+<!-- If there is a UI change, please include before and after screenshots or videos. This will speed up PRs being merged. It is extra nice to annotate screenshots with arrows or boxes pointing out the differences. -->
+<!--
+## Screenshots
+### Before
+### After
+-->
+
+<!-- If there is anything about the deployment, please make a note. -->
+<!--
+# Deploy Notes
+-->
+
+<!--  Copy and paste command line output. -->
+<!--
+## Database changes
+-->
+
+<!--  Please specify deploy instructions if there is something more than the automated steps. -->
+<!--
+## Deployment instructions
+-->
+
+<!-- If you are on Discord, please join https://discord.gg/elizaOS and state your Discord username here for the contributor role and join us in #development-feed -->
+<!--
+## Discord username
+
+-->
+9:T56c,# Relates to
+Documentation updates for weekly contributor meetings
+
+# Risks
+Low - This is a documentation-only change adding meeting notes.
+
+# Background
+
+## What does this PR do?
+Adds meeting notes for two weekly contributor meetings:
+- February 18, 2025 covering plugin ecosystem discussions, Linea blockchain integration, and V2 plugin management
+- February 25, 2025 covering ETH Denver updates and documentation improvements
+
+## What kind of change is this?
+Documentation (adding new meeting notes)
+
+# Documentation changes needed?
+My changes are documentation changes themselves, no additional documentation updates needed.
+
+# Testing
+
+## Where should a reviewer start?
+Review the two new markdown files:
+1. `docs/community/Contributors/weekly-contributor-meeting/2025-02-18.md`
+2. `docs/community/Contributors/weekly-contributor-meeting/2025-02-25.md`
+
+## Detailed testing steps
+1. Verify markdown formatting is correct
+2. Verify dates and titles are consistent with our documentation standards
+3. Verify the frontmatter metadata (title, date, description) is properly formatted
+4. Check that links within the documents (if any) are valid
+
+<!-- If you are on Discord, please join https://discord.gg/elizaOS and state your Discord username here for the contributor role and join us in #development-feed -->
+<!--
+## Discord username
+YoungPhlo
+-->
+a:T661,# Relates to
+Weekly community updates documentation
+
+# Risks
+Low - This is a documentation-only change adding a new weekly update markdown file.
+
+# Background
+
+## What does this PR do?
+Adds the documentation for "What Did You Get Done This Week? 12" covering ElizaOS 0.1.9 launch and ecosystem updates from January 31, 2025. The document includes:
+- Core ElizaOS improvements and architectural changes
+- Technical innovations in agent communication
+- Agent capabilities and applications development
+- Organizational developments including DUNA DAO framework
+- Partnership and event updates
+- Community hot takes and timestamped discussion points
+
+## What kind of change is this?
+Documentation (adding new community update content)
+
+# Documentation changes needed?
+No additional documentation changes needed - this PR is itself a documentation update.
+
+# Testing
+
+## Where should a reviewer start?
+Review the new file at `docs/community/Streams/01-2025/2025-01-31.md` for:
+- Correct formatting of markdown
+- Accuracy of timestamps and links
+- Proper categorization of updates
+- Spelling and grammar
+
+## Detailed testing steps
+1. Verify markdown renders correctly
+2. Check that all links (YouTube, Twitter Spaces) are valid
+3. Confirm timestamps match with video references
+4. Validate that all sections are properly formatted
+5. Ensure all quoted content matches the stream recording
+
+<!-- If you are on Discord, please join https://discord.gg/elizaOS and state your Discord username here for the contributor role and join us in #development-feed -->
+<!--
+## Discord username
+YoungPhlo
+-->
+b:Tabc,
+
+<!-- Use this template by filling in information and copy and pasting relevant items out of the html comments. -->
+
+# Relates to: 
+
+<!-- LINK TO ISSUE OR TICKET -->
+
+<!-- This risks section is to be filled out before final review and merge. -->
+
+# Risks 
+
+<!--
+Low, medium, large. List what kind of risks, and what could be effected.
+-->
+
+# Background
+As a Windows user unfamiliar with WSL development, it took me hours to successfully set up the environment. Therefore, I suggest including an additional approach specifically tailored for Windows developers like me. I believe this would significantly reduce the time and effort required for others in a similar situation.
+## What does this PR do?
+Added a development approach for Windows Users, only in README file
+
+## What kind of change is this?
+Improvements 
+<!--
+Bug fixes (non-breaking change which fixes an issue)
+Improvements (misc. changes to existing features)
+Features (non-breaking change which adds functionality)
+Updates (new versions of included code)
+-->
+
+<!-- This "Why" section is most relevant if there is no linked issue explaining why. If there is a related issue it might make sense to skip this why section. -->
+<!--
+## Why are we doing this? Any context or related work?
+-->
+Some windows user, may take hours to set up the environment.
+
+# Documentation changes needed?
+
+<!--
+My changes do not require a change to the project documentation.
+My changes require a change to the project documentation.
+If a docs change is needed: I have updated the documentation accordingly.
+-->
+
+<!-- Please show how you tested the PR. This will really help if the PR needs to be retested, and probably help the PR get merged quicker. -->
+
+# Testing
+
+## Where should a reviewer start?
+README
+## Detailed testing steps
+
+<!--
+None, automated tests are fine.
+-->
+
+<!--
+- As [anon/admin], go to [link]
+  - [do action]
+  - verify [result]
+-->
+
+<!-- If there is a UI change, please include before and after screenshots or videos. This will speed up PRs being merged. It is extra nice to annotate screenshots with arrows or boxes pointing out the differences. -->
+<!--
+## Screenshots
+### Before
+### After
+-->
+
+<!-- If there is anything about the deploy, please make a note. -->
+<!--
+# Deploy Notes
+-->
+
+<!--  Copy and paste commandline output. -->
+<!--
+## Database changes
+-->
+
+<!--  If there is something more than the automated steps, please specifiy deploy instructions. -->
+<!--
+## Deployment instructions
+-->
+
+<!-- If you are on Discord, please join https://discord.gg/ai16z and state your Discord username here for contribute role and join us in #development-feed -->
+<!--
+## Discord username
+
+-->
+c:Td1e,On March 5, 2025, ElizaOS focused on significant documentation enhancements and feature additions, including new logging functionality and updates to the quickstart guide. Key progress was made in closing issues related to NFT marketplace and liquidity pool management within the TON Plugin, while new issues emerged concerning Twitter integration and `parseJSONObjectFromText` function bugs.
+
+## ✅ Completed Work
+### Documentation & Community Updates
+- Included notes from weekly contributor meetings on February 18 and February 25 to keep the community informed ([elizaos/eliza#3769](https://github.com/elizaos/eliza/pull/3769)).
+- Added documentation for the "What Did You Get Done This Week? 12" community update ([elizaos/eliza#3768](https://github.com/elizaos/eliza/pull/3768)).
+- Improved clarity and presentation in various documentation pages, including the plugin showcase ([elizaos/eliza#3772](https://github.com/elizaos/eliza/pull/3772)).
+- Updated quickstart documentation with Twitter configuration details to facilitate user setup ([elizaos/eliza#3778](https://github.com/elizaos/eliza/pull/3778)).
+
+### Core Framework Enhancements
+- Added logging functionality to improve tracking and debugging ([elizaos/eliza#3774](https://github.com/elizaos/eliza/pull/3774)).
+
+### TON Plugin Functionality
+- Closed issues related to the integration of NFT marketplace functionalities, including listing, buying, and auctioning capabilities in the TON Plugin ([elizaos/eliza#3034](https://github.com/elizaos/eliza/issues/3034)).
+- Resolved enhancements for liquidity pool management within the TON Plugin, allowing for better automated pool creation and management ([elizaos/eliza#3029](https://github.com/elizaos/eliza/issues/3029)).
+- Finalized the implementation of action sets for NFT creation and management in the TON Plugin ([elizaos/eliza#2962](https://github.com/elizaos/eliza/issues/2962)).
+
+## 🐞 Issue Triage
+### New Issues
+- **elizaos/eliza**:
+    - Reported an issue where the agent fails to post to Twitter due to an unsupported provider, Venice ([elizaos/eliza#3783](https://github.com/elizaos/eliza/issues/3783)).
+    - Identified a bug with the `parseJSONObjectFromText` function, which appears to have broken in version 0.25.9 ([elizaos/eliza#3779](https://github.com/elizaos/eliza/issues/3779)).
+    - Requested the addition of basic DeFi features in the plugin-sui, including creating pools and managing liquidity ([elizaos/eliza#3776](https://github.com/elizaos/eliza/issues/3776)).
+    - Suggested support for token swaps between any pairs in the plugin-sui, expanding its functionality beyond current limitations ([elizaos/eliza#3775](https://github.com/elizaos/eliza/issues/3775)).
+
+### Closed Issues
+- **elizaos/eliza**:
+    - Closed issues related to the integration of NFT marketplace functionalities, including listing, buying, and auctioning capabilities in the TON Plugin ([elizaos/eliza#3034](https://github.com/elizaos/eliza/issues/3034)).
+    - Resolved enhancements for liquidity pool management within the TON Plugin, allowing for better automated pool creation and management ([elizaos/eliza#3029](https://github.com/elizaos/eliza/issues/3029)).
+    - Finalized the implementation of action sets for NFT creation and management in the TON Plugin ([elizaos/eliza#2962](https://github.com/elizaos/eliza/issues/2962)).0:{"buildId":"US8XLB_zHXYj_PVAECGcd","rsc":["$","$1","c",{"children":[["$","div",null,{"className":"container mx-auto px-6 py-8 md:px-8","children":["$","div",null,{"className":"mx-auto max-w-4xl","children":[["$","div",null,{"className":"mb-4 flex flex-col justify-between sm:flex-row","children":[["$","$L2",null,{"currentInterval":"day","currentDate":"2025-03-05"}],["$","$L3",null,{"metrics":{"date":"2025-03-05","interval":{"intervalStart":"$D2025-03-05T00:00:00.000Z","intervalEnd":"$D2025-03-06T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":7,"merged":8,"total":11},"issues":{"new":4,"closed":3,"total":7},"activeContributors":15,"codeChanges":{"additions":1004,"deletions":244,"files":87,"commitCount":30},"topContributors":[{"username":"wtfsayo","avatarUrl":"https://avatars.githubusercontent.com/u/82053242?u=98209a1f10456f42d4d2fa71db4d5bf4a672cbc3&v=4","totalScore":152.0189230974201,"prScore":152.0189230974201,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"wtfsayo: Merged 4 PRs, including a significant feature addition with logs functionality in PR #3774 (+559/-4 lines), while also addressing various chores and improvements. Modified 39 files with a total of +741/-181 lines, focusing primarily on bugfix work (50%) and maintaining a consistent activity pattern."},{"username":"0xBondSUI","avatarUrl":"https://avatars.githubusercontent.com/u/173979004?u=06113793a1ef2ee9c138b2c822caa9014699545b&v=4","totalScore":50.9697738965761,"prScore":42.9697738965761,"issueScore":8,"reviewScore":0,"commentScore":0,"summary":"0xBondSUI: Opened 1 PR (#3777) focused on supporting pool creation and liquidity management, while also creating 2 issues (#3776, #3775) related to pool and token swap functionalities, both of which are now closed. Made significant code changes by modifying 14 files, resulting in a total of +1558 lines added and -222 lines removed, demonstrating a strong focus on feature work today."},{"username":"yungalgo","avatarUrl":"https://avatars.githubusercontent.com/u/113615973?u=92e0f29f7e2fbb8ce46ed13c51f692ca803de02d&v=4","totalScore":32.09712968466856,"prScore":32.09712968466856,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"yungalgo: Opened 1 PR (#3781) focused on general linting and dependency cleanup for the clients/smm agent, while modifying 5 files with a net change of +97/-17 lines across 4 commits, demonstrating a balanced focus on feature work, bug fixes, and other tasks. Active today, maintaining a consistent contribution pattern."},{"username":"Shelpin","avatarUrl":"https://avatars.githubusercontent.com/u/21328788?u=5045227cb8bac2a8d6d1b9117e49411f3c5afef1&v=4","totalScore":20.631573590279974,"prScore":20.631573590279974,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"Shelpin: Merged 1 PR (#3778) related to documentation, updating the quickstart with Twitter configurations (+1/-0 lines). Maintained a consistent activity pattern, focusing entirely on documentation work today."},{"username":"lalalune","avatarUrl":"https://avatars.githubusercontent.com/u/18633264?u=e2e906c3712c2506ebfa98df01c2cfdc50050b30&v=4","totalScore":10.5,"prScore":0,"issueScore":0,"reviewScore":10.5,"commentScore":0,"summary":"lalalune: Engaged in code reviews with a total of 2 reviews, including 1 change request and 1 comment, but did not merge any pull requests or make any code changes today. Activity was sporadic, being active on only 0 out of 1 days this period."},{"username":"odilitime","avatarUrl":"https://avatars.githubusercontent.com/u/16395496?u=c9bac48e632aae594a0d85aaf9e9c9c69b674d8b&v=4","totalScore":10.2,"prScore":0,"issueScore":0,"reviewScore":10,"commentScore":0.2,"summary":"odilitime: Contributed by reviewing 2 pull requests with 2 approvals and leaving 1 comment, demonstrating sporadic activity today."},{"username":"madjin","avatarUrl":"https://avatars.githubusercontent.com/u/32600939?u=cdcf89f44c7a50906c7a80d889efa85023af2049&v=4","totalScore":5.2,"prScore":0,"issueScore":0,"reviewScore":5,"commentScore":0.2,"summary":"madjin: Made significant code changes by modifying 1019 files (+49408/-4621 lines) with a focus on other work (67%) and bugfix work (33%), while also completing 1 review with an approval and leaving 1 comment on a PR. Maintained a consistent activity pattern, being active every day."},{"username":"shakkernerd","avatarUrl":"https://avatars.githubusercontent.com/u/165377636?u=5560dd9f2d310e1ba61dbba864006a951391a582&v=4","totalScore":5,"prScore":0,"issueScore":0,"reviewScore":5,"commentScore":0,"summary":"shakkernerd: Contributed with 1 review, providing 1 approval, but had no merged or open pull requests, issues created, or comments made today. Activity remains sporadic with engagement on only 1 out of the last 1 days."},{"username":"Ulysseus","avatarUrl":"https://avatars.githubusercontent.com/u/10251137?u=aa9b272de836dea86814dafc17c8329a1cc43927&v=4","totalScore":4.3,"prScore":0,"issueScore":4.1,"reviewScore":0,"commentScore":0.2,"summary":"Ulysseus: Created 1 issue (#3783 \"agent won't post to Twitter, Unsupported provider: venice\") which has been closed, and commented on another issue. Activity has been sporadic, with engagement on only 1 out of the last 1 days."},{"username":"notorious-d-e-v","avatarUrl":"https://avatars.githubusercontent.com/u/189247757?u=57d631abf52f54843d1e3e9b3311d5ca4820429a&v=4","totalScore":4,"prScore":0,"issueScore":4,"reviewScore":0,"commentScore":0,"summary":"notorious-d-e-v: Created 1 issue (#3779 \"parseJSONObjectFromText broke in or before 0.25.9\") which has been closed, indicating a focus on addressing a bug. Activity has been sporadic, with no code changes or merged pull requests today."}],"focusAreas":[{"area":"docs/api","count":50},{"area":"cli","count":6},{"area":"client","count":6},{"area":"plugin-tee","count":4},{"area":"docs/community","count":3},{"area":"core","count":3},{"area":"plugin-solana","count":3},{"area":"docs","count":2},{"area":"plugin-discord","count":2},{"area":"agent","count":1}],"topIssues":[{"id":"I_kwDOMT5cIs6sudat","title":"agent won't post to Twitter, Unsupported provider: venice","author":"Ulysseus","number":3783,"repository":"elizaos/eliza","body":"**Describe the bug**\n\n<!-- A clear and concise description of what the bug is. -->\n\n**To Reproduce**\n\n<!-- Steps to reproduce the behavior. -->\n\n**Expected behavior**\n\n<!-- A clear and concise description of what you expected to happen. -->\n\n**Screenshots**\n\n<!-- If applicable, add screenshots to help explain your problem. -->\n\n**Additional context**\n\n<!-- Add any other context about the problem here. -->\n","createdAt":"2025-03-05T16:50:34Z","closedAt":"2025-03-08T01:15:18Z","state":"CLOSED","commentCount":2},{"id":"I_kwDOMT5cIs6sr3ZB","title":"parseJSONObjectFromText broke in or before 0.25.9","author":"notorious-d-e-v","number":3779,"repository":"elizaos/eliza","body":"$4","createdAt":"2025-03-05T12:20:46Z","closedAt":"2025-03-07T07:03:17Z","state":"CLOSED","commentCount":1},{"id":"I_kwDOMT5cIs6sq2aV","title":"Support swap in any token pair in plugin-sui","author":"0xBondSUI","number":3775,"repository":"elizaos/eliza","body":"**Is your feature request related to a problem? Please describe.**\n\nNow, plugin-sui just support swap in sui and usdc, i want to swap between any token pairs.\n\n<!-- A clear and concise description of what the problem is. Ex. I'm always frustrated when [...] -->\n\n**Describe the solution you'd like**\n\n<!-- A clear and concise description of what you want to happen. -->\n\nNone\n\n**Describe alternatives you've considered**\n\n<!-- A clear and concise description of any alternative solutions or features you've considered. -->\n\nNone\n\n**Additional context**\n\n<!-- Add any other context or screenshots about the feature request here. -->\n\nNone\n","createdAt":"2025-03-05T10:27:56Z","closedAt":"2025-03-08T01:15:17Z","state":"CLOSED","commentCount":1},{"id":"I_kwDOMT5cIs6sq33W","title":"Add create pool, open position and add/remove liquidity in plugin-sui","author":"0xBondSUI","number":3776,"repository":"elizaos/eliza","body":"**Is your feature request related to a problem? Please describe.**\n\n<!-- A clear and concise description of what the problem is. Ex. I'm always frustrated when [...] -->\nPlease add more defi basic features in plugin-sui, like:\n- create clmm pool\n- open position with liquidity\n- remove liquidity\n- more..\n\n**Describe the solution you'd like**\nNone\n<!-- A clear and concise description of what you want to happen. -->\n\n**Describe alternatives you've considered**\nNone\n<!-- A clear and concise description of any alternative solutions or features you've considered. -->\n\n**Additional context**\nNone\n<!-- Add any other context or screenshots about the feature request here. -->\n","createdAt":"2025-03-05T10:30:17Z","closedAt":"2025-03-08T01:15:18Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs6oHSRq","title":"NFT Marketplace Integration: Listing, Buying, and Auctioning","author":"alefmanvladimir","number":3034,"repository":"elizaos/eliza","body":"$5","createdAt":"2025-01-30T10:44:56Z","closedAt":"2025-03-05T13:44:59Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs6oGq1P","title":"Extending TON Plugin for Liquidity Pool Management","author":"alefmanvladimir","number":3029,"repository":"elizaos/eliza","body":"$6","createdAt":"2025-01-30T09:30:29Z","closedAt":"2025-03-05T13:45:20Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs6n8RxC","title":"Implement Action Set for NFT Creation & Management in TON Plugin","author":"alefmanvladimir","number":2962,"repository":"elizaos/eliza","body":"$7","createdAt":"2025-01-29T08:55:18Z","closedAt":"2025-03-05T13:45:29Z","state":"CLOSED","commentCount":0}],"topPullRequests":[{"id":"PR_kwDOMT5cIs6NWwZV","title":"chore: improve quickstart, plugin showcase, doc fixes","author":"madjin","number":3772,"body":"Added sidebar to showcase, improved some wording, added new images, cleaned up various pages for clarity","repository":"elizaos/eliza","createdAt":"2025-03-04T18:19:20Z","mergedAt":"2025-03-05T00:42:21Z","additions":31897,"deletions":4381},{"id":"PR_kwDOMT5cIs6NdBKL","title":"feat: support create pool, open position with liquidity and add/remove liquidity in plugin sui","author":"0xBondSUI","number":3777,"body":"$8","repository":"elizaos/eliza","createdAt":"2025-03-05T10:34:30Z","mergedAt":null,"additions":1558,"deletions":222},{"id":"PR_kwDOMT5cIs6NcbpI","title":"feat: add logs functionality","author":"wtfsayo","number":3774,"body":"","repository":"elizaos/eliza","createdAt":"2025-03-05T09:28:09Z","mergedAt":"2025-03-05T09:28:16Z","additions":559,"deletions":4},{"id":"PR_kwDOMT5cIs6Nfz2g","title":"general linting and dep cleanup for clients/smm agent","author":"yungalgo","number":3781,"body":"# Agent Improvements and Build Fixes\r\n\r\n## Summary\r\nThis PR includes several important fixes and improvements to enhance agent functionality and resolve build issues:\r\n\r\n- **Agent Responsiveness**: Improved agent sensitivity to user replies during onboarding processes, creating a more interactive and responsive experience\r\n- **Twitter Integration**: Fixed minor issues in the Social Media Manager's Twitter service integration\r\n- **Build System Fixes**: \r\n  - Added EventEmitter polyfill to resolve Docusaurus documentation build failures\r\n  - Updated dependencies including date-fns and typescript-eslint packages for TypeScript 5 compatibility\r\n\r\nThese changes collectively improve the stability of our build pipeline while enhancing the agent's interaction capabilities.","repository":"elizaos/eliza","createdAt":"2025-03-05T16:03:37Z","mergedAt":null,"additions":301,"deletions":76},{"id":"PR_kwDOMT5cIs6NQ4PP","title":"docs: Add weekly contributor meeting notes (2025-02-18 + 2025-02-25)","author":"YoungPhlo","number":3769,"body":"$9","repository":"elizaos/eliza","createdAt":"2025-03-04T08:10:30Z","mergedAt":"2025-03-05T22:24:40Z","additions":98,"deletions":0},{"id":"PR_kwDOMT5cIs6NPyF8","title":"docs: Add \"What Did You Get Done This Week? 12\" notes","author":"YoungPhlo","number":3768,"body":"$a","repository":"elizaos/eliza","createdAt":"2025-03-04T05:44:11Z","mergedAt":"2025-03-05T21:51:52Z","additions":92,"deletions":0},{"id":"PR_kwDOMT5cIs6NeaQi","title":"chore: v2 lint and docs build stuff","author":"wtfsayo","number":3780,"body":"","repository":"elizaos/eliza","createdAt":"2025-03-05T13:29:48Z","mergedAt":"2025-03-05T13:34:41Z","additions":91,"deletions":40},{"id":"PR_kwDOMT5cIs6NanVQ","title":"chore: v2 specific init changes","author":"wtfsayo","number":3773,"body":"","repository":"elizaos/eliza","createdAt":"2025-03-05T05:33:06Z","mergedAt":"2025-03-05T05:35:12Z","additions":17,"deletions":66},{"id":"PR_kwDOMT5cIs6NhqOE","title":"chore: fix docker build","author":"wtfsayo","number":3784,"body":"","repository":"elizaos/eliza","createdAt":"2025-03-05T19:38:05Z","mergedAt":"2025-03-06T04:29:48Z","additions":2,"deletions":2},{"id":"PR_kwDOMT5cIs6NdyX4","title":"docs: Update quickstart with twitter configs.md","author":"Shelpin","number":3778,"body":"Added TWITTER 2FA secret in the values to config in the env to avoid X preventing the login\r\n\r\n","repository":"elizaos/eliza","createdAt":"2025-03-05T12:09:38Z","mergedAt":"2025-03-05T22:28:57Z","additions":1,"deletions":0},{"id":"PR_kwDOMT5cIs6Ggn78","title":"chore(docs): Added a development approach for Windows Users","author":"matthewhou19","number":1618,"body":"$b","repository":"elizaos/eliza","createdAt":"2024-12-31T20:25:22Z","mergedAt":"2025-03-05T00:42:22Z","additions":0,"deletions":0}],"detailedContributorSummaries":{"0xBondSUI":"0xBondSUI: Opened 1 PR (#3777) focused on supporting pool creation and liquidity management, while also creating 2 issues (#3776, #3775) related to pool and token swap functionalities, both of which are now closed. Made significant code changes by modifying 14 files, resulting in a total of +1558 lines added and -222 lines removed, demonstrating a strong focus on feature work today.","Shelpin":"Shelpin: Merged 1 PR (#3778) related to documentation, updating the quickstart with Twitter configurations (+1/-0 lines). Maintained a consistent activity pattern, focusing entirely on documentation work today.","Ulysseus":"Ulysseus: Created 1 issue (#3783 \"agent won't post to Twitter, Unsupported provider: venice\") which has been closed, and commented on another issue. Activity has been sporadic, with engagement on only 1 out of the last 1 days.","lalalune":"lalalune: Engaged in code reviews with a total of 2 reviews, including 1 change request and 1 comment, but did not merge any pull requests or make any code changes today. Activity was sporadic, being active on only 0 out of 1 days this period.","madjin":"madjin: Made significant code changes by modifying 1019 files (+49408/-4621 lines) with a focus on other work (67%) and bugfix work (33%), while also completing 1 review with an approval and leaving 1 comment on a PR. Maintained a consistent activity pattern, being active every day.","notorious-d-e-v":"notorious-d-e-v: Created 1 issue (#3779 \"parseJSONObjectFromText broke in or before 0.25.9\") which has been closed, indicating a focus on addressing a bug. Activity has been sporadic, with no code changes or merged pull requests today.","odilitime":"odilitime: Contributed by reviewing 2 pull requests with 2 approvals and leaving 1 comment, demonstrating sporadic activity today.","shakkernerd":"shakkernerd: Contributed with 1 review, providing 1 approval, but had no merged or open pull requests, issues created, or comments made today. Activity remains sporadic with engagement on only 1 out of the last 1 days.","wtfsayo":"wtfsayo: Merged 4 PRs, including a significant feature addition with logs functionality in PR #3774 (+559/-4 lines), while also addressing various chores and improvements. Modified 39 files with a total of +741/-181 lines, focusing primarily on bugfix work (50%) and maintaining a consistent activity pattern.","yungalgo":"yungalgo: Opened 1 PR (#3781) focused on general linting and dependency cleanup for the clients/smm agent, while modifying 5 files with a net change of +97/-17 lines across 4 commits, demonstrating a balanced focus on feature work, bug fixes, and other tasks. Active today, maintaining a consistent contribution pattern."}},"summaryContent":"$c","className":"self-end sm:self-start"}]]}],"$Ld","$Le","$Lf"]}]}],["$L10","$L11","$L12"],"$L13"]}],"loading":null,"isPartial":false}
+d:["$","div",null,{"className":"mb-6","children":["$","div",null,{"className":"flex items-center justify-between","children":[[["$","$L14",null,{"href":"/summary/day/2025-03-04","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left mr-2 h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"children":"Previous"}],false],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$L14",null,{"href":"/summary/day/2025-03-04","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-left h-4 w-4","aria-hidden":"true","children":[["$","path","1wnfg3",{"d":"m15 18-6-6 6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Previous"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]],["$","div",null,{"className":"flex flex-col items-center","children":[["$","div",null,{"className":"text-sm font-medium text-gray-500","children":["Daily"," Summary"]}],["$","time",null,{"dateTime":"2025-03-05","className":"text-md font-bold","children":"Mar 5, 2025"}]]}],[["$","$L14",null,{"href":"/summary/day/2025-03-06","children":[false,["$","span",null,{"children":"Next"}],["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right ml-2 h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}]],"className":"justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 hidden items-center sm:flex","ref":null}],["$","$L14",null,{"href":"/summary/day/2025-03-06","children":[["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-chevron-right h-4 w-4","aria-hidden":"true","children":[["$","path","mthhwq",{"d":"m9 18 6-6-6-6"}],"$undefined"]}],["$","span",null,{"className":"sr-only","children":"Next"}]],"className":"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 sm:hidden","ref":null}]]]}]}]
+16:T60c,**Describe the bug**
+
+`parseJSONObjectFromText` broke for me in or before 0.25.9
+It was working OK for me in 0.18
+
+The problem imo is the `normalizeJSONString` function.
+
+**To Reproduce**
+
+1. Run `node` interpreter in your eliza repo.
+2. Run the following:
+```
+const { parseJSONObjectFromText, cleanJsonResponse } = await import("@elizaos/core");
+
+let text = '```json{    "success": true,    "result": {        "serviceAdCID": "zdpuB1ZVfhZFX4iaVhXkyhTuGUhPA1Ac3LuQdSWe9zcdXrKce",        "wallet": "9ovkK7WoiSXyEJDM5cZG3or3W95bdzZLDDHhuMgSJT9U",        "desiredServiceID": "Landing Page Creation",        "desiredUnitAmount": "1"    }}```'
+
+parseJSONObjectFromText(text)
+```
+You will see an error, and then the code tries to handle it by doing `extractAttributes(text)`
+But `extractAttributesText` cannot handle nested objects.
+
+![Image](https://github.com/user-attachments/assets/2cb0d3bc-c662-4f4b-b3b3-59ab0e2f02a0)
+
+**Expected behavior**
+
+In my opinion, running the text through `cleanJsonResponse` and then `JSON.parse` should be enough, as `JSON.parse` handles a lot of the stuff that `normalizeJSONString` is trying to handle.
+
+Additionally, the code should fail if `JSON.parse` can't parse it, instead of trying to fix the problem with `extractAttributesText`.
+That way the user can fix their AI prompt.
+
+![Image](https://github.com/user-attachments/assets/da93c13d-ede8-4e50-bc83-5e069dfa36b3)
+
+
+**Additional context**
+
+Happy to help with this and write some test cases around it. Documenting the issue in case someone gets to it before me.17:T97e,**Description**  
+Extend the TON Plugin to enable AI agents (and other modules) to list NFTs for sale, purchase listed NFTs, and conduct auctions. This new functionality should support creating and managing both fixed-price sales and auction-style listings, allowing bids, retrieving pricing information, and handling related on-chain data for specific NFTs or entire collections.
+
+**Key Requirements**  
+1. **List NFTs for Sale**  
+   - Implement an action to list an NFT for sale at a fixed price.  
+   - Allow customization of parameters such as price, and any additional data.  
+
+2. **Buy Listed NFTs**  
+   - Provide a mechanism for AI agents to purchase NFTs that have been listed for a fixed price.  
+   - Handle payment transactions securely and confirm successful transfers.
+
+3. **Auction Listings**  
+   - Offer actions to create an auction for an NFT, defining starting price, duration, and any bid increment rules.  
+   - Enable cancellation of an auction if no bids have been placed or before a predefined time threshold.
+
+4. **Bidding and Bid Management**  
+   - Implement a bidding system for ongoing auctions, including placing, updating, or canceling bids.  
+   - Return real-time auction status (e.g., highest bid, time remaining) to AI agents.
+
+5. **Price & Bid Information Retrieval**  
+   - Provide a means to fetch pricing data (fixed price or current highest bid), bid history, and overall activity for specific NFTs or entire collections.  
+   - Ensure timely updates and reliable responses to support AI-driven trading or analytics.
+
+**Resources**  
+- [TON Plugin Repository](https://github.com/elizaOS/eliza/tree/develop/packages/plugin-ton)  
+- [TON Documentation](https://docs.ton.org/)  
+- TON NFT standard references (e.g., [TEP-62](https://github.com/ton-blockchain/TEPs/blob/master/text/0062-nft-standard.md))  
+- [GetGems SDK](https://github.com/getgems-io)
+
+**Definition of Done**  
+- Fully functional listings for both fixed-price sales and auctions, with comprehensive test coverage.  
+- Successful purchase and bid flow, verified by unit and integration tests.  
+- Documentation detailing how to list NFTs, buy listed NFTs, create auctions, place bids, and retrieve up-to-date pricing/bid info.
+
+**Bounty**  
+- **Estimated Reward**: \$2000 in TON  
+
+For additional questions or in-depth discussion, join the bounty program working group: [Telegram: @ton_ai_bounty](https://t.me/ton_ai_bounty).18:T88b,**Description**  
+Enhance the TON Plugin within the elizaOS framework to enable the creation and management of liquidity pools on existing TON decentralized exchanges. The plugin should offer robust actions for automated pool creation, liquidity provisioning, and management, integrating seamlessly with AI agents to facilitate advanced, programmatic control of DeFi operations.
+
+**Key Requirements**  
+1. **DEX Integration**  
+   Leverage existing DEX SDKs to create new liquidity pools on supported platforms, handle deposits/withdrawals, and manage fees. The design must remain extendable for future DEX integrations.
+
+2. **Pool Creation & Configuration**  
+   Provide user-friendly actions to define parameters (e.g., token pairs, initial liquidity) and initiate pool creation. Ensure that essential checks are in place to prevent invalid or insecure setups.
+
+3. **Liquidity Management**  
+   Support depositing and withdrawing liquidity, accurately tracking each contributor’s share. LP tokens should be issued/burned, reflecting real-time positions.
+
+4. **Fee Distribution**  
+   Integrate with the underlying DEX’s fee model so that providers can receive rewards proportional to their stakes. Offer methods to retrieve or claim accrued fees.
+
+5. **Security & Best Practices**  
+   Follow TON documentation guidelines and recommended practices from the chosen DEX SDK. Validate input parameters rigorously and manage error handling gracefully.
+
+**Resources**  
+- [List of DEXs](https://github.com/ton-society/ecosystem-map?tab=readme-ov-file#decentralized-exchanges)
+- [TON Documentation](https://docs.ton.org/)  
+
+**Definition of Done**  
+- Successful creation a working set of actions and/or interfaces providing pool creation, deposit, withdrawal, and fee distribution with DEXs
+- Comprehensive test coverage for all newly introduced actions and workflows.  
+- Clear documentation explaining how to configure and invoke these new actions in conjunction with the relevant DEX.
+
+**Bounty**  
+- **Estimated Reward**: $2,000 in TON  
+
+For further discussion or clarification, reach out in the bounty program working group: [Telegram: @ton_ai_bounty](https://t.me/ton_ai_bounty).19:T87d,**Description**  
+Extend the TON Plugin to provide an action set enabling AI agents to create and manage NFTs according to the [TEP-62](https://github.com/ton-blockchain/TEPs/blob/master/text/0062-nft-standard.md) standard. The new actions should handle various NFT workflows, including metadata handling (on-chain/off-chain with IPFS support), minting, transferring, and editing metadata, giving AI agents direct blockchain interaction capabilities.
+
+**Key Requirements**  
+1. **NFT Creation & Metadata Handling**  
+   - Action to initialize an NFT Collection or standalone NFT.  
+   - Provide options for metadata storage: on-chain, off-chain.  
+   - Allow selection of different IPFS providers.  
+
+2. **Mint NFT**  
+   - Action to mint new NFT items within a collection.  
+   - Ensure minted items follow TEP-62 and store or reference metadata appropriately.
+
+3. **Transfer NFT**  
+   - Action to transfer ownership of an existing NFT item.  
+   - Verify that only authorized agents can invoke this action, respecting any access controls.
+
+4. **Edit Metadata**  
+   - Action to update NFT metadata post-mint.  
+   - Support partial or full metadata edits, following on-chain or off-chain constraints.
+
+5. **AI Agent Integration**  
+   - Ensure each action is exposed in a manner that AI agents can call programmatically.  
+   - Provide clear function signatures or APIs for elizaOS modules interacting with these actions.
+
+**Useful Resources**  
+- [TEP-62: TON NFT Stantard](https://github.com/ton-blockchain/TEPs/blob/master/text/0062-nft-standard.md)
+- [Reference NFT implementation](https://github.com/ton-blockchain/token-contract/tree/main/nft)
+
+**Definition of Done**  
+- Deployed and tested actions for NFT creation, minting, transferring, and metadata editing.  
+- Verified interoperability with TEP-62.  
+- Comprehensive test coverage for all newly introduced actions and workflows.
+- Documentation detailing how AI agents can invoke and use each action.  
+
+**Bounty**  
+- **Estimated Reward**: $1500 in TON 
+
+For questions or further discussion, feel free to reach out in the bounty program working group: [Telegram: @ton_ai_bounty](https://t.me/ton_ai_bounty)1a:Tc4a,<!-- Use this template by filling in information and copying and pasting relevant items out of the HTML comments. -->
+
+# Relates to
+
+<!-- LINK TO ISSUE OR TICKET -->
+#3775
+#3776
+<!-- This risks section must be filled out before the final review and merge. -->
+
+# Risks
+
+Low
+<!--
+Low, medium, large. List what kind of risks and what could be affected.
+-->
+
+# Background
+
+## What does this PR do?
+
+1. Enhance Sui Swap by expanding support from only SUI and USDC swaps to supporting swaps for any coin. 
+2. The following four foundational capabilities will be added through integration with Cetus:
+- Create CLMM pools for any token pair.
+- Open positions and add liquidity in any pool.
+- Remove liquidity from any position you hold.
+
+## What kind of change is this?
+
+Improvements & Features
+<!--
+Bug fixes (non-breaking change which fixes an issue)
+Improvements (misc. changes to existing features)
+Features (non-breaking change which adds functionality)
+Updates (new versions of included code)
+-->
+
+<!-- This "Why" section is most relevant if there are no linked issues explaining why. If there is a related issue, it might make sense to skip this why section. -->
+<!--
+## Why are we doing this? Any context or related work?
+-->
+
+# Documentation changes needed?
+My changes do not require a change to the project documentation.
+<!--
+My changes do not require a change to the project documentation.
+My changes require a change to the project documentation.
+If documentation change is needed: I have updated the documentation accordingly.
+-->
+
+<!-- Please show how you tested the PR. This will really help if the PR needs to be retested and probably help the PR get merged quicker. -->
+
+# Testing
+add swap check
+![image](https://github.com/user-attachments/assets/d71b707e-7b8d-45ca-ae9c-38026088ffab)
+
+remove liquidity
+<img width="1378" alt="image" src="https://github.com/user-attachments/assets/753d44f0-a2b1-45ab-9b69-3f30e5876d46" />
+
+open position with liquidity
+<img width="1432" alt="image" src="https://github.com/user-attachments/assets/4aecc1dd-d797-4af3-9235-d898146c1ec8" />
+
+## Where should a reviewer start?
+
+## Detailed testing steps
+
+<!--
+None: Automated tests are acceptable.
+-->
+
+<!--
+- As [anon/admin], go to [link]
+  - [do action]
+  - verify [result]
+-->
+
+<!-- If there is a UI change, please include before and after screenshots or videos. This will speed up PRs being merged. It is extra nice to annotate screenshots with arrows or boxes pointing out the differences. -->
+<!--
+## Screenshots
+### Before
+### After
+-->
+
+<!-- If there is anything about the deployment, please make a note. -->
+<!--
+# Deploy Notes
+-->
+
+<!--  Copy and paste command line output. -->
+<!--
+## Database changes
+-->
+
+<!--  Please specify deploy instructions if there is something more than the automated steps. -->
+<!--
+## Deployment instructions
+-->
+
+<!-- If you are on Discord, please join https://discord.gg/elizaOS and state your Discord username here for the contributor role and join us in #development-feed -->
+<!--
+## Discord username
+
+-->
+1b:T56c,# Relates to
+Documentation updates for weekly contributor meetings
+
+# Risks
+Low - This is a documentation-only change adding meeting notes.
+
+# Background
+
+## What does this PR do?
+Adds meeting notes for two weekly contributor meetings:
+- February 18, 2025 covering plugin ecosystem discussions, Linea blockchain integration, and V2 plugin management
+- February 25, 2025 covering ETH Denver updates and documentation improvements
+
+## What kind of change is this?
+Documentation (adding new meeting notes)
+
+# Documentation changes needed?
+My changes are documentation changes themselves, no additional documentation updates needed.
+
+# Testing
+
+## Where should a reviewer start?
+Review the two new markdown files:
+1. `docs/community/Contributors/weekly-contributor-meeting/2025-02-18.md`
+2. `docs/community/Contributors/weekly-contributor-meeting/2025-02-25.md`
+
+## Detailed testing steps
+1. Verify markdown formatting is correct
+2. Verify dates and titles are consistent with our documentation standards
+3. Verify the frontmatter metadata (title, date, description) is properly formatted
+4. Check that links within the documents (if any) are valid
+
+<!-- If you are on Discord, please join https://discord.gg/elizaOS and state your Discord username here for the contributor role and join us in #development-feed -->
+<!--
+## Discord username
+YoungPhlo
+-->
+1c:T661,# Relates to
+Weekly community updates documentation
+
+# Risks
+Low - This is a documentation-only change adding a new weekly update markdown file.
+
+# Background
+
+## What does this PR do?
+Adds the documentation for "What Did You Get Done This Week? 12" covering ElizaOS 0.1.9 launch and ecosystem updates from January 31, 2025. The document includes:
+- Core ElizaOS improvements and architectural changes
+- Technical innovations in agent communication
+- Agent capabilities and applications development
+- Organizational developments including DUNA DAO framework
+- Partnership and event updates
+- Community hot takes and timestamped discussion points
+
+## What kind of change is this?
+Documentation (adding new community update content)
+
+# Documentation changes needed?
+No additional documentation changes needed - this PR is itself a documentation update.
+
+# Testing
+
+## Where should a reviewer start?
+Review the new file at `docs/community/Streams/01-2025/2025-01-31.md` for:
+- Correct formatting of markdown
+- Accuracy of timestamps and links
+- Proper categorization of updates
+- Spelling and grammar
+
+## Detailed testing steps
+1. Verify markdown renders correctly
+2. Check that all links (YouTube, Twitter Spaces) are valid
+3. Confirm timestamps match with video references
+4. Validate that all sections are properly formatted
+5. Ensure all quoted content matches the stream recording
+
+<!-- If you are on Discord, please join https://discord.gg/elizaOS and state your Discord username here for the contributor role and join us in #development-feed -->
+<!--
+## Discord username
+YoungPhlo
+-->
+1d:Tabc,
+
+<!-- Use this template by filling in information and copy and pasting relevant items out of the html comments. -->
+
+# Relates to: 
+
+<!-- LINK TO ISSUE OR TICKET -->
+
+<!-- This risks section is to be filled out before final review and merge. -->
+
+# Risks 
+
+<!--
+Low, medium, large. List what kind of risks, and what could be effected.
+-->
+
+# Background
+As a Windows user unfamiliar with WSL development, it took me hours to successfully set up the environment. Therefore, I suggest including an additional approach specifically tailored for Windows developers like me. I believe this would significantly reduce the time and effort required for others in a similar situation.
+## What does this PR do?
+Added a development approach for Windows Users, only in README file
+
+## What kind of change is this?
+Improvements 
+<!--
+Bug fixes (non-breaking change which fixes an issue)
+Improvements (misc. changes to existing features)
+Features (non-breaking change which adds functionality)
+Updates (new versions of included code)
+-->
+
+<!-- This "Why" section is most relevant if there is no linked issue explaining why. If there is a related issue it might make sense to skip this why section. -->
+<!--
+## Why are we doing this? Any context or related work?
+-->
+Some windows user, may take hours to set up the environment.
+
+# Documentation changes needed?
+
+<!--
+My changes do not require a change to the project documentation.
+My changes require a change to the project documentation.
+If a docs change is needed: I have updated the documentation accordingly.
+-->
+
+<!-- Please show how you tested the PR. This will really help if the PR needs to be retested, and probably help the PR get merged quicker. -->
+
+# Testing
+
+## Where should a reviewer start?
+README
+## Detailed testing steps
+
+<!--
+None, automated tests are fine.
+-->
+
+<!--
+- As [anon/admin], go to [link]
+  - [do action]
+  - verify [result]
+-->
+
+<!-- If there is a UI change, please include before and after screenshots or videos. This will speed up PRs being merged. It is extra nice to annotate screenshots with arrows or boxes pointing out the differences. -->
+<!--
+## Screenshots
+### Before
+### After
+-->
+
+<!-- If there is anything about the deploy, please make a note. -->
+<!--
+# Deploy Notes
+-->
+
+<!--  Copy and paste commandline output. -->
+<!--
+## Database changes
+-->
+
+<!--  If there is something more than the automated steps, please specifiy deploy instructions. -->
+<!--
+## Deployment instructions
+-->
+
+<!-- If you are on Discord, please join https://discord.gg/ai16z and state your Discord username here for contribute role and join us in #development-feed -->
+<!--
+## Discord username
+
+-->
+e:["$","div",null,{"className":"mb-8 space-y-6","children":[["$","$L15",null,{"metrics":{"date":"2025-03-05","interval":{"intervalStart":"$D2025-03-05T00:00:00.000Z","intervalEnd":"$D2025-03-06T00:00:00.000Z","intervalType":"day"},"pullRequests":{"new":7,"merged":8,"total":11},"issues":{"new":4,"closed":3,"total":7},"activeContributors":15,"codeChanges":{"additions":1004,"deletions":244,"files":87,"commitCount":30},"topContributors":[{"username":"wtfsayo","avatarUrl":"https://avatars.githubusercontent.com/u/82053242?u=98209a1f10456f42d4d2fa71db4d5bf4a672cbc3&v=4","totalScore":152.0189230974201,"prScore":152.0189230974201,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"wtfsayo: Merged 4 PRs, including a significant feature addition with logs functionality in PR #3774 (+559/-4 lines), while also addressing various chores and improvements. Modified 39 files with a total of +741/-181 lines, focusing primarily on bugfix work (50%) and maintaining a consistent activity pattern."},{"username":"0xBondSUI","avatarUrl":"https://avatars.githubusercontent.com/u/173979004?u=06113793a1ef2ee9c138b2c822caa9014699545b&v=4","totalScore":50.9697738965761,"prScore":42.9697738965761,"issueScore":8,"reviewScore":0,"commentScore":0,"summary":"0xBondSUI: Opened 1 PR (#3777) focused on supporting pool creation and liquidity management, while also creating 2 issues (#3776, #3775) related to pool and token swap functionalities, both of which are now closed. Made significant code changes by modifying 14 files, resulting in a total of +1558 lines added and -222 lines removed, demonstrating a strong focus on feature work today."},{"username":"yungalgo","avatarUrl":"https://avatars.githubusercontent.com/u/113615973?u=92e0f29f7e2fbb8ce46ed13c51f692ca803de02d&v=4","totalScore":32.09712968466856,"prScore":32.09712968466856,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"yungalgo: Opened 1 PR (#3781) focused on general linting and dependency cleanup for the clients/smm agent, while modifying 5 files with a net change of +97/-17 lines across 4 commits, demonstrating a balanced focus on feature work, bug fixes, and other tasks. Active today, maintaining a consistent contribution pattern."},{"username":"Shelpin","avatarUrl":"https://avatars.githubusercontent.com/u/21328788?u=5045227cb8bac2a8d6d1b9117e49411f3c5afef1&v=4","totalScore":20.631573590279974,"prScore":20.631573590279974,"issueScore":0,"reviewScore":0,"commentScore":0,"summary":"Shelpin: Merged 1 PR (#3778) related to documentation, updating the quickstart with Twitter configurations (+1/-0 lines). Maintained a consistent activity pattern, focusing entirely on documentation work today."},{"username":"lalalune","avatarUrl":"https://avatars.githubusercontent.com/u/18633264?u=e2e906c3712c2506ebfa98df01c2cfdc50050b30&v=4","totalScore":10.5,"prScore":0,"issueScore":0,"reviewScore":10.5,"commentScore":0,"summary":"lalalune: Engaged in code reviews with a total of 2 reviews, including 1 change request and 1 comment, but did not merge any pull requests or make any code changes today. Activity was sporadic, being active on only 0 out of 1 days this period."},{"username":"odilitime","avatarUrl":"https://avatars.githubusercontent.com/u/16395496?u=c9bac48e632aae594a0d85aaf9e9c9c69b674d8b&v=4","totalScore":10.2,"prScore":0,"issueScore":0,"reviewScore":10,"commentScore":0.2,"summary":"odilitime: Contributed by reviewing 2 pull requests with 2 approvals and leaving 1 comment, demonstrating sporadic activity today."},{"username":"madjin","avatarUrl":"https://avatars.githubusercontent.com/u/32600939?u=cdcf89f44c7a50906c7a80d889efa85023af2049&v=4","totalScore":5.2,"prScore":0,"issueScore":0,"reviewScore":5,"commentScore":0.2,"summary":"madjin: Made significant code changes by modifying 1019 files (+49408/-4621 lines) with a focus on other work (67%) and bugfix work (33%), while also completing 1 review with an approval and leaving 1 comment on a PR. Maintained a consistent activity pattern, being active every day."},{"username":"shakkernerd","avatarUrl":"https://avatars.githubusercontent.com/u/165377636?u=5560dd9f2d310e1ba61dbba864006a951391a582&v=4","totalScore":5,"prScore":0,"issueScore":0,"reviewScore":5,"commentScore":0,"summary":"shakkernerd: Contributed with 1 review, providing 1 approval, but had no merged or open pull requests, issues created, or comments made today. Activity remains sporadic with engagement on only 1 out of the last 1 days."},{"username":"Ulysseus","avatarUrl":"https://avatars.githubusercontent.com/u/10251137?u=aa9b272de836dea86814dafc17c8329a1cc43927&v=4","totalScore":4.3,"prScore":0,"issueScore":4.1,"reviewScore":0,"commentScore":0.2,"summary":"Ulysseus: Created 1 issue (#3783 \"agent won't post to Twitter, Unsupported provider: venice\") which has been closed, and commented on another issue. Activity has been sporadic, with engagement on only 1 out of the last 1 days."},{"username":"notorious-d-e-v","avatarUrl":"https://avatars.githubusercontent.com/u/189247757?u=57d631abf52f54843d1e3e9b3311d5ca4820429a&v=4","totalScore":4,"prScore":0,"issueScore":4,"reviewScore":0,"commentScore":0,"summary":"notorious-d-e-v: Created 1 issue (#3779 \"parseJSONObjectFromText broke in or before 0.25.9\") which has been closed, indicating a focus on addressing a bug. Activity has been sporadic, with no code changes or merged pull requests today."}],"focusAreas":[{"area":"docs/api","count":50},{"area":"cli","count":6},{"area":"client","count":6},{"area":"plugin-tee","count":4},{"area":"docs/community","count":3},{"area":"core","count":3},{"area":"plugin-solana","count":3},{"area":"docs","count":2},{"area":"plugin-discord","count":2},{"area":"agent","count":1}],"topIssues":[{"id":"I_kwDOMT5cIs6sudat","title":"agent won't post to Twitter, Unsupported provider: venice","author":"Ulysseus","number":3783,"repository":"elizaos/eliza","body":"**Describe the bug**\n\n<!-- A clear and concise description of what the bug is. -->\n\n**To Reproduce**\n\n<!-- Steps to reproduce the behavior. -->\n\n**Expected behavior**\n\n<!-- A clear and concise description of what you expected to happen. -->\n\n**Screenshots**\n\n<!-- If applicable, add screenshots to help explain your problem. -->\n\n**Additional context**\n\n<!-- Add any other context about the problem here. -->\n","createdAt":"2025-03-05T16:50:34Z","closedAt":"2025-03-08T01:15:18Z","state":"CLOSED","commentCount":2},{"id":"I_kwDOMT5cIs6sr3ZB","title":"parseJSONObjectFromText broke in or before 0.25.9","author":"notorious-d-e-v","number":3779,"repository":"elizaos/eliza","body":"$16","createdAt":"2025-03-05T12:20:46Z","closedAt":"2025-03-07T07:03:17Z","state":"CLOSED","commentCount":1},{"id":"I_kwDOMT5cIs6sq2aV","title":"Support swap in any token pair in plugin-sui","author":"0xBondSUI","number":3775,"repository":"elizaos/eliza","body":"**Is your feature request related to a problem? Please describe.**\n\nNow, plugin-sui just support swap in sui and usdc, i want to swap between any token pairs.\n\n<!-- A clear and concise description of what the problem is. Ex. I'm always frustrated when [...] -->\n\n**Describe the solution you'd like**\n\n<!-- A clear and concise description of what you want to happen. -->\n\nNone\n\n**Describe alternatives you've considered**\n\n<!-- A clear and concise description of any alternative solutions or features you've considered. -->\n\nNone\n\n**Additional context**\n\n<!-- Add any other context or screenshots about the feature request here. -->\n\nNone\n","createdAt":"2025-03-05T10:27:56Z","closedAt":"2025-03-08T01:15:17Z","state":"CLOSED","commentCount":1},{"id":"I_kwDOMT5cIs6sq33W","title":"Add create pool, open position and add/remove liquidity in plugin-sui","author":"0xBondSUI","number":3776,"repository":"elizaos/eliza","body":"**Is your feature request related to a problem? Please describe.**\n\n<!-- A clear and concise description of what the problem is. Ex. I'm always frustrated when [...] -->\nPlease add more defi basic features in plugin-sui, like:\n- create clmm pool\n- open position with liquidity\n- remove liquidity\n- more..\n\n**Describe the solution you'd like**\nNone\n<!-- A clear and concise description of what you want to happen. -->\n\n**Describe alternatives you've considered**\nNone\n<!-- A clear and concise description of any alternative solutions or features you've considered. -->\n\n**Additional context**\nNone\n<!-- Add any other context or screenshots about the feature request here. -->\n","createdAt":"2025-03-05T10:30:17Z","closedAt":"2025-03-08T01:15:18Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs6oHSRq","title":"NFT Marketplace Integration: Listing, Buying, and Auctioning","author":"alefmanvladimir","number":3034,"repository":"elizaos/eliza","body":"$17","createdAt":"2025-01-30T10:44:56Z","closedAt":"2025-03-05T13:44:59Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs6oGq1P","title":"Extending TON Plugin for Liquidity Pool Management","author":"alefmanvladimir","number":3029,"repository":"elizaos/eliza","body":"$18","createdAt":"2025-01-30T09:30:29Z","closedAt":"2025-03-05T13:45:20Z","state":"CLOSED","commentCount":0},{"id":"I_kwDOMT5cIs6n8RxC","title":"Implement Action Set for NFT Creation & Management in TON Plugin","author":"alefmanvladimir","number":2962,"repository":"elizaos/eliza","body":"$19","createdAt":"2025-01-29T08:55:18Z","closedAt":"2025-03-05T13:45:29Z","state":"CLOSED","commentCount":0}],"topPullRequests":[{"id":"PR_kwDOMT5cIs6NWwZV","title":"chore: improve quickstart, plugin showcase, doc fixes","author":"madjin","number":3772,"body":"Added sidebar to showcase, improved some wording, added new images, cleaned up various pages for clarity","repository":"elizaos/eliza","createdAt":"2025-03-04T18:19:20Z","mergedAt":"2025-03-05T00:42:21Z","additions":31897,"deletions":4381},{"id":"PR_kwDOMT5cIs6NdBKL","title":"feat: support create pool, open position with liquidity and add/remove liquidity in plugin sui","author":"0xBondSUI","number":3777,"body":"$1a","repository":"elizaos/eliza","createdAt":"2025-03-05T10:34:30Z","mergedAt":null,"additions":1558,"deletions":222},{"id":"PR_kwDOMT5cIs6NcbpI","title":"feat: add logs functionality","author":"wtfsayo","number":3774,"body":"","repository":"elizaos/eliza","createdAt":"2025-03-05T09:28:09Z","mergedAt":"2025-03-05T09:28:16Z","additions":559,"deletions":4},{"id":"PR_kwDOMT5cIs6Nfz2g","title":"general linting and dep cleanup for clients/smm agent","author":"yungalgo","number":3781,"body":"# Agent Improvements and Build Fixes\r\n\r\n## Summary\r\nThis PR includes several important fixes and improvements to enhance agent functionality and resolve build issues:\r\n\r\n- **Agent Responsiveness**: Improved agent sensitivity to user replies during onboarding processes, creating a more interactive and responsive experience\r\n- **Twitter Integration**: Fixed minor issues in the Social Media Manager's Twitter service integration\r\n- **Build System Fixes**: \r\n  - Added EventEmitter polyfill to resolve Docusaurus documentation build failures\r\n  - Updated dependencies including date-fns and typescript-eslint packages for TypeScript 5 compatibility\r\n\r\nThese changes collectively improve the stability of our build pipeline while enhancing the agent's interaction capabilities.","repository":"elizaos/eliza","createdAt":"2025-03-05T16:03:37Z","mergedAt":null,"additions":301,"deletions":76},{"id":"PR_kwDOMT5cIs6NQ4PP","title":"docs: Add weekly contributor meeting notes (2025-02-18 + 2025-02-25)","author":"YoungPhlo","number":3769,"body":"$1b","repository":"elizaos/eliza","createdAt":"2025-03-04T08:10:30Z","mergedAt":"2025-03-05T22:24:40Z","additions":98,"deletions":0},{"id":"PR_kwDOMT5cIs6NPyF8","title":"docs: Add \"What Did You Get Done This Week? 12\" notes","author":"YoungPhlo","number":3768,"body":"$1c","repository":"elizaos/eliza","createdAt":"2025-03-04T05:44:11Z","mergedAt":"2025-03-05T21:51:52Z","additions":92,"deletions":0},{"id":"PR_kwDOMT5cIs6NeaQi","title":"chore: v2 lint and docs build stuff","author":"wtfsayo","number":3780,"body":"","repository":"elizaos/eliza","createdAt":"2025-03-05T13:29:48Z","mergedAt":"2025-03-05T13:34:41Z","additions":91,"deletions":40},{"id":"PR_kwDOMT5cIs6NanVQ","title":"chore: v2 specific init changes","author":"wtfsayo","number":3773,"body":"","repository":"elizaos/eliza","createdAt":"2025-03-05T05:33:06Z","mergedAt":"2025-03-05T05:35:12Z","additions":17,"deletions":66},{"id":"PR_kwDOMT5cIs6NhqOE","title":"chore: fix docker build","author":"wtfsayo","number":3784,"body":"","repository":"elizaos/eliza","createdAt":"2025-03-05T19:38:05Z","mergedAt":"2025-03-06T04:29:48Z","additions":2,"deletions":2},{"id":"PR_kwDOMT5cIs6NdyX4","title":"docs: Update quickstart with twitter configs.md","author":"Shelpin","number":3778,"body":"Added TWITTER 2FA secret in the values to config in the env to avoid X preventing the login\r\n\r\n","repository":"elizaos/eliza","createdAt":"2025-03-05T12:09:38Z","mergedAt":"2025-03-05T22:28:57Z","additions":1,"deletions":0},{"id":"PR_kwDOMT5cIs6Ggn78","title":"chore(docs): Added a development approach for Windows Users","author":"matthewhou19","number":1618,"body":"$1d","repository":"elizaos/eliza","createdAt":"2024-12-31T20:25:22Z","mergedAt":"2025-03-05T00:42:22Z","additions":0,"deletions":0}],"detailedContributorSummaries":{"0xBondSUI":"0xBondSUI: Opened 1 PR (#3777) focused on supporting pool creation and liquidity management, while also creating 2 issues (#3776, #3775) related to pool and token swap functionalities, both of which are now closed. Made significant code changes by modifying 14 files, resulting in a total of +1558 lines added and -222 lines removed, demonstrating a strong focus on feature work today.","Shelpin":"Shelpin: Merged 1 PR (#3778) related to documentation, updating the quickstart with Twitter configurations (+1/-0 lines). Maintained a consistent activity pattern, focusing entirely on documentation work today.","Ulysseus":"Ulysseus: Created 1 issue (#3783 \"agent won't post to Twitter, Unsupported provider: venice\") which has been closed, and commented on another issue. Activity has been sporadic, with engagement on only 1 out of the last 1 days.","lalalune":"lalalune: Engaged in code reviews with a total of 2 reviews, including 1 change request and 1 comment, but did not merge any pull requests or make any code changes today. Activity was sporadic, being active on only 0 out of 1 days this period.","madjin":"madjin: Made significant code changes by modifying 1019 files (+49408/-4621 lines) with a focus on other work (67%) and bugfix work (33%), while also completing 1 review with an approval and leaving 1 comment on a PR. Maintained a consistent activity pattern, being active every day.","notorious-d-e-v":"notorious-d-e-v: Created 1 issue (#3779 \"parseJSONObjectFromText broke in or before 0.25.9\") which has been closed, indicating a focus on addressing a bug. Activity has been sporadic, with no code changes or merged pull requests today.","odilitime":"odilitime: Contributed by reviewing 2 pull requests with 2 approvals and leaving 1 comment, demonstrating sporadic activity today.","shakkernerd":"shakkernerd: Contributed with 1 review, providing 1 approval, but had no merged or open pull requests, issues created, or comments made today. Activity remains sporadic with engagement on only 1 out of the last 1 days.","wtfsayo":"wtfsayo: Merged 4 PRs, including a significant feature addition with logs functionality in PR #3774 (+559/-4 lines), while also addressing various chores and improvements. Modified 39 files with a total of +741/-181 lines, focusing primarily on bugfix work (50%) and maintaining a consistent activity pattern.","yungalgo":"yungalgo: Opened 1 PR (#3781) focused on general linting and dependency cleanup for the clients/smm agent, while modifying 5 files with a net change of +97/-17 lines across 4 commits, demonstrating a balanced focus on feature work, bug fixes, and other tasks. Active today, maintaining a consistent contribution pattern."}}}],"$L1e"]}]
+f:["$","div",null,{"className":"prose prose-sm mx-auto mt-8 dark:prose-invert sm:prose lg:prose-lg xl:prose-xl","children":[["$","p","p-0",{"children":["On March 5, 2025, ElizaOS focused on significant documentation enhancements and feature additions, including new logging functionality and updates to the quickstart guide. Key progress was made in closing issues related to NFT marketplace and liquidity pool management within the TON Plugin, while new issues emerged concerning Twitter integration and ",["$","code","code-0",{"children":"parseJSONObjectFromText"}]," function bugs."]}],"\n",["$","h2","h2-0",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"✅ Completed Work","position":{"start":{"line":3,"column":4,"offset":397},"end":{"line":3,"column":20,"offset":413}}}],"position":{"start":{"line":3,"column":1,"offset":394},"end":{"line":3,"column":20,"offset":413}}},"children":"✅ Completed Work"}],"\n",["$","h3","h3-0",{"children":"Documentation & Community Updates"}],"\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["Included notes from weekly contributor meetings on February 18 and February 25 to keep the community informed (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/3769","children":"elizaos/eliza#3769"}],")."]}],"\n",["$","li","li-1",{"children":["Added documentation for the \"What Did You Get Done This Week? 12\" community update (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/3768","children":"elizaos/eliza#3768"}],")."]}],"\n",["$","li","li-2",{"children":["Improved clarity and presentation in various documentation pages, including the plugin showcase (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/3772","children":"elizaos/eliza#3772"}],")."]}],"\n",["$","li","li-3",{"children":["Updated quickstart documentation with Twitter configuration details to facilitate user setup (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/3778","children":"elizaos/eliza#3778"}],")."]}],"\n"]}],"\n",["$","h3","h3-1",{"children":"Core Framework Enhancements"}],"\n",["$","ul","ul-1",{"children":["\n",["$","li","li-0",{"children":["Added logging functionality to improve tracking and debugging (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/pull/3774","children":"elizaos/eliza#3774"}],")."]}],"\n"]}],"\n",["$","h3","h3-2",{"children":"TON Plugin Functionality"}],"\n",["$","ul","ul-2",{"children":["\n",["$","li","li-0",{"children":["Closed issues related to the integration of NFT marketplace functionalities, including listing, buying, and auctioning capabilities in the TON Plugin (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/3034","children":"elizaos/eliza#3034"}],")."]}],"\n",["$","li","li-1",{"children":["Resolved enhancements for liquidity pool management within the TON Plugin, allowing for better automated pool creation and management (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/3029","children":"elizaos/eliza#3029"}],")."]}],"\n",["$","li","li-2",{"children":["Finalized the implementation of action sets for NFT creation and management in the TON Plugin (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/2962","children":"elizaos/eliza#2962"}],")."]}],"\n"]}],"\n",["$","h2","h2-1",{"className":"lowercase","node":{"type":"element","tagName":"h2","properties":{},"children":[{"type":"text","value":"🐞 Issue Triage","position":{"start":{"line":18,"column":4,"offset":1907},"end":{"line":18,"column":19,"offset":1922}}}],"position":{"start":{"line":18,"column":1,"offset":1904},"end":{"line":18,"column":19,"offset":1922}}},"children":"🐞 Issue Triage"}],"\n",["$","h3","h3-3",{"children":"New Issues"}],"\n",["$","ul","ul-3",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"elizaos/eliza"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["Reported an issue where the agent fails to post to Twitter due to an unsupported provider, Venice (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/3783","children":"elizaos/eliza#3783"}],")."]}],"\n","$L1f","\n","$L20","\n","$L21","\n"]}],"\n"]}],"\n"]}],"\n","$L22","\n","$L23"]}]
+10:["$","script","script-0",{"src":"/eliza-leaderboard/_next/static/chunks/a400816e9dd4d7a4.js","async":true}]
+11:["$","script","script-1",{"src":"/eliza-leaderboard/_next/static/chunks/4f6f1c9ebd75e684.js","async":true}]
+12:["$","script","script-2",{"src":"/eliza-leaderboard/_next/static/chunks/2d734ad4b9b36e9e.js","async":true}]
+13:["$","$L24",null,{"children":["$","$25",null,{"name":"Next.MetadataOutlet","children":"$@26"}]}]
+1e:["$","div",null,{"className":"rounded-lg border bg-card text-card-foreground shadow-sm","children":[["$","div",null,{"className":"flex flex-col space-y-1.5 p-6 py-4","children":["$","div",null,{"className":"tracking-tight text-sm font-medium","children":["$undefined","Code Changes"]}]}],["$","div",null,{"className":"p-6 pt-0","children":["$","div",null,{"className":"grid grid-cols-2 gap-4 md:grid-cols-4","children":[["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-git-commit-vertical h-5 w-5","aria-hidden":"true","children":[["$","path","1holv5",{"d":"M12 3v6"}],["$","circle","1v7zrd",{"cx":"12","cy":"12","r":"3"}],["$","path","a9ows0",{"d":"M12 15v6"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":30}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Commits"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-primary/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-file-code h-5 w-5","aria-hidden":"true","children":[["$","path","1oefj6",{"d":"M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"}],["$","path","wfsgrz",{"d":"M14 2v5a1 1 0 0 0 1 1h5"}],["$","path","1tg20x",{"d":"M10 12.5 8 15l2 2.5"}],["$","path","yinavb",{"d":"m14 12.5 2 2.5-2 2.5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold","children":87}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Files Changed"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-green-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-up h-5 w-5 text-green-500","aria-hidden":"true","children":[["$","path","hav0vg",{"d":"m5 12 7-7 7 7"}],["$","path","x0mq9r",{"d":"M12 19V5"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-green-500","children":"+1,004"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Added"}]]}]]}],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-full bg-red-500/10","children":["$","svg",null,{"xmlns":"http://www.w3.org/2000/svg","width":24,"height":24,"viewBox":"0 0 24 24","fill":"none","stroke":"currentColor","strokeWidth":2,"strokeLinecap":"round","strokeLinejoin":"round","className":"lucide lucide-arrow-down h-5 w-5 text-red-500","aria-hidden":"true","children":[["$","path","s699le",{"d":"M12 5v14"}],["$","path","1idqje",{"d":"m19 12-7 7-7-7"}],"$undefined"]}]}],["$","div",null,{"children":[["$","div",null,{"className":"text-xl font-bold text-red-500","children":"-244"}],["$","div",null,{"className":"text-xs text-muted-foreground","children":"Lines Deleted"}]]}]]}]]}]}]]}]
+1f:["$","li","li-1",{"children":["Identified a bug with the ",["$","code","code-0",{"children":"parseJSONObjectFromText"}]," function, which appears to have broken in version 0.25.9 (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/3779","children":"elizaos/eliza#3779"}],")."]}]
+20:["$","li","li-2",{"children":["Requested the addition of basic DeFi features in the plugin-sui, including creating pools and managing liquidity (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/3776","children":"elizaos/eliza#3776"}],")."]}]
+21:["$","li","li-3",{"children":["Suggested support for token swaps between any pairs in the plugin-sui, expanding its functionality beyond current limitations (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/3775","children":"elizaos/eliza#3775"}],")."]}]
+22:["$","h3","h3-4",{"children":"Closed Issues"}]
+23:["$","ul","ul-4",{"children":["\n",["$","li","li-0",{"children":[["$","strong","strong-0",{"children":"elizaos/eliza"}],":","\n",["$","ul","ul-0",{"children":["\n",["$","li","li-0",{"children":["Closed issues related to the integration of NFT marketplace functionalities, including listing, buying, and auctioning capabilities in the TON Plugin (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/3034","children":"elizaos/eliza#3034"}],")."]}],"\n",["$","li","li-1",{"children":["Resolved enhancements for liquidity pool management within the TON Plugin, allowing for better automated pool creation and management (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/3029","children":"elizaos/eliza#3029"}],")."]}],"\n",["$","li","li-2",{"children":["Finalized the implementation of action sets for NFT creation and management in the TON Plugin (",["$","a","a-0",{"href":"https://github.com/elizaos/eliza/issues/2962","children":"elizaos/eliza#2962"}],")."]}],"\n"]}],"\n"]}],"\n"]}]
+26:null

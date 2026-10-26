@@ -1,0 +1,1336 @@
+{
+  "interval": {
+    "intervalStart": "2025-06-29T00:00:00.000Z",
+    "intervalEnd": "2025-07-06T00:00:00.000Z",
+    "intervalType": "week"
+  },
+  "repository": "elizaos/eliza",
+  "overview": "From 2025-06-29 to 2025-07-06, elizaos/eliza had 91 new PRs (75 merged), 14 new issues, and 23 active contributors.",
+  "topIssues": [
+    {
+      "id": "I_kwDOMT5cIs69hVkJ",
+      "title": "Migrate remaining CLI input methods to use @clack/prompts for consistency",
+      "author": "wtfsayo",
+      "number": 5295,
+      "repository": "elizaos/eliza",
+      "body": "# Migrate remaining CLI input methods to use @clack/prompts for consistency\n\n## 🎯 Summary\n\nCurrently, the CLI uses a mix of input libraries (`inquirer`, Bun's global `prompt()`, and `@clack/prompts`). We should standardize on `@clack/prompts` for a consistent user experience and better styling across all CLI interactions.\n\n## 📋 Current State\n\nMost of the CLI already uses `@clack/prompts` properly, but there are **2 main files** still using other input methods:\n\n### 1. `src/utils/plugin-creator.ts` - Using `inquirer` 📦\n\nThis file has multiple `inquirer.prompt()` calls that need to be migrated:\n\n- **Plugin specification collection** (~line 172-290):\n  - Plugin name input\n  - Plugin description input  \n  - Plugin features input\n  - Component selection (checkbox)\n  - Action names input\n  - Provider names input\n  - Evaluator names input\n  - Service names input\n\n### 2. `scripts/generate-unit-tests.ts` - Using global `prompt()` 🔧\n\n- **Test generation confirmation** (~line 165):\n  ```typescript\n  const answer = prompt('Generate tests? (y/n): ');\n  ```\n\n## ✨ Benefits of Migration\n\n1. **Consistent UX** - All CLI interactions will have the same look and feel\n2. **Better styling** - Clack provides superior visual design and animations\n3. **Better error handling** - Clack has built-in cancellation handling\n4. **Reduced dependencies** - Can remove `inquirer` from package.json\n5. **Type safety** - Better TypeScript integration\n\n## 🔧 Implementation Examples\n\n### For `plugin-creator.ts`:\n\n**Before (inquirer):**\n```typescript\nconst answers = await inquirer.prompt([\n  {\n    type: 'input',\n    name: 'name',\n    message: 'Plugin name (without \"plugin-\" prefix):',\n    validate: (input: string) => input.length > 0 || 'Plugin name is required'\n  }\n]);\n```\n\n**After (clack):**\n```typescript\nconst name = await clack.text({\n  message: 'Plugin name (without \"plugin-\" prefix):',\n  validate: (input) => input.length > 0 ? undefined : 'Plugin name is required'\n});\n\nif (clack.isCancel(name)) {\n  clack.cancel('Operation cancelled.');\n  process.exit(0);\n}\n```\n\n### For `generate-unit-tests.ts`:\n\n**Before:**\n```typescript\nconst answer = prompt('Generate tests? (y/n): ');\n```\n\n**After:**\n```typescript\nconst answer = await clack.confirm({\n  message: 'Generate tests?',\n  initialValue: true\n});\n\nif (clack.isCancel(answer)) {\n  console.log('Cancelled.');\n  return;\n}\n```\n\n## ✅ Reference Files (Already Using Clack)\n\nThese files are already properly implemented and serve as good examples:\n- `src/commands/create/actions/creators.ts`\n- `src/commands/create/index.ts`\n- `src/commands/env/actions/edit.ts`\n- `src/commands/publish/utils/validation.ts`\n- `src/utils/cli-prompts.ts`\n\n## ✅ Acceptance Criteria\n\n- [ ] Replace all `inquirer.prompt()` calls in `plugin-creator.ts` with clack equivalents\n- [ ] Replace global `prompt()` call in `generate-unit-tests.ts` with clack\n- [ ] Remove `inquirer` dependency from `package.json` if no longer used elsewhere\n- [ ] Ensure all prompts handle cancellation properly (ctrl+c)\n- [ ] Test plugin creation flow works identically to current behavior\n- [ ] Test unit test generation script works identically to current behavior\n- [ ] Maintain existing validation logic and error messages\n- [ ] Update any related TypeScript types if needed\n\n## 🎯 Priority\n\n**Medium** - This improves developer experience and code consistency but doesn't affect core functionality.\n\n## 💡 Implementation Notes\n\n- The `generate-unit-tests.ts` part would be a good **beginner-friendly** task\n- The `plugin-creator.ts` part is more complex due to multiple sequential prompts\n- Consider breaking this into two separate PRs if needed\n- Make sure to test the checkbox selection for component types in plugin creation\n\n---\n\n**Note**: The majority of the CLI already uses clack properly - this is just cleaning up the last few stragglers to ensure complete consistency across the entire CLI experience.",
+      "createdAt": "2025-06-26T16:14:01Z",
+      "closedAt": "2025-07-04T07:16:46Z",
+      "state": "CLOSED",
+      "commentCount": 3
+    },
+    {
+      "id": "I_kwDOMT5cIs68jIbD",
+      "title": "fix: ensure `bun run test` works consistently across all packages",
+      "author": "wtfsayo",
+      "number": 5218,
+      "repository": "elizaos/eliza",
+      "body": "## Problem\n\nCurrently, `bun run test` does not work consistently across all packages in the ElizaOS monorepo. This creates several issues:\n\n1. **Inconsistent Developer Experience**: Developers cannot reliably run tests in individual packages\n2. **CI/CD Fragility**: The root `bun test` command fails, making it difficult to validate changes\n3. **Low Test Coverage**: Only 28% of source files have tests (excluding dist files)\n4. **Missing Test Infrastructure**: 29% of packages have no test scripts defined\n\n### Current State Analysis\n\n**Test Coverage by Package:**\n- ✅ **10/14 packages (71%)** have test scripts defined\n- ❌ **4/14 packages (29%)** have no test infrastructure\n- 🔴 Root `bun test` fails due to `@elizaos/plugin-bootstrap` mock initialization errors\n\n**Packages with Issues:**\n1. **No Tests At All:**\n   - `@elizaos/app` - Tauri application\n   - `@elizaos/autodoc` - Documentation generator\n   - `create-eliza` - Scaffolding tool\n   - `@elizaos/docs` - Docusaurus site (expected)\n\n2. **Failing Tests:**\n   - `@elizaos/plugin-bootstrap` - Mock initialization errors\n   - `@elizaos/project-tee-starter` - Environment setup issues\n\n3. **Excluded from Root Tests:**\n   - `@elizaos/plugin-starter` (template)\n   - `@elizaos/docs` (documentation)\n   - `@elizaos/plugin-sql` (has tests but excluded)\n\n## Proposed Solution\n\nImplement a phased approach to ensure all packages have working tests:\n\n### Phase 1: Fix Failing Tests (Priority: High)\n- [ ] Fix `@elizaos/plugin-bootstrap` mock initialization errors\n- [ ] Fix `@elizaos/project-tee-starter` environment setup issues\n- [ ] Ensure root `bun test` command passes\n\n### Phase 2: Add Missing Test Infrastructure (Priority: High)\n- [ ] Add test setup to `@elizaos/app` (Tauri app testing)\n- [ ] Add test setup to `@elizaos/autodoc`\n- [ ] Add test setup to `create-eliza`\n- [ ] Create minimal test files to validate setup\n\n### Phase 3: Standardize Test Configuration (Priority: Medium)\n- [ ] Create shared test configuration for consistency\n- [ ] Standardize coverage reporting (exclude dist/, build/, node_modules/)\n- [ ] Add coverage thresholds per package\n- [ ] Ensure all packages use Bun test runner consistently\n\n### Phase 4: Documentation & CI Updates (Priority: Medium)\n- [ ] Update contributing guide with testing requirements\n- [ ] Add pre-commit hooks for test validation\n- [ ] Update CI workflows to run package-specific tests\n- [ ] Create testing best practices documentation\n\n## Implementation Details\n\n### 1. Shared Test Configuration\nCreate a base test configuration that all packages can extend:\n\n```typescript\n// packages/test-config/base.config.ts\nexport default {\n  testMatch: [\"**/*.test.ts\", \"**/*.spec.ts\"],\n  coverage: {\n    exclude: [\n      \"**/dist/**\",\n      \"**/build/**\",\n      \"**/node_modules/**\",\n      \"**/*.d.ts\",\n      \"**/coverage/**\"\n    ],\n    threshold: {\n      statements: 60,\n      branches: 60,\n      functions: 60,\n      lines: 60\n    }\n  }\n}\n```\n\n### 2. Package Test Script Standardization\nEnsure every package.json has:\n```json\n{\n  \"scripts\": {\n    \"test\": \"bun test\",\n    \"test:coverage\": \"bun test --coverage\"\n  }\n}\n```\n\n### 3. Fix Root Test Command\nUpdate root package.json to handle package-specific test requirements:\n```json\n{\n  \"scripts\": {\n    \"test\": \"turbo run test --filter=\\!@elizaos/docs --filter=\\!@elizaos/plugin-starter\"\n  }\n}\n```\n\n## Success Criteria\n\n- [ ] `bun run test` works in every package directory\n- [ ] Root `bun test` command passes without errors\n- [ ] All packages have at least minimal test coverage\n- [ ] Test coverage reporting excludes dist/build artifacts\n- [ ] CI/CD pipeline runs all tests successfully\n- [ ] Developer documentation updated with testing guidelines\n\n## Benefits\n\n1. **Improved Developer Experience**: Consistent testing commands across all packages\n2. **Better Code Quality**: Increased test coverage from 28% to target 60%+\n3. **Reliable CI/CD**: All PRs validated with comprehensive test suite\n4. **Easier Onboarding**: New contributors can confidently run tests\n5. **Reduced Bugs**: Catch issues early with standardized testing\n\n## Alternatives Considered\n\n1. **Using Different Test Runners**: Considered Jest/Vitest but Bun test is already established\n2. **Monorepo-level Testing Only**: Would miss package-specific issues\n3. **Excluding Packages from Testing**: Would leave gaps in coverage\n\n## Additional Context\n\n- Current test coverage is ~28% (excluding dist files)\n- The monorepo uses Turbo for orchestration\n- Bun test runner is the standard across the project\n- Some packages have E2E tests (client) that need special handling\n\nThis improvement will significantly enhance the development workflow and code quality across the ElizaOS project.",
+      "createdAt": "2025-06-20T13:18:54Z",
+      "closedAt": "2025-07-02T11:54:24Z",
+      "state": "CLOSED",
+      "commentCount": 2
+    },
+    {
+      "id": "I_kwDOMT5cIs6-uqs2",
+      "title": "Review actions tab in GUI",
+      "author": "borisudovicic",
+      "number": 5377,
+      "repository": "elizaos/eliza",
+      "body": "",
+      "createdAt": "2025-07-03T16:09:48Z",
+      "closedAt": "2025-07-06T11:02:33Z",
+      "state": "CLOSED",
+      "commentCount": 2
+    },
+    {
+      "id": "I_kwDOMT5cIs65Y6DK",
+      "title": "Client hot reloads in dev",
+      "author": "lalalune",
+      "number": 4889,
+      "repository": "elizaos/eliza",
+      "body": "Right now we have to rebuild and restart to see any UI changes, would be really nice to have hot reload",
+      "createdAt": "2025-06-02T13:56:56Z",
+      "closedAt": "2025-07-03T15:22:43Z",
+      "state": "CLOSED",
+      "commentCount": 1
+    },
+    {
+      "id": "I_kwDOMT5cIs69Gbj2",
+      "title": "Create custom plugin for onchain AI agent",
+      "author": "yehia67",
+      "number": 5260,
+      "repository": "elizaos/eliza",
+      "body": "\n**Describe the bug**\nI am creating a plugin to manage the Biconomy wallet with Chainlink automation & functions. It is hard to use Eliza as the agent that only supports one message, then stop using plugins and do everything from the AI model and simulate on-chain action, although I added all the actions to use it correctly.\n\n\nThe ElizaOS framework (v0.0.12) has significant reliability issues when developing custom plugins. The primary issues include:\n1. Action triggers frequently return responses from the AI model itself rather than executing the defined handler functions\n2. The debugging tools are non-functional, making troubleshooting nearly impossible\n3. Error handling is minimal or absent, with cryptic error messages like \"message: \"(Error) Message content or data is missing \" without proper stack traces. I know it from my code, but with no debugger, now I am supposed to use the `logger.debug` everywhere and redo steps, which almost take forever\n4. Database connection failures occur without clear resolution paths\n```\n[2025-06-24 15:24:48] ERROR: [CUSTOM MIGRATOR] Database connection failed: Aborted(). Build with -sASSERTIONS for more info.\nTrace: Error: Database migration failed: Database connection failed: Aborted(). Build with -sASSERTIONS for more info.\n    at AgentServer.initialize (file:///Users/yehiatarek/Documents/projects/ai%20agents/ai-agent-defi-consultant/agent/node_modules/@elizaos/server/dist/index.js:5617:15)\n    at async startAgents (file:///Users/yehiatarek/Documents/projects/ai%20agents/ai-agent-defi-consultant/agent/node_modules/@elizaos/cli/dist/index.js:3062:3)\n    at async Command.<anonymous> (file:///Users/yehiatarek/Documents/projects/ai%20agents/ai-agent-defi-consultant/agent/node_modules/@elizaos/cli/dist/index.js:3147:5)\n    at async Command.parseAsync (/Users/yehiatarek/Documents/projects/ai agents/ai-agent-defi-consultant/agent/node_modules/commander/lib/command.js:1123:5)\n    at async main (file:///Users/yehiatarek/Documents/projects/ai%20agents/ai-agent-defi-consultant/agent/node_modules/@elizaos/cli/dist/index.js:3780:3)\n    at console.trace (file:///Users/yehiatarek/Documents/projects/ai%20agents/ai-agent-defi-consultant/agent/node_modules/@sentry/core/build/esm/instrument/console.js:36:14)\n    at AgentServer.initialize (file:///Users/yehiatarek/Documents/projects/ai%20agents/ai-agent-defi-consultant/agent/node_modules/@elizaos/server/dist/index.js:5630:15)\n    at async startAgents (file:///Users/yehiatarek/Documents/projects/ai%20agents/ai-agent-defi-consultant/agent/node_modules/@elizaos/cli/dist/index.js:3062:3)\n    at async Command.<anonymous> (file:///Users/yehiatarek/Documents/projects/ai%20agents/ai-agent-defi-consultant/agent/node_modules/@elizaos/cli/dist/index.js:3147:5)\n    at async Command.parseAsync (/Users/yehiatarek/Documents/projects/ai agents/ai-agent-defi-consultant/agent/node_modules/commander/lib/command.js:1123:5)\n    at async main (file:///Users/yehiatarek/Documents/projects/ai%20agents/ai-agent-defi-consultant/agent/node_modules/@elizaos/cli/dist/index.js:3780:3)\n[2025-06-24 15:24:48] ERROR: [CUSTOM MIGRATOR] Stack trace: RuntimeError: Aborted(). Build with -sASSERTIONS for more info.\n    at abort (file:///Users/yehiatarek/Documents/projects/ai%20agents/ai-agent-defi-consultant/agent/node_modules/@electric-sql/pglite/dist/index.js:1:78978)\n    at __abort_js (file:///Users/yehiatarek/Documents/projects/ai%20agents/ai-agent-defi-consultant/agent/node_modules/@electric-sql/pglite/dist/index.js:2:64321)\n    at wasm://wasm/02190c76:wasm-function[1366]:0xe49a5\n    at wasm://wasm/02190c76:wasm-function[122]:0x13aa1\n    at wasm://wasm/02190c76:wasm-function[2987]:0x1ba700\n    at wasm://wasm/02190c76:wasm-function[9372]:0x49939b\n    at Module._pgl_backend (file:///Users/yehiatarek/Documents/projects/ai%20agents/ai-agent-defi-consultant/agent/node_modules/@electric-sql/pglite/dist/index.js:3:28022)\n    at ue.De (file:///Users/yehiatarek/Documents/projects/ai%20agents/ai-agent-defi-consultant/agent/node_modules/@electric-sql/pglite/dist/index.js:3:253696)\n    at async ue._checkReady (file:///Users/yehiatarek/Documents/projects/ai%20agents/ai-agent-defi-consultant/agent/node_modules/@electric-sql/pglite/dist/index.js:3:248130)\n    at async ue.query (file:///Users/yehiatarek/Documents/projects/ai%20agents/ai-agent-defi-consultant/agent/node_modules/@electric-sql/pglite/dist/chunk-TGYMLQND.js:8:255)\n    at async file:///Users/yehiatarek/Documents/projects/ai%20agents/ai-agent-defi-consultant/agent/node_modules/drizzle-orm/pglite/session.js:67:16\n    at async PglitePreparedQuery.queryWithCache (file:///Users/yehiatarek/Documents/projects/ai%20agents/ai-agent-defi-consultant/agent/node_modules/drizzle-orm/pg-core/session.js:40:16)\n    at async runPluginMigrations (file:///Users/yehiatarek/Documents/projects/ai%20agents/ai-agent-defi-consultant/agent/node_modules/@elizaos/plugin-sql/dist/index.js:4073:5)\n    at async DatabaseMigrationService.runAllPluginMigrations (file:///Users/yehiatarek/Documents/projects/ai%20agents/ai-agent-defi-consultant/agent/node_modules/@elizaos/plugin-sql/dist/index.js:4182:7)\n    at async AgentServer.initialize (file:///Users/yehiatarek/Documents/projects/ai%20agents/ai-agent-defi-consultant/agent/node_modules/@elizaos/server/dist/index.js:5613:9)\n    at async startAgents (file:///Users/yehiatarek/Documents/projects/ai%20agents/ai-agent-defi-consultant/agent/node_modules/@elizaos/cli/dist/index.js:3062:3)\n    at async Command.<anonymous> (file:///Users/yehiatarek/Documents/projects/ai%20agents/ai-agent-defi-consultant/agent/node_modules/@elizaos/cli/dist/index.js:3147:5)\n    at async Command.parseAsync (/Users/yehiatarek/Documents/projects/ai agents/ai-agent-defi-consultant/agent/node_modules/commander/lib/command.js:1123:5)\n    at async main (file:///Users/yehiatarek/Documents/projects/ai%20agents/ai-agent-defi-consultant/agent/node_modules/@elizaos/cli/dist/index.js:3780:3)\n[2025-06-24 15:24:48] ERROR: [INIT] Failed to run database migrations:\n    message: \"(Error) Database connection failed: Aborted(). Build with -sASSERTIONS for more info.\"\n    stack: [\n      \"Error: Database connection failed: Aborted(). Build with -sASSERTIONS for more info.\",\n      \"at runPluginMigrations (file:///Users/yehiatarek/Documents/projects/ai%20agents/ai-agent-defi-consultant/agent/node_modules/@elizaos/plugin-sql/dist/index.js:4081:11)\",\n      \"at async DatabaseMigrationService.runAllPluginMigrations (file:///Users/yehiatarek/Documents/projects/ai%20agents/ai-agent-defi-consultant/agent/node_modules/@elizaos/plugin-sql/dist/index.js:4182:7)\",\n      \"at async AgentServer.initialize (file:///Users/yehiatarek/Documents/projects/ai%20agents/ai-agent-defi-consultant/agent/node_modules/@elizaos/server/dist/index.js:5613:9)\",\n      \"at async startAgents (file:///Users/yehiatarek/Documents/projects/ai%20agents/ai-agent-defi-consultant/agent/node_modules/@elizaos/cli/dist/index.js:3062:3)\",\n      \"at async Command.<anonymous> (file:///Users/yehiatarek/Documents/projects/ai%20agents/ai-agent-defi-consultant/agent/node_modules/@elizaos/cli/dist/index.js:3147:5)\",\n      \"at async Command.parseAsync (/Users/yehiatarek/Documents/projects/ai agents/ai-agent-defi-consultant/agent/node_modules/commander/lib/command.js:1123:5)\",\n      \"at async main (file:///Users/yehiatarek/Documents/projects/ai%20agents/ai-agent-defi-consultant/agent/node_modules/@elizaos/cli/dist/index.js:3780:3)\"\n    ]\n[2025-06-24 15:24:48] ERROR: Failed to initialize AgentServer (async operations):\n    message: \"(Error) Database migration failed: Database connection failed: Aborted(). Build with -sASSERTIONS for more info.\"\n    stack: [\n      \"Error: Database migration failed: Database connection failed: Aborted(). Build with -sASSERTIONS for more info.\",\n      \"at AgentServer.initialize (file:///Users/yehiatarek/Documents/projects/ai%20agents/ai-agent-defi-consultant/agent/node_modules/@elizaos/server/dist/index.js:5617:15)\",\n      \"at async startAgents (file:///Users/yehiatarek/Documents/projects/ai%20agents/ai-agent-defi-consultant/agent/node_modules/@elizaos/cli/dist/index.js:3062:3)\",\n      \"at async Command.<anonymous> (file:///Users/yehiatarek/Documents/projects/ai%20agents/ai-agent-defi-consultant/agent/node_modules/@elizaos/cli/dist/index.js:3147:5)\",\n      \"at async Command.parseAsync (/Users/yehiatarek/Documents/projects/ai agents/ai-agent-defi-consultant/agent/node_modules/commander/lib/command.js:1123:5)\",\n      \"at async main (file:///Users/yehiatarek/Documents/projects/ai%20agents/ai-agent-defi-consultant/agent/node_modules/@elizaos/cli/dist/index.js:3780:3)\"\n    ]\n[2025-06-24 15:24:48] ERROR: An error occurred:\n    message: \"(Error) Database migration failed: Database connection failed: Aborted(). Build with -sASSERTIONS for more info.\"\n    stack: [\n      \"Error: Database migration failed: Database connection failed: Aborted(). Build with -sASSERTIONS for more info.\",\n      \"at AgentServer.initialize (file:///Users/yehiatarek/Documents/projects/ai%20agents/ai-agent-defi-consultant/agent/node_modules/@elizaos/server/dist/index.js:5617:15)\",\n      \"at async startAgents (file:///Users/yehiatarek/Documents/projects/ai%20agents/ai-agent-defi-consultant/agent/node_modules/@elizaos/cli/dist/index.js:3062:3)\",\n      \"at async Command.<anonymous> (file:///Users/yehiatarek/Documents/projects/ai%20agents/ai-agent-defi-consultant/agent/node_modules/@elizaos/cli/dist/index.js:3147:5)\",\n      \"at async Command.parseAsync (/Users/yehiatarek/Documents/projects/ai agents/ai-agent-defi-consultant/agent/node_modules/commander/lib/command.js:1123:5)\",\n      \"at async main (file:///Users/yehiatarek/Documents/projects/ai%20agents/ai-agent-defi-consultant/agent/node_modules/@elizaos/cli/dist/index.js:3780:3)\"\n    ]\n[2025-06-24 15:24:48] ERROR: Error details: Database migration failed: Database connection failed: Aborted(). Build with -sASSERTIONS for more info.\n[2025-06-24 15:24:48] ERROR: Stack trace: Error: Database migration failed: Database connection failed: Aborted(). Build with -sASSERTIONS for more info.\n    at AgentServer.initialize (file:///Users/yehiatarek/Documents/projects/ai%20agents/ai-agent-defi-consultant/agent/node_modules/@elizaos/server/dist/index.js:5617:15)\n    at async startAgents (file:///Users/yehiatarek/Documents/projects/ai%20agents/ai-agent-defi-consultant/agent/node_modules/@elizaos/cli/dist/index.js:3062:3)\n    at async Command.<anonymous> (file:///Users/yehiatarek/Documents/projects/ai%20agents/ai-agent-defi-consultant/agent/node_modules/@elizaos/cli/dist/index.js:3147:5)\n    at async Command.parseAsync (/Users/yehiatarek/Documents/projects/ai agents/ai-agent-defi-consultant/agent/node_modules/commander/lib/command.js:1123:5)\n    at async main (file:///Users/yehiatarek/Documents/projects/ai%20agents/ai-agent-defi-consultant/agent/node_modules/@elizaos/cli/dist/index.js:3780:3)\n```\n5. The plugin-evm integration is particularly problematic, with the agent consistently struggling to differentiate between executing actual on-chain transactions and merely simulating them\nThese issues severely impact our timeline for the Chainlink Chromium hackathon project.\n\n**To Reproduce**\n\n1. Create a custom plugin with defined actions (e.g., our smart-wallet-plugin with CREATE_BICONOMY_WALLET action)\n2. Attempt to trigger the action through the agent interface\n3. Observe that the system returns a generic AI response instead of executing the handler function. \n4. When errors occur, observe that the error messages lack context or actionable information\n5. Attempt to use the debugging tools and observe that they fail to provide useful information\n\n**Expected behavior**\n\n1. When an action is triggered, the corresponding handler function should execute reliably\n2. Error messages should provide clear context, including the specific issue, location, and potential resolution\n3. Debugging tools should function properly, allowing developers to trace execution flow\n4. Database connections should be reliable or provide clear error messages with resolution steps\n5. Documentation should accurately reflect the current API and provide troubleshooting guidance\n\n**Screenshots**\n\n![Image](https://github.com/user-attachments/assets/38ef9343-0280-4f09-8c55-adb474b02f9b)\n![Image](https://github.com/user-attachments/assets/dc2aa091-595f-4d37-b2f6-69d701c2d3c8)\n![Image](https://github.com/user-attachments/assets/03a06bd6-4c58-4da8-9b23-2b7f27b31fea)\n![Image](https://github.com/user-attachments/assets/fc025bc6-5f57-43c7-a1ac-c7ab9612420c)\n![Image](https://github.com/user-attachments/assets/d117bec6-5960-4c6d-9028-2210a0616bf1)\n![Image](https://github.com/user-attachments/assets/1dfbc39f-c6c1-46ba-9550-4dcddd0cff4d)\n\n**Additional context**\n\nWe upgraded from v0.0.11 (which had message loading issues) to v0.0.12, but continue to experience significant development challenges. The framework's instability is particularly problematic given our tight timeline for the Chainlink Chromium hackathon. The most frustrating aspect is the inconsistency between documentation examples and actual runtime behaviour, especially regarding action handling and plugin integration.\n\nConclusion: All I want is a way to make sure actions are getting triggered instead of the AI model replying to me with a simulation with 0 on-chain action\n",
+      "createdAt": "2025-06-24T16:19:58Z",
+      "closedAt": "2025-06-30T12:08:51Z",
+      "state": "CLOSED",
+      "commentCount": 1
+    }
+  ],
+  "topPRs": [
+    {
+      "id": "PR_kwDOMT5cIs6aFGnn",
+      "title": "feat: updated plugin migrator",
+      "author": "samarth30",
+      "number": 5066,
+      "body": "This pull request introduces several enhancements and new features to the plugin migration system, focusing on improving test generation, repository analysis, and environment variable management. The most significant changes include the introduction of a context-aware test generation system, updates to repository analysis logic, and improvements to environment variable prompting. Additionally, configuration constants and export structure have been updated for better maintainability.\r\n\r\n### Context-Aware Test Generation\r\n* Added a new system for generating plugin-specific tests dynamically based on the plugin's actual structure and functionality. This replaces the old static template system, ensuring more relevant and accurate tests. (`CONTEXT_AWARE_TESTING.md`)\r\n\r\n### Repository Analysis Enhancements\r\n* Implemented a repository analyzer that scans a plugin's directory for key files (`README.md`, `package.json`, `index.ts/js`) and source files while respecting token limits and skipping large or binary files. (`repository-analyzer.ts`)\r\n\r\n### Environment Variable Management\r\n* Introduced `EnvPrompter`, a utility for interactive collection and validation of environment variables, with support for sensitive values and default descriptions. (`env-prompter.ts`)\r\n\r\n### Configuration Updates\r\n* Added new configuration constants for migration, including `MAX_TOKENS`, `CLAUDE_CODE_TIMEOUT`, and `MIN_DISK_SPACE_GB`, to centralize and standardize settings. (`config.ts`)\r\n\r\n### Export Structure Improvements\r\n* Updated the export structure in `index.ts` to include new components like `EnvPrompter`, `ContextAwareTestGenerator`, and configuration constants, ensuring better modularity and accessibility. (`index.ts`)<!-- Use this template by filling in information and copying and pasting relevant items out of the HTML comments. -->\r\n\r\n",
+      "repository": "elizaos/eliza",
+      "createdAt": "2025-06-11T18:02:27Z",
+      "mergedAt": null,
+      "additions": 46293,
+      "deletions": 1326
+    },
+    {
+      "id": "PR_kwDOMT5cIs6ddQIv",
+      "title": "feat: implement comprehensive documentation overhaul with two-track system",
+      "author": "SYMBaiEX",
+      "number": 5401,
+      "body": "## Summary\n\nThis PR implements a comprehensive documentation overhaul addressing issue #5234, creating a two-track documentation system that serves both simple users (\"vibecoders\") and developers with distinct, focused experiences.\n\n## Key Features Implemented\n\n### 🎯 Two-Track Documentation Architecture\n- **Simple Track**: Streamlined quick-start guides for non-technical users\n- **Technical Track**: Deep technical documentation for developers\n- **Customize Track**: Advanced customization and plugin development guides\n\n### 🚀 Enhanced User Experience\n- **Glass Morphism Design System**: Modern, polished UI with smooth animations\n- **Smart Search**: AI-powered search with contextual suggestions\n- **Improved Navigation**: Clear separation between user types and content tracks\n- **RSS Integration**: Fixed RSS button styling to match GitHub button design\n\n### 📚 Content Improvements\n- **Restructured FAQ**: Comprehensive answers addressing common issues\n- **Updated Configuration**: Environment variable standardization and examples\n- **Better API Documentation**: Enhanced REST API docs with Socket.IO examples\n- **Visual Design**: Consistent theming with #f2f2f2 light theme background\n\n### 🔧 Technical Enhancements\n- **Performance Optimizations**: Reduced transitions and improved theme switching\n- **Component Architecture**: Modular search components with AI integration\n- **Layout Fixes**: Resolved gaps, sticky positioning, and responsive design issues\n- **Build Warnings**: Fixed missing documentation files and broken links\n\n## Addresses Issue #5234 Requirements\n\n✅ **Clear Audience Separation**: Distinct tracks for different user types\n✅ **Progressive Disclosure**: Simple → Technical → Advanced progression\n✅ **Visual Learning**: Enhanced UI with glassmorphic design elements\n✅ **Better Navigation**: Streamlined sidebar and navbar organization\n✅ **Technical Deep Dives**: Architecture explanations and development guides\n✅ **Quick Start Experience**: Simplified onboarding for non-technical users\n\n## Technical Changes\n\n### Documentation Structure\n- Implemented three-track architecture (Simple, Technical, Customize)\n- Updated sidebar configuration with collapsed states\n- Enhanced DocItem components with AI assistant integration\n\n### Design System\n- Glass morphism effects with proper backdrop blur and transparency\n- Optimized color scheme using #f2f2f2 for light theme consistency\n- Fixed RSS button styling to match existing GitHub button design\n- Improved theme switching performance with reduced transition durations\n\n### Search & Navigation\n- Smart search component with AI-powered suggestions\n- Enhanced semantic search capabilities using Lunr.js\n- Fixed navigation redirects and removed redundant components\n- Improved accessibility and keyboard navigation\n\n### Performance & UX\n- Reduced motion for users with accessibility preferences\n- CSS containment for better rendering performance\n- Optimized theme switching with minimal layout shift\n- Fixed sidebar gaps and sticky positioning issues\n\n## Files Changed\n\n### Core Documentation Files\n- `packages/docs/docs/faq.md` - Comprehensive FAQ updates\n- `packages/docs/docs/intro.mdx` - Updated introduction with track navigation\n- `packages/docs/docs/simple/intro.md` - New simple track entry point\n\n### Configuration & Structure\n- `packages/docs/docusaurus.config.ts` - RSS, AI, and plugin configuration\n- `packages/docs/sidebars.ts` - Three-track sidebar architecture\n- `packages/docs/package.json` - Updated dependencies and scripts\n\n### Design & Components\n- `packages/docs/src/css/custom.css` - Complete design system overhaul\n- `packages/docs/src/components/SmartSearch/index.tsx` - AI-powered search\n- `packages/docs/src/theme/DocItem/Content/index.js` - AI assistant integration\n- `packages/docs/src/theme/Root/index.js` - Optimized navigation and redirects\n\n### API Documentation\n- `packages/docs/docs/rest/socket-io-real-time-connection.api.mdx` - Enhanced Socket.IO docs\n\n## Testing\n\n- ✅ All build processes complete successfully\n- ✅ Documentation renders correctly across all tracks\n- ✅ Search functionality works with both regular and AI-enhanced modes\n- ✅ Theme switching performs smoothly without layout shifts\n- ✅ RSS feeds and external links function properly\n- ✅ Mobile and desktop responsive design verified\n\n## Breaking Changes\n\nNone. All changes are additive and maintain backward compatibility with existing documentation links and structure.\n\n## Next Steps\n\nThis foundation enables:\n1. **Content Migration**: Moving existing docs into appropriate tracks\n2. **Template Gallery**: Adding pre-built agent templates\n3. **Video Tutorials**: Integration points for multimedia content\n4. **Interactive Examples**: Framework for hands-on documentation\n5. **Community Contributions**: Clear structure for community-generated content\n\n## Impact\n\n- **Simple Users**: Can now get started in under 5 minutes with clear, focused guidance\n- **Developers**: Have access to deep technical documentation and architecture explanations\n- **Contributors**: Benefit from improved development workflows and clearer project structure\n- **Overall Project**: Professional, polished documentation that matches ElizaOS product quality\n\nThis PR represents the foundation for a world-class documentation experience that serves all ElizaOS users effectively.\n\n<!-- This is an auto-generated comment: release notes by coderabbit.ai -->\n\n## Summary by CodeRabbit\n\n* **New Features**\n  * Introduced extensive new documentation for ElizaOS, including quick start guides, agent customization tools, platform integration setup (Discord, Telegram, Twitter), plugin development interfaces, and advanced configuration options.\n  * Added guides and UI documentation for analytics, validation frameworks, visual customization, feature workshops, and accessibility within the design system.\n  * Expanded documentation structure with separate tracks for simple and technical users, and detailed FAQs.\n\n* **Documentation**\n  * Added comprehensive API, CLI, and customization documentation, including markdown and MDX files for setup, usage, best practices, and troubleshooting.\n  * Enhanced design system docs with guidelines on accessibility, performance, components, implementation, and animation.\n  * Updated and improved documentation formatting, structure, and navigation.\n  * Added new tags for blog posts and improved environment configuration examples.\n\n* **Style**\n  * Improved formatting and consistency across documentation files, including whitespace, headings, and code snippets.\n\n* **Chores**\n  * Added new scripts for documentation development and startup.\n  * Removed deprecated or redundant configuration and documentation files.\n\n<!-- end of auto-generated comment: release notes by coderabbit.ai -->",
+      "repository": "elizaos/eliza",
+      "createdAt": "2025-07-04T14:30:08Z",
+      "mergedAt": "2025-07-06T08:15:11Z",
+      "additions": 26647,
+      "deletions": 579
+    },
+    {
+      "id": "PR_kwDOMT5cIs6bGryt",
+      "title": "Fix/summarized tweet interval issue",
+      "author": "crypto-cooker",
+      "number": 5177,
+      "body": "This PR fixed Milli bot issue that is not posting summarized tweet in time interval that is set in .env.\r\n\r\nhttps://github.com/orgs/abstractoperators/projects/4/views/1?pane=issue&itemId=115868311&issue=abstractoperators%7Caiden%7C166",
+      "repository": "elizaos/eliza",
+      "createdAt": "2025-06-18T15:55:17Z",
+      "mergedAt": null,
+      "additions": 16855,
+      "deletions": 80117
+    },
+    {
+      "id": "PR_kwDOMT5cIs6dlDSZ",
+      "title": "fix: issue 5407 windows plugin loading",
+      "author": "ai16z-demirix",
+      "number": 5415,
+      "body": "<!-- Use this template by filling in information and copying and pasting relevant items out of the HTML comments. -->\r\n\r\n# Relates to\r\nhttps://github.com/elizaOS/eliza/issues/5407\r\n<!-- LINK TO ISSUE OR TICKET -->\r\n\r\n<!-- This risks section must be filled out before the final review and merge. -->\r\n\r\n# Risks\r\n\r\n<!--\r\nLow, medium, large. List what kind of risks and what could be affected.\r\n-->\r\nMedium: this affects plugin loading\r\n# Background\r\n\r\n## What does this PR do?\r\nFixed Windows plugin loading by:\r\n\r\n1. Added path.normalize() to ensure cross-platform path separators\r\n2. Created a Windows-specific pnpm fallback strategy\r\n3. Added glob dependency for more robust path resolution\r\n\r\n## What kind of change is this?\r\n\r\n<!--\r\nBug fixes (non-breaking change which fixes an issue)\r\nImprovements (misc. changes to existing features)\r\nFeatures (non-breaking change which adds functionality)\r\nUpdates (new versions of included code)\r\n-->\r\nImprovement: plugin loading \r\n<!-- This \"Why\" section is most relevant if there are no linked issues explaining why. If there is a related issue, it might make sense to skip this why section. -->\r\n<!--\r\n## Why are we doing this? Any context or related work?\r\n-->\r\nhttps://github.com/elizaOS/eliza/issues/5407\r\n# Documentation changes needed?\r\n\r\n<!--\r\nMy changes do not require a change to the project documentation.\r\nMy changes require a change to the project documentation.\r\nIf documentation change is needed: I have updated the documentation accordingly.\r\n-->\r\n\r\n<!-- Please show how you tested the PR. This will really help if the PR needs to be retested and probably help the PR get merged quicker. -->\r\n\r\n# Testing\r\n\r\n## Where should a reviewer start?\r\n\r\n## Detailed testing steps\r\n\r\n<!--\r\nNone: Automated tests are acceptable.\r\n-->\r\n\r\n<!--\r\n- As [anon/admin], go to [link]\r\n  - [do action]\r\n  - verify [result]\r\n-->\r\n\r\n<!-- If there is a UI change, please include before and after screenshots or videos. This will speed up PRs being merged. It is extra nice to annotate screenshots with arrows or boxes pointing out the differences. -->\r\n<!--\r\n## Screenshots\r\n### Before\r\n### After\r\n-->\r\n\r\n<!-- If there is anything about the deployment, please make a note. -->\r\n<!--\r\n# Deploy Notes\r\n-->\r\n\r\n<!--  Copy and paste command line output. -->\r\n<!--\r\n## Database changes\r\n-->\r\n\r\n<!--  Please specify deploy instructions if there is something more than the automated steps. -->\r\n<!--\r\n## Deployment instructions\r\n-->\r\n\r\n<!-- If you are on Discord, please join https://discord.gg/ai16z and state your Discord username here for the contributor role and join us in #development-feed -->\r\n<!--\r\n## Discord username\r\n\r\n-->\r\n",
+      "repository": "elizaos/eliza",
+      "createdAt": "2025-07-05T19:23:39Z",
+      "mergedAt": null,
+      "additions": 8965,
+      "deletions": 3131
+    },
+    {
+      "id": "PR_kwDOMT5cIs6clTBC",
+      "title": "feat: plugins upgrade with claude code",
+      "author": "0xbbjoker",
+      "number": 5311,
+      "body": "\n\n<!-- This is an auto-generated comment: release notes by coderabbit.ai -->\n\n## Summary by CodeRabbit\n\n* **New Features**\n  * Introduced an AI-powered migration tool for upgrading ElizaOS plugins from version 0.x to 1.x, featuring a stepwise, gated process with detailed progress reporting and validation at each stage.\n  * Added advanced migration guides and comprehensive documentation covering configuration, state management, providers, prompt generation, and testing.\n  * Extended CLI options for the upgrade command, including verbosity controls and confirmation skipping.\n\n* **Bug Fixes**\n  * Improved error handling and user messaging during the migration process.\n\n* **Documentation**\n  * Added detailed migration, prompt, state, provider, and testing guides to assist plugin developers with the upgrade process.\n\n* **Chores**\n  * Updated dependencies to support the new migration workflow.\n\n<!-- end of auto-generated comment: release notes by coderabbit.ai -->",
+      "repository": "elizaos/eliza",
+      "createdAt": "2025-06-29T15:07:06Z",
+      "mergedAt": "2025-07-01T12:49:28Z",
+      "additions": 6050,
+      "deletions": 1089
+    }
+  ],
+  "codeChanges": {
+    "additions": 14829,
+    "deletions": 6524,
+    "files": 168,
+    "commitCount": 469
+  },
+  "completedItems": [
+    {
+      "title": "Feature: Add ELIZA_UI_ENABLE environment variable to toggle Web UI availability",
+      "prNumber": 5304,
+      "type": "feature",
+      "body": "# Add ELIZA_UI_ENABLE environment variable to control web UI in production\r\n\r\n## Problem\r\n\r\nelizaOS currently serves the web UI to anyone who can reach the server. While there's `ELIZA_SERVER_AUTH_TOKEN` for API endpoints, the web interface",
+      "files": [
+        ".env.example",
+        "bun.lock",
+        "packages/plugin-sql/package.json",
+        "packages/server/src/__tests__/basic-functionality.test.ts",
+        "packages/server/src/__tests__/ui-disable-feature.test.ts",
+        "packages/server/src/index.ts"
+      ]
+    },
+    {
+      "title": "docs: enhance plugin-bootstrap requirements documentation",
+      "prNumber": 5309,
+      "type": "docs",
+      "body": "## Summary\n\nEnhances documentation to clearly communicate that plugin-bootstrap is mandatory for communication and basic agent functionality unless doing heavy customizations.\n\n## Changes Made\n\n### 📚 Documentation Updates\n\n- **FAQ Section*",
+      "files": [
+        "README.md",
+        "packages/docs/docs/core/plugins.md",
+        "packages/docs/docs/faq.md",
+        "packages/docs/docs/quickstart.md"
+      ]
+    },
+    {
+      "title": "fix: increase character file size limit to 2MB",
+      "prNumber": 5308,
+      "type": "bugfix",
+      "body": "## Summary\n- Fixes #5268 by increasing Express JSON payload limit from 100KB to 2MB\n- Adds comprehensive regression test to prevent future issues\n- Addresses user reports of 150KB character files failing with \"request entity too large\" erro",
+      "files": [
+        "packages/server/src/__tests__/character-file-size-regression.test.ts",
+        "packages/server/src/index.ts"
+      ]
+    },
+    {
+      "title": "feat: plugins upgrade with claude code",
+      "prNumber": 5311,
+      "type": "feature",
+      "body": "\n\n<!-- This is an auto-generated comment: release notes by coderabbit.ai -->\n\n## Summary by CodeRabbit\n\n* **New Features**\n  * Introduced an AI-powered migration tool for upgrading ElizaOS plugins from version 0.x to 1.x, featuring a stepwi",
+      "files": [
+        "bun.lock",
+        "packages/cli/package.json",
+        "packages/cli/src/commands/plugins/actions/upgrade.ts",
+        "packages/cli/src/commands/plugins/index.ts",
+        "packages/cli/src/commands/plugins/types.ts",
+        "packages/cli/src/utils/upgrade/gates/gate-0-branch.ts",
+        "packages/cli/src/utils/upgrade/gates/gate-1-analysis.ts",
+        "packages/cli/src/utils/upgrade/gates/gate-2-setup.ts",
+        "packages/cli/src/utils/upgrade/gates/gate-3-build.ts",
+        "packages/cli/src/utils/upgrade/gates/gate-4-typescript.ts",
+        "packages/cli/src/utils/upgrade/gates/gate-5-migration.ts",
+        "packages/cli/src/utils/upgrade/gates/gate-6-tests.ts",
+        "packages/cli/src/utils/upgrade/gates/gate-7-final.ts",
+        "packages/cli/src/utils/upgrade/gates/gate-8-verify.ts",
+        "packages/cli/src/utils/upgrade/gates/index.ts",
+        "packages/cli/src/utils/upgrade/migration-guide-loader.ts",
+        "packages/cli/src/utils/upgrade/progress-reporter.ts",
+        "packages/cli/src/utils/upgrade/sdk-migration-agent.ts",
+        "packages/cli/src/utils/upgrade/simple-migration-agent.ts",
+        "packages/cli/src/utils/upgrade/types.ts",
+        "packages/cli/src/utils/upgrade/utils/file-tracker.ts",
+        "packages/cli/src/utils/upgrade/utils/git-utils.ts",
+        "packages/cli/src/utils/upgrade/utils/validation.ts",
+        "packages/docs/docs/plugins/migration/claude-code/advanced-migration-guide.md",
+        "packages/docs/docs/plugins/migration/claude-code/completion-requirements.md",
+        "packages/docs/docs/plugins/migration/claude-code/integrated-migration-loop.md",
+        "packages/docs/docs/plugins/migration/claude-code/migration-guide.md",
+        "packages/docs/docs/plugins/migration/claude-code/prompt-and-generation-guide.md",
+        "packages/docs/docs/plugins/migration/claude-code/state-and-providers-guide.md",
+        "packages/docs/docs/plugins/migration/claude-code/testing-guide.md",
+        "packages/cli/src/utils/upgrade/CLAUDE.md",
+        "packages/cli/src/utils/upgrade/migrator.ts",
+        "packages/cli/tsup.config.ts"
+      ]
+    },
+    {
+      "title": "chore: update agent secrets when they are empty with local vars",
+      "prNumber": 5329,
+      "type": "other",
+      "body": "## Summary\r\n\r\nAdd automatic synchronization of secrets from local `.env` file for characters that don't have secrets configured.\r\n\r\n## Context\r\n\r\nWhen characters are stored in the database or loaded from files, they often lack secrets for s",
+      "files": [
+        "packages/cli/src/commands/start/actions/agent-start.ts",
+        "packages/cli/src/commands/start/utils/config-utils.ts"
+      ]
+    },
+    {
+      "title": "fix: issue with load from dirname",
+      "prNumber": 5328,
+      "type": "bugfix",
+      "body": "Fixes this issue: \r\n\r\n![image](https://github.com/user-attachments/assets/79129dd7-a5f5-486e-a47e-702a8e13051b)\r\n",
+      "files": [
+        "packages/cli/src/characters/eliza.ts"
+      ]
+    },
+    {
+      "title": "fix(plugin-sql): Fix integration test infinite loops by using isolated databases",
+      "prNumber": 5327,
+      "type": "bugfix",
+      "body": "## Problem\n\nThe plugin-sql integration tests were failing in GitHub Actions with infinite loops and timeouts (exit code 134). The specific failing test was in the memory integration suite, causing the CI workflow to hang indefinitely.\n\n**Gi",
+      "files": [
+        "packages/plugin-sql/bunfig.toml",
+        "packages/plugin-sql/package.json",
+        "packages/plugin-sql/scripts/run-integration-tests.sh",
+        "packages/plugin-sql/src/__tests__/integration/agent.test.ts",
+        "packages/plugin-sql/src/__tests__/integration/memory.test.ts"
+      ]
+    },
+    {
+      "title": "feat: clack env prompts cli, major refactor of cli envs",
+      "prNumber": 5326,
+      "type": "feature",
+      "body": "## 🔧 CLI Environment System Improvements\r\n\r\nThis PR significantly improves the CLI environment variable system, making it more maintainable, user-friendly, and feature-rich.\r\n\r\n### 🎯 Summary of Changes\r\n\r\n#### 1. **Enhanced Plugin Environ",
+      "files": [
+        "packages/cli/src/commands/env/utils/file-operations.ts",
+        "packages/cli/src/commands/plugins/actions/install.ts",
+        "packages/cli/src/commands/plugins/utils/env-vars.ts",
+        "packages/cli/src/commands/test/actions/e2e-tests.ts",
+        "packages/cli/src/services/env-file.service.ts",
+        "packages/cli/src/services/index.ts",
+        "packages/cli/src/types/index.ts",
+        "packages/cli/src/utils/config-manager.ts",
+        "packages/cli/src/utils/env-prompt.ts",
+        "packages/cli/src/utils/index.ts",
+        "packages/cli/tests/unit/commands/test/e2e-tests.test.ts",
+        "packages/client/src/lib/info.json",
+        "packages/cli/src/services/__tests__/env-file.service.test.ts"
+      ]
+    },
+    {
+      "title": "feat: Set default avatar for Eliza",
+      "prNumber": 5324,
+      "type": "feature",
+      "body": "This PR sets the default avatar for the Eliza character, as requested by @borisudovicic.\r\n\r\nresult:\r\n\r\n<img width=\"840\" alt=\"Screenshot 2025-06-30 at 11 27 48 PM\" src=\"https://github.com/user-attachments/assets/5be8c382-98c0-43f0-a070-49bfc",
+      "files": [
+        "packages/cli/src/characters/eliza.ts",
+        "packages/client/public/elizaos-avatar.png"
+      ]
+    },
+    {
+      "title": "fix: avatar",
+      "prNumber": 5323,
+      "type": "bugfix",
+      "body": "This PR includes the following improvements:\r\n\r\n1. Increase avatar upload threshold to 1024\r\nPer request by @borisudovicic, the allowed avatar upload size limit is now increased to 1024 to support higher-quality avatars.\r\n\r\n2. Fix avatar im",
+      "files": [
+        "packages/client/src/components/agent-card.tsx",
+        "packages/client/src/components/ui/avatar.tsx",
+        "packages/client/src/constants.ts"
+      ]
+    },
+    {
+      "title": "feat(cli): show 'monorepo' version for local dist builds",
+      "prNumber": 5322,
+      "type": "feature",
+      "body": "## Summary\n- Added logic to detect if CLI is running from node_modules\n- Shows 'monorepo' when running from local dist (not properly installed)\n- Shows actual version only when globally installed via bun/npm\n\n## Changes\n- Added `isRunningFr",
+      "files": [
+        "packages/cli/src/utils/display-banner.ts",
+        "packages/cli/tests/integration/version-display.test.ts",
+        "packages/cli/tests/unit/utils/display-banner.test.ts"
+      ]
+    },
+    {
+      "title": "fix: cli create command directory display and cleanup on interruption",
+      "prNumber": 5321,
+      "type": "bugfix",
+      "body": "# Fix CLI create command directory display and cleanup on interruption\r\n\r\n## Problem\r\n\r\nTwo minor bugs with the `elizaos create` command:\r\n\r\n1. **Confusing directory display**: When creating a project/plugin, the confirmation prompt showed ",
+      "files": [
+        "packages/cli/src/commands/create/actions/creators.ts",
+        "packages/cli/src/commands/create/actions/setup.ts",
+        "packages/cli/src/utils/build-project.ts",
+        "packages/cli/src/utils/helpers.ts",
+        "packages/cli/tests/commands/create.test.ts",
+        "packages/cli/src/commands/create/index.ts"
+      ]
+    },
+    {
+      "title": "feat(cli): display 'monorepo' version when running from monorepo context",
+      "prNumber": 5320,
+      "type": "feature",
+      "body": "## Summary\n- Modified CLI to display \"Version: monorepo\" when running from within the ElizaOS monorepo\n- Skip npm version update checks when in monorepo context  \n- Added comprehensive unit and integration tests for version display function",
+      "files": [
+        ".github/workflows/cli-tests.yml",
+        ".github/workflows/plugin-sql-tests.yaml",
+        "packages/cli/package.json",
+        "packages/cli/src/commands/test/actions/component-tests.ts",
+        "packages/cli/src/commands/test/actions/e2e-tests.ts",
+        "packages/cli/src/index.ts",
+        "packages/cli/src/utils/display-banner.ts",
+        "packages/cli/tests/integration/version-display.test.ts",
+        "packages/cli/tests/unit/utils/display-banner.test.ts"
+      ]
+    },
+    {
+      "title": "docs: add elizaos test command documentation",
+      "prNumber": 5319,
+      "type": "docs",
+      "body": "## Summary\nAdded comprehensive documentation for the `elizaos test` command to CLAUDE.md\n\n## Changes\n- Added new section \"ElizaOS Test Command\" with usage examples\n- Documented all available options and flags\n- Explained the two test types:",
+      "files": [
+        "CLAUDE.md"
+      ]
+    },
+    {
+      "title": "fix: allow elizaos test command to work outside monorepo",
+      "prNumber": 5318,
+      "type": "bugfix",
+      "body": "## Summary\n- Fixed `elizaos test` command failing when run outside the monorepo\n- The command now works in both monorepo and standalone project contexts\n\n## Changes\n- Updated monorepo root detection in `e2e-tests.ts` to gracefully handle st",
+      "files": [
+        "packages/cli/src/commands/test/actions/component-tests.ts",
+        "packages/cli/src/commands/test/actions/e2e-tests.ts"
+      ]
+    },
+    {
+      "title": "chore: fix some minor issues in the comments",
+      "prNumber": 5317,
+      "type": "bugfix",
+      "body": "<!-- Use this template by filling in information and copying and pasting relevant items out of the HTML comments. -->\r\n\r\n# Relates to\r\n\r\n<!-- LINK TO ISSUE OR TICKET -->\r\n\r\n<!-- This risks section must be filled out before the final review ",
+      "files": [
+        "packages/docs/community/Streams/12-2024/2024-12-27.md",
+        "packages/docs/packages/plugins/flow-advanced.md",
+        "packages/docs/packages/plugins/multiversx.md",
+        "packages/docs/static/llms-community.txt"
+      ]
+    },
+    {
+      "title": "fix: Clarify UX by removing misleading avatar upload text",
+      "prNumber": 5314,
+      "type": "bugfix",
+      "body": "This PR removes the avatar upload message shown after uploading an avatar, which previously stated that the avatar was updated even though the user still needed to click “Save Changes” to apply it.\r\n\r\nrelated: https://linear.app/eliza-labs/",
+      "files": [
+        "packages/client/src/components/avatar-panel.tsx"
+      ]
+    },
+    {
+      "title": "feat: mark bootstrap plugin as essential",
+      "prNumber": 5313,
+      "type": "feature",
+      "body": "This PR marks @elizaos/plugin-bootstrap as an essential plugin within the PluginsPanel\r\n\r\nrelated: https://linear.app/eliza-labs/issue/ELIZA-504/bootstrap-needs-to-be-marked-blue-in-gui",
+      "files": [
+        "packages/client/src/components/plugins-panel.tsx"
+      ]
+    },
+    {
+      "title": "fix: env settings scroll",
+      "prNumber": 5312,
+      "type": "bugfix",
+      "body": "This PR fixes an issue where the environment settings page would get stuck and prevent scrolling.\r\n\r\nRelated: [ELIZA-499](https://linear.app/eliza-labs/issue/ELIZA-499/cant-scroll-down-in-gui)",
+      "files": [
+        "packages/client/src/App.tsx"
+      ]
+    },
+    {
+      "title": "feat(client): Restructure character form action buttons layout",
+      "prNumber": 5342,
+      "type": "feature",
+      "body": "## Description\n\nThis PR restructures the character form action buttons to improve the user experience and visual layout.\n\n## Changes Made\n\n### Layout Improvements\n- **Horizontal Layout**: Replaced vertical stacked buttons with horizontal la",
+      "files": [
+        "bun.lock",
+        "packages/api-client/src/types/agents.ts",
+        "packages/client/src/components/agent-creator.tsx",
+        "packages/client/src/components/character-form.tsx"
+      ]
+    },
+    {
+      "title": "fix: simplify .env file creation to use template only",
+      "prNumber": 5340,
+      "type": "bugfix",
+      "body": "## Summary\n- Remove automatic merging of process.env variables into .env file\n- Use clean template without runtime environment pollution\n- Prevent .env file from becoming cluttered with unrelated variables\n\n## Problem\nThe previous implement",
+      "files": [
+        "packages/cli/src/utils/get-config.ts"
+      ]
+    },
+    {
+      "title": "fix: gui version resolve",
+      "prNumber": 5339,
+      "type": "bugfix",
+      "body": "\n\n<!-- This is an auto-generated comment: release notes by coderabbit.ai -->\n\n## Summary by CodeRabbit\n\n* **New Features**\n  * The app sidebar now displays the server version dynamically, fetched from the server.\n  * Added a new server endp",
+      "files": [
+        "bun.lock",
+        "eliza.postman.json",
+        "lerna.json",
+        "package.json",
+        "packages/api-client/package.json",
+        "packages/app/package.json",
+        "packages/app/src-tauri/tauri.conf.json",
+        "packages/autodoc/package.json",
+        "packages/cli/package.json",
+        "packages/client/.gitignore",
+        "packages/client/package.json",
+        "packages/client/src/components/app-sidebar.tsx",
+        "packages/client/src/hooks/use-server-version.tsx",
+        "packages/client/src/hooks/use-version.tsx",
+        "packages/client/src/lib/info.json",
+        "packages/client/vite.config.ts",
+        "packages/core/package.json",
+        "packages/create-eliza/package.json",
+        "packages/docs/package.json",
+        "packages/plugin-bootstrap/package.json",
+        "packages/plugin-dummy-services/package.json",
+        "packages/plugin-sql/package.json",
+        "packages/plugin-starter/package.json",
+        "packages/project-starter/package.json",
+        "packages/project-tee-starter/package.json",
+        "packages/server/examples/package.json",
+        "packages/server/package.json",
+        "packages/server/src/api/system/__tests__/version.test.ts",
+        "packages/server/src/api/system/index.ts",
+        "packages/server/src/api/system/version.ts"
+      ]
+    },
+    {
+      "title": "fix: (cli) show correct type in create command messages",
+      "prNumber": 5337,
+      "type": "bugfix",
+      "body": "## Description\r\n\r\nUpdates the CLI create command to display the correct type (Plugin/Agent/TEE Project) in prompts instead of always showing \"Project\".\r\n\r\n## Changes\r\n\r\n- Dynamic intro message based on `--type` flag\r\n- Type-specific success",
+      "files": [
+        "packages/cli/src/commands/create/index.ts"
+      ]
+    },
+    {
+      "title": "fix: auto-install AI model plugins on project creation",
+      "prNumber": 5335,
+      "type": "bugfix",
+      "body": "## Problem\r\n\r\nWhen creating a new project with `elizaos create`, selecting an AI model (e.g., OpenAI, Claude) would:\r\n- ✅ Store the API key in `.env`\r\n- ✅ Report successful configuration\r\n- ❌ **NOT** install the corresponding plugin package",
+      "files": [
+        "packages/cli/src/commands/create/actions/setup.ts"
+      ]
+    },
+    {
+      "title": "feat: tweak agent card",
+      "prNumber": 5351,
+      "type": "feature",
+      "body": "This PR refines the Agent Card to match the Figma design more closely.\r\n\r\nbefore:\r\n\r\n\r\n<img width=\"807\" alt=\"Screenshot 2025-07-03 at 6 36 23 AM\" src=\"https://github.com/user-attachments/assets/2aafc81c-4d1a-4f8e-87c2-a3811c47d500\" />\r\n\r\naf",
+      "files": [
+        "packages/client/src/components/agent-card.tsx",
+        "packages/client/src/components/ui/switch.tsx",
+        "packages/client/src/routes/home.tsx"
+      ]
+    },
+    {
+      "title": "fix: update eliza avatar",
+      "prNumber": 5350,
+      "type": "bugfix",
+      "body": "Currently, we are using a large image for the default Eliza avatar, which makes the app load slowly. Since we only need a reasonable resolution for avatars, this PR:\r\n\r\nResizes the default Eliza avatar to 512x512, which is sufficient for UI",
+      "files": [
+        "packages/client/public/elizaos-avatar.png",
+        "packages/client/src/components/avatar-panel.tsx",
+        "packages/client/src/constants.ts"
+      ]
+    },
+    {
+      "title": "feat: chat refactor",
+      "prNumber": 5349,
+      "type": "feature",
+      "body": "This PR refactors the Chat component, including the chat bubble and chat view, to align with the new Figma design. Please note that the group chat design is not finalized yet and will be refactored in a separate PR once the design is comple",
+      "files": [
+        "packages/client/src/components/ChatMessageListComponent.tsx",
+        "packages/client/src/components/chat.tsx",
+        "packages/client/src/components/retry-button.tsx",
+        "packages/client/src/components/ui/button.cy.tsx",
+        "packages/client/src/components/ui/button.tsx",
+        "packages/client/src/components/ui/chat/chat-bubble.tsx",
+        "packages/client/src/components/ui/chat/chat-message-list.tsx",
+        "packages/client/src/components/ui/chat/chat-tts-button.tsx"
+      ]
+    },
+    {
+      "title": "chore: improve logs",
+      "prNumber": 5348,
+      "type": "other",
+      "body": "\n\n<!-- This is an auto-generated comment: release notes by coderabbit.ai -->\n\n## Summary by CodeRabbit\n\n* **New Features**\n  * Added visual spinner animations to indicate progress during migrations.\n  * Introduced real-time tracking and dis",
+      "files": [
+        "packages/cli/src/utils/upgrade/simple-migration-agent.ts"
+      ]
+    },
+    {
+      "title": "fix(client): resolve all type issues in home.tsx for complete type safety",
+      "prNumber": 5346,
+      "type": "bugfix",
+      "body": "## Summary\n\nThis PR fixes all TypeScript type issues in the home.tsx file to ensure complete type safety.\n\n## Changes\n\n- Use  enum instead of string literals for status comparison\n- Add proper type imports for  and \n- Add explicit type anno",
+      "files": [
+        "packages/client/src/components/add-agent-card.tsx",
+        "packages/client/src/components/agent-card.tsx",
+        "packages/client/src/routes/home.tsx"
+      ]
+    },
+    {
+      "title": "feat: update agent settings UI to match design specifications",
+      "prNumber": 5345,
+      "type": "feature",
+      "body": "## Summary\n\n- Updated dark theme colors for better contrast and visual consistency\n- Fixed form field styling with proper border radius (4px) and increased spacing\n- Restructured form element order to follow design pattern: label → input → ",
+      "files": [
+        "packages/client/src/components/agent-settings.tsx",
+        "packages/client/src/components/array-input.tsx",
+        "packages/client/src/components/character-form.tsx",
+        "packages/client/src/components/plugins-panel.tsx",
+        "packages/client/src/components/secret-panel.tsx",
+        "packages/client/src/components/ui/input.tsx",
+        "packages/client/src/components/ui/label.cy.tsx",
+        "packages/client/src/components/ui/label.tsx",
+        "packages/client/src/components/ui/select.tsx",
+        "packages/client/src/components/ui/tabs.tsx",
+        "packages/client/src/components/ui/textarea.cy.tsx",
+        "packages/client/src/components/ui/textarea.tsx",
+        "packages/client/src/hooks/use-elevenlabs-voices.ts",
+        "packages/client/src/hooks/use-server-version.tsx",
+        "packages/client/src/index.css",
+        "packages/client/src/routes/agent-settings.tsx"
+      ]
+    },
+    {
+      "title": "feat: redesign Agent Cards Homepage Layout",
+      "prNumber": 5344,
+      "type": "feature",
+      "body": "## 🎨 UI Redesign: Agent Cards Homepage\n\nThis PR redesigns the agent cards on the client homepage to match the target design specification.\n\n### 📋 Changes Made\n\n#### **AgentCard Component**\n- ✅ **Layout**: Changed from square/vertical to h",
+      "files": [
+        "bun.lock",
+        "packages/client/package.json",
+        "packages/client/src/components/add-agent-card.tsx",
+        "packages/client/src/components/agent-card.tsx",
+        "packages/client/src/components/ui/switch.tsx",
+        "packages/client/src/routes/home.tsx"
+      ]
+    },
+    {
+      "title": "chore: v1.0.17",
+      "prNumber": 5385,
+      "type": "other",
+      "body": "Version 1.0.17 release",
+      "files": [
+        ".env.example",
+        "bun.lock",
+        "eliza.postman.json",
+        "lerna.json",
+        "package.json",
+        "packages/api-client/package.json",
+        "packages/app/package.json",
+        "packages/app/src-tauri/tauri.conf.json",
+        "packages/autodoc/package.json",
+        "packages/cli/package.json",
+        "packages/cli/src/utils/upgrade/simple-migration-agent.ts",
+        "packages/client/cypress/e2e/01-home-page.cy.ts",
+        "packages/client/cypress/e2e/02-chat-functionality.cy.ts",
+        "packages/client/package.json",
+        "packages/client/src/components/ChatMessageListComponent.tsx",
+        "packages/client/src/components/agent-card.tsx",
+        "packages/client/src/components/agent-creator.tsx",
+        "packages/client/src/components/agent-settings.tsx",
+        "packages/client/src/components/app-sidebar.tsx",
+        "packages/client/src/components/character-form.tsx",
+        "packages/client/src/components/chat.tsx",
+        "packages/client/src/components/group-card.tsx",
+        "packages/client/src/components/ui/switch.tsx",
+        "packages/client/src/routes/home.tsx",
+        "packages/core/package.json",
+        "packages/create-eliza/package.json",
+        "packages/docs/docs/rest/complete-message.api.mdx",
+        "packages/docs/docs/rest/ingest-external-message.api.mdx",
+        "packages/docs/docs/rest/send-message.api.mdx",
+        "packages/docs/docs/rest/submit-message.api.mdx",
+        "packages/docs/package.json",
+        "packages/plugin-bootstrap/package.json",
+        "packages/plugin-dummy-services/package.json",
+        "packages/plugin-sql/package.json",
+        "packages/plugin-starter/package.json",
+        "packages/project-starter/package.json",
+        "packages/project-tee-starter/package.json",
+        "packages/server/examples/package.json",
+        "packages/server/package.json",
+        "packages/server/src/api/index.ts"
+      ]
+    },
+    {
+      "title": "fix: remove duplicate express.json middleware in API router",
+      "prNumber": 5384,
+      "type": "bugfix",
+      "body": "## Summary\n- Removes redundant express.json middleware that was causing duplicate JSON parsing in the API router\n- This was creating unnecessary overhead and potential conflicts in request processing\n\n## Test plan\n- [x] Verify API endpoints",
+      "files": [
+        "packages/server/src/api/index.ts"
+      ]
+    },
+    {
+      "title": "chore: bump version to 1.0.16",
+      "prNumber": 5383,
+      "type": "other",
+      "body": "This PR updates the version across all packages from 1.0.15 to 1.0.16.",
+      "files": [
+        "bun.lock",
+        "eliza.postman.json",
+        "lerna.json",
+        "package.json",
+        "packages/api-client/package.json",
+        "packages/app/package.json",
+        "packages/app/src-tauri/tauri.conf.json",
+        "packages/autodoc/package.json",
+        "packages/cli/package.json",
+        "packages/client/package.json",
+        "packages/core/package.json",
+        "packages/create-eliza/package.json",
+        "packages/docs/package.json",
+        "packages/plugin-bootstrap/package.json",
+        "packages/plugin-dummy-services/package.json",
+        "packages/plugin-sql/package.json",
+        "packages/plugin-starter/package.json",
+        "packages/project-starter/package.json",
+        "packages/project-tee-starter/package.json",
+        "packages/server/examples/package.json",
+        "packages/server/package.json"
+      ]
+    },
+    {
+      "title": "fix: cypress test",
+      "prNumber": 5382,
+      "type": "bugfix",
+      "body": "The test was failing because we removed the AddAgentCard component. This PR removes the related test checks for the add-agent-button to align with the updated UI, ensuring tests reflect the current state of the application.",
+      "files": [
+        "packages/client/cypress/e2e/01-home-page.cy.ts",
+        "packages/client/cypress/e2e/02-chat-functionality.cy.ts",
+        "packages/client/src/routes/home.tsx"
+      ]
+    },
+    {
+      "title": "fix: correct REST API documentation to match actual implementation",
+      "prNumber": 5380,
+      "type": "bugfix",
+      "body": "## Summary\n\nThis PR fixes the REST API documentation to match the actual server implementation, addressing issue #5370 where the docs showed non-existent endpoints and incorrect request parameters.\n\n## Changes\n\n### Documentation Updates\n- *",
+      "files": [
+        "bun.lock",
+        "eliza.postman.json",
+        "packages/docs/docs/rest/complete-message.api.mdx",
+        "packages/docs/docs/rest/ingest-external-message.api.mdx",
+        "packages/docs/docs/rest/send-message.api.mdx",
+        "packages/docs/docs/rest/submit-message.api.mdx"
+      ]
+    },
+    {
+      "title": "fix: tweak padding",
+      "prNumber": 5379,
+      "type": "bugfix",
+      "body": "",
+      "files": [
+        "packages/client/src/components/app-sidebar.tsx"
+      ]
+    },
+    {
+      "title": "fix: correct import/export icon",
+      "prNumber": 5378,
+      "type": "bugfix",
+      "body": "",
+      "files": [
+        "packages/client/src/components/character-form.tsx"
+      ]
+    },
+    {
+      "title": "Fix import/export button order and icons in character form",
+      "prNumber": 5374,
+      "type": "bugfix",
+      "body": "## Description\n\nThis PR fixes the reversed import/export buttons in the character form dropdown menu.\n\n## Changes Made\n\n1. **Fixed icon orientation**: \n   - Export button now uses  (data flowing down from app to file)\n   - Import button now",
+      "files": [
+        "packages/client/src/components/character-form.tsx"
+      ]
+    },
+    {
+      "title": "feat: side bar",
+      "prNumber": 5373,
+      "type": "feature",
+      "body": "This PR updates the Sidebar component to align with the new Figma design, improving structure, consistency, and visual clarity.\r\n\r\nUpdated Agent and Group list sections with consistent headers and new button placements.\r\n\r\nAdded \"Create New",
+      "files": [
+        "packages/client/src/components/app-sidebar.tsx"
+      ]
+    },
+    {
+      "title": "refactor: reorganize .env.example for better clarity",
+      "prNumber": 5372,
+      "type": "refactor",
+      "body": "## Summary\n- Reorganized .env.example file for better clarity and maintainability\n- Grouped related configuration sections together\n- Simplified the file structure to focus on essential configuration\n\n## Changes\n- Moved server configuration",
+      "files": [
+        ".env.example"
+      ]
+    },
+    {
+      "title": "feat: tweak ui",
+      "prNumber": 5371,
+      "type": "feature",
+      "body": "This PR reduces the gap between the plus icon and the text as requested by @borisudovicic.\r\nIt also reduces the avatar size in group chats as requested by @wtfsayo.",
+      "files": [
+        "packages/client/src/components/ChatMessageListComponent.tsx",
+        "packages/client/src/routes/home.tsx"
+      ]
+    },
+    {
+      "title": "feat: Show correct create button label based on active tab",
+      "prNumber": 5369,
+      "type": "feature",
+      "body": "Update the create button on the Home page to display “Create New Agent” when on the Agents tab and “Create New Group” when on the Groups tab for clearer user guidance.",
+      "files": [
+        "packages/client/src/routes/home.tsx"
+      ]
+    },
+    {
+      "title": "feat: bun test:app base setup - issue 5367",
+      "prNumber": 5368,
+      "type": "feature",
+      "body": "<!-- Use this template by filling in information and copying and pasting relevant items out of the HTML comments. -->\r\n\r\n# Relates to\r\n\r\nhttps://github.com/elizaOS/eliza/issues/5367\r\n\r\n<!-- This risks section must be filled out before the f",
+      "files": [
+        "packages/app/package.json",
+        "packages/app/src/__tests__/main.test.ts",
+        "packages/app/src/types/bun-test.d.ts",
+        "packages/app/tsconfig.json"
+      ]
+    },
+    {
+      "title": "fix: adding missing dependency Test issues #5366",
+      "prNumber": 5366,
+      "type": "bugfix",
+      "body": "<!-- Use this template by filling in information and copying and pasting relevant items out of the HTML comments. -->\r\n\r\n# Relates to\r\n\r\nhttps://github.com/elizaOS/eliza/issues/5365\r\n\r\n<!-- This risks section must be filled out before the f",
+      "files": [
+        "packages/app/package.json"
+      ]
+    },
+    {
+      "title": "fix: small UI fix",
+      "prNumber": 5363,
+      "type": "bugfix",
+      "body": "This PR improves the hover color of the “New Chat” button in the Agent/Group cards and also fixes a regression with the MoreVertical icon padding",
+      "files": [
+        "packages/client/src/components/agent-card.tsx",
+        "packages/client/src/components/character-form.tsx",
+        "packages/client/src/components/group-card.tsx"
+      ]
+    },
+    {
+      "title": "fix: Align '+' button on the same line as Agents/Groups tabs",
+      "prNumber": 5362,
+      "type": "bugfix",
+      "body": "Aligns the “+” create button to be on the same line as the Agents/Groups tabs, matching the intended layout for cleaner visual alignment.\r\n\r\n\r\nhttps://github.com/user-attachments/assets/ad2a610b-f1a9-44f6-84db-6eede99044b7\r\n\r\n",
+      "files": [
+        "packages/client/src/routes/home.tsx"
+      ]
+    },
+    {
+      "title": "feat: update group card",
+      "prNumber": 5361,
+      "type": "feature",
+      "body": "This PR updates the GroupCard component to align with the latest Figma design\r\n\r\nresult:\r\n\r\n![image](https://github.com/user-attachments/assets/6e04b179-eb3d-4aa6-b1d7-dbf332c6d8fc)",
+      "files": [
+        "packages/client/src/components/group-card.tsx"
+      ]
+    },
+    {
+      "title": "fix: tweak ui and fix agent card padding issue",
+      "prNumber": 5360,
+      "type": "bugfix",
+      "body": "This PR updates the UI based on @wtfsayo requirements:\r\n\r\n- Updates the switch off button to gray color.\r\n\r\n- Removes the message icon from the “New Chat” button.\r\n\r\n- Adds background color to the tabs that switch between group chat and DM ",
+      "files": [
+        "packages/client/src/components/agent-card.tsx",
+        "packages/client/src/routes/home.tsx"
+      ]
+    },
+    {
+      "title": "feat: migrate CLI to @clack/prompts for consistency",
+      "prNumber": 5359,
+      "type": "feature",
+      "body": "## Summary\nMigrates remaining CLI input methods from inquirer and global prompt() to @clack/prompts for consistency and better UX.\n\n## Changes\n- **Replace inquirer with @clack/prompts in plugin-creator.ts**\n  - Migrated all 8 different inpu",
+      "files": [
+        "packages/cli/package.json",
+        "packages/cli/scripts/generate-unit-tests.ts",
+        "packages/cli/src/utils/plugin-creator.ts"
+      ]
+    },
+    {
+      "title": "feat: update tabs",
+      "prNumber": 5357,
+      "type": "feature",
+      "body": "This PR improves the visual styling of the tabs component used for switching between group and DM views.\r\n\r\nbefore:\r\n\r\n![image](https://github.com/user-attachments/assets/b7863bf1-2bda-4e5c-8c08-56103a69f144)\r\n\r\n\r\nafter:\r\n\r\n\r\nhttps://github",
+      "files": [
+        "packages/client/src/routes/home.tsx"
+      ]
+    },
+    {
+      "title": "feat: update agent card",
+      "prNumber": 5355,
+      "type": "feature",
+      "body": "",
+      "files": [
+        "packages/client/src/components/agent-card.tsx",
+        "packages/client/src/components/ui/switch.tsx"
+      ]
+    },
+    {
+      "title": "fix: remove chat bubble extra padding",
+      "prNumber": 5354,
+      "type": "bugfix",
+      "body": "",
+      "files": [
+        "packages/client/src/components/chat.tsx"
+      ]
+    },
+    {
+      "title": "fix: chat bubble padding",
+      "prNumber": 5353,
+      "type": "bugfix",
+      "body": "",
+      "files": [
+        "packages/client/src/components/chat.tsx"
+      ]
+    },
+    {
+      "title": "fix: gui",
+      "prNumber": 5352,
+      "type": "bugfix",
+      "body": "This PR fixes several small GUI issues:\r\n\r\n- Fix timestamp padding and alignment in chat bubbles.\r\n\r\n- Add cursor: pointer to relevant components for better UX.\r\n\r\n- Correct the import/export icon display.\r\n\r\n- Update the character form tit",
+      "files": [
+        "packages/client/src/components/agent-card.tsx",
+        "packages/client/src/components/agent-creator.tsx",
+        "packages/client/src/components/agent-settings.tsx",
+        "packages/client/src/components/character-form.tsx",
+        "packages/client/src/components/chat.tsx",
+        "packages/client/src/components/ui/switch.tsx",
+        "packages/client/src/routes/home.tsx"
+      ]
+    },
+    {
+      "title": "chore: update twitter plugin docs",
+      "prNumber": 5408,
+      "type": "other",
+      "body": "",
+      "files": [
+        "packages/docs/packages/plugins/twitter.md"
+      ]
+    },
+    {
+      "title": "fix: improve maxConnectionAttempts calculation in test-utils",
+      "prNumber": 5406,
+      "type": "bugfix",
+      "body": "## Problem\n\nThe current `maxConnectionAttempts` calculation in `waitForServerReady` function uses an arbitrary time division (`maxWaitTime / 1000`) that assumes each connection attempt takes exactly 1 second. This leads to:\n\n- Inconsistent ",
+      "files": [
+        "packages/cli/tests/commands/test-utils.ts"
+      ]
+    },
+    {
+      "title": "fix(ci): standardize memory allocation and test execution across platforms",
+      "prNumber": 5405,
+      "type": "bugfix",
+      "body": "## Problem\n\nUbuntu CLI tests have been failing consistently while macOS tests pass reliably. The failures include:\n- 'No agents found' errors\n- 'AGENT_NOT_FOUND:Ada' errors  \n- Process cleanup issues\n\n## Root Cause Analysis\n\nThe Ubuntu CI c",
+      "files": [
+        ".github/workflows/cli-tests.yml",
+        "bun.lock",
+        "packages/cli/tests/commands/test-utils.ts",
+        "packages/cli/tests/test-characters/ada.json",
+        "packages/cli/tests/test-characters/multi-chars.json"
+      ]
+    },
+    {
+      "title": "fix: Refactor agent-settings delete to use agentDelete hook for reusability",
+      "prNumber": 5404,
+      "type": "bugfix",
+      "body": "Replace the local delete function in agent-settings with the existing agentDelete hook.\r\n\r\nThis improves reusability and keeps the code DRY.\r\n\r\nNo functional changes; only internal cleanup.",
+      "files": [
+        "packages/client/src/components/agent-settings.tsx"
+      ]
+    },
+    {
+      "title": "feat: header dropdown",
+      "prNumber": 5403,
+      "type": "feature",
+      "body": "This PR updates the header avatar action to match the new Figma design. Clicking the avatar in the header now opens a dropdown with options to export, delete, or stop the agent directly.\r\n\r\nAdditionally, this PR adds a reusable useDeleteAge",
+      "files": [
+        "packages/client/src/components/chat.tsx",
+        "packages/client/src/hooks/use-delete-agent.ts"
+      ]
+    },
+    {
+      "title": "fix: resolve group chat crash and unify SplitButton corner radius",
+      "prNumber": 5402,
+      "type": "bugfix",
+      "body": "This PR fixes a group chat crash issue\r\n\r\nAdditionally, it unifies the corner radius for the SplitButton component across the app by:\r\n\r\nAdding mainButtonClassName and dropdownButtonClassName props to allow per-button styling control.\r\n",
+      "files": [
+        "packages/client/src/components/chat.tsx",
+        "packages/client/src/components/ui/split-button.tsx"
+      ]
+    },
+    {
+      "title": "fix: prevent duplicate new chat creation",
+      "prNumber": 5400,
+      "type": "bugfix",
+      "body": "",
+      "files": [
+        "packages/client/src/components/chat.tsx"
+      ]
+    },
+    {
+      "title": "fix: preserve avatar when updating secrets from SecretPanel",
+      "prNumber": 5399,
+      "type": "bugfix",
+      "body": "Fixes an issue where updating secrets via SecretPanel unintentionally reset agent.settings.avatar to an empty string.\r\n\r\nUpdates updateSettings logic in usePartialUpdate to:\r\n\r\nPreserve existing avatar unless explicitly provided.\r\n\r\nUpdate ",
+      "files": [
+        "packages/client/src/hooks/use-partial-update.ts"
+      ]
+    },
+    {
+      "title": "fix: agent card new chat",
+      "prNumber": 5398,
+      "type": "bugfix",
+      "body": "This PR refactors Agent Card behavior to improve the chat initiation and navigation experience:\r\n\r\nNew Chat Button: Now correctly navigates to the chat page and creates a new chat with the agent.\r\n\r\nAgent Card Click Area: Clicking anywhere ",
+      "files": [
+        "packages/client/src/components/agent-card.tsx",
+        "packages/client/src/components/chat.tsx",
+        "packages/client/src/components/group-card.tsx",
+        "packages/client/src/hooks/use-dm-channels.ts",
+        "packages/client/src/routes/home.tsx"
+      ]
+    },
+    {
+      "title": "feat: improve UI cursor pointer interactions",
+      "prNumber": 5397,
+      "type": "feature",
+      "body": "## Summary\nThis PR improves the user experience by adding proper cursor pointer interactions to all interactive elements in the sidebar and updating the base button component.\n\n## Changes Made\n- ✨ Added `cursor-pointer` class to all interac",
+      "files": [
+        "packages/client/src/components/app-sidebar.tsx",
+        "packages/client/src/components/ui/button.tsx"
+      ]
+    },
+    {
+      "title": "fix(docs): update documentation version from 1.0.10 to 1.0.17",
+      "prNumber": 5396,
+      "type": "bugfix",
+      "body": "## Summary\n- Updated the current version label in docusaurus.config.ts from 1.0.10 to 1.0.17\n- This fixes the incorrect version display that was showing as 1.10.0 instead of 1.0.17\n\n## Changes\n- Modified `packages/docs/docusaurus.config.ts`",
+      "files": [
+        "packages/docs/docusaurus.config.ts"
+      ]
+    },
+    {
+      "title": "Fix non-null assertion in useImperativeHandle",
+      "prNumber": 5395,
+      "type": "bugfix",
+      "body": "```\n# Relates to\n\n<!-- LINK TO ISSUE OR TICKET -->\n\n# Risks\n\nLow. This change removes a potential runtime error and improves type safety without altering the component's intended behavior.\n\n# Background\n\n## What does this PR do?\n\nThis PR re",
+      "files": [
+        "packages/client/src/components/ui/split-button.tsx"
+      ]
+    },
+    {
+      "title": "fix: cursor review",
+      "prNumber": 5393,
+      "type": "bugfix",
+      "body": "Fixes an issue noted in [review](https://github.com/elizaOS/eliza/pull/5392#pullrequestreview-2986620046)",
+      "files": [
+        "packages/client/src/components/chat.tsx",
+        "packages/client/src/components/ui/split-button.tsx"
+      ]
+    },
+    {
+      "title": "feat: dm chat header",
+      "prNumber": 5392,
+      "type": "feature",
+      "body": "This PR updates the DM chat header design to align with the new Figma designs.\r\n\r\nAdditional improvements:\r\nFixes an issue where creating a new chat would jump to the second-latest chat instead of the newly created one.\r\n\r\nAdds a mechanism ",
+      "files": [
+        "packages/client/src/components/chat.tsx",
+        "packages/client/src/components/ui/dropdown-menu.tsx",
+        "packages/client/src/components/ui/split-button.tsx"
+      ]
+    },
+    {
+      "title": "feat: update actions tab label to 'Model Calls' in agent sidebar",
+      "prNumber": 5391,
+      "type": "feature",
+      "body": "## Summary\n\nThis PR updates the label for the actions tab in the agent sidebar from 'Actions' to 'Model Calls' for better clarity and user understanding.\n\n## Changes\n\n- Updated the tab label in \n- Changed from 'Actions' to 'Model Calls' to ",
+      "files": [
+        "packages/client/src/components/agent-sidebar.tsx"
+      ]
+    },
+    {
+      "title": "feat: improve UI avatar handling and styling consistency",
+      "prNumber": 5390,
+      "type": "feature",
+      "body": "## Summary\n\nThis PR improves the UI avatar handling and styling consistency across the client components.\n\n## Changes Made\n\n- **Agent Card Component**: Added  utility function for consistent avatar handling\n- **App Sidebar Component**: \n  -",
+      "files": [
+        "packages/client/src/components/agent-card.tsx",
+        "packages/client/src/components/app-sidebar.tsx",
+        "packages/client/src/components/connection-status.tsx"
+      ]
+    },
+    {
+      "title": "chore: Update select component border radius",
+      "prNumber": 5389,
+      "type": "other",
+      "body": "This PR updates the border radius of the select component from 'rounded' to 'rounded-xl' for a more modern appearance.",
+      "files": [
+        "packages/client/src/components/ui/select.tsx"
+      ]
+    },
+    {
+      "title": "fix: recording icon padding",
+      "prNumber": 5388,
+      "type": "bugfix",
+      "body": "Issue:\r\nThe recording icon has no padding, causing it to appear cramped.\r\n\r\n\r\n![image](https://github.com/user-attachments/assets/5c96b07f-b5e8-45f9-abb5-74c8b558c0a3)\r\n\r\nFix:\r\n\r\nAdded padding to the recording icon to improve visual balance",
+      "files": [
+        "packages/client/src/components/audio-recorder.tsx"
+      ]
+    },
+    {
+      "title": "fix: handle string and array types in bio for backward compatibility",
+      "prNumber": 5387,
+      "type": "bugfix",
+      "body": "Previously, the bio handling logic assumed `agent.bio` was always an array, causing existing agents with string-based bios to fallback to the default description, hiding their actual bio.\r\n\r\nThis fix adds type checks to gracefully handle bo",
+      "files": [
+        "packages/client/src/components/agent-card.tsx"
+      ]
+    },
+    {
+      "title": "fix: Refactor DM channel creation logic to fetch live message count inste…",
+      "prNumber": 5411,
+      "type": "bugfix",
+      "body": "# Context\r\n\r\nPreviously, we were relying on the stale `latestChannelMessages` state to determine if a DM channel was empty when deciding to reuse or create a new DM channel. However, `latestChannelMessages` could be stale, leading to incorr",
+      "files": [
+        "packages/client/src/components/chat.tsx"
+      ]
+    }
+  ],
+  "topContributors": [
+    {
+      "username": "wtfsayo",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/82053242?u=98209a1f10456f42d4d2fa71db4d5bf4a672cbc3&v=4",
+      "totalScore": 1010.1019183736114,
+      "prScore": 985.4119183736115,
+      "issueScore": 0,
+      "reviewScore": 22.5,
+      "commentScore": 2.1899999999999995,
+      "summary": "wtfsayo: Had a highly active week in the `elizaos/eliza` repository, merging 23 pull requests with a focus on bug fixes, new features, and UI improvements. Key contributions included a significant fix for GUI version resolution (+583/-193 lines in elizaos/eliza#5339), a redesign of the agent cards homepage (+443/-398 lines in elizaos/eliza#5344), and several CLI enhancements. In addition to opening 6 new pull requests, they were highly collaborative with 115 commits and 34 comments on other pull requests."
+    },
+    {
+      "username": "tcm390",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/60634884?u=c6c41679b8322eaa0c81f72e0b4ed95e80f0ac16&v=4",
+      "totalScore": 765.5568531031212,
+      "prScore": 760.5568531031212,
+      "issueScore": 0,
+      "reviewScore": 5,
+      "commentScore": 0,
+      "summary": "tcm390: Merged 35 pull requests in elizaos/eliza, delivering a mix of UI features and bug fixes for components like avatars, agent cards, and the side bar. This work was done consistently over 5 days, totaling 107 commits and +2,971/-2,512 lines of code changes. They also approved one pull request and have another feature PR currently open (elizaos/eliza#5347)."
+    },
+    {
+      "username": "SYMBaiEX",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/192078165?u=a6e562521cc94448799ea50ebc1faeda3c3cef26&v=4",
+      "totalScore": 211.68288562287125,
+      "prScore": 198.04488562287128,
+      "issueScore": 4,
+      "reviewScore": 9,
+      "commentScore": 0.6379999999999999,
+      "summary": "SYMBaiEX: This week's main contribution was a massive documentation overhaul in `elizaos/eliza`, merging PR #5401 which introduced over 43,000 lines of content. They also merged a significant CLI refactor in PR #5359, with their total work spanning 53 commits and modifying 367 files (+48851/-16057). Additionally, SYMBaiEX opened three new pull requests, created one issue, and provided several code reviews and comments."
+    },
+    {
+      "username": "ai16z-demirix",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/188117230?u=424cd5b834584b3799da288712b3c4158c8032a1&v=4",
+      "totalScore": 210.14131226296527,
+      "prScore": 190.4613122629653,
+      "issueScore": 10,
+      "reviewScore": 9,
+      "commentScore": 0.6799999999999999,
+      "summary": "ai16z-demirix: Merged 3 pull requests in the elizaos/eliza repository, including a major effort to set up a new testing framework in elizaos/eliza#5368 (+1166/-1518 lines). They also opened one new PR (elizaos/eliza#5415), created two related issues, and provided several code reviews and comments. This week's work involved 12 commits across 47 files, with a primary focus on configuration, documentation, and tests."
+    },
+    {
+      "username": "ChristopherTrimboli",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/27584221?u=0d816ce1dcdea8f925aba18bb710153d4a87a719&v=4",
+      "totalScore": 193.72625452985767,
+      "prScore": 178.72625452985767,
+      "issueScore": 0,
+      "reviewScore": 15,
+      "commentScore": 0,
+      "summary": "ChristopherTrimboli: Merged a major refactor of the CLI environment in elizaos/eliza#5326 (+2050/-1166 lines) and also updated plugin documentation in elizaos/eliza#5408. They opened one new pull request (elizaos/eliza#5330) and approved 3 others. Overall, work was spread across 3 days this week."
+    },
+    {
+      "username": "yungalgo",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/113615973?u=92e0f29f7e2fbb8ce46ed13c51f692ca803de02d&v=4",
+      "totalScore": 175.57251752121945,
+      "prScore": 165.39451752121946,
+      "issueScore": 0,
+      "reviewScore": 9,
+      "commentScore": 1.178,
+      "summary": "yungalgo merged three pull requests in elizaos/eliza to fix the command-line interface, with the largest being elizaos/eliza#5321 (+896/-167 lines). They continued this work by opening two new PRs for CLI fixes and making 36 commits across 43 files (+622/-269 lines). Additionally, yungalgo was active in code review, providing two reviews and eight comments on pull requests."
+    },
+    {
+      "username": "0xbbjoker",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/54844437?u=90fe1762420de6ad493a1c1582f1f70c0d87d8e2&v=4",
+      "totalScore": 159.6993526748324,
+      "prScore": 133.6793526748324,
+      "issueScore": 0,
+      "reviewScore": 25,
+      "commentScore": 1.02,
+      "summary": "0xbbjoker merged four pull requests in elizaos/eliza, highlighted by a major feature for plugin upgrades that added over 26,300 lines of code (elizaos/eliza#5311). Other merged work included bug fixes and logging improvements, and they also provided five PR reviews and five comments. This work was spread across 15 commits, showing a very consistent activity pattern over five days."
+    },
+    {
+      "username": "odilitime",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/16395496?u=c9bac48e632aae594a0d85aaf9e9c9c69b674d8b&v=4",
+      "totalScore": 76.43239488210207,
+      "prScore": 67.63239488210208,
+      "issueScore": 4.1,
+      "reviewScore": 4.5,
+      "commentScore": 0.2,
+      "summary": "odilitime: Pushed a single commit that modified one file (+81/-1 lines)."
+    },
+    {
+      "username": "META-DREAMER",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/7143583?u=96f63f10e066a06d5ad592c8efc659e2b84a68fc&v=4",
+      "totalScore": 59.2867738965761,
+      "prScore": 53.0867738965761,
+      "issueScore": 6,
+      "reviewScore": 0,
+      "commentScore": 0.2,
+      "summary": null
+    },
+    {
+      "username": "0xtc23",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/129641996?v=4",
+      "totalScore": 43.5437738965761,
+      "prScore": 43.5437738965761,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "0xtc23: No activity this week."
+    },
+    {
+      "username": "Dangoz",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/71613713?u=1839f372422c7a5503a713dca22981490b4ea7da&v=4",
+      "totalScore": 33.74239089914137,
+      "prScore": 33.74239089914137,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "Dangoz: Merged a substantial bug fix in elizaos/eliza#5343 (+29872/-3864 lines) to handle unwrapped server responses. This was their primary contribution, with activity on two days this week."
+    },
+    {
+      "username": "mountdisk",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/169329268?u=56c8e0bec21bdd4536af2760513450d4c20aee29&v=4",
+      "totalScore": 31.83679054559674,
+      "prScore": 31.83679054559674,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "mountdisk: Merged one pull request in elizaos/eliza#5317 to fix minor issues in documentation comments (+5/-5 lines)."
+    },
+    {
+      "username": "mikirov",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/29272392?u=a4773a399c1cbcd34cdca9a7877cd61824c5bf09&v=4",
+      "totalScore": 28.94057359027997,
+      "prScore": 28.740573590279972,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0.2,
+      "summary": null
+    },
+    {
+      "username": "superdevstar50",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/140016551?u=a28d6409e859583510c771e9ebcbcf72adea1e04&v=4",
+      "totalScore": 28.420720770839914,
+      "prScore": 28.420720770839914,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": null
+    },
+    {
+      "username": "standujar",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/16385918?u=718bdcd1585be8447bdfffb8c11ce249baa7532d&v=4",
+      "totalScore": 27.556879734614025,
+      "prScore": 22.356879734614026,
+      "issueScore": 0,
+      "reviewScore": 5,
+      "commentScore": 0.2,
+      "summary": "standujar: Focused on bug fixes this week, merging one PR in elizaos/eliza#5384 to remove duplicate middleware (+176/-416 lines). Activity was sporadic, with all contributions, including two commits and one PR comment, occurring on a single day."
+    },
+    {
+      "username": "reallesee",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/155267459?u=048a8021b60ccdd599d1389ec6bd3a07578a8cbf&v=4",
+      "totalScore": 22.437910149055313,
+      "prScore": 22.437910149055313,
+      "issueScore": 0,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "reallesee: Merged one pull request in elizaos/eliza (#5412) to update a GitHub Actions dependency, modifying test files (+12/-13 lines)."
+    },
+    {
+      "username": "borisudovicic",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/31806472?u=27713fbe603baae91ef519990facbacd6c23e93d&v=4",
+      "totalScore": 22,
+      "prScore": 0,
+      "issueScore": 22,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "borisudovicic: Created six issues in the elizaos/eliza repository. These issues covered planning for plugin upgrades (elizaos/eliza#5341), new features like security roles (elizaos/eliza#5386), and reviews of existing functionality (elizaos/eliza#5377, #5375)."
+    },
+    {
+      "username": "linear",
+      "avatarUrl": "https://avatars.githubusercontent.com/in/20150?v=4",
+      "totalScore": 8,
+      "prScore": 0,
+      "issueScore": 8,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "linear: Created two issues in the elizaos/eliza repository: elizaos/eliza#5325 and elizaos/eliza#5336."
+    },
+    {
+      "username": "bealers",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/6403055?u=8c40778251e25b92cdee727056415b6c0d1bcdc5&v=4",
+      "totalScore": 5.138,
+      "prScore": 0,
+      "issueScore": 0,
+      "reviewScore": 4.5,
+      "commentScore": 0.6379999999999999,
+      "summary": "bealers: Focused on bug fixes this week, modifying 5 files (+164/-506 lines) in a single commit. Active on one day, they also provided one code review and left comments on two issues and four pull requests."
+    },
+    {
+      "username": "github-advanced-security",
+      "avatarUrl": "https://avatars.githubusercontent.com/in/57789?v=4",
+      "totalScore": 4.5,
+      "prScore": 0,
+      "issueScore": 0,
+      "reviewScore": 4.5,
+      "commentScore": 0,
+      "summary": "github-advanced-security: Activity was limited to a single pull request review comment."
+    },
+    {
+      "username": "iQiexie",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/63598014?v=4",
+      "totalScore": 4.34,
+      "prScore": 0,
+      "issueScore": 4,
+      "reviewScore": 0,
+      "commentScore": 0.33999999999999997,
+      "summary": "iQiexie: Focused on documentation feedback by creating issue elizaos/eliza#5370 to report misleading REST API documentation. They also contributed to discussions with one pull request comment and one issue comment."
+    },
+    {
+      "username": "gcbsumid",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/909374?u=37f846cf6061061fd858eeca1210d5378a7bb65b&v=4",
+      "totalScore": 4.1,
+      "prScore": 0,
+      "issueScore": 4.1,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "gcbsumid opened one issue this week, elizaos/eliza#5407, reporting a failure to load plugins."
+    },
+    {
+      "username": "samarth30",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/48334430?u=1fc119a6c2deb8cf60448b4c8961cb21dc69baeb&v=4",
+      "totalScore": 4,
+      "prScore": 0,
+      "issueScore": 4,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": "samarth30: This week's only contribution was opening issue elizaos/eliza#5376 to discuss a hybrid approach for plugin migration."
+    },
+    {
+      "username": "madjin",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/32600939?u=cdcf89f44c7a50906c7a80d889efa85023af2049&v=4",
+      "totalScore": 2.3000000000000003,
+      "prScore": 0,
+      "issueScore": 2.1,
+      "reviewScore": 0,
+      "commentScore": 0.2,
+      "summary": null
+    },
+    {
+      "username": "nccuong-vikki",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/207505492?u=fa65b4f312a59d9ad78fe77a84ef56a282fe8786&v=4",
+      "totalScore": 2.2,
+      "prScore": 0,
+      "issueScore": 2,
+      "reviewScore": 0,
+      "commentScore": 0.2,
+      "summary": null
+    },
+    {
+      "username": "Ovodo",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/107152769?u=875457368f5da28dd042a989613a3b38c9d008e2&v=4",
+      "totalScore": 2.1,
+      "prScore": 0,
+      "issueScore": 2.1,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": null
+    },
+    {
+      "username": "myst4",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/86130282?u=2aee3ed374a6ecd7ba99178257ec95e8690f239b&v=4",
+      "totalScore": 2,
+      "prScore": 0,
+      "issueScore": 2,
+      "reviewScore": 0,
+      "commentScore": 0,
+      "summary": null
+    }
+  ],
+  "newPRs": 91,
+  "mergedPRs": 75,
+  "newIssues": 14,
+  "closedIssues": 14,
+  "activeContributors": 23
+}
